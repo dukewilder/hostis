@@ -2201,6 +2201,48 @@ footer .hint kbd {
   color: var(--bone);
 }
 
+/* Contact line: corrections, additions, errors */
+.contact-line {
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--bone-faint);
+  line-height: 1.6;
+}
+.contact-line a {
+  color: var(--bone-dim);
+  text-decoration: none;
+  border-bottom: 1px solid var(--bone-faint);
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.contact-line a:hover {
+  color: var(--blood);
+  border-color: var(--blood);
+}
+.compass-contact {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--bone-faint);
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--bone-faint);
+  line-height: 1.6;
+}
+.compass-contact a {
+  color: var(--bone-dim);
+  text-decoration: none;
+  border-bottom: 1px solid var(--bone-faint);
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.compass-contact a:hover {
+  color: var(--blood);
+  border-color: var(--blood);
+}
+
 /* Print styles: let someone actually print the articles */
 @media print {
   body { background: white; color: black; }
@@ -2272,6 +2314,11 @@ footer .hint kbd {
         mirror, fork, reprint, host, seed, hand to a stranger.<br>
         the argument is kept alive by the copy.
       </p>
+    </div>
+
+    <div class="compass-contact">
+      send corrections, additions, broken links<br>
+      <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a>
     </div>
   </div>
 </div>
@@ -3939,6 +3986,7 @@ footer .hint kbd {
      ========================================= -->
 <footer>
   <span class="mark">HOSTIS</span>
+  <div class="contact-line">send corrections, additions, broken links<br><a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></div>
   <div>no rights reserved &middot; all copies welcome</div>
   <!-- The ship's log opens to the patient. The Konami hands remember. The black spot waits for the right finger. -->
   <button id="black-spot" type="button" aria-label="black spot" title="" tabindex="-1"></button>
