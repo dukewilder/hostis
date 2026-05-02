@@ -770,70 +770,6 @@ h2.section-title.left {
   content: none;
 }
 
-.era-marker {
-  text-align: center;
-  position: relative;
-  padding: 2.5rem 0;
-  font-family: var(--carved);
-  font-size: 0.8rem;
-  letter-spacing: 0.35em;
-  color: var(--blood);
-  text-transform: uppercase;
-}
-.era-marker span {
-  display: inline-block;
-  background: var(--black);
-  padding: 0 1.5rem;
-  position: relative;
-  z-index: 2;
-}
-.era-marker.silence {
-  color: var(--bone-faint);
-  font-style: italic;
-  font-family: var(--serif-italic);
-  letter-spacing: 0.2em;
-  padding: 4rem 0;
-}
-.era-marker.silence span {
-  background: var(--black);
-  padding: 0.5rem 2rem;
-  border-top: 1px solid var(--bone-faint);
-  border-bottom: 1px solid var(--bone-faint);
-}
-
-.era-note {
-  text-align: center;
-  max-width: 36rem;
-  margin: 0 auto 4rem;
-  padding: 1rem 1.5rem;
-  font-family: var(--serif-italic);
-  font-style: italic;
-  font-size: 0.95rem;
-  line-height: 1.7;
-  color: var(--bone-faint);
-  letter-spacing: 0.01em;
-  position: relative;
-  z-index: 2;
-  background: var(--black);
-}
-.era-note.silence-note {
-  color: var(--bone-faint);
-  opacity: 0.85;
-}
-
-.silence-note {
-  text-align: center;
-  font-family: var(--serif-italic);
-  font-style: italic;
-  color: var(--bone-faint);
-  font-size: 0.95rem;
-  line-height: 1.7;
-  max-width: 38rem;
-  margin: 0 auto 3rem;
-  padding: 0 1.5rem;
-  opacity: 0.75;
-}
-
 .entry {
   position: relative;
   display: grid;
@@ -1044,7 +980,7 @@ h2.section-title.left {
 }
 
 /* =========================================
-   VI. THE QUARTERMASTER'S STORES
+   VI. THE STORES
    ========================================= */
 #stores {
   background: var(--black);
@@ -1244,33 +1180,6 @@ h2.section-title.left {
 }
 .fold.section-fold .fold-body {
   padding-bottom: 1rem;
-}
-
-/* Ledger-fold: small, sits inside a ledger column under its eyebrow/title/intro */
-/* Era markers inside the timeline (now internal headers, not folds) */
-.era-marker {
-  text-align: center;
-  position: relative;
-  padding: 2.5rem 0 2rem;
-  font-family: var(--carved);
-  font-size: 0.85rem;
-  letter-spacing: 0.35em;
-  color: var(--blood);
-  text-transform: uppercase;
-  z-index: 2;
-}
-.era-marker span {
-  display: inline-block;
-  background: var(--black);
-  padding: 0 1.5rem;
-  position: relative;
-  z-index: 2;
-}
-.era-marker.silence {
-  color: var(--bone-faint);
-  font-style: italic;
-  font-family: var(--serif-italic);
-  letter-spacing: 0.2em;
 }
 
 /* Mobile: tighter spacing on summaries */
@@ -2297,7 +2206,7 @@ footer .hint kbd {
       <li><a href="#articles" data-compass-link><span class="roman">III</span><span>The Articles</span></a></li>
       <li><a href="#annals" data-compass-link><span class="roman">IV</span><span>The Annals</span></a></li>
       <li><a href="#broadside" data-compass-link><span class="roman">V</span><span>The Broadside</span></a></li>
-      <li><a href="#stores" data-compass-link><span class="roman">VI</span><span>The Quartermaster's Stores</span></a></li>
+      <li><a href="#stores" data-compass-link><span class="roman">VI</span><span>The Stores</span></a></li>
       <li><a href="#ledger" data-compass-link><span class="roman">VII</span><span>The Practice</span></a></li>
       <li><a href="#hourglass" data-compass-link><span class="roman">VIII</span><span>The Hourglass</span></a></li>
       <li><a href="#crew" data-compass-link><span class="roman">IX</span><span>The Crew</span></a></li>
@@ -2599,7 +2508,7 @@ footer .hint kbd {
           <div class="entry reveal" data-side="left">
         <div class="entry-date">1572</div>
         <div class="entry-content"><div class="entry-title">Drake at Nombre de Dios</div>
-          <div class="entry-desc">Francis Drake sacks the Spanish silver train on the Isthmus of Panama. The English Crown calls him a hero and pays him in royal arms. Spain calls him a pirate. The distinction between privateer and pirate is revealed, once and for all, as the distinction between friend and enemy.</div></div>
+          <div class="entry-desc">Francis Drake sacks the Spanish silver train on the Isthmus of Panama. The English Crown rewards him with arms; Spain hangs his men when they catch them. He sails for the state. The pirates after him will sail for themselves. The distinction is the entire argument that follows.</div></div>
       </div>
 
       <div class="entry reveal" data-side="right">
@@ -2633,328 +2542,390 @@ footer .hint kbd {
       </div>
 
       <div class="entry reveal" data-side="left">
+        <div class="entry-date">1696</div>
+        <div class="entry-content"><div class="entry-title">Rex v. Dawson</div>
+          <div class="entry-desc">An English admiralty court tries Henry Every's crew. The judges hold that pirates are <em>hostis humani generis</em>, enemies of all mankind, triable by any nation that catches them. The phrase is older than the case. The case gives it teeth.</div></div>
+      </div>
+
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">1701</div>
         <div class="entry-content"><div class="entry-title">Captain Kidd hanged at Wapping</div>
           <div class="entry-desc">A privateer commissioned by the Crown, then disowned by the Crown, then hanged twice for the inconvenience of having documented his commission. The rope breaks the first time. The second holds.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">1710</div>
         <div class="entry-content"><div class="entry-title">The Statute of Anne</div>
           <div class="entry-desc">England invents copyright. Fourteen years plus fourteen, then the work belongs to everyone. The term has lengthened every generation since.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">1713</div>
         <div class="entry-content"><div class="entry-title">The Treaty of Utrecht</div>
           <div class="entry-desc">The War of the Spanish Succession ends. Tens of thousands of trained sailors are demobilized into a peacetime market that has no use for them. They take the only trade they know to the only employer who will have them. The Golden Age proper begins.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">1716</div>
         <div class="entry-content"><div class="entry-title">The Republic of Pirates</div>
           <div class="entry-desc">Nassau. For the better part of four years the port runs outside the Crown's writ. Blackbeard, Vane, Hornigold, Bellamy, Rackham, the whole crew ashore. Lawless by London's measure. Self-governing by their own.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">1717</div>
         <div class="entry-content"><div class="entry-title">Bellamy's Speech</div>
           <div class="entry-desc">Aboard a captured sloop, Sam Bellamy answers a merchant captain who scorns him: <em>I am a free prince, and I have as much authority to make war on the whole world as he who has a hundred sail of ships at sea and an army of 100,000 men in the field.</em></div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">1718</div>
         <div class="entry-content"><div class="entry-title">The King's Pardon</div>
           <div class="entry-desc">George I offers a royal pardon to any pirate who surrenders by September. Most of Hornigold's men take it. Bellamy and Roberts would not have. The pardon is a clever piece of counter-insurgency: split the crew between those who want a quiet life and those who remember what they came for.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">May 1718</div>
         <div class="entry-content"><div class="entry-title">Blackbeard blockades Charleston</div>
           <div class="entry-desc">Edward Teach holds an entire colonial port hostage for a chest of medicine. He gets the chest. He sails away. The lesson is published in every newspaper on two continents: the state's monopoly on coercion is fragile.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">Jul 1718</div>
         <div class="entry-content"><div class="entry-title">Woodes Rogers takes Nassau</div>
           <div class="entry-desc">The Crown ships the former privateer Rogers to New Providence as governor, with a navy squadron and a copy of the pardon. The Republic of Pirates ends with paperwork. Rogers hangs the holdouts who refuse the offer. Hornigold takes the pardon and becomes a pirate hunter. The archetype of the co-opted radical is minted here.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">Nov 1718</div>
         <div class="entry-content"><div class="entry-title">Death of Blackbeard at Ocracoke</div>
           <div class="entry-desc">Maynard's boarding party. Five musket balls and twenty cutlass wounds before he goes down. His head, cut off and slung from the bowsprit, is the kind of trophy a navy displays only when it knows the man is more dangerous as a story than he ever was as a captain.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">1719 &ndash; 22</div>
         <div class="entry-content"><div class="entry-title">Black Bart takes 400+ prizes</div>
           <div class="entry-desc">Bartholomew Roberts, the most successful pirate captain by prize count in the entire Age of Sail. He drank tea, not rum. He forbade gambling aboard. He insisted his crew not work on Sunday. He also ran up a flag with his own figure standing on two skulls, captioned <em>A Barbadian's Head</em> and <em>A Martinican's Head</em>, to remind the merchants of those two islands who had hanged his men. The articles worked.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">1720</div>
         <div class="entry-content"><div class="entry-title">Bartholomew Roberts' Articles</div>
           <div class="entry-desc">Black Bart's crew draws up eleven articles: equal vote, equal share, no smuggling aboard women or boys, lights out at eight, disputes ashore with pistol and cutlass. The most complete pirate code that survives.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">1720</div>
         <div class="entry-content"><div class="entry-title">Anne Bonny &amp; Mary Read captured</div>
           <div class="entry-desc">Both plead their bellies and escape the noose. Bonny's parting words to Jack Rackham on the gallows: <em>Had you fought like a man, you need not have been hanged like a dog.</em></div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">1722</div>
         <div class="entry-content"><div class="entry-title">Death of Black Bart</div>
           <div class="entry-desc">A broadside catches Roberts in the throat off Cape Lopez. 272 of his crew are taken to Cape Coast Castle for the largest pirate trial in history; 52 hang within the flood marks of the castle gate. The back of the Golden Age is broken.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">1724</div>
         <div class="entry-content"><div class="entry-title">Johnson's General History of the Pyrates</div>
           <div class="entry-desc">The book that shapes every pirate myth after it. Likely written by Defoe. The articles, the flags, the speeches, the ends. All here.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">1726</div>
         <div class="entry-content"><div class="entry-title">William Fly on the gallows at Boston</div>
           <div class="entry-desc">One of the last of the Golden Age captains. The minister offers him a final repentance. Fly refuses, retying the noose himself with a sailor's knot and warning the assembled merchants and shipmasters to use their crews better, lest the same fate find them. A clean exit. The Golden Age ends with its mouth shut around a curse.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">1730s</div>
         <div class="entry-content"><div class="entry-title">Calm, officially</div>
-          <div class="entry-desc">The Royal Navy completes the suppression. The Caribbean goes quiet. Piracy persists in the South China Sea and the Barbary Coast for another century, but the great public argument about property, sovereignty, and democratic consent made at sea is over. The argument goes underground and waits.</div></div>
+          <div class="entry-desc">The Royal Navy completes the Atlantic suppression. The last of the great Caribbean captains hang or sail east. The public argument the pirates carried, about property, sovereignty, who owns the sea and who owns himself, is forced underground. London declares the trade ended. London is half right.</div></div>
       </div>
 
-          <div class="era-marker silence"><span>the long silence &middot; 1730 to 1948</span></div>
+      <div class="entry reveal" data-side="right">
+        <div class="entry-date">1735</div>
+        <div class="entry-content"><div class="entry-title">Zenger acquitted</div>
+          <div class="entry-desc">John Peter Zenger, German-born printer in New York, is tried for seditious libel after publishing criticism of the colonial governor. Andrew Hamilton argues that truth is a defense. The jury acquits in ten minutes. American press freedom dates from this verdict.</div></div>
+      </div>
 
-          <p class="era-note silence-note">the printing press industrialized, the telegraph cabled, the post regulated, the radio licensed, the cipher classified. enclosure moved faster than refusal could.</p>
+      <div class="entry reveal" data-side="left">
+        <div class="entry-date">1751 &ndash; 72</div>
+        <div class="entry-content"><div class="entry-title">Diderot's Encyclop&eacute;die</div>
+          <div class="entry-desc">Twenty-eight volumes, seventy-two thousand articles, four thousand contributors, twenty-one years. Diderot and d'Alembert compile the technical knowledge of an age and refuse to let the church or the crown decide who reads it. Suppressed twice, smuggled past censors, finished anyway.</div></div>
+      </div>
 
-          <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
+        <div class="entry-date">1789 &ndash; 91</div>
+        <div class="entry-content"><div class="entry-title">Free speech enters constitutional law</div>
+          <div class="entry-desc">The French Declaration of the Rights of Man, Article 11: free communication of thought is the most precious right. Two years later the United States ratifies the First Amendment. Two governments at war with each other write the same insurance against themselves.</div></div>
+      </div>
+
+      <div class="entry reveal" data-side="left">
+        <div class="entry-date">1801 &ndash; 10</div>
+        <div class="entry-content"><div class="entry-title">Ching Shih's Red Flag Fleet</div>
+          <div class="entry-desc">A former Cantonese sex worker takes command of her dead husband's pirate fleet. She expands it to eighty thousand hands and 1,800 ships, fights the Qing navy and the East India Company to a stalemate, and negotiates her own retirement on her own terms. The Atlantic golden age ends in nooses. The Pacific golden age ends in pension.</div></div>
+      </div>
+
+      <div class="entry reveal" data-side="right">
+        <div class="entry-date">1844</div>
+        <div class="entry-content"><div class="entry-title">Spooner runs the post</div>
+          <div class="entry-desc">Lysander Spooner founds the American Letter Mail Company, charging five cents a letter against the federal monopoly's twelve. The post moves faster and reaches farther. Congress shuts him down with a new postal act the following year. The mail will cost twelve cents because Congress says so.</div></div>
+      </div>
+
+      <div class="entry reveal" data-side="left">
+        <div class="entry-date">1886</div>
+        <div class="entry-content"><div class="entry-title">The Berne Convention</div>
+          <div class="entry-desc">Ten European states sign a treaty granting reciprocal copyright across borders. A book published in Paris is now protected in Berlin, in London, in Bern. Every empire that signs commits to enforcing every other empire's copyright. The Statute of Anne has become an instrument of imperial policy.</div></div>
+      </div>
+
+      <div class="entry reveal" data-side="right">
+        <div class="entry-date">1906</div>
+        <div class="entry-content"><div class="entry-title">Twain testifies</div>
+          <div class="entry-desc">Mark Twain appears before the joint congressional committee on copyright in a white linen suit. He argues for perpetual copyright on the grounds that the wealthy already enjoy it through trusts and dynasties. The 1909 Copyright Act extends the term to fifty-six years. The lengthening continues.</div></div>
+      </div>
+
+      <div class="entry reveal" data-side="left">
+        <div class="entry-date">1917</div>
+        <div class="entry-content"><div class="entry-title">Vernam invents the one-time pad</div>
+          <div class="entry-desc">Gilbert Vernam, at AT&amp;T's research lab, designs a teleprinter cipher that combines plaintext with a random key tape. Joseph Mauborgne later proves it mathematically unbreakable when the key is truly random and used once. The first cipher math itself certifies as secure.</div></div>
+      </div>
+
+      <div class="entry reveal" data-side="right">
+        <div class="entry-date">1928</div>
+        <div class="entry-content"><div class="entry-title">Olmstead v. United States</div>
+          <div class="entry-desc">The Supreme Court rules five to four that federal wiretapping does not violate the Fourth Amendment because no physical entry occurred. Justice Brandeis dissents: the right to be let alone is the right most valued by civilized men. The dissent loses the case and wins the next century.</div></div>
+      </div>
+
+      <div class="entry reveal" data-side="left">
+        <div class="entry-date">1929</div>
+        <div class="entry-content"><div class="entry-title">The Black Chamber dissolved</div>
+          <div class="entry-desc">Secretary of State Henry Stimson disbands the American cryptographic bureau with a single sentence: gentlemen do not read each other's mail. Yardley's team had been reading Japanese cables for a decade. The decision is reversed within three years. The next rebuild will be at Bletchley's scale.</div></div>
+      </div>
+
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">1940 &ndash; 45</div>
         <div class="entry-content"><div class="entry-title">Bletchley Park</div>
           <div class="entry-desc">Alan Turing's team breaks Enigma at a country house north of London. The work is so consequential it stays classified for thirty years. Industrial-scale cryptography becomes a state instrument; the postwar NSA and GCHQ inherit the toolkit. Mathematics takes orders from parliaments, briefly. The cypherpunks of 1976 onward will spend a generation taking it back.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">1948</div>
         <div class="entry-content"><div class="entry-title">Shannon's Mathematical Theory of Communication</div>
           <div class="entry-desc">Claude Shannon publishes <em>A Mathematical Theory of Communication</em> at Bell Labs. Information becomes measurable, encodeable, transmissible. His information theory and his classified cryptography work had been the same project. The math foundation of every entry that follows.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">1971</div>
         <div class="entry-content"><div class="entry-title">Project Gutenberg</div>
           <div class="entry-desc">Michael Hart types the Declaration of Independence into a Xerox Sigma V mainframe at the University of Illinois on July 4, 1971. The first electronic free-information project. He runs it by hand for forty years.</div></div>
       </div>
 
-          <div class="entry reveal" data-side="right">
+          <div class="entry reveal" data-side="left">
         <div class="entry-date">1976</div>
         <div class="entry-content"><div class="entry-title">Diffie &amp; Hellman</div>
           <div class="entry-desc"><em>New Directions in Cryptography.</em> Public-key cryptography makes private conversation possible between strangers. The first crack in the state's monopoly on secrets.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">1983</div>
         <div class="entry-content"><div class="entry-title">Richard Stallman begins GNU</div>
           <div class="entry-desc">Free as in freedom, not as in beer. The first serious argument that software, and by extension all code, ought to be unshackled from proprietary enclosure.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">1988</div>
         <div class="entry-content"><div class="entry-title">Crypto Anarchist Manifesto</div>
           <div class="entry-desc">Timothy May writes: <em>A specter is haunting the modern world, the specter of crypto anarchy.</em> Privacy, contracts, and markets will be reconstituted outside the state's reach.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">1989</div>
         <div class="entry-content"><div class="entry-title">David Chaum's DigiCash</div>
           <div class="entry-desc">Blind signatures. Anonymous electronic cash, twenty years before Bitcoin. The technology works. The business dies. The idea outlasts the company.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">1991</div>
         <div class="entry-content"><div class="entry-title">Phil Zimmermann releases PGP</div>
           <div class="entry-desc">Strong encryption for the ordinary person. The US government charges him with exporting munitions. He publishes the source code as a printed book. Books cannot be export-controlled. The investigation is dropped. The cipher is loose.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">Aug 1991</div>
         <div class="entry-content"><div class="entry-title">Linus Torvalds posts Linux</div>
           <div class="entry-desc">A Finnish graduate student announces a kernel he wrote for fun on a Usenet newsgroup. By 2026 it runs the internet, every Android phone, the cloud, and most of the world&apos;s servers. Free software at scale, three decades after Stallman called for it.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">1992</div>
         <div class="entry-content"><div class="entry-title">The cypherpunks mailing list</div>
           <div class="entry-desc">Eric Hughes, Tim May, John Gilmore host the first meeting in a Bay Area living room. The list runs for decades. Nakamoto, Finney, Back, Dai, Szabo all pass through it. The whole of modern digital money, anonymity, and private computation is hashed out on a mailing list, exactly the way a pirate code was hashed out on a captured deck.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">1993</div>
         <div class="entry-content"><div class="entry-title">A Cypherpunk's Manifesto</div>
           <div class="entry-desc">Eric Hughes: <em>Privacy is necessary for an open society in the electronic age. Cypherpunks write code.</em> The crew's new articles, in a new sea.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">Apr 1993</div>
         <div class="entry-content"><div class="entry-title">Crypto Wars, Round One</div>
           <div class="entry-desc">The Clinton administration announces the Clipper chip, a key-escrow scheme that would have handed the government a backdoor into every encrypted consumer device. Cypherpunks, EFF, and academic cryptographers mount a coordinated public-comment and technical-critique campaign. Matt Blaze demonstrates a fatal flaw. By 1996, the proposal is dead.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">1996</div>
         <div class="entry-content"><div class="entry-title">Declaration of the Independence of Cyberspace</div>
           <div class="entry-desc">John Perry Barlow to the governments of the industrial world: <em>You have no sovereignty where we gather. Cyberspace does not lie within your borders.</em> Written in Davos of all places, during the signing of the US Telecommunications Act.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">1998</div>
         <div class="entry-content"><div class="entry-title">The DMCA passes</div>
           <div class="entry-desc">The Digital Millennium Copyright Act criminalizes breaking DRM, even on things you bought. Circumvention becomes a separate offense from infringement. The fence is given its own guards.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">May 1999</div>
         <div class="entry-content"><div class="entry-title">Bernstein v. United States</div>
           <div class="entry-desc">Daniel Bernstein, a Berkeley math student, sues the federal government over export controls on his Snuffle cipher. The Ninth Circuit rules that source code is speech, protected by the First Amendment. Every cipher published since stands on this judgment.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">1999</div>
         <div class="entry-content"><div class="entry-title">Napster</div>
           <div class="entry-desc">Shawn Fanning writes a program in a college dorm. The music industry's revenue model is broken inside twenty-four months.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">1999</div>
         <div class="entry-content"><div class="entry-title">DeCSS</div>
           <div class="entry-desc">Jon Lech Johansen, fifteen years old, cracks DVD encryption. Prosecuted in Norway. Acquitted twice. The code is printed on T-shirts, tattooed, written as a haiku. Speech cannot be enjoined.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">2001</div>
         <div class="entry-content"><div class="entry-title">BitTorrent</div>
           <div class="entry-desc">Bram Cohen publishes the protocol. Every leecher becomes a seeder. The network gets stronger the more it is used. An architecture of mutual aid disguised as a file-sharing trick.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">2002</div>
         <div class="entry-content"><div class="entry-title">Tor goes public</div>
           <div class="entry-desc">Developed by the US Naval Research Lab, released as open source. Onion routing goes from classified to available to every activist, dissident, and journalist on earth.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">2003</div>
         <div class="entry-content"><div class="entry-title">The Pirate Bay</div>
           <div class="entry-desc">A Swedish BBS spawns the most prosecuted tracker in history. Raided, seized, cloned, relocated, mirrored. Still running. The flag does not come down.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">2006</div>
         <div class="entry-content"><div class="entry-title">WikiLeaks launches</div>
           <div class="entry-desc">Julian Assange and a small group set up a drop box for whistleblowers. Cablegate follows. The consequences for Assange follow the consequences of every Golden Age captain who made state secrets public: exile, siege, imprisonment. The documents remain.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">2008</div>
         <div class="entry-content"><div class="entry-title">The Bitcoin whitepaper</div>
           <div class="entry-desc">Satoshi Nakamoto proposes a peer-to-peer electronic cash system. Sound money without a central bank. The cypherpunks' longest-running bet finally clears. Nine pages. The single most consequential document in the post-2008 financial order.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">2008</div>
         <div class="entry-content"><div class="entry-title">Guerilla Open Access Manifesto</div>
           <div class="entry-desc">Aaron Swartz, age 21: <em>Information is power. But like all power, there are those who wish to keep it for themselves. There is no justice in following unjust laws.</em></div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">2009</div>
         <div class="entry-content"><div class="entry-title">Satoshi mines the genesis block</div>
           <div class="entry-desc">Encoded in the coinbase: <em>The Times 03/Jan/2009 Chancellor on brink of second bailout for banks.</em> The first written act of the new monetary order is a headline about the failure of the old one.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">May 2010</div>
         <div class="entry-content"><div class="entry-title">Bradley Manning</div>
           <div class="entry-desc">An Army intelligence analyst, twenty-two, sends WikiLeaks roughly 750,000 classified diplomatic cables, war logs from Iraq and Afghanistan, and the Collateral Murder video, transmitted via Tor. He is convicted under the Espionage Act of 1917, the same statute used against Daniel Ellsberg in 1971. Sentenced to thirty-five years; commuted to seven by Obama.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">2011</div>
         <div class="entry-content"><div class="entry-title">Sci-Hub</div>
           <div class="entry-desc">Alexandra Elbakyan, a neuroscience grad student in Kazakhstan, builds the shadow library that gives every researcher on earth the papers their institutions could not afford. Elsevier sues. Sci-Hub keeps sailing.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">Jan 2012</div>
         <div class="entry-content"><div class="entry-title">Megaupload seized</div>
           <div class="entry-desc">In one week, the US government raids Kim Dotcom's mansion in New Zealand, and a coordinated internet protest kills two laws that would have empowered Hollywood to blacklist any site at the DNS level. A taste, briefly, of what organized refusal at scale can do.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">Jan 2013</div>
         <div class="entry-content"><div class="entry-title">Aaron Swartz dies</div>
           <div class="entry-desc">Indicted on thirteen felony counts for downloading academic papers from JSTOR. Thirty-five years and a million-dollar fine hung over him. He was 26. He died under indictment. The argument he made carried.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">Jun 2013</div>
         <div class="entry-content"><div class="entry-title">The Snowden disclosures</div>
           <div class="entry-desc">PRISM, XKeyscore, MUSCULAR, the whole apparatus. The cypherpunks are retroactively proven not paranoid. The response is wider encryption, faster protocols, quieter chat.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">Aug 2013</div>
         <div class="entry-content"><div class="entry-title">Lavabit shuts down</div>
           <div class="entry-desc">Ladar Levison receives a federal demand for the SSL keys that would unlock every user of his encrypted email service. He shuts the service rather than comply. The first business in modern memory to choose closure over collaboration.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">Oct 2013</div>
         <div class="entry-content"><div class="entry-title">Silk Road seized</div>
           <div class="entry-desc">Ross Ulbricht arrested in a San Francisco library. Sentenced to two consecutive life terms plus forty years for running a marketplace. The state's response to a functioning anonymous market is to imprison its operator until he dies.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">Feb 2016</div>
         <div class="entry-content"><div class="entry-title">Apple vs. FBI</div>
           <div class="entry-desc">The FBI demands Apple build a backdoor to unlock the San Bernardino shooter's iPhone. Apple refuses publicly. The FBI finds an outside contractor and drops the case. The largest company in the world said no to a federal court. The court withdrew.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">2019</div>
         <div class="entry-content"><div class="entry-title">Assange arrested at the Ecuadorian Embassy</div>
           <div class="entry-desc">Seven years of asylum end. London, Belmarsh, and a US extradition request built on the Espionage Act. He is eventually released in 2024 after a plea bargain. The documents he published remain.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">2022</div>
         <div class="entry-content"><div class="entry-title">Anna's Archive</div>
           <div class="entry-desc">After the Z-Library takedown of November 2022, the pseudonymous Anna Archivist opens a meta-index of every shadow library at once. By 2026, more than 63 million books and 95 million papers, all CC0, code and data fully open, designed to be re-hosted by anyone if seized. The largest open library in human history.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">2023 &ndash; 26</div>
         <div class="entry-content"><div class="entry-title">The Right to Repair</div>
           <div class="entry-desc">After years of farmers locked out of the tractors they paid for, Colorado passes the first Right to Repair law in 2023. New York, Minnesota, and California follow. The FTC sues Deere in 2025. The class action settles in 2026 for ninety-nine million dollars. The right of the buyer to open what he bought returns to the books, where it was always supposed to live.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">2023</div>
         <div class="entry-content"><div class="entry-title">The AI corpus suits begin</div>
           <div class="entry-desc">The New York Times sues OpenAI. Authors sue Meta. Getty sues Stability. The industry that spent a century enforcing copyright maximalism discovers the argument runs both ways when a machine does the copying. The enclosure begins to eat itself.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="left">
+      <div class="entry reveal" data-side="right">
         <div class="entry-date">Jan 2025</div>
         <div class="entry-content"><div class="entry-title">Ulbricht pardoned</div>
           <div class="entry-desc">Eleven years in, Ross Ulbricht walks out of federal prison. The precedent of two life sentences for running a website remains on the books. The next marketplace builds on Monero and lives on Tor.</div></div>
       </div>
 
-      <div class="entry reveal" data-side="right">
+      <div class="entry reveal" data-side="left">
         <div class="entry-date">now</div>
         <div class="entry-content"><div class="entry-title">The voyage continues</div>
           <div class="entry-desc">The fence keeps moving. So does the crew. The names on the articles change. The articles do not.</div></div>
@@ -3023,11 +2994,11 @@ footer .hint kbd {
 <div class="divider"><span class="divider-glyph"></span></div>
 
 <!-- =========================================
-     VI. THE QUARTERMASTER'S STORES
+     VI. THE STORES
      ========================================= -->
 <section id="stores">
   <div class="container">
-    <p class="section-label">The Quartermaster&apos;s Stores</p>
+    <p class="section-label">The Stores</p>
     <h2 class="section-title">Tools of the Trade</h2>
     <p class="stores-intro">
       The quartermaster held the stores and kept the count. He was elected by the crew and his first duty was to the men aboard. The provisions were common stock. Every hand had an equal title to them by article. Below is the working hold of the present crew. Every tool has been vouched for by the communities that live by it and every link goes directly to the project. The stores grow. Send corrections back to the deck.
@@ -3709,6 +3680,18 @@ footer .hint kbd {
         <div class="sig-meta"><span class="years">c. 1680 &ndash; 1721</span> &middot; refused the king&rsquo;s pardon</div>
       </div>
       <div class="sig reveal">
+        <div class="sig-name">Howell Davis</div>
+        <div class="sig-meta"><span class="years">c. 1690 &ndash; 1719</span> &middot; taught Roberts the trade</div>
+      </div>
+      <div class="sig reveal">
+        <div class="sig-name">Calico Jack Rackham</div>
+        <div class="sig-meta"><span class="years">c. 1682 &ndash; 1720</span> &middot; the captain Bonny and Read sailed under</div>
+      </div>
+      <div class="sig reveal">
+        <div class="sig-name">Edward England</div>
+        <div class="sig-meta"><span class="years">d. 1721</span> &middot; deposed by his own crew for clemency</div>
+      </div>
+      <div class="sig reveal">
         <div class="sig-name">William Fly</div>
         <div class="sig-meta"><span class="years">d. 1726</span> &middot; tied his own noose</div>
       </div>
@@ -3725,12 +3708,20 @@ footer .hint kbd {
         <div class="sig-meta"><span class="years">1944 &ndash; , 1945 &ndash;</span> &middot; broke the state monopoly on secrets</div>
       </div>
       <div class="sig reveal">
+        <div class="sig-name">Ralph Merkle</div>
+        <div class="sig-meta"><span class="years">1952 &ndash;</span> &middot; the trees that hold the chains</div>
+      </div>
+      <div class="sig reveal">
         <div class="sig-name">David Chaum</div>
         <div class="sig-meta"><span class="years">1955 &ndash;</span> &middot; blind signatures, twenty years early</div>
       </div>
       <div class="sig reveal">
         <div class="sig-name">Phil Zimmermann</div>
         <div class="sig-meta"><span class="years">1954 &ndash;</span> &middot; the man who armed the inbox</div>
+      </div>
+      <div class="sig reveal">
+        <div class="sig-name">Werner Koch</div>
+        <div class="sig-meta"><span class="years">1961 &ndash;</span> &middot; kept GPG alive when no one was paying</div>
       </div>
       <div class="sig reveal">
         <div class="sig-name">Timothy May</div>
@@ -3765,12 +3756,28 @@ footer .hint kbd {
         <div class="sig-meta"><span class="years">1971 &ndash;</span> &middot; the case that made code speech</div>
       </div>
       <div class="sig reveal">
+        <div class="sig-name">Cindy Cohn</div>
+        <div class="sig-meta"><span class="years">1963 &ndash;</span> &middot; made the case for code as speech</div>
+      </div>
+      <div class="sig reveal">
+        <div class="sig-name">Edward Felten</div>
+        <div class="sig-meta"><span class="years">1963 &ndash;</span> &middot; made research on DRM protected speech</div>
+      </div>
+      <div class="sig reveal">
         <div class="sig-name">John Perry Barlow</div>
         <div class="sig-meta"><span class="years">1947 &ndash; 2018</span> &middot; declarant of the commons</div>
       </div>
       <div class="sig reveal">
         <div class="sig-name">Linus Torvalds</div>
         <div class="sig-meta"><span class="years">1969 &ndash;</span> &middot; the kernel under most of the planet</div>
+      </div>
+      <div class="sig reveal">
+        <div class="sig-name">Mitchell Baker</div>
+        <div class="sig-meta"><span class="years">1957 &ndash;</span> &middot; kept the open browser alive</div>
+      </div>
+      <div class="sig reveal">
+        <div class="sig-name">Tim Berners-Lee</div>
+        <div class="sig-meta"><span class="years">1955 &ndash;</span> &middot; built the web, did not patent it</div>
       </div>
       <div class="sig reveal">
         <div class="sig-name">Satoshi Nakamoto</div>
@@ -3783,6 +3790,10 @@ footer .hint kbd {
       <div class="sig reveal">
         <div class="sig-name">Moxie Marlinspike</div>
         <div class="sig-meta"><span class="years">1980 &ndash;</span> &middot; moved the baseline</div>
+      </div>
+      <div class="sig reveal">
+        <div class="sig-name">Roger Dingledine</div>
+        <div class="sig-meta"><span class="years">1976 &ndash;</span> &middot; built the routes the watchers cannot trace</div>
       </div>
       <div class="sig reveal">
         <div class="sig-name">Daniel Micay</div>
@@ -4341,7 +4352,7 @@ footer .hint kbd {
       termLine('  the records', 'output accent');
       termLines([
         '    annals              · the timeline in brief',
-        '    stores              · the quartermaster\'s categories',
+        '    stores              · the stores, by category',
         '    ledger              · prizes already aboard',
         '    manifest            · the crew',
         '    brethren            · the Brethren of the Coast',
@@ -4645,11 +4656,17 @@ footer .hint kbd {
       termLine('the annals, in brief:', 'output emphasis');
       const brief = [
         '1660s  Brethren of the Coast · the first written pirate code',
+        '1696   Rex v. Dawson · hostis humani generis given teeth',
         '1710   Statute of Anne · copyright invented',
         '1716   Nassau, the Republic of Pirates',
         '1717   Bellamy: I am a free prince',
         '1720   Roberts\' Articles',
         '1722   Black Bart killed; 52 of his crew hanged at Cape Coast',
+        '1735   Zenger acquitted · press freedom in the colonies',
+        '1810   Ching Shih retires on her own terms',
+        '1844   Spooner runs the post against the federal monopoly',
+        '1886   Berne Convention · copyright goes international',
+        '1928   Olmstead v. US · Brandeis dissents on privacy',
         '1940   Bletchley Park breaks Enigma',
         '1948   Shannon · A Mathematical Theory of Communication',
         '1971   Project Gutenberg · the first free-information project',
@@ -4675,7 +4692,7 @@ footer .hint kbd {
       brief.forEach(l => termLine('  ' + l, 'output'));
     },
     stores() {
-      termLine('the quartermaster\'s stores, by category:', 'output emphasis');
+      termLine('the stores, by category:', 'output emphasis');
       const cats = [
         'I.    Shadow Libraries',
         'II.   Streaming',
