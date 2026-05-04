@@ -2183,6 +2183,60 @@ footer .hint kbd {
   }
   #skull-canvas { display: none !important; }
 }
+
+/* =========================================
+   TERMINAL EASTER EGGS: page mutations
+   These are toggled by terminal commands.
+   ========================================= */
+
+/* invert: flip the bone/black scheme. Genuine page mutation. */
+body.inverted {
+  background: var(--bone);
+  color: var(--blood-deep);
+  --bone: #030303;
+  --bone-dim: rgba(3, 3, 3, 0.82);
+  --bone-faint: rgba(3, 3, 3, 0.55);
+  --bone-ghost: rgba(3, 3, 3, 0.22);
+  --black: #ede4ce;
+  --black-deep: #d6cdb6;
+}
+body.inverted .grain {
+  filter: invert(1);
+  opacity: 0.55;
+}
+body.inverted #skull-canvas {
+  filter: invert(1);
+  opacity: 0.7;
+}
+
+/* doubloon-rain: animated falling glyphs across the screen. ~3s. */
+.doubloon-rain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9000;
+  overflow: hidden;
+}
+.doubloon-rain .doubloon {
+  position: absolute;
+  top: -2rem;
+  font-family: var(--mono);
+  font-size: 1.4rem;
+  font-weight: bold;
+  color: #d4a02c;
+  text-shadow: 0 0 6px rgba(212, 160, 44, 0.7), 0 1px 0 rgba(0,0,0,0.6);
+  animation: doubloon-fall linear forwards;
+  user-select: none;
+}
+@keyframes doubloon-fall {
+  0%   { transform: translateY(-2rem) rotate(0deg);   opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .doubloon-rain { display: none !important; }
+}
 </style>
 </head>
 <body>
@@ -4380,10 +4434,9 @@ footer .hint kbd {
       termLine('  the argument', 'output accent');
       termLines([
         '    oath                · recite the oath',
-        '    axioms              · the four propositions',
         '    articles            · list all eleven articles',
         '    article <n>         · read an article by numeral (1-11 or i-xi)',
-        '    practice            · the seventeen acts'
+        '    practice            · the twenty-one acts'
       ], 'output');
       termLine('', 'output');
       termLine('  the voices', 'output accent');
@@ -4396,8 +4449,9 @@ footer .hint kbd {
         '    hughes              · A Cypherpunk\'s Manifesto, excerpt',
         '    barlow              · Declaration of the Independence of Cyberspace',
         '    stallman            · the four freedoms',
-        '    stirner             · The Ego and Its Own',
+        '    thoreau             · on conscience and law',
         '    rothbard            · on patent and copyright',
+        '    finney              · running bitcoin',
         '    kinsella            · on intellectual property',
         '    kahle               · on the library',
         '    gallows             · last words of the hanged'
@@ -4410,7 +4464,8 @@ footer .hint kbd {
         '    ledger              · prizes already aboard',
         '    manifest            · the crew',
         '    brethren            · the Brethren of the Coast',
-        '    log                 · the ship\'s log'
+        '    log                 · the ship\'s log',
+        '    count               · the holdings, in numbers'
       ], 'output');
       termLine('', 'output');
       termLine('  pirate craft', 'output accent');
@@ -4425,7 +4480,9 @@ footer .hint kbd {
         '    mutiny              · convene the watch',
         '    black-spot          · the mark served',
         '    prize               · a fact drawn at random',
-        '    watch               · a quotable line drawn at random'
+        '    watch               · a quotable line drawn at random',
+        '    shares              · the prize divided by the articles',
+        '    knot                · a sailor\'s knot'
       ], 'output');
       termLine('', 'output');
       termLine('  cryptography', 'output accent');
@@ -4434,7 +4491,21 @@ footer .hint kbd {
         '    bury <text>         · encrypt with key FREEPRINCE',
         '    dig <text>          · decrypt with key FREEPRINCE',
         '    encode / decode     · same operations, plain naming',
-        '    strongbox           · open the strongbox'
+        '    rot13 <text>        · the trivial cipher'
+      ], 'output');
+      termLine('', 'output');
+      termLine('  on the page', 'output accent');
+      termLines([
+        '    invert              · flip the colour scheme',
+        '    rain on | off       · the binary rain in the hero',
+        '    doubloon            · drop a prize across the deck',
+        '    spot                · serve the black spot',
+        '    scroll <section>    · come about to oath, articles, stores, etc.',
+        '    reveal              · open every hatch',
+        '    fold                · close every hatch',
+        '    cache               · download the page as a single file',
+        '    sign                · come to the sign-rite',
+        '    flagship            · which section the flag is over now'
       ], 'output');
       termLine('', 'output');
       termLine('  housekeeping', 'output accent');
@@ -4462,26 +4533,13 @@ footer .hint kbd {
         termLine('  -- ' + sigText, 'output accent');
       }
     },
-    axioms() {
-      termLine('the load-bearing claims, distilled from the eleven articles:', 'output emphasis');
-      termLine('', 'output');
-      termLines([
-        '  I.    Property resolves conflict between users of rival goods.',
-        '  II.   Ideas are not rival goods.',
-        '  III.  No statute can change the nature of a thing.',
-        '  IV.   The individual is sovereign, or the individual is subject.'
-      ], 'output');
-      termLine('', 'output');
-      termLine('  the articles work these claims out in eleven forms.', 'output');
-      termLine('  use `articles` for the list, `article <n>` for the full text.', 'output');
-    },
     ledger() {
       termLine('prizes already aboard:', 'output emphasis');
       termLines([
         '  88,000,000+ research papers ........... Sci-Hub',
-        '  63,000,000+ books, 95,000,000+ papers . Anna\'s Archive',
+        '  64,000,000+ books, 95,000,000+ papers . Anna\'s Archive',
         '   2,000,000  daily users ............... Tor Network',
-        '          22+ years online ............... The Pirate Bay',
+        '          23+ years online ............... The Pirate Bay',
         '      70,000+ public-domain works ....... Project Gutenberg',
         '  every block since 2009 ................ Bitcoin',
         '  every tx since 2014 ................... Monero',
@@ -4492,25 +4550,29 @@ footer .hint kbd {
       ], 'output');
     },
     practice() {
-      termLine('keep the colours up. seventeen acts, plain order:', 'output emphasis');
+      termLine('keep the colours up. twenty-one acts, plain order:', 'output emphasis');
       termLines([
         'I.     Know what you defend, and from whom.',
         'II.    Encrypt by default.',
         'III.   Verify what you install.',
-        'IV.    Patch on the day.',
-        'V.     Cover the route.',
-        'VI.    Hold your own keys.',
-        'VII.   Back up what you cannot lose.',
-        'VIII.  Strip the metadata before you publish.',
-        'IX.    Compartmentalize.',
-        'X.     Refuse the cloud by default.',
-        'XI.    Treat the phone as a sensor.',
-        'XII.   Refuse the listening room.',
-        'XIII.  Self-host what you can.',
-        'XIV.   Seed what you take.',
-        'XV.    Pay the maker. Share the work.',
-        'XVI.   Add to the crew.',
-        'XVII.  Pass the articles on.'
+        'IV.    Read what you sign.',
+        'V.     Patch on the day.',
+        'VI.    Cover the route.',
+        'VII.   Hold your own keys.',
+        'VIII.  Back up what you cannot lose.',
+        'IX.    Strip the metadata before you publish.',
+        'X.     Watch what you broadcast.',
+        'XI.    Compartmentalize.',
+        'XII.   Shrink the trail behind you.',
+        'XIII.  Refuse the cloud by default.',
+        'XIV.   Treat the phone as a sensor.',
+        'XV.    Refuse the listening room.',
+        'XVI.   Self-host what you can.',
+        'XVII.  Repair before replace.',
+        'XVIII. Seed what you take.',
+        'XIX.   Pay the maker. Share the work.',
+        'XX.    Add to the crew.',
+        'XXI.   Pass the articles on.'
       ], 'output');
     },
     gallows() {
@@ -4681,12 +4743,6 @@ footer .hint kbd {
         '  2. The freedom to redistribute copies so you can help others.',
         '  3. The freedom to distribute copies of your modified versions to others. By doing this you can give the whole community a chance to benefit from your changes. Access to the source code is a precondition for this.'
       ].forEach(l => termLine(l, 'output emphasis'));
-    },
-    stirner() {
-      termLine('Max Stirner, The Ego and Its Own, 1844:', 'output accent');
-      termLine('', 'output');
-      wrapText('All things are nothing to me. I am my own only when I am master of myself, instead of being mastered by sensuality, or by anything else (God, man, authority, law, state, church). Away, then, with every concern that is not altogether my concern! You think at least the good cause must be my concern? What\'s good, what\'s bad? Why, I myself am my concern, and I am neither good nor bad. Neither has meaning for me.', 76)
-        .forEach(l => termLine(l, 'output emphasis'));
     },
     rothbard() {
       termLine('Murray Rothbard, on patent and copyright:', 'output accent');
@@ -5136,10 +5192,259 @@ footer .hint kbd {
         '       the fence is on notice.'
       ], 'output emphasis');
     },
-    strongbox() {
-      revealKonami();
-      termLine('strongbox opened. (also: ↑ ↑ ↓ ↓ ← → ← → B A on the page.)', 'output accent');
+
+    // ===== NEW COMMANDS =====
+
+    finney() {
+      termLine('Hal Finney · Twitter · 11 January 2009:', 'output accent');
+      termLine('', 'output');
+      termLine('  "Running bitcoin"', 'output emphasis');
+      termLine('', 'output');
+      termLine('the second node. the first receipt. two words and a flag.', 'output');
     },
+
+    thoreau() {
+      termLine('Henry David Thoreau, Civil Disobedience, 1849:', 'output accent');
+      termLine('', 'output');
+      wrapText('I think that we should be men first, and subjects afterward. It is not desirable to cultivate a respect for the law, so much as for the right. The only obligation which I have a right to assume is to do at any time what I think right.', 76)
+        .forEach(l => termLine(l, 'output emphasis'));
+    },
+
+    count() {
+      termLine('the holdings, in numbers:', 'output emphasis');
+      termLine('', 'output');
+      termLines([
+        '  articles    .................. 11',
+        '  annals      .................. 72',
+        '  signatures  .................. 53',
+        '  practice    .................. 21',
+        '  stores      ................. 362  (across 16 categories)',
+        '  gallows     ................... 6',
+        '  total bytes ............. one file, no dependencies'
+      ], 'output');
+      termLine('', 'output');
+      termLine('every count is a refusal already in motion.', 'output emphasis');
+    },
+
+    shares() {
+      termLine('the prize divided by the articles:', 'output emphasis');
+      termLine('', 'output');
+      termLines([
+        '  Captain      ................ 2 shares',
+        '  Quartermaster ............... 2 shares',
+        '  Sailing master / surgeon .... 1.5 shares',
+        '  Gunner / boatswain .......... 1.25 shares',
+        '  Common hand ................. 1 share'
+      ], 'output');
+      termLine('', 'output');
+      termLines([
+        '  injury compensation, paid from the common stock first:',
+        '    loss of right arm  ........ 600 pieces of eight',
+        '    loss of left arm   ........ 500',
+        '    loss of right leg  ........ 500',
+        '    loss of left leg   ........ 400',
+        '    loss of an eye     ........ 100',
+        '    loss of a finger   ........ 100'
+      ], 'output');
+      termLine('', 'output');
+      termLine('the wounded man was paid before the prize was split.', 'output emphasis');
+      termLine('the captain held two shares because the crew said two, not because he asked.', 'output');
+    },
+
+    knot() {
+      termLines([
+        '',
+        '          .-""-.',
+        '         /      \\',
+        '        |  .--.  |',
+        '         \\/    \\/',
+        '         /        \\',
+        '        (  ______  )',
+        '         \\/      \\/',
+        '          \\______/',
+        ''
+      ], 'output accent');
+      termLine('a bowline. ties a fixed loop that will not slip under load.', 'output emphasis');
+      termLine('the rabbit comes out of the hole, around the tree, and back down the hole.', 'output');
+    },
+
+    rot13(arg) {
+      if (!arg) {
+        termLine('usage: rot13 <text>', 'error');
+        termLine('a Caesar cipher with shift 13. its own inverse.', 'output');
+        return;
+      }
+      const out = arg.replace(/[a-zA-Z]/g, c => {
+        const base = c <= 'Z' ? 65 : 97;
+        return String.fromCharCode((c.charCodeAt(0) - base + 13) % 26 + base);
+      });
+      termLine(out, 'output emphasis');
+      termLine('', 'output');
+      termLine('the trivial cipher. its security is its disclosure.', 'output');
+    },
+
+    // ===== PAGE-CHANGING COMMANDS =====
+
+    invert() {
+      document.body.classList.toggle('inverted');
+      const on = document.body.classList.contains('inverted');
+      termLine('the colours are ' + (on ? 'inverted. white-on-black has become black-on-white.' : 'restored. bone over black again.'), 'output emphasis');
+      termLine('run `invert` again to ' + (on ? 'restore' : 'invert again') + '.', 'output');
+    },
+
+    rain(arg) {
+      const canvas = document.getElementById('skull-canvas');
+      if (!canvas) {
+        termLine('the rain canvas is not on the page.', 'error');
+        return;
+      }
+      const a = (arg || '').toLowerCase();
+      let target;
+      if (a === 'on' || a === 'up') target = false;
+      else if (a === 'off' || a === 'stop' || a === 'down') target = true;
+      else target = canvas.style.display !== 'none';
+      canvas.style.display = target ? 'none' : '';
+      termLine(target ? 'the rain has stopped.' : 'the rain falls again.', 'output emphasis');
+    },
+
+    doubloon() {
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        termLine('reduced motion is set. the prize is yours but unseen.', 'output emphasis');
+        return;
+      }
+      const layer = document.createElement('div');
+      layer.className = 'doubloon-rain';
+      layer.setAttribute('aria-hidden', 'true');
+      const glyphs = ['$', '$', '$', '$', '$', 'o', '8', 'O', '*'];
+      const N = 36;
+      for (let i = 0; i < N; i++) {
+        const d = document.createElement('span');
+        d.className = 'doubloon';
+        d.textContent = glyphs[Math.floor(Math.random() * glyphs.length)];
+        d.style.left = (Math.random() * 100) + 'vw';
+        const dur = 2.4 + Math.random() * 2.0;
+        const delay = Math.random() * 0.8;
+        d.style.animationDuration = dur + 's';
+        d.style.animationDelay = delay + 's';
+        d.style.fontSize = (1.0 + Math.random() * 1.2) + 'rem';
+        layer.appendChild(d);
+      }
+      document.body.appendChild(layer);
+      setTimeout(() => layer.remove(), 6000);
+      termLine('a prize is loose on the deck.', 'output emphasis');
+    },
+
+    spot() {
+      const btn = document.getElementById('black-spot');
+      if (!btn) {
+        termLine('the spot is not on the page.', 'error');
+        return;
+      }
+      if (btn.classList.contains('served')) {
+        termLine('the spot has already been served.', 'output');
+        return;
+      }
+      btn.click();
+      termLine('the black spot is served. the fence is on notice.', 'output emphasis');
+    },
+
+    scroll(arg) {
+      const valid = {
+        colours: 'colors', colors: 'colors',
+        oath: 'oath',
+        articles: 'articles',
+        annals: 'annals',
+        broadside: 'broadside',
+        stores: 'stores',
+        practice: 'ledger', ledger: 'ledger',
+        hourglass: 'hourglass',
+        crew: 'crew',
+        copy: 'take-a-copy', 'take-a-copy': 'take-a-copy', cache: 'take-a-copy',
+        top: 'top'
+      };
+      const a = (arg || '').toLowerCase();
+      if (!a) {
+        termLine('usage: scroll <section>', 'error');
+        termLine('sections: colours, oath, articles, annals, broadside, stores, practice,', 'output');
+        termLine('          hourglass, crew, copy, top', 'output');
+        return;
+      }
+      if (!valid[a]) {
+        termLine('no such heading: ' + a, 'error');
+        return;
+      }
+      if (a === 'top' || valid[a] === 'top') {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        const el = document.getElementById(valid[a]);
+        if (!el) { termLine('section not found on the page.', 'error'); return; }
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      termLine('coming about to ' + a + '.', 'output emphasis');
+    },
+
+    reveal() {
+      const folds = document.querySelectorAll('details.fold');
+      let count = 0;
+      folds.forEach(f => { if (!f.open) { f.open = true; count++; } });
+      termLine('all hatches open. ' + count + ' folds opened, ' + (folds.length - count) + ' already open.', 'output emphasis');
+    },
+
+    fold() {
+      const folds = document.querySelectorAll('details.fold');
+      let count = 0;
+      folds.forEach(f => { if (f.open) { f.open = false; count++; } });
+      termLine('all hatches closed. ' + count + ' folds closed.', 'output emphasis');
+    },
+
+    cache() {
+      if (typeof window.__hostisDownloadCopy === 'function') {
+        window.__hostisDownloadCopy({ preventDefault: () => {} });
+        termLine('the copy is yours. mirror it. fork it. read it when the site is taken down.', 'output emphasis');
+      } else {
+        termLine('the copy mechanism is not yet armed. press the take-a-copy button instead.', 'error');
+      }
+    },
+
+    sign() {
+      const rite = document.getElementById('sign-rite');
+      const input = document.getElementById('sign-rite-input');
+      if (!rite) {
+        termLine('the sign-rite is not on the page.', 'error');
+        return;
+      }
+      rite.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => { if (input) input.focus(); }, 600);
+      termLine('the page has come to your name. set your mark.', 'output emphasis');
+    },
+
+    flagship() {
+      const sections = ['colors','oath','articles','annals','broadside','stores','ledger','hourglass','crew','take-a-copy'];
+      const labels = {
+        colors: 'The Colours', oath: 'The Oath', articles: 'The Articles',
+        annals: 'The Annals', broadside: 'The Broadside', stores: 'The Stores',
+        ledger: 'The Practice', hourglass: 'The Hourglass', crew: 'The Crew',
+        'take-a-copy': 'Take a Copy'
+      };
+      const mid = window.innerHeight / 2;
+      let current = null, bestDist = Infinity;
+      sections.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        if (r.top <= mid && r.bottom >= 0) {
+          const d = Math.abs(r.top);
+          if (d < bestDist) { bestDist = d; current = id; }
+        }
+      });
+      if (current) {
+        termLine('the flag is over: ' + labels[current], 'output emphasis');
+        termLine('id: #' + current, 'output');
+      } else {
+        termLine('between sections. you are reading the seam.', 'output emphasis');
+      }
+    },
+
     close() { termCloseFn(); },
     quit() { termCloseFn(); },
     exit() { termCloseFn(); }
@@ -5370,6 +5675,8 @@ footer .hint kbd {
     if (mainDownload) {
       mainDownload.addEventListener('click', downloadCopy);
     }
+    // expose for terminal access
+    window.__hostisDownloadCopy = downloadCopy;
   } catch (err) {
     console.warn('compass disabled:', err);
   }
