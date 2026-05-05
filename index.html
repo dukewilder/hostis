@@ -5757,11 +5757,14 @@ body.inverted #skull-canvas {
 
   // -------- DEEP-LINK FOLD AUTO-OPEN --------
   // When the URL targets a <details> element (or an element inside one),
-  // open that details so the reader lands on the content, not the title.
-  // Works on initial load and on hashchange. Also nudges the scroll position
-  // after opening, since the layout shifts when the fold expands.
+  // open every <details> ancestor so the reader lands on the content,
+  // not the title. Runs at multiple lifecycle points because in-app
+  // browsers (X, Instagram, Facebook, etc.) routinely race the page load
+  // against fragment processing. The native browser scrolls to the
+  // closed-fold position before our JS opens the fold, leaving the
+  // reader stranded on a title bar.
   try {
-    function openTargetFold() {
+    function openHashTarget() {
       var hash = window.location.hash;
       if (!hash || hash.length < 2) return;
       var target;
@@ -5779,16 +5782,25 @@ body.inverted #skull-canvas {
         }
         node = node.parentNode;
       }
-      // Scroll into view after the layout has settled.
+      // Wait two animation frames so the layout fully reflows after the
+      // <details> opens, then scroll. Instant ('auto') is more reliable
+      // than 'smooth' in in-app browsers, which often ignore smooth-scroll
+      // or land at the pre-reflow position.
       requestAnimationFrame(function () {
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        requestAnimationFrame(function () {
+          target.scrollIntoView({ behavior: 'auto', block: 'start' });
+        });
       });
     }
-    // Run on initial load (after the DOM is ready, which it is here since
-    // this script is at the end of <body>).
-    openTargetFold();
-    // And again whenever the hash changes (in-page nav).
-    window.addEventListener('hashchange', openTargetFold);
+    // 1. Run when the script first executes (DOM is ready since we're at
+    //    the end of <body>).
+    openHashTarget();
+    // 2. Run again on full page load. By this point, in-app browsers
+    //    have finished their own fragment handling; this is the catch
+    //    for races where the closed fold trapped the initial scroll.
+    window.addEventListener('load', openHashTarget);
+    // 3. Run on every hash change for in-page navigation.
+    window.addEventListener('hashchange', openHashTarget);
   } catch (err) {
     console.warn('deep-link fold auto-open disabled:', err);
   }
