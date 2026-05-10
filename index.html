@@ -20,8 +20,8 @@
 <link rel="canonical" href="https://hostis.black/">
 <meta name="theme-color" content="#030303">
 
-<!-- Favicon: skull-and-crossbones, the unifying mark. Bold shapes for small-size legibility. -->
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Ctext%20x%3D%2250%22%20y%3D%2250%22%20font-family%3D%22Apple%20Symbols%2CSegoe%20UI%20Symbol%2CNoto%20Sans%20Symbols%202%2Cserif%22%20font-size%3D%22115%22%20text-anchor%3D%22middle%22%20dominant-baseline%3D%22central%22%20fill%3D%22%23ede4ce%22%3E%26%239760%3B%3C%2Ftext%3E%3C%2Fsvg%3E">
+<!-- Favicon: skull-and-crossbones, the unifying mark. Identical character payload (U+2620 + U+FE0E text presentation selector) and identical font stack to the hero sigil, so the tab icon and the hero skull resolve to the same glyph rendering on every device that honors either signal. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Ctext%20x%3D%2250%22%20y%3D%2250%22%20font-family%3D%22Noto%20Sans%20Symbols%202%2CApple%20Symbols%2CSegoe%20UI%20Symbol%2CNoto%20Sans%20Symbols%2Cserif%22%20font-size%3D%22115%22%20text-anchor%3D%22middle%22%20dominant-baseline%3D%22central%22%20fill%3D%22%23ede4ce%22%3E%26%239760%3B%26%2365038%3B%3C%2Ftext%3E%3C%2Fsvg%3E">
 <!-- Apple touch icon: 180x180 PNG hosted at site root. Used when an iOS user adds the page to their home screen. -->
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 
@@ -448,11 +448,22 @@ h2.section-title.left {
   gap: 2.2rem;
 }
 
-/* The hero sigil: the unicode ☠ glyph at display size.
-   Noto Sans Symbols 2 renders a traditional Jolly Roger skull-and-crossbones,
-   the same design used on historical gravestones and pirate flags. */
+/* The hero sigil and the ensign hourglass both use Unicode codepoints, not
+   image assets. Noto Sans Symbols 2 is loaded as a webfont and listed first
+   because its renderings (the Jolly Roger skull-and-crossbones for U+2620
+   and the cup-and-plate hourglass for U+231B) are the canonical marks for
+   this page. Stack falls through to platform symbol fonts only when the
+   webfont fails to load.
+
+   The character payload itself ends in U+FE0E (variation selector text) which
+   tells the renderer "use the text presentation, not the emoji presentation."
+   Without it, some platforms would substitute their color emoji skull or
+   color emoji hourglass. With it, the renderer is asked for the line-art form
+   that matches every other line in the page. The variation selector is part
+   of the Unicode standard, not a custom override; the page is still asking
+   the device, just asking with more precision. */
 .hero-sigil {
-  font-family: 'Noto Sans Symbols 2', 'Noto Sans', 'Apple Symbols', 'Segoe UI Symbol', serif;
+  font-family: 'Noto Sans Symbols 2', 'Apple Symbols', 'Segoe UI Symbol', 'Noto Sans Symbols', serif;
   font-size: clamp(180px, 22vw, 260px);
   line-height: 1;
   color: var(--bone);
@@ -483,8 +494,10 @@ h2.section-title.left {
   user-select: none;
 }
 .ensign-hourglass {
+  font-family: 'Noto Sans Symbols 2', 'Apple Symbols', 'Segoe UI Symbol', 'Noto Sans Symbols', serif;
   font-size: clamp(160px, 22vw, 280px);
   line-height: 1;
+  color: var(--bone);
   filter: drop-shadow(0 0 30px rgba(3, 3, 3, 0.8));
 }
 
@@ -2327,7 +2340,7 @@ body.inverted #skull-canvas {
   <div class="hero-content">
 
     <!-- Jolly Roger: the unicode skull-and-crossbones glyph at display size -->
-    <div class="hero-sigil" aria-hidden="true">☠</div>
+    <div class="hero-sigil" aria-hidden="true">☠︎</div>
 
     <h1 class="hero-mark">HOSTIS</h1>
     <p class="hero-latin">hostis humani generis</p>
@@ -3751,7 +3764,7 @@ body.inverted #skull-canvas {
     <!-- Just the hourglass. The skull belongs on the flag at the top of the page.
          Here, at the end, the device is the glass itself: time running on the enclosure. -->
     <div class="ensign-device" aria-hidden="true">
-      <div class="ensign-hourglass">⌛</div>
+      <div class="ensign-hourglass">⌛︎</div>
     </div>
   </div>
 
