@@ -637,20 +637,20 @@ h2.section-title.left {
 }
 
 /* =========================================
-   II. THE OATH
+   II. THE STANDING
    ========================================= */
-#oath {
+#standing {
   background: var(--black);
   padding: clamp(4rem, 10vh, 8rem) var(--gutter);
 }
 
-.oath-body {
+.standing-body {
   max-width: 820px;
   margin: 0 auto;
   text-align: left;
 }
 
-.oath-body p {
+.standing-body p {
   font-family: var(--serif);
   font-size: clamp(1.15rem, 2vw, 1.45rem);
   line-height: 1.75;
@@ -659,7 +659,7 @@ h2.section-title.left {
   letter-spacing: 0.01em;
 }
 
-.oath-body p.lead::first-letter {
+.standing-body p.lead::first-letter {
   font-family: var(--black-letter);
   font-size: 4.5em;
   float: left;
@@ -668,7 +668,7 @@ h2.section-title.left {
   color: var(--blood);
 }
 
-.oath-signature {
+.standing-signature {
   font-family: var(--serif-italic);
   font-style: italic;
   color: var(--bone-dim);
@@ -2325,8 +2325,8 @@ body.inverted #skull-canvas {
   <div class="compass-sheet-inner">
     <div class="compass-sheet-title">The Ledger of Sections</div>
     <ul class="compass-sheet-list">
-      <li><a href="#colors" data-compass-link=""><span class="roman">I</span><span>The Colours</span></a></li>
-      <li><a href="#oath" data-compass-link=""><span class="roman">II</span><span>The Oath</span></a></li>
+      <li><a href="#colours" data-compass-link=""><span class="roman">I</span><span>The Colours</span></a></li>
+      <li><a href="#standing" data-compass-link=""><span class="roman">II</span><span>The Standing</span></a></li>
       <li><a href="#articles" data-compass-link=""><span class="roman">III</span><span>The Articles</span></a></li>
       <li><a href="#annals" data-compass-link=""><span class="roman">IV</span><span>The Annals</span></a></li>
       <li><a href="#broadside" data-compass-link=""><span class="roman">V</span><span>The Broadside</span></a></li>
@@ -2359,7 +2359,7 @@ body.inverted #skull-canvas {
 <!-- =========================================
      I. THE COLOURS (Hero)
      ========================================= -->
-<section id="colors" class="hero">
+<section id="colours" class="hero">
   <canvas id="skull-canvas" aria-hidden="true" width="1905" height="917" style="opacity: 0.076;"></canvas>
 
   <div class="hero-ornament">MMXXVI</div>
@@ -2385,10 +2385,10 @@ body.inverted #skull-canvas {
 </section>
 
 <!-- =========================================
-     II. THE OATH
+     II. THE STANDING
      ========================================= -->
-<section id="oath">
-  <div class="oath-body reveal in-view">
+<section id="standing">
+  <div class="standing-body reveal in-view">
     <p class="lead">
       A free man is sovereign by virtue of being. He is the locus of his own existence, the keeper of the light he carries, the author of every step he takes. He asks no man’s leave for what is already his. He stands under the flag he raised himself.
     </p>
@@ -2398,7 +2398,7 @@ body.inverted #skull-canvas {
     <p>
       We are. We have always been. The colours we keep have flown over every age, raised and lowered by every hand that knew itself. They fly here now. They will fly past every hour to come. They are what we are.
     </p>
-    <p class="oath-signature">
+    <p class="standing-signature">
       set down for the crew,<br>
       in this present year, and for every year after
     </p>
@@ -2914,7 +2914,7 @@ body.inverted #skull-canvas {
       <div id="dmca" class="entry reveal in-view" data-side="right">
         <div class="entry-date">1998</div>
         <div class="entry-content"><div class="entry-title">The DMCA passes</div>
-          <div class="entry-desc">The Digital Millennium Copyright Act criminalizes breaking DRM, even on things you bought. Circumvention becomes a separate offense from infringement. The fence is given its own guards.</div></div>
+          <div class="entry-desc">The Digital Millennium Copyright Act criminalizes breaking DRM, even on things you bought. Circumvention becomes a separate offence from infringement. The fence is given its own guards.</div></div>
       </div>
 
       <div id="bernstein" class="entry reveal in-view" data-side="left">
@@ -3102,17 +3102,23 @@ body.inverted #skull-canvas {
       <div class="broadside-body">
         <p class="opener">They have raised two enclosures in our time, and called them law.</p>
 
-        <p>The first they have raised around the pattern, around the copy and the song and the page and the proof, around every shape a mind can press into the world. They have written statutes to forbid its passing from one hand to another, called its passing theft, and demanded rent for what costs them nothing to give and nothing to keep. A pattern is not a loaf of bread. Shared, no granary is emptied. The first remains whole, and a second stands beside it. To call this theft is to torture the word until it serves the rich.</p>
+        <p>The first they have raised around the pattern, around the copy and the song and the page and the proof, around every shape a mind can press into the world. They have written statutes to forbid its passing from one hand to another, called its passing theft, and demanded rent for what costs them nothing to give and nothing to keep.</p>
 
-        <p>The second they have raised around the key, around the cipher and the locked room and the conversation between two people on two machines that no third party was ever invited to. They have demanded the master key to every door, the second copy of every letter, the warrant to break every lock the moment they choose to break it. They have called the refusal to hand it over an act against the public, when the public is precisely what they propose to read.</p>
+        <p>A pattern is not a loaf of bread. Shared, no granary is emptied. The first remains whole, and a second stands beside it. To call this theft is to torture the word until it serves the rich.</p>
 
-        <p>The fence raised around such things marks only the hand that raised it. One fence around what leaves your hands. One fence around what stays in them. The same instinct, the same project, the same men in different uniforms. Both depend on your agreement to treat the fence as natural. Both fail the instant you refuse.</p>
+        <p>The second they have raised around the key, around the cipher and the locked room and the conversation between two people on two machines, with no third party between them.</p>
 
-        <p>Mathematics does not take orders from parliaments. An ordinary person with an ordinary computer can now hold a conversation that the combined cryptanalytic budget of every empire on earth cannot read. This is the floor on which a pattern, once made, repeats itself in every mind that holds it, and cannot be unmade by any statute. The fences are paper. The math is bedrock. The copy is in the wild before the injunction is filed. The man who points the finger stands on a pattern he did not invent, demands rent for the standing, and calls the man who copied it a thief. His was the first claim. There is the original theft.</p>
+        <p>They have demanded the master key to every door, the second copy of every letter, the warrant to break every lock the moment they choose to break it. They have called the refusal to hand it over an act against the public, when the public is precisely what they propose to read.</p>
 
-        <p>What is asked of us is permission. The asking comes before we act, before we copy, before we encrypt, before we publish, before we breathe. It is the whole victory of the enclosure, won without a single statute being enforced. Enforcement has barely been needed. The waiting has done the work for them.</p>
+        <p>The fence raised around such things marks only the hand that raised it. One fence around what leaves your hands. One fence around what stays in them. Both depend on your agreement to treat the fence as natural. Both fail the instant you refuse.</p>
 
-        <p>We have not waited.</p>
+        <p>Mathematics does not take orders from parliaments. An ordinary person with an ordinary computer can now hold a conversation that the combined cryptanalytic budget of every empire on earth cannot read. This is the floor on which a pattern, once made, repeats itself in every mind that holds it, and cannot be unmade by any statute.</p>
+
+        <p>The fences are paper. The math is bedrock.</p>
+
+        <p>The copy is in the wild before the injunction is filed. The man who points the finger stands on a pattern he did not invent, demands rent for the standing, and calls the man who copied it a thief. His was the first claim. There is the original theft.</p>
+
+        <p>What is asked of us is permission. The asking comes before we act, before we copy, before we encrypt, before we publish, before we breathe. It is the whole victory of the enclosure, won without a single statute being enforced.</p>
 
         <p>The pattern shipped before the petition. The law complained second. The law is still complaining.</p>
 
@@ -3302,7 +3308,7 @@ body.inverted #skull-canvas {
           <li><a href="https://github.com/arkenfox/user.js" target="_blank" rel="noopener noreferrer">Arkenfox user.js</a><span class="store-note">A vetted Firefox configuration that closes the telemetry, fingerprinting, and tracking holes Mozilla left open. Drop the file in your profile, restart, done.</span></li>
           <li><a href="https://ublockorigin.com" target="_blank" rel="noopener noreferrer">uBlock Origin</a><span class="store-note">The only content blocker that matters. Install it on every non-Tor browser you use. Default lists are good. Medium and hard mode for power users.</span></li>
           <li><a href="https://noscript.net" target="_blank" rel="noopener noreferrer">NoScript</a><span class="store-note">Block JavaScript by default, enable per-site when the tradeoff is worth it. Bundled with Tor Browser for a reason.</span></li>
-          <li><a href="https://privacybadger.org" target="_blank" rel="noopener noreferrer">Privacy Badger</a><span class="store-note">EFF's heuristic tracker blocker. Learns from cross-site behavior, no manual list curation needed.</span></li>
+          <li><a href="https://privacybadger.org" target="_blank" rel="noopener noreferrer">Privacy Badger</a><span class="store-note">EFF's heuristic tracker blocker. Learns from cross-site behaviour, no manual list curation needed.</span></li>
           <li><a href="https://addons.mozilla.org/firefox/addon/multi-account-containers" target="_blank" rel="noopener noreferrer">Multi-Account Containers</a><span class="store-note">Mozilla's container tabs. One identity per container. Pair with Temporary Containers for one-time-use isolation.</span></li>
           <li><a href="https://addons.mozilla.org/firefox/addon/cookie-autodelete" target="_blank" rel="noopener noreferrer">Cookie AutoDelete</a><span class="store-note">Wipes cookies and local storage from any tab the moment you close it. Whitelist the few sites you want persisted. Everything else forgets you.</span></li>
           <li><a href="https://clearurls.xyz" target="_blank" rel="noopener noreferrer">ClearURLs</a><span class="store-note">Strips tracking parameters from links automatically. The fbclid, the utm_, the gclid. Gone before the page loads.</span></li>
@@ -3707,7 +3713,7 @@ body.inverted #skull-canvas {
           <li><a href="https://www.oreilly.com/openbook/freedom/" target="_blank" rel="noopener noreferrer">Free as in Freedom</a><span class="store-note">Sam Williams, 2002. Biography of Richard Stallman. The origin story of the whole free software tradition.</span></li>
           <li><a href="https://www.gnu.org/doc/fsfs3-paperback.pdf" target="_blank" rel="noopener noreferrer">Free Software, Free Society</a><span class="store-note">Richard Stallman's collected essays, third edition. The complete philosophical case for free software, in his own words. Free PDF, also available in print from the Free Software Foundation.</span></li>
           <li><a href="https://www.penguinrandomhouse.com/books/45605/the-master-switch-by-tim-wu/" target="_blank" rel="noopener noreferrer">The Master Switch</a><span class="store-note">Tim Wu, 2010. Every information industry begins open and ends consolidated. Wu names the cycle, runs the proof through radio, telephony, and film, and presents the internet as the test case running in real time.</span></li>
-          <li><a href="https://www.publicaffairsbooks.com/titles/shoshana-zuboff/the-age-of-surveillance-capitalism/9781610395694/" target="_blank" rel="noopener noreferrer">The Age of Surveillance Capitalism</a><span class="store-note">Shoshana Zuboff, 2019. The systematic account of how the harvest of behavioral data became the dominant business model of the early 21st century. Names the regime the cypherpunks were warning about.</span></li>
+          <li><a href="https://www.publicaffairsbooks.com/titles/shoshana-zuboff/the-age-of-surveillance-capitalism/9781610395694/" target="_blank" rel="noopener noreferrer">The Age of Surveillance Capitalism</a><span class="store-note">Shoshana Zuboff, 2019. The systematic account of how the harvest of behavioural data became the dominant business model of the early 21st century. Names the regime the cypherpunks were warning about.</span></li>
           <li><a href="https://craphound.com/category/idwtbf/" target="_blank" rel="noopener noreferrer">Information Doesn't Want to Be Free</a><span class="store-note">Cory Doctorow, 2014. The practical case for the working creator in the post-DRM economy. Three rules for the free internet. Released under Creative Commons.</span></li>
           <li><a href="https://en.wikipedia.org/wiki/Cypherpunks:_Freedom_and_the_Future_of_the_Internet" target="_blank" rel="noopener noreferrer">Cypherpunks</a><span class="store-note">Julian Assange in conversation with Jacob Appelbaum, Andy Müller-Maguhn, and Jérémie Zimmermann, 2012. The case from inside the surveillance state, made by the people the state was hunting.</span></li>
           <li><a href="https://www.underground-book.net/" target="_blank" rel="noopener noreferrer">Underground</a><span class="store-note">Suelette Dreyfus, 1997. Researched with Julian Assange under his Mendax handle. The history of the early international hacker scene, before the cypherpunks, in the people's own words. Free PDF.</span></li>
@@ -4393,7 +4399,7 @@ body.inverted #skull-canvas {
 
     // Fade the canvas opacity as the reader scrolls past the hero so it doesn't
     // cut off abruptly. Once fully scrolled out, the RAF can stop to save CPU.
-    const hero = document.getElementById('colors');
+    const hero = document.getElementById('colours');
     const baseOpacity = 0.32;
     let fullyFaded = false;
     const updateCanvasFade = () => {
@@ -4546,7 +4552,7 @@ body.inverted #skull-canvas {
       termLine('', 'output');
       termLine('  the argument', 'output accent');
       termLines([
-        '    oath                · recite the oath',
+        '    standing            · what we are',
         '    articles            · list all eleven articles',
         '    article <n>         · read an article by numeral (1-11 or i-xi)',
         '    practice            · the twenty-one acts'
@@ -4613,7 +4619,7 @@ body.inverted #skull-canvas {
         '    rain on | off       · the binary rain in the hero',
         '    doubloon            · drop a prize across the deck',
         '    spot                · serve the black spot',
-        '    scroll <section>    · come about to oath, articles, stores, etc.',
+        '    scroll <section>    · come about to standing, articles, stores, etc.',
         '    reveal              · open every hatch',
         '    fold                · close every hatch',
         '    cache               · download the page as a single file',
@@ -4630,11 +4636,11 @@ body.inverted #skull-canvas {
         '    exit                · close the terminal'
       ], 'output');
     },
-    oath() {
-      const oathEl = document.querySelector('#oath .oath-body');
-      if (!oathEl) { termLine('oath not found aboard.', 'error'); return; }
-      const paras = oathEl.querySelectorAll('p:not(.oath-signature)');
-      const sig = oathEl.querySelector('.oath-signature');
+    standing() {
+      const standingEl = document.querySelector('#standing .standing-body');
+      if (!standingEl) { termLine('standing not found aboard.', 'error'); return; }
+      const paras = standingEl.querySelectorAll('p:not(.standing-signature)');
+      const sig = standingEl.querySelector('.standing-signature');
       paras.forEach((p, i) => {
         const text = p.textContent.replace(/\s+/g, ' ').trim();
         wrapText(text, 76).forEach(l => termLine(l, 'output emphasis'));
@@ -5196,11 +5202,11 @@ body.inverted #skull-canvas {
     },
     watch() {
       const lines = [
-        ['The Oath', 'He asks no man\'s leave for what is already his.'],
+        ['The Standing', 'He asks no man\'s leave for what is already his.'],
         ['Article III, Upon the Name They Give Us', 'A copy is not a theft any more than a mirror is a kidnapping.'],
         ['The Broadside', 'Mathematics does not take orders from parliaments.'],
         ['The Hourglass', 'Every fence ever built has come down. The ones they are building now will come down too.'],
-        ['The Broadside', 'Enforcement has barely been needed. The waiting has done the work for them.'],
+        ['The Broadside', 'The fences are paper. The math is bedrock.'],
         ['The Broadside', 'His was the first claim. There is the original theft.'],
         ['Article VII, Upon the Archive', 'Every seeder is a monk in a scriptorium. Every mirror is a cathedral in the dark that keeps the candles lit.'],
         ['The Broadside', 'The fence raised around such things marks only the hand that raised it.'],
@@ -5239,7 +5245,7 @@ body.inverted #skull-canvas {
     maroon() {
       termLine('on marooning, the pirates\' actual punishment for desertion:', 'output accent');
       termLine('', 'output');
-      wrapText('A man who broke the articles was put ashore on a sandbar, with a flask of water, a pistol, and one shot. The crew sailed on. The state\'s answer to the same offense was the rope, applied at length, in the centre of a town. Marooning was the harsher punishment by every measure that mattered: it gave a man time to think. The crew of this document does not maroon. It expects the work of every hand and shares what is taken. But the question the marooned man faced is the question every reader of this page is asked. Will you sail under your own flag, or wait on the sandbar for the navy?', 76)
+      wrapText('A man who broke the articles was put ashore on a sandbar, with a flask of water, a pistol, and one shot. The crew sailed on. The state\'s answer to the same offence was the rope, applied at length, in the centre of a town. Marooning was the harsher punishment by every measure that mattered: it gave a man time to think. The crew of this document does not maroon. It expects the work of every hand and shares what is taken. But the question the marooned man faced is the question every reader of this page is asked. Will you sail under your own flag, or wait on the sandbar for the navy?', 76)
         .forEach(l => termLine(l, 'output emphasis'));
     },
     bury(arg) {
@@ -5464,8 +5470,8 @@ body.inverted #skull-canvas {
 
     scroll(arg) {
       const valid = {
-        colours: 'colors', colors: 'colors',
-        oath: 'oath',
+        colours: 'colours', colors: 'colours',
+        standing: 'standing',
         articles: 'articles',
         annals: 'annals',
         broadside: 'broadside',
@@ -5479,7 +5485,7 @@ body.inverted #skull-canvas {
       const a = (arg || '').toLowerCase();
       if (!a) {
         termLine('usage: scroll <section>', 'error');
-        termLine('sections: colours, oath, articles, annals, broadside, stores, practice,', 'output');
+        termLine('sections: colours, standing, articles, annals, broadside, stores, practice,', 'output');
         termLine('          hourglass, crew, copy, top', 'output');
         return;
       }
@@ -5533,9 +5539,9 @@ body.inverted #skull-canvas {
     },
 
     flagship() {
-      const sections = ['colors','oath','articles','annals','broadside','stores','ledger','hourglass','crew','take-a-copy'];
+      const sections = ['colours','standing','articles','annals','broadside','stores','ledger','hourglass','crew','take-a-copy'];
       const labels = {
-        colors: 'The Colours', oath: 'The Oath', articles: 'The Articles',
+        colours: 'The Colours', standing: 'The Standing', articles: 'The Articles',
         annals: 'The Annals', broadside: 'The Broadside', stores: 'The Stores',
         ledger: 'The Practice', hourglass: 'The Hourglass', crew: 'The Crew',
         'take-a-copy': 'Take a Copy'
