@@ -23,6 +23,7 @@
 <meta name="twitter:image:alt" content="HOSTIS · Enemies of All Mankind">
 <link rel="canonical" href="https://hostis.black/">
 <meta name="theme-color" content="#030303">
+<meta name="color-scheme" content="dark">
 
 <!-- Structured data for search engines. Tells Google, Bing, DuckDuckGo, and
      Brave Search the canonical name, alternate name, URL, and description of
@@ -2202,9 +2203,19 @@ footer .mark {
 /* Print styles: let someone actually print the articles */
 @media print {
   body { background: white; color: black; }
-  .grain, #terminal, .scroll-hint, #skull-canvas, .compass, .compass-sheet { display: none !important; }
-  section { padding: 1rem; break-inside: avoid; }
-  .article { break-inside: avoid; }
+  .grain, #terminal, .scroll-hint, #skull-canvas, .compass, .compass-sheet,
+  .sign-rite-form, .sign-rite-strike, .sign-rite-button,
+  .take-a-copy-btn, .compass-download,
+  #black-spot, .doubloon-rain,
+  .scroll-hint, .skip-link { display: none !important; }
+  section { padding: 1rem 0; break-inside: avoid; }
+  article { break-inside: avoid; page-break-inside: avoid; }
+  h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
+  a { color: black; text-decoration: underline; }
+  /* Show external URLs after links so printed copy is actionable */
+  a[href^="http"]::after { content: " <" attr(href) ">"; font-size: 0.85em; color: #555; }
+  /* Don't decorate internal anchor links with their URLs */
+  a[href^="#"]::after { content: ""; }
 }
 
 /* Reduced-motion: vestibular safety. Disable transitions, transforms, and the
@@ -2290,7 +2301,7 @@ body.inverted #skull-canvas {
 
 <!-- The floating compass: navigation for the whole voyage, on every screen -->
 <div class="compass" aria-label="Navigation">
-  <button class="compass-btn" type="button" id="compass-open" aria-label="Open section navigation">
+  <button class="compass-btn" type="button" id="compass-open" aria-label="Open section navigation" aria-expanded="false" aria-controls="compass-sheet">
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <circle cx="12" cy="12" r="9"></circle>
       <path d="M 12 4 L 14 11 L 20 12 L 14 13 L 12 20 L 10 13 L 4 12 L 10 11 Z"></path>
@@ -2464,8 +2475,8 @@ body.inverted #skull-canvas {
           The whole estate of intellectual “property” is a single fortress built on a single lie: that ideas can be owned. Each of its walls is a state-granted monopoly. No land was broken. No field sown. A court was petitioned, and a neighbour was told to stop thinking in a direction the petitioner had already walked. Demolish the fortress. Let the ideas go where they were always going.
         </div>
         <blockquote class="article-marginalia">
-          Patent and copyright laws have no justification in a free society. They are state-granted monopolies.
-          <cite>Murray Rothbard, 1970</cite>
+          Patents and copyrights are unjustifiable monopolies granted by government legislation.
+          <cite>Stephan Kinsella, Against Intellectual Property, 2001</cite>
         </blockquote>
       </article>
 
@@ -2628,7 +2639,7 @@ body.inverted #skull-canvas {
       </div>
 
       <div id="morgan" class="entry reveal in-view" data-side="right">
-        <div class="entry-date">1670</div>
+        <div class="entry-date">1671</div>
         <div class="entry-content"><div class="entry-title">Henry Morgan sacks Panama</div>
           <div class="entry-desc">Two thousand buccaneers cross the isthmus, burn the city to the ground, and hand the Crown a victory it had not asked for. Morgan is later knighted. Useful piracy is statecraft. Inconvenient piracy is crime.</div></div>
       </div>
@@ -3044,7 +3055,7 @@ body.inverted #skull-canvas {
       <div id="annas-archive" class="entry reveal in-view" data-side="left">
         <div class="entry-date">2022</div>
         <div class="entry-content"><div class="entry-title">Anna’s Archive</div>
-          <div class="entry-desc">After the Z-Library takedown of November 2022, the pseudonymous Anna Archivist opens a meta-index of every shadow library at once. By 2026, more than 63 million books and 95 million papers, all CC0, code and data fully open, designed to be re-hosted by anyone if seized. The largest open library in human history.</div></div>
+          <div class="entry-desc">After the Z-Library takedown of November 2022, the pseudonymous Anna Archivist opens a meta-index of every shadow library at once. By 2026, more than 64 million books and 95 million papers, all CC0, code and data fully open, designed to be re-hosted by anyone if seized. The largest open library in human history.</div></div>
       </div>
 
       <div id="right-to-repair" class="entry reveal in-view" data-side="right">
@@ -4203,7 +4214,7 @@ body.inverted #skull-canvas {
 
     </div>
 
-    <!-- The signing rite. Persists on the reader's own machine. No registry, no server, no permission. -->
+    <!-- The signing rite. Persists on the reader’s own machine. No registry, no server, no permission. -->
     <div class="sign-rite reveal in-view" id="sign-rite">
       <span class="sign-rite-corner tl" aria-hidden="true"></span>
       <span class="sign-rite-corner tr" aria-hidden="true"></span>
@@ -4286,7 +4297,7 @@ body.inverted #skull-canvas {
   <span class="mark">HOSTIS</span>
   <div class="contact-line">send corrections, additions, broken links<br><a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></div>
   <div>no rights reserved · all copies welcome</div>
-  <!-- The ship's log opens to the patient. The Konami hands remember. The black spot waits for the right finger. -->
+  <!-- The ship’s log opens to the patient. The Konami hands remember. The black spot waits for the right finger. -->
   <button id="black-spot" type="button" aria-label="black spot" title="" tabindex="-1"></button>
 </footer>
 
@@ -4313,7 +4324,7 @@ body.inverted #skull-canvas {
 <script>
 /* ==========================================================
    HOSTIS · all scripts
-   The ship's log is in the source. Read it at your leisure.
+   The ship’s log is in the source. Read it at your leisure.
    ========================================================== */
 
 (function () {
@@ -4983,6 +4994,7 @@ body.inverted #skull-canvas {
         '1971   Project Gutenberg · the first free-information project',
         '1976   Diffie & Hellman · public-key cryptography',
         '1988   May · Crypto Anarchist Manifesto',
+        '1990   Kapor, Barlow, Gilmore · the Electronic Frontier Foundation',
         '1991   Zimmermann releases PGP; Torvalds posts Linux',
         '1993   Hughes · Cypherpunk’s Manifesto; Clipper Chip announced',
         '1996   Barlow · Declaration of the Independence of Cyberspace',
@@ -4994,10 +5006,12 @@ body.inverted #skull-canvas {
         '2010   Manning sends 750,000 cables to WikiLeaks',
         '2011   Sci-Hub',
         '2013   Swartz dies; Snowden discloses; Lavabit shuts down',
+        '2018   GDPR enforced · the EU prices the harvest',
         '2019   Assange arrested at the Embassy',
         '2022   Anna’s Archive',
         '2023   The Right to Repair; AI corpus suits begin',
-        '2025   Ulbricht pardoned; Bartz v. Anthropic settles for $1.5B',
+        '2024   Durov arrested in France; Hachette v. Internet Archive',
+        '2025   Ulbricht pardoned; Storm convicted; Bartz settles for $1.5B',
         '2026   the voyage continues'
       ];
       brief.forEach(l => termLine('  ' + l, 'output'));
@@ -5258,7 +5272,7 @@ body.inverted #skull-canvas {
     prize() {
       const prizes = [
         'Sci-Hub holds 88 million research papers. The publishers’ combined catalog is smaller.',
-        'Anna’s Archive holds 63 million books and 95 million papers, all CC0, with code and data fully open. By design, anyone can re-host it if seized.',
+        'Anna’s Archive holds 64 million books and 95 million papers, all CC0, with code and data fully open. By design, anyone can re-host it if seized.',
         'Tor carries roughly 2 million daily users. The exit relays are run by volunteers. The whole network costs nothing to use.',
         'The Pirate Bay has been online for over 20 years and survived raids in Sweden, the Netherlands, and France.',
         'GrapheneOS hardens every Pixel into a phone the carrier did not authorize.',
@@ -5415,10 +5429,10 @@ body.inverted #skull-canvas {
       termLine('', 'output');
       termLines([
         '  articles    .................. 11',
-        '  annals      .................. 73',
-        '  signatures  .................. 53',
+        '  annals      .................. 81',
+        '  signatures  .................. 64',
         '  practice    .................. 21',
-        '  stores      ................. 379  (across 16 categories)',
+        '  stores      ................. 383  (across 16 categories)',
         '  gallows     ................... 6',
         '  total bytes ............. one file, no dependencies'
       ], 'output');
@@ -5758,19 +5772,19 @@ body.inverted #skull-canvas {
         <p style="text-align:center;font-family:var(--serif-italic);font-style:italic;color:var(--bone-dim);margin-bottom:3rem;">
           Aaron Swartz · Eremo, Italy · July 2008
         </p>
-        <p style="font-size:1.1rem;margin-bottom:1.2rem;">Information is power. But like all power, there are those who want to keep it for themselves. The world's entire scientific and cultural heritage, published over centuries in books and journals, is increasingly being digitized and locked up by a handful of private corporations.</p>
-        <p style="font-size:1.1rem;margin-bottom:1.2rem;">Want to read the papers featuring the most famous results of the sciences? You'll need to send enormous amounts to publishers like Reed Elsevier.</p>
+        <p style="font-size:1.1rem;margin-bottom:1.2rem;">Information is power. But like all power, there are those who want to keep it for themselves. The world’s entire scientific and cultural heritage, published over centuries in books and journals, is increasingly being digitized and locked up by a handful of private corporations.</p>
+        <p style="font-size:1.1rem;margin-bottom:1.2rem;">Want to read the papers featuring the most famous results of the sciences? You’ll need to send enormous amounts to publishers like Reed Elsevier.</p>
         <p style="font-size:1.1rem;margin-bottom:1.2rem;">There are those struggling to change this. The Open Access Movement has fought valiantly to ensure that scientists do not sign their copyrights away but instead ensure their work is published on the Internet, under terms that allow anyone to access it. But even under the best scenarios, their work will only apply to things published in the future. Everything up until now will have been lost.</p>
-        <p style="font-size:1.1rem;margin-bottom:1.2rem;">That is too high a price to pay. Forcing academics to pay money to read the work of their colleagues? Scanning entire libraries but only allowing the folks at Google to read them? Providing scientific articles to those at elite universities in the First World, but not to children in the Global South? It's outrageous and unacceptable.</p>
-        <p style="font-size:1.1rem;margin-bottom:1.2rem;">"I agree," many say, "but what can we do? The companies hold the copyrights, they make enormous amounts of money by charging for access, and it's perfectly legal. There's nothing we can do to stop them." But there is something we can, something that's already being done: we can fight back.</p>
+        <p style="font-size:1.1rem;margin-bottom:1.2rem;">That is too high a price to pay. Forcing academics to pay money to read the work of their colleagues? Scanning entire libraries but only allowing the folks at Google to read them? Providing scientific articles to those at elite universities in the First World, but not to children in the Global South? It’s outrageous and unacceptable.</p>
+        <p style="font-size:1.1rem;margin-bottom:1.2rem;">"I agree," many say, "but what can we do? The companies hold the copyrights, they make enormous amounts of money by charging for access, and it’s perfectly legal. There’s nothing we can do to stop them." But there is something we can, something that’s already being done: we can fight back.</p>
         <p style="font-size:1.1rem;margin-bottom:1.2rem;">Those with access to these resources (students, librarians, scientists) have been given a privilege. You get to feed at this banquet of knowledge while the rest of the world is locked out. You need not keep this privilege for yourselves. Morally, you cannot. You have a duty to share it with the world.</p>
         <p style="font-size:1.1rem;margin-bottom:1.2rem;">And you have: trading passwords with colleagues, filling download requests for friends.</p>
         <p style="font-size:1.1rem;margin-bottom:1.2rem;">Meanwhile, those who have been locked out are not standing idly by. You have been sneaking through holes and climbing over fences, liberating the information locked up by the publishers and sharing them with your friends.</p>
-        <p style="font-size:1.1rem;margin-bottom:1.2rem;">But all of this action goes on in the dark, hidden underground. It's called stealing or piracy, as if sharing a wealth of knowledge were the moral equivalent of plundering a ship and murdering its crew. But sharing isn't immoral. It's a moral imperative. Only those blinded by greed would refuse to let a friend make a copy.</p>
+        <p style="font-size:1.1rem;margin-bottom:1.2rem;">But all of this action goes on in the dark, hidden underground. It’s called stealing or piracy, as if sharing a wealth of knowledge were the moral equivalent of plundering a ship and murdering its crew. But sharing isn’t immoral. It’s a moral imperative. Only those blinded by greed would refuse to let a friend make a copy.</p>
         <p style="font-size:1.1rem;margin-bottom:1.2rem;">Large corporations, of course, are blinded by greed. The laws under which they operate require it; their shareholders would revolt at anything less. And the politicians they have bought off back them, passing laws giving them the exclusive power to decide who can make copies.</p>
-        <p style="font-size:1.1rem;margin-bottom:1.2rem;">There is no justice in following unjust laws. It's time to come into the light and, in the grand tradition of civil disobedience, declare our opposition to this private theft of public culture.</p>
-        <p style="font-size:1.1rem;margin-bottom:1.2rem;">We need to take information, wherever it is stored, make our copies and share them with the world. We need to take stuff that's out of copyright and add it to the archive. We need to buy secret databases and put them on the Web. We need to download scientific journals and upload them to file sharing networks. We need to fight for Guerilla Open Access.</p>
-        <p style="font-size:1.1rem;margin-bottom:2rem;">With enough of us, around the world, we'll not just send a strong message opposing the privatization of knowledge, we'll make it a thing of the past. Will you join us?</p>
+        <p style="font-size:1.1rem;margin-bottom:1.2rem;">There is no justice in following unjust laws. It’s time to come into the light and, in the grand tradition of civil disobedience, declare our opposition to this private theft of public culture.</p>
+        <p style="font-size:1.1rem;margin-bottom:1.2rem;">We need to take information, wherever it is stored, make our copies and share them with the world. We need to take stuff that’s out of copyright and add it to the archive. We need to buy secret databases and put them on the Web. We need to download scientific journals and upload them to file sharing networks. We need to fight for Guerilla Open Access.</p>
+        <p style="font-size:1.1rem;margin-bottom:2rem;">With enough of us, around the world, we’ll not just send a strong message opposing the privatization of knowledge, we’ll make it a thing of the past. Will you join us?</p>
         <p style="text-align:center;font-family:var(--carved);font-size:0.7rem;letter-spacing:0.4em;color:var(--bone-faint);margin-top:3rem;text-transform:uppercase;">click anywhere to close · the argument he made carried</p>
         <p style="text-align:center;font-family:var(--mono);font-size:0.75rem;color:var(--bone-faint);margin-top:1.5rem;letter-spacing:0.05em;">the ship&rsquo;s terminal opens with the backtick key &nbsp;<code style="color:var(--blood);background:rgba(125,24,24,0.1);padding:0.1rem 0.4rem;border:1px solid var(--blood-deep);border-radius:2px;">&#96;</code>&nbsp; · type <code style="color:var(--bone-dim);">help</code> aboard.</p>
       </div>
@@ -5795,8 +5809,8 @@ body.inverted #skull-canvas {
           <div class="spot-card">
             <div class="spot-disc"></div>
             <div class="spot-title">The Black Spot</div>
-            <p class="spot-line">"I could not doubt that this was the black spot; and taking it up, I found written on the other side, in a very good, clear hand, this short message: 'You have till ten tonight.'"</p>
-            <p>The black spot was a pirate's summons. A paper disc, blackened on one side, served on a man to mark him for judgment by his fellows.</p>
+            <p class="spot-line">“I could not doubt that this was the black spot; and taking it up, I found written on the other side, in a very good, clear hand, this short message: ‘You have till ten tonight.’”</p>
+            <p>The black spot was a pirate’s summons. A paper disc, blackened on one side, served on a man to mark him for judgment by his fellows.</p>
             <p>You have served it on the enclosure. The fence is on notice. The colours are up.</p>
             <div class="spot-stamp">click anywhere to close</div>
           </div>
@@ -5831,10 +5845,12 @@ body.inverted #skull-canvas {
       const openSheet = () => {
         compassSheet.classList.add('open');
         compassSheet.setAttribute('aria-hidden', 'false');
+        compassBtn.setAttribute('aria-expanded', 'true');
       };
       const closeSheet = () => {
         compassSheet.classList.remove('open');
         compassSheet.setAttribute('aria-hidden', 'true');
+        compassBtn.setAttribute('aria-expanded', 'false');
       };
       compassBtn.addEventListener('click', openSheet);
       compassClose.addEventListener('click', closeSheet);
