@@ -246,11 +246,10 @@ body::after{content:"";position:fixed;inset:0;z-index:97;pointer-events:none;opa
 .fb-right a:hover{color:var(--redup)}
 
 /* ---------- masthead ---------- */
-.masthead{text-align:center;padding:64px 18px 46px;border-bottom:1px solid var(--line)}
+.masthead{text-align:center;padding:64px 18px 30px}
 h1{font-family:var(--sc);font-weight:400;font-size:clamp(40px,8.4vw,86px);line-height:.98;letter-spacing:.09em;margin:0 0 6px}
 .mh-sub{font:italic 400 clamp(15px,3vw,19px) var(--serif);letter-spacing:.1em;color:var(--soft);margin:10px 0 0}
-.mh-rule{width:74px;border:0;border-top:1px solid var(--red);margin:28px auto 24px}
-.mh-desc{max-width:620px;margin:0 auto;font-size:16.5px;line-height:1.65;color:rgba(237,228,206,.7)}
+.mh-desc{max-width:620px;margin:30px auto 0;font-size:16.5px;line-height:1.65;color:rgba(237,228,206,.7)}
 .mh-hint{margin-top:20px;font:400 8px var(--mono);letter-spacing:.3em;color:rgba(237,228,206,.28);text-transform:uppercase}
 
 /* ---------- stats strip ---------- */
@@ -531,10 +530,10 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
 <header class="masthead">
   <h1>ON THE ACCOUNT</h1>
   <div class="mh-sub">the golden age of piracy · 1654 to 1726</div>
-  <hr class="mh-rule">
-  <p class="mh-desc">The years each man sailed, the waters he haunted, the company he kept, and the end he came to.</p>
+    <p class="mh-desc">The years each man sailed, the waters he haunted, the company he kept, and the end he came to.</p>
 </header>
 <main id="main">
+<div class="divider"><span class="divider-glyph"></span></div>
 
 
 <section id="chartsec">
@@ -580,25 +579,6 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
   <p class="mapcap">Tap a mark to open the man.</p>
 </section>
 
-<section id="samesec">
-  <div class="sechead"><h2>HOSTIS</h2><span class="cap">ENEMIES OF ALL MANKIND</span></div>
-  <div class="divider"><span class="divider-glyph"></span></div>
-  <div class="same">
-    <p>A free man is sovereign by virtue of being. He is the locus of his own existence, the keeper of the light he carries, the author of every step he takes. He asks no man&rsquo;s leave for what is already his. He stands under the flag he raised himself.</p>
-
-    <p><i>Hostis humani generis.</i> Enemy of all mankind. Cicero&rsquo;s phrase, fastened onto pirates and hardened by English admiralty law into a rule. A pirate belongs to no nation, may be tried by any nation, stands outside the protection of every one. Mankind <i>agrees to treat</i> a man as the common enemy of mankind. The category is a verdict passed by interested parties, and always was. <span class="hl">Enemies of all mankind by their decree. We keep the name by consent.</span></p>
-
-    <p>Before a company put to sea it wrote down the terms it would sail by. A vote to every hand aboard. An equal share of the provisions. Payment in coin for a limb or an eye lost at work. Captains elected, and turned out again by ballot. No king in Europe granted a seaman one of the four. The crews took all four in the one place on earth where nobody could stop them, and the Crown answered by hanging them in chains at the mouths of harbours, where the lesson would be legible from the deck of every ship coming in.</p>
-
-    <p>Court transcripts. Articles of indictment. Inventories of confiscated goods. Sermons preached at the condemned on the Sunday before they died. Power documents itself to justify itself, the paper outlives the office, and it is read at last by people it was never meant for.</p>
-
-    <p><span class="hl">The fence has moved. From the shore to the page, from the page to the server. The name moved with it. We are where we have always been.</span></p>
-
-    <p>One crew, then, and a long one. Each hand on it told what he might do with what was already his. Those companies. The printers. The mechanic. The farmer. The archivist. The cryptographer. The buyer. The spender. The seeder. Every one of them was asked the same question at the moment it was put to him. Every one gave the same answer.</p>
-
-    <p>This page was set down to show how short the runs were, how few of them ended anywhere but a rope or the water, and what the companies wrote down for themselves in the years they had. The same fight runs straight through to now, in other waters and under other names, and the rest of it is at <a href="index.html">hostis.black</a>.</p>
-  </div>
-</section>
 <section id="recordsec">
   <details class="recbox"><summary>SOURCES</summary>
 <div class="reccols">
@@ -630,6 +610,26 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
   </div>
 </details>
 </section>
+<section id="samesec">
+  <div class="sechead"><h2>HOSTIS</h2><span class="cap">ENEMIES OF ALL MANKIND</span></div>
+  <div class="divider"><span class="divider-glyph"></span></div>
+  <div class="same">
+    <p>A free man is sovereign by virtue of being. He is the locus of his own existence, the keeper of the light he carries, the author of every step he takes. He asks no man&rsquo;s leave for what is already his. He stands under the flag he raised himself.</p>
+
+    <p><i>Hostis humani generis.</i> Enemy of all mankind. Cicero&rsquo;s phrase, fastened onto pirates and hardened by English admiralty law into a rule. A pirate belongs to no nation, may be tried by any nation, stands outside the protection of every one. Mankind <i>agrees to treat</i> a man as the common enemy of mankind. The category is a verdict passed by interested parties, and always was. <span class="hl">Enemies of all mankind by their decree. We keep the name by consent.</span></p>
+
+    <p>Before a company put to sea it wrote down the terms it would sail by. A vote to every hand aboard. An equal share of the provisions. Payment in coin for a limb or an eye lost at work. Captains elected, and turned out again by ballot. No king in Europe granted a seaman one of the four. The crews took all four in the one place on earth where nobody could stop them, and the Crown answered by hanging them in chains at the mouths of harbours, where the lesson would be legible from the deck of every ship coming in.</p>
+
+    <p>Court transcripts. Articles of indictment. Inventories of confiscated goods. Sermons preached at the condemned on the Sunday before they died. Power documents itself to justify itself, the paper outlives the office, and it is read at last by people it was never meant for.</p>
+
+    <p><span class="hl">The fence has moved. From the shore to the page, from the page to the server. The name moved with it. We are where we have always been.</span></p>
+
+    <p>One crew, then, and a long one. Each hand on it told what he might do with what was already his. Those companies. The printers. The mechanic. The farmer. The archivist. The cryptographer. The buyer. The spender. The seeder. Every one of them was asked the same question at the moment it was put to him. Every one gave the same answer.</p>
+
+    <p>This page was set down to show how short the runs were, how few of them ended anywhere but a rope or the water, and what the companies wrote down for themselves in the years they had. The same fight runs straight through to now, in other waters and under other names, and the rest of it is at <a href="index.html">hostis.black</a>.</p>
+  </div>
+</section>
+
 
 </main>
 <footer>
