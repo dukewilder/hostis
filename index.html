@@ -2496,6 +2496,7 @@ footer .mark {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0.01ms !important;   /* durations were zeroed but delays were not, so the hero still arrived a piece at a time */
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
@@ -2630,7 +2631,10 @@ footer .sister-sep{color:var(--bone-ghost)}
 
 .hero-sheets{margin-top:1.6rem;margin-bottom:1.2rem;display:flex;gap:.9rem;
   justify-content:center;align-items:center;flex-wrap:wrap;
-  font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:.2em;text-transform:lowercase}
+  font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:.2em;text-transform:lowercase;
+  /* the hero arrives on a 0.3s step: sigil 0, mark 0.3, latin 0.8, translation 1.1.
+     these are the next in the line, not an afterthought bolted to the bottom. */
+  animation:fadeSlow 2s ease-out 1.4s both}
 /* the floating hint must never land on them */
 @media (max-height:760px){ .scroll-hint{display:none} }
 .hero-sheets a{position:relative;color:var(--bone);text-decoration:none;
