@@ -2651,6 +2651,22 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 </style>
 </head>
 <body>
+<script>
+/* The address bar reads clean while the links stay relative, so a downloaded
+   folder still works offline. GitHub Pages resolves /account to account.html,
+   so a URL copied from the bar resolves on reload and when shared. Skipped
+   entirely on file:// where there is nothing to tidy and no resolver. */
+(function () {
+  if (location.protocol === 'file:') return;
+  var p = location.pathname, clean = p;
+  if (clean.slice(-11) === '/index.html') clean = clean.slice(0, -10);
+  else if (clean.slice(-5) === '.html') clean = clean.slice(0, -5);
+  if (clean !== p) {
+    try { history.replaceState(null, '', clean + location.search + location.hash); } catch (e) {}
+  }
+})();
+</script>
+
 
 <!-- Skip link: keyboard / screen-reader shortcut past the compass UI -->
 <a class="skip-link" href="#main">Skip to content</a>
