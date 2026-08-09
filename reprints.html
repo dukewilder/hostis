@@ -2,11 +2,11 @@
 <html lang="en"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>The Reprints · HOSTIS</title>
+<title>The Reprints</title>
 <meta name="description" content="Public-domain records set entire and put back into the world with no rights reserved.">
 <meta name="author" content="HOSTIS">
 <meta name="robots" content="index, follow, max-image-preview:large">
-<meta property="og:title" content="The Reprints · HOSTIS">
+<meta property="og:title" content="The Reprints">
 <meta property="og:description" content="Public-domain records set entire and put back into the world with no rights reserved.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://hostis.black/reprints.html">
@@ -19,7 +19,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@hostis_black">
 <meta name="twitter:creator" content="@hostis_black">
-<meta name="twitter:title" content="The Reprints · HOSTIS">
+<meta name="twitter:title" content="The Reprints">
 <meta name="twitter:description" content="Public-domain records set entire and put back into the world with no rights reserved.">
 <meta name="twitter:image" content="https://hostis.black/og-image.png">
 <link rel="canonical" href="https://hostis.black/reprints.html">
@@ -397,6 +397,20 @@ main{padding-bottom:2rem}
 </style>
 </head>
 <body>
+<script>
+/* The address bar reads clean while the links stay relative, so a downloaded
+   folder still works offline. GitHub Pages resolves /reprints to reprints.html,
+   so a URL copied from the bar resolves on reload and when shared. */
+(function () {
+  if (location.protocol === 'file:') return;
+  var p = location.pathname, clean = p;
+  if (clean.slice(-11) === '/index.html') clean = clean.slice(0, -10);
+  else if (clean.slice(-5) === '.html') clean = clean.slice(0, -5);
+  if (clean !== p) {
+    try { history.replaceState(null, '', clean + location.search + location.hash); } catch (e) {}
+  }
+})();
+</script>
 <a class="skip-link" href="#main">Skip to content</a>
 <div class="grain" aria-hidden="true"></div>
 <nav class="flagbar"><a class="fb-mark" href="index.html"><span class="sk">&#9760;&#xFE0E;</span>HOSTIS</a></nav>
@@ -420,7 +434,7 @@ main{padding-bottom:2rem}
       <h2>The Vial Poured Out Upon the Sea</h2>
       <p class="byline">Cotton Mather, Boston, 1726 &#183; the expanded edition</p>
       <div class="blurb">
-    <p>In May 1726 the boatswain William Fly threw his captain into the sea, took four vessels in a month, and was carried into Boston in irons by the forced men of his own crew. He was among the last pirates of the Golden Age, and he is famous for what he did next: he refused the script, and the man who came to break him wrote every word of it down.</p>
+    <p>In May 1726 the boatswain William Fly threw his captain into the sea, took four vessels in a month, and was carried into Boston in irons by the forced men of his own crew. He was among the last pirates of the Golden Age.</p>
     <details class="vol-more">
       <summary><span class="vm-open">show more</span><span class="vm-shut">show less</span></summary>
       <p>Cotton Mather went to the prison to collect the confession that always came, and to print it. Fly gave him nothing. He denied the charge as laid, would not be led to the meeting house, and used what he was told would be his last words to advise the shipmasters in the crowd to treat their crews better and pay them what they were owed. At the gallows he told the hangman he was no craftsman and retied the noose himself.</p>
