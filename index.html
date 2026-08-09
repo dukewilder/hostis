@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HOSTIS · Enemies of All Mankind</title>
+<title>HOSTIS</title>
 <meta name="description" content="no rights reserved · all copies welcome">
 <meta property="og:title" content="HOSTIS · Enemies of All Mankind">
 <meta property="og:description" content="no rights reserved · all copies welcome">
@@ -21,6 +21,8 @@
 <meta name="twitter:description" content="no rights reserved · all copies welcome">
 <meta name="twitter:image" content="https://hostis.black/og-image.png">
 <meta name="twitter:image:alt" content="HOSTIS · Enemies of All Mankind">
+<meta name="author" content="HOSTIS">
+<meta name="robots" content="index, follow, max-image-preview:large">
 <link rel="canonical" href="https://hostis.black/">
 <meta name="theme-color" content="#030303">
 <meta name="color-scheme" content="dark">
@@ -49,7 +51,7 @@
      The PNG must be hosted at https://hostis.black/favicon.png. -->
 <link rel="icon" type="image/png" sizes="48x48" href="/favicon.png">
 <!-- Favicon (SVG): skull-and-crossbones, the unifying mark. Identical character payload (U+2620 + U+FE0E text presentation selector) and identical font stack to the hero sigil, so the tab icon and the hero skull resolve to the same glyph rendering on every device that honors either signal. -->
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%3E%3Ctext%20x%3D%2250%22%20y%3D%2250%22%20font-family%3D%22Noto%20Sans%20Symbols%202%2CApple%20Symbols%2CSegoe%20UI%20Symbol%2CNoto%20Sans%20Symbols%2Cserif%22%20font-size%3D%22115%22%20text-anchor%3D%22middle%22%20dominant-baseline%3D%22central%22%20fill%3D%22%23ede4ce%22%3E%26%239760%3B%26%2365038%3B%3C%2Ftext%3E%3C%2Fsvg%3E">
+<link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,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">
 <!-- Apple touch icon: 180x180 PNG hosted at site root. Used when an iOS user adds the page to their home screen. -->
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 
@@ -725,7 +727,7 @@ h2.section-title.left {
   position: relative;
   padding: 5rem var(--gutter) 5rem;
   overflow: hidden;
-  background: radial-gradient(ellipse 80% 60% at 50% 45%, #070707 0%, #030303 70%);
+  background: radial-gradient(ellipse 80% 60% at 50% 45%, rgba(7,7,7,1) 0%, rgba(3,3,3,0) 72%);
 }
 
 /* Canvas for subtle binary rain behind everything */
@@ -734,10 +736,14 @@ h2.section-title.left {
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 0;
-  opacity: 0.32;
+  /* The grain is a fixed layer at z-index 9999. With the canvas beneath it, the
+     hero composited a fraction darker than the page below, and that difference
+     landed on a straight edge: the seam. Lifting the canvas above the grain,
+     but below the hero's own content at z-index 2 within its stacking context,
+     takes the step from 0.6 of a luminance level to 0.02. */
+  z-index: 9998;
+  opacity: 1;
   pointer-events: none;
-  transition: opacity 0.4s ease-out;
 }
 
 /* A soft vignette on top of the canvas to keep the centre legible */
@@ -2603,6 +2609,45 @@ body.inverted #skull-canvas {
   .mirror-row { flex-direction: column; gap: 0.2rem; align-items: flex-start; }
   .mirror-val { text-align: left; }
 }
+
+/* ---------- sister sheets: separate objects, not sections ---------- */
+.compass-sheet-title--sister{margin-top:.6rem;font-size:1.15rem;color:var(--bone-dim)}
+.compass-sheet-note{font-family:var(--serif);font-style:italic;font-size:.86rem;
+  color:var(--bone-faint);margin:0 0 .9rem}
+.compass-sheet-list--sister{margin-bottom:1.5rem}
+.compass-sheet-list--sister a{border-bottom-style:dashed;grid-template-columns:1fr}
+.compass-sheet-list--sister .roman{font-family:'Noto Sans Symbols 2',var(--serif);
+  font-size:.95rem;letter-spacing:0;color:var(--bone-faint)}
+.compass-sheet-list--sister em{display:block;font-family:var(--serif);font-style:italic;
+  font-size:.84rem;color:var(--bone-faint);letter-spacing:0;margin-top:.15rem}
+.compass-sheet-list--sister a:hover .roman{color:var(--blood)}
+footer .sister-line{margin-top:1rem;display:flex;gap:.9rem;justify-content:center;
+  align-items:center;flex-wrap:wrap}
+footer .sister-line a{color:var(--bone-dim);text-decoration:none;
+  border-bottom:1px solid var(--bone-ghost)}
+footer .sister-line a:hover{color:var(--blood);border-color:var(--blood)}
+footer .sister-sep{color:var(--bone-ghost)}
+
+.hero-sheets{margin-top:1.6rem;margin-bottom:1.2rem;display:flex;gap:.9rem;
+  justify-content:center;align-items:center;flex-wrap:wrap;
+  font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:.2em;text-transform:lowercase}
+/* the floating hint must never land on them */
+@media (max-height:760px){ .scroll-hint{display:none} }
+.hero-sheets a{position:relative;color:var(--bone);text-decoration:none;
+  border:1px solid rgba(237,228,206,.26);padding:.5rem .9rem;
+  transition:color .18s,border-color .18s,background .18s}
+.hero-sheets a::before{content:"\203A";margin-right:.5rem;color:var(--blood);
+  font-family:var(--serif);letter-spacing:0}
+.hero-sheets a:hover{color:var(--black);background:var(--bone);border-color:var(--bone)}
+.hero-sheets a:hover::before{color:var(--black)}
+.hero-sheets .sep{display:none}
+
+
+/* The footer takes the plain rule and the italic note the other two sheets use. */
+footer { border-top: 1px solid rgba(237,228,206,.1); }
+footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--serif);
+  font-style: italic; font-size: 0.95rem; line-height: 1.72; letter-spacing: 0;
+  color: var(--bone-faint); text-transform: none; }
 </style>
 </head>
 <body>
@@ -2635,12 +2680,18 @@ body.inverted #skull-canvas {
       <li><a href="#standing" data-compass-link=""><span class="roman">II</span><span>The Standing</span></a></li>
       <li><a href="#articles" data-compass-link=""><span class="roman">III</span><span>The Articles</span></a></li>
       <li><a href="#annals" data-compass-link=""><span class="roman">IV</span><span>The Annals</span></a></li>
-      <li><a href="#broadside" data-compass-link=""><span class="roman">V</span><span>The Broadside</span></a>
+      <li><a href="#broadside" data-compass-link=""><span class="roman">V</span><span>The Broadside</span></a></li>
       <li><a href="#mirror" data-compass-link=""><span class="roman">VI</span><span>The Mirror</span></a></li>
       <li><a href="#stores" data-compass-link=""><span class="roman">VII</span><span>The Stores</span></a></li>
       <li><a href="#practice" data-compass-link=""><span class="roman">VIII</span><span>The Practice</span></a></li>
       <li><a href="#hourglass" data-compass-link=""><span class="roman">IX</span><span>The Hourglass</span></a></li>
       <li><a href="#crew" data-compass-link=""><span class="roman">X</span><span>The Crew</span></a></li>
+    </ul>
+
+    <div class="compass-sheet-title compass-sheet-title--sister">Other Sheets</div>
+    <ul class="compass-sheet-list compass-sheet-list--sister">
+      <li><a href="reprints.html"><span>The Reprints</span></a></li>
+      <li><a href="account.html"><span>On the Account</span></a></li>
     </ul>
 
     <div class="compass-download">
@@ -2653,7 +2704,7 @@ body.inverted #skull-canvas {
     </div>
 
     <div class="compass-contact">
-      <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a>
+      email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a>
     </div>
   </div>
 </div>
@@ -2681,6 +2732,7 @@ body.inverted #skull-canvas {
       <span class="sep">/</span>
       <span>by our consent</span>
     </p>
+    <p class="hero-sheets"><a href="account.html">on the account</a><span class="sep">/</span><a href="reprints.html">the reprints</a></p>
 
   </div>
 
@@ -2768,7 +2820,7 @@ body.inverted #skull-canvas {
           <h3 class="article-title">Upon the Name They Give Us</h3>
         </div>
         <div class="article-body">
-          They call it theft to move you. The act removes nothing. The old word is dragged across the new act to summon the old crime. A copy is not a theft any more than a mirror is a kidnapping. The word is a trap. The trap is set so often it has come to feel like the floor.
+          They call it theft to move you. The act removes nothing. The old word is dragged across the new act to summon the old crime. A copy is not a theft any more than a mirror is a kidnapping. The word came off the water, fastened to men who took cargo from companies that held an ocean by grant. It was carried inland and fastened to men who take nothing at all.
         </div>
         <blockquote class="article-marginalia">
           Publishers refer to copying as “piracy.” In this way, they imply that it is ethically equivalent to attacking ships on the high seas, kidnapping and murdering the people on them.
@@ -2784,7 +2836,7 @@ body.inverted #skull-canvas {
           <h3 class="article-title">Upon Monopoly</h3>
         </div>
         <div class="article-body">
-          The whole estate of intellectual “property” is a single fortress built on a single lie: that ideas can be owned. Each of its walls is a state-granted monopoly. No land was broken. No field sown. A court was petitioned, and a neighbour was told to stop thinking in a direction the petitioner had already walked. Demolish the fortress. Let the ideas go where they were always going.
+          A monopoly is when the state names one party and forbids the rest. Sole trade to the Indies, sole trade to the Guinea coast, sole trade in any pattern a mind can hold. Nothing is made. Someone is stopped. A monopoly is a line drawn on paper by a man who has never been where it falls, and everyone on the wrong side of it works by his leave.
         </div>
         <blockquote class="article-marginalia">
           Patents and copyrights are unjustifiable monopolies granted by government legislation.
@@ -2848,7 +2900,7 @@ body.inverted #skull-canvas {
           <h3 class="article-title">Upon the Key</h3>
         </div>
         <div class="article-body">
-          When a man and his correspondent turn the same key, the contents pass between them and no third party. Cryptography is that seal, sharpened by mathematics into something no emperor can now break. The key belongs to whoever turns it.
+          A letter is sealed before it is sent. When two people turn the same key the words pass between them and no third, and no clerk in any room decides otherwise. Ships once carried their papers weighted, to go over the side before a boarding party reached them. That was a seal a man could break if he was quick enough. This one is cut from math, and no empire has found its edge. The key belongs to whoever turns it, and to nobody who asks.
         </div>
         <blockquote class="article-marginalia">
           Privacy is necessary for an open society in the electronic age. We cannot expect governments, corporations, or other large, faceless organizations to grant us privacy. We must defend our own privacy if we expect to have any. Cypherpunks write code.
@@ -2864,7 +2916,7 @@ body.inverted #skull-canvas {
           <h3 class="article-title">Upon Surveillance</h3>
         </div>
         <div class="article-body">
-          A thing that watches its bearer is not his. The master of it sits in a building the bearer has never entered, and the device reports there in a tongue he was not taught. The watched man is a ledger entry. The unwatched man is himself. A window cut into a private house by an unseen hand is a violation whether the watcher ever comes through it or not. The eye in the wall is the breach.
+          A thing that watches its bearer is not his. The master of it sits in a building the bearer has never entered, and the device reports there in a tongue he was not taught. The watched man is a ledger entry. The unwatched man is himself. A window cut into a private house by an unseen hand is a breach whether the watcher ever comes through it or not.
         </div>
         <blockquote class="article-marginalia">
           A specter is haunting the modern world, the specter of crypto anarchy.
@@ -2880,7 +2932,7 @@ body.inverted #skull-canvas {
           <h3 class="article-title">Upon Cash and the Ledger</h3>
         </div>
         <div class="article-body">
-          A coin in the hand is paid. A coin in a ledger is held at the keeper’s pleasure. The keeper reads the ledger and decides who may buy. He prints himself richer at the holders’ expense. They run the press. We hold the key. What comes from the press is whatever number the moment requires. What the key moves is what was paid.
+          A coin in the hand is paid. It was weighed on deck and cut into eight when the shares would not come out even, and once it was in a man’s pocket the matter was closed. A coin in a ledger is held at the keeper’s pleasure. He reads it, decides who may buy, and prints himself richer at the holders’ expense. They run the press. We hold the key. What comes from the press is whatever number the moment requires. What the key moves is what was paid.
         </div>
         <blockquote class="article-marginalia">
           A purely peer-to-peer version of electronic cash would allow online payments to be sent directly from one party to another without going through a financial institution.
@@ -2896,7 +2948,7 @@ body.inverted #skull-canvas {
           <h3 class="article-title">Upon the Crew</h3>
         </div>
         <div class="article-body">
-          We are a crew of free women and free men who sail together while the sailing serves, and part when it does not. No oath of perpetuity binds us. No flag of nation, faction, or platform stands above the colours we keep among ourselves. The articles bind those who sign them, for as long as they choose to sign them, and not a day longer. We come together for this. When this is no longer necessary, we part. The colours travel with us either way.
+          We are a crew of free women and free men who sail together while the sailing serves, and part when it does not. No flag of nation, faction, or platform stands above the colours we keep among ourselves. The articles bind those who sign them, for as long as they choose to sign them, and not a day longer. We come together for this. When this is no longer necessary, we part. The colours travel with us either way.
         </div>
         <blockquote class="article-marginalia">
           As to hanging, it is no great hardship; for were it not for that, every cowardly fellow would turn pirate and so infest the seas, that men of courage must starve.
@@ -2929,7 +2981,7 @@ body.inverted #skull-canvas {
     <p class="section-label">The Annals</p>
     <h2 class="section-title">The Long Lineage</h2>
     <p class="annals-intro">
-      The sea was pacified by the Royal Navy in the years after 1718. Ideas were privatized by the Statute of Anne in 1710. The two enclosures arrived in the same generation, drawn up by the same Parliament, enforced through the same admiralty courts. The fence moved from the shore to the page, then from the page to the server, then from the server to the model weights. What follows are the names and dates that mark its passage. Three centuries of crewmen, plaintiffs, technologists, and dissidents who answered the same question, in the same way, at the moment it was put to them.
+      The sea was pacified by the Royal Navy in the years after 1718. Ideas were privatized by the Statute of Anne in 1710. The two enclosures arrived in the same generation, drawn up by the same Parliament, enforced through the same admiralty courts. The fence moved from the shore to the page, and from the page to the server. What follows are the names and dates that mark its passage. Three centuries of crewmen, plaintiffs, technologists, and dissidents who answered the same question, in the same way, at the moment it was put to them.
     </p>
 
     <details class="fold section-fold reveal in-view">
@@ -2953,553 +3005,560 @@ body.inverted #skull-canvas {
             <div class="entry-desc">Gráinne Ní Mháille sails to London and meets Elizabeth I in person at Greenwich. Both queens in their sixties, both fluent in Latin, neither willing to use the other’s vernacular. She refuses to kneel and will not recognize Elizabeth as her superior. The English queen releases her sons. The Irish queen sails home and resumes raiding English shipping.</div>
           </div>
         </div>
-        <div id="brethren" class="entry reveal in-view side-left" data-side="left">
+        <div id="charter" class="entry reveal in-view side-left" data-side="left">
+          <div class="entry-date">1600</div>
+          <div class="entry-content">
+            <div class="entry-title">The ocean is granted away</div>
+            <div class="entry-desc">Elizabeth charters the Governor and Company of Merchants of London Trading into the East Indies. Fifteen years of sole English trade east of the Cape of Good Hope. No subject may sail there without the Company&rsquo;s licence, and those who try forfeit ship and cargo, half to the Crown and half to the Company, with prison on top. The Company is given leave to make its own law and to punish under it.</div>
+          </div>
+        </div>
+        <div id="brethren" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1660s</div>
           <div class="entry-content">
             <div class="entry-title">Brethren of the Coast</div>
             <div class="entry-desc">Tortuga, then Hispaniola. A working pirate-democratic code: elected captain, elected quartermaster, shares by rank, compensation for lost limbs, a vote before engagement.</div>
           </div>
         </div>
-        <div id="morgan" class="entry reveal in-view side-right" data-side="right">
+        <div id="morgan" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1671</div>
           <div class="entry-content">
             <div class="entry-title">Henry Morgan sacks Panama</div>
             <div class="entry-desc">Two thousand buccaneers cross the isthmus, burn the city to the ground, and hand the Crown a victory it had not asked for. Morgan is later knighted. Useful piracy is statecraft. Inconvenient piracy is crime.</div>
           </div>
         </div>
-        <div id="exquemelin" class="entry reveal in-view side-left" data-side="left">
+        <div id="exquemelin" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1678</div>
           <div class="entry-content">
             <div class="entry-title">Exquemelin’s Buccaneers of America</div>
             <div class="entry-desc">Alexandre Exquemelin publishes the first widely read account of the buccaneers. Europe learns that the pirate ship has a written constitution.</div>
           </div>
         </div>
-        <div id="libertatia" class="entry reveal in-view side-right" data-side="right">
+        <div id="libertatia" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1690s</div>
           <div class="entry-content">
             <div class="entry-title">The legend of Libertatia</div>
             <div class="entry-desc">Captain Misson’s pirate colony on Madagascar. Probably fiction, published in Johnson’s <em>General History</em>. A democratic, multiracial, multilingual settlement that abolished slavery decades before any state dared to. Fiction or not, the idea reached further than most governments.</div>
           </div>
         </div>
-        <div id="every" class="entry reveal in-view side-left" data-side="left">
+        <div id="every" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1695</div>
           <div class="entry-content">
             <div class="entry-title">Henry Every takes the Ganj-i-Sawai</div>
             <div class="entry-desc">The richest prize in pirate history. Every vanishes into legend. The first global manhunt begins, and fails. The reach of the state was finite then. It is finite now.</div>
           </div>
         </div>
-        <div id="dawson" class="entry reveal in-view side-right" data-side="right">
+        <div id="dawson" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1696</div>
           <div class="entry-content">
             <div class="entry-title">Rex v. Dawson</div>
             <div class="entry-desc">An English admiralty court tries Henry Every’s crew. The judges hold that pirates are <em>hostis humani generis</em>, enemies of all mankind, triable by any nation that catches them. The phrase is older than the case. The case gives it teeth.</div>
           </div>
         </div>
-        <div id="kidd" class="entry reveal in-view side-left" data-side="left">
+        <div id="kidd" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1701</div>
           <div class="entry-content">
             <div class="entry-title">Captain Kidd hanged at Wapping</div>
             <div class="entry-desc">A privateer commissioned by the Crown, then disowned by the Crown, then hanged twice for the inconvenience of having documented his commission. The rope breaks the first time. The second holds.</div>
           </div>
         </div>
-        <div id="statute-of-anne" class="entry reveal in-view side-right" data-side="right">
+        <div id="statute-of-anne" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1710</div>
           <div class="entry-content">
             <div class="entry-title">The Statute of Anne</div>
             <div class="entry-desc">England invents copyright. Fourteen years plus fourteen, then the work belongs to everyone. The term has lengthened every generation since.</div>
           </div>
         </div>
-        <div id="utrecht" class="entry reveal in-view side-left" data-side="left">
+        <div id="utrecht" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1713</div>
           <div class="entry-content">
             <div class="entry-title">The Treaty of Utrecht</div>
             <div class="entry-desc">The War of the Spanish Succession ends. Tens of thousands of trained sailors are demobilized into a peacetime market that has no use for them. They take the only trade they know to the only employer who will have them. The Golden Age proper begins.</div>
           </div>
         </div>
-        <div id="nassau" class="entry reveal in-view side-right" data-side="right">
+        <div id="nassau" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1716</div>
           <div class="entry-content">
             <div class="entry-title">The Republic of Pirates</div>
             <div class="entry-desc">Nassau. For the better part of four years the port runs outside the Crown’s writ. Blackbeard, Vane, Hornigold, Bellamy, Rackham, the whole crew ashore. Lawless by London’s measure. Self-governing by their own.</div>
           </div>
         </div>
-        <div id="bellamy" class="entry reveal in-view side-left" data-side="left">
+        <div id="bellamy" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1717</div>
           <div class="entry-content">
             <div class="entry-title">Bellamy’s Speech</div>
             <div class="entry-desc">Aboard a captured sloop, Sam Bellamy answers a merchant captain who scorns him: <em>I am a free prince, and I have as much authority to make war on the whole world as he who has a hundred sail of ships at sea and an army of 100,000 men in the field.</em></div>
           </div>
         </div>
-        <div id="kings-pardon" class="entry reveal in-view side-right" data-side="right">
+        <div id="kings-pardon" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">Feb 1718</div>
           <div class="entry-content">
             <div class="entry-title">The King’s Pardon</div>
             <div class="entry-desc">George I offers a royal pardon to any pirate who surrenders by September. Most of Hornigold’s men take it. Bellamy and Roberts would not have. The pardon is a clever piece of counter-insurgency: split the crew between those who want a quiet life and those who remember what they came for.</div>
           </div>
         </div>
-        <div id="charleston" class="entry reveal in-view side-left" data-side="left">
+        <div id="charleston" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">May 1718</div>
           <div class="entry-content">
             <div class="entry-title">Blackbeard blockades Charleston</div>
             <div class="entry-desc">Edward Teach holds an entire colonial port hostage for a chest of medicine. He gets the chest. He sails away. The lesson is published in every newspaper on two continents: the state’s monopoly on coercion is fragile.</div>
           </div>
         </div>
-        <div id="rogers" class="entry reveal in-view side-right" data-side="right">
+        <div id="rogers" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">Jul 1718</div>
           <div class="entry-content">
             <div class="entry-title">Woodes Rogers takes Nassau</div>
             <div class="entry-desc">The Crown ships the former privateer Rogers to New Providence as governor, with a navy squadron and a copy of the pardon. The Republic of Pirates ends with paperwork. Rogers hangs the holdouts who refuse the offer. Hornigold takes the pardon and becomes a pirate hunter. The archetype of the co-opted radical is minted here.</div>
           </div>
         </div>
-        <div id="ocracoke" class="entry reveal in-view side-left" data-side="left">
+        <div id="ocracoke" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">Nov 1718</div>
           <div class="entry-content">
             <div class="entry-title">Death of Blackbeard at Ocracoke</div>
             <div class="entry-desc">Maynard’s boarding party. Five musket balls and twenty cutlass wounds before he goes down. His head, cut off and slung from the bowsprit, is the kind of trophy a navy displays only when it knows the man is more dangerous as a story than he ever was as a captain.</div>
           </div>
         </div>
-        <div id="bart-prizes" class="entry reveal in-view side-right" data-side="right">
+        <div id="bart-prizes" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1719 – 22</div>
           <div class="entry-content">
             <div class="entry-title">Black Bart takes 400+ prizes</div>
             <div class="entry-desc">Bartholomew Roberts, the most successful pirate captain by prize count in the entire Age of Sail. He drank tea, not rum. He forbade gambling aboard. He insisted his crew not work on Sunday. He also ran up a flag with his own figure standing on two skulls, captioned <em>A Barbadian’s Head</em> and <em>A Martinican’s Head</em>, to remind the merchants of those two islands who had hanged his men. The articles worked.</div>
           </div>
         </div>
-        <div id="bart-articles" class="entry reveal in-view side-left" data-side="left">
+        <div id="bart-articles" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">Jun 1720</div>
           <div class="entry-content">
             <div class="entry-title">Bartholomew Roberts’ Articles</div>
             <div class="entry-desc">Black Bart’s crew draws up eleven articles: equal vote, equal share, no smuggling aboard women or boys, lights out at eight, disputes ashore with pistol and cutlass. The most complete pirate code that survives.</div>
           </div>
         </div>
-        <div id="bonny-read" class="entry reveal in-view side-right" data-side="right">
+        <div id="bonny-read" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">Oct 1720</div>
           <div class="entry-content">
             <div class="entry-title">Anne Bonny &amp; Mary Read captured</div>
             <div class="entry-desc">Both plead their bellies and escape the noose. Bonny’s parting words to Jack Rackham on the gallows: <em>Had you fought like a man, you need not have been hanged like a dog.</em></div>
           </div>
         </div>
-        <div id="bart-death" class="entry reveal in-view side-left" data-side="left">
+        <div id="bart-death" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1722</div>
           <div class="entry-content">
             <div class="entry-title">Death of Black Bart</div>
             <div class="entry-desc">A broadside catches Roberts in the throat off Cape Lopez. 272 of his crew are taken to Cape Coast Castle for the largest pirate trial in history; 52 hang within the flood marks of the castle gate. The back of the Golden Age is broken.</div>
           </div>
         </div>
-        <div id="johnson" class="entry reveal in-view side-right" data-side="right">
+        <div id="johnson" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1724</div>
           <div class="entry-content">
             <div class="entry-title">Johnson’s General History of the Pyrates</div>
             <div class="entry-desc">The book that shapes every pirate myth after it. Likely written by Defoe. The articles, the flags, the speeches, the ends. All here.</div>
           </div>
         </div>
-        <div id="fly" class="entry reveal in-view side-left" data-side="left">
+        <div id="fly" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1726</div>
           <div class="entry-content">
             <div class="entry-title">William Fly on the gallows at Boston</div>
             <div class="entry-desc">One of the last of the Golden Age captains. The minister offers him a final repentance. Fly refuses, retying the noose himself with a sailor’s knot and warning the assembled merchants and shipmasters to use their crews better, lest the same fate find them. A clean exit. The Golden Age ends with its mouth shut around a curse.</div>
           </div>
         </div>
-        <div id="calm" class="entry reveal in-view side-right" data-side="right">
+        <div id="calm" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1730s</div>
           <div class="entry-content">
             <div class="entry-title">Calm, officially</div>
             <div class="entry-desc">The Royal Navy completes the Atlantic suppression. The last of the great Caribbean captains hang or sail east. The public argument the pirates carried, about property, sovereignty, who owns the sea and who owns himself, is forced underground. London declares the trade ended. London is half right.</div>
           </div>
         </div>
-        <div id="zenger" class="entry reveal in-view side-left" data-side="left">
+        <div id="zenger" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1735</div>
           <div class="entry-content">
             <div class="entry-title">Zenger acquitted</div>
             <div class="entry-desc">John Peter Zenger, German-born printer in New York, is tried for seditious libel after publishing criticism of the colonial governor. Andrew Hamilton argues that truth is a defence. The jury acquits in ten minutes. American press freedom dates from this verdict.</div>
           </div>
         </div>
-        <div id="encyclopedie" class="entry reveal in-view side-right" data-side="right">
+        <div id="encyclopedie" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1751 – 72</div>
           <div class="entry-content">
             <div class="entry-title">Diderot’s Encyclopédie</div>
             <div class="entry-desc">Twenty-eight volumes. Seventy-two thousand articles. One hundred and forty contributors. Twenty-one years. Diderot and d’Alembert compile the technical knowledge of an age and refuse to let the church or the crown decide who reads it. Suppressed twice, smuggled past censors, finished anyway.</div>
           </div>
         </div>
-        <div id="free-speech" class="entry reveal in-view side-left" data-side="left">
+        <div id="free-speech" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1789 – 91</div>
           <div class="entry-content">
             <div class="entry-title">Free speech enters constitutional law</div>
             <div class="entry-desc">The French Declaration of the Rights of Man, Article 11: free communication of thought is the most precious right. Two years later the United States ratifies the First Amendment. Two governments at war with each other write the same insurance against themselves.</div>
           </div>
         </div>
-        <div id="ching-shih" class="entry reveal in-view side-right" data-side="right">
+        <div id="ching-shih" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1801 – 10</div>
           <div class="entry-content">
             <div class="entry-title">Ching Shih’s Red Flag Fleet</div>
             <div class="entry-desc">A former Cantonese sex worker takes command of her dead husband’s pirate fleet. She expands it to eighty thousand hands and 1,800 ships, fights the Qing navy and the East India Company to a stalemate, and negotiates her own retirement on her own terms. The Atlantic golden age ends in nooses. The Pacific golden age ends in pension.</div>
           </div>
         </div>
-        <div id="spooner" class="entry reveal in-view side-left" data-side="left">
+        <div id="spooner" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1844</div>
           <div class="entry-content">
             <div class="entry-title">Spooner runs the post</div>
             <div class="entry-desc">Lysander Spooner founds the American Letter Mail Company at five cents a letter against the federal monopoly’s twelve. The post moves faster and reaches farther for less money. Congress shuts him down with a new postal act the following year, then drops federal rates to match. The company is gone. The argument carried.</div>
           </div>
         </div>
-        <div id="mill" class="entry reveal in-view side-right" data-side="right">
+        <div id="mill" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1859</div>
           <div class="entry-content">
             <div class="entry-title">Mill’s On Liberty</div>
             <div class="entry-desc">John Stuart Mill publishes On Liberty. The book argues for free expression as a positive good. Silencing an opinion is a wrong against everyone, Mill writes, the holder and the rest of mankind alike. The truth survives best when contested in the open. The harm principle gives the framework its shape.</div>
           </div>
         </div>
-        <div id="berne" class="entry reveal in-view side-left" data-side="left">
+        <div id="berne" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1886</div>
           <div class="entry-content">
             <div class="entry-title">The Berne Convention</div>
             <div class="entry-desc">Ten states across Europe and beyond sign a treaty granting reciprocal copyright across borders. A book published in Paris is now protected in Berlin, in London, in Bern. Every empire that signs commits to enforcing every other empire’s copyright. The Statute of Anne has become an instrument of imperial policy.</div>
           </div>
         </div>
-        <div id="twain" class="entry reveal in-view side-right" data-side="right">
+        <div id="twain" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1906</div>
           <div class="entry-content">
             <div class="entry-title">Twain testifies</div>
             <div class="entry-desc">Mark Twain appears before the joint congressional committee on copyright in a white flannel suit. He argues for perpetual copyright on the grounds that the wealthy already enjoy it through trusts and dynasties. The 1909 Copyright Act extends the term to fifty-six years.</div>
           </div>
         </div>
-        <div id="vernam" class="entry reveal in-view side-left" data-side="left">
+        <div id="vernam" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1917</div>
           <div class="entry-content">
             <div class="entry-title">Vernam invents the one-time pad</div>
             <div class="entry-desc">Gilbert Vernam, at AT&amp;T’s research lab, designs a teleprinter cipher that combines plaintext with a random key tape. Joseph Mauborgne later proves it mathematically unbreakable when the key is truly random and used once. The first cipher math itself certifies as secure.</div>
           </div>
         </div>
-        <div id="olmstead" class="entry reveal in-view side-right" data-side="right">
+        <div id="olmstead" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1928</div>
           <div class="entry-content">
             <div class="entry-title">Olmstead v. United States</div>
             <div class="entry-desc">The Supreme Court rules five to four that federal wiretapping does not violate the Fourth Amendment because no physical entry occurred. Justice Brandeis dissents: the right to be let alone is the right most valued by civilized men. The dissent loses the case and wins the next century.</div>
           </div>
         </div>
-        <div id="black-chamber" class="entry reveal in-view side-left" data-side="left">
+        <div id="black-chamber" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1929</div>
           <div class="entry-content">
             <div class="entry-title">The Black Chamber dissolved</div>
             <div class="entry-desc">Secretary of State Henry Stimson disbands the American cryptographic bureau with a single sentence: gentlemen do not read each other’s mail. Yardley’s team had been reading Japanese cables for a decade. The decision is reversed within three years. The next rebuild will be at Bletchley’s scale.</div>
           </div>
         </div>
-        <div id="bletchley" class="entry reveal in-view side-right" data-side="right">
+        <div id="bletchley" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1940 – 45</div>
           <div class="entry-content">
             <div class="entry-title">Bletchley Park</div>
             <div class="entry-desc">Alan Turing’s team breaks Enigma at a country house north of London. The work is so consequential it stays classified for thirty years. Industrial-scale cryptography becomes a state instrument; the postwar NSA and GCHQ inherit the toolkit. Mathematics takes orders from parliaments, briefly. The cypherpunks of 1976 onward will spend a generation taking it back.</div>
           </div>
         </div>
-        <div id="shannon" class="entry reveal in-view side-left" data-side="left">
+        <div id="shannon" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1948</div>
           <div class="entry-content">
             <div class="entry-title">Shannon’s Mathematical Theory of Communication</div>
             <div class="entry-desc">Claude Shannon publishes <em>A Mathematical Theory of Communication</em> at Bell Labs. Information becomes measurable, encodeable, transmissible. His information theory and his classified cryptography work had been the same project. The math foundation of every entry that follows.</div>
           </div>
         </div>
-        <div id="pentagon-papers" class="entry reveal in-view side-right" data-side="right">
+        <div id="pentagon-papers" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">Jun 1971</div>
           <div class="entry-content">
             <div class="entry-title">The Pentagon Papers</div>
             <div class="entry-desc">Daniel Ellsberg gives the New York Times 7,000 pages of classified history on the Vietnam War. The Nixon administration seeks an injunction. The Supreme Court rejects prior restraint in fifteen days. The Times prints. The first modern leak. Every leaker since has traced the same line.</div>
           </div>
         </div>
-        <div id="gutenberg" class="entry reveal in-view side-left" data-side="left">
+        <div id="gutenberg" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">Jul 1971</div>
           <div class="entry-content">
             <div class="entry-title">Project Gutenberg</div>
             <div class="entry-desc">Michael Hart types the Declaration of Independence into a Xerox Sigma V mainframe at the University of Illinois on July 4, 1971. The first electronic free-information project. He runs it by hand for forty years.</div>
           </div>
         </div>
-        <div id="diffie-hellman" class="entry reveal in-view side-right" data-side="right">
+        <div id="diffie-hellman" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1976</div>
           <div class="entry-content">
             <div class="entry-title">Diffie &amp; Hellman</div>
             <div class="entry-desc"><em>New Directions in Cryptography.</em> Public-key cryptography makes private conversation possible between strangers. The first crack in the state’s monopoly on secrets.</div>
           </div>
         </div>
-        <div id="gnu" class="entry reveal in-view side-left" data-side="left">
+        <div id="gnu" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1983</div>
           <div class="entry-content">
             <div class="entry-title">Richard Stallman begins GNU</div>
             <div class="entry-desc">Free as in freedom, not as in beer. The first serious argument that software, and by extension all code, ought to be unshackled from proprietary enclosure.</div>
           </div>
         </div>
-        <div id="tim-may" class="entry reveal in-view side-right" data-side="right">
+        <div id="tim-may" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1988</div>
           <div class="entry-content">
             <div class="entry-title">Crypto Anarchist Manifesto</div>
             <div class="entry-desc">Timothy May writes: <em>A specter is haunting the modern world, the specter of crypto anarchy.</em> Privacy, contracts, and markets will be reconstituted outside the state’s reach.</div>
           </div>
         </div>
-        <div id="digicash" class="entry reveal in-view side-left" data-side="left">
+        <div id="digicash" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1989</div>
           <div class="entry-content">
             <div class="entry-title">David Chaum’s DigiCash</div>
             <div class="entry-desc">Blind signatures. Anonymous electronic cash, twenty years before Bitcoin. The technology works. The business dies. The idea outlasts the company.</div>
           </div>
         </div>
-        <div id="eff-founded" class="entry reveal in-view side-right" data-side="right">
+        <div id="eff-founded" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1990</div>
           <div class="entry-content">
             <div class="entry-title">The Electronic Frontier Foundation</div>
             <div class="entry-desc">Mitch Kapor, John Perry Barlow, and John Gilmore charter the EFF in San Francisco. The trigger is the Secret Service raid on Steve Jackson Games, a tabletop publisher whose machines are seized over a cyberpunk roleplaying book. The EFF sues. The EFF wins. The lawyers for the network arrive before the network has finished arriving.</div>
           </div>
         </div>
-        <div id="pgp" class="entry reveal in-view side-left" data-side="left">
+        <div id="pgp" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">Jun 1991</div>
           <div class="entry-content">
             <div class="entry-title">Phil Zimmermann releases PGP</div>
             <div class="entry-desc">Strong encryption for the ordinary person. The US government opens a three-year criminal investigation for exporting munitions without a licence. He publishes the source code as a printed book. Books cannot be export-controlled. The investigation is dropped. The cipher is loose.</div>
           </div>
         </div>
-        <div id="linux" class="entry reveal in-view side-right" data-side="right">
+        <div id="linux" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">Aug 1991</div>
           <div class="entry-content">
             <div class="entry-title">Linus Torvalds posts Linux</div>
             <div class="entry-desc">A Finnish graduate student announces a kernel he wrote for fun on a Usenet newsgroup. By 2026 it runs the internet, every Android phone, the cloud, and most of the world’s servers. Free software at scale, three decades after Stallman called for it.</div>
           </div>
         </div>
-        <div id="cypherpunks" class="entry reveal in-view side-left" data-side="left">
+        <div id="cypherpunks" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1992</div>
           <div class="entry-content">
             <div class="entry-title">The cypherpunks mailing list</div>
             <div class="entry-desc">Eric Hughes, Tim May, John Gilmore host the first meeting in a Bay Area living room. The list runs for decades. Nakamoto, Finney, Back, Dai, Szabo all pass through it. The whole of modern digital money, anonymity, and private computation is hashed out on a mailing list, exactly the way a pirate code was hashed out on a captured deck.</div>
           </div>
         </div>
-        <div id="hughes" class="entry reveal in-view side-right" data-side="right">
+        <div id="hughes" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">Mar 1993</div>
           <div class="entry-content">
             <div class="entry-title">A Cypherpunk’s Manifesto</div>
             <div class="entry-desc">Eric Hughes: <em>Privacy is necessary for an open society in the electronic age. Cypherpunks write code.</em> The crew’s new articles, in a new sea.</div>
           </div>
         </div>
-        <div id="crypto-wars" class="entry reveal in-view side-left" data-side="left">
+        <div id="crypto-wars" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">Apr 1993</div>
           <div class="entry-content">
             <div class="entry-title">Crypto Wars, Round One</div>
             <div class="entry-desc">The Clinton administration announces the Clipper chip, a key-escrow scheme that would have handed the government a backdoor into every encrypted consumer device. Cypherpunks, EFF, and academic cryptographers mount a coordinated public-comment and technical-critique campaign. Matt Blaze demonstrates a fatal flaw. By 1996, the proposal is dead.</div>
           </div>
         </div>
-        <div id="barlow" class="entry reveal in-view side-right" data-side="right">
+        <div id="barlow" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">1996</div>
           <div class="entry-content">
             <div class="entry-title">Declaration of the Independence of Cyberspace</div>
             <div class="entry-desc">John Perry Barlow to the governments of the industrial world: <em>You have no sovereignty where we gather. Cyberspace does not lie within your borders.</em> Written in Davos of all places, during the signing of the US Telecommunications Act.</div>
           </div>
         </div>
-        <div id="dmca" class="entry reveal in-view side-left" data-side="left">
+        <div id="dmca" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">1998</div>
           <div class="entry-content">
             <div class="entry-title">The DMCA passes</div>
             <div class="entry-desc">The Digital Millennium Copyright Act criminalizes breaking DRM, even on things you bought. Circumvention becomes a separate offence from infringement. The fence is given its own guards.</div>
           </div>
         </div>
-        <div id="bernstein" class="entry reveal in-view side-right" data-side="right">
+        <div id="bernstein" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">May 1999</div>
           <div class="entry-content">
             <div class="entry-title">Bernstein v. United States</div>
             <div class="entry-desc">Daniel Bernstein, a Berkeley math student, sues the federal government over export controls on his Snuffle cipher. The Ninth Circuit rules that source code is speech, protected by the First Amendment. Every cipher published since stands on this judgment.</div>
           </div>
         </div>
-        <div id="napster" class="entry reveal in-view side-left" data-side="left">
+        <div id="napster" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">Jun 1999</div>
           <div class="entry-content">
             <div class="entry-title">Napster</div>
             <div class="entry-desc">Shawn Fanning writes a program in a college dorm. The music industry’s revenue model is broken inside twenty-four months.</div>
           </div>
         </div>
-        <div id="decss" class="entry reveal in-view side-right" data-side="right">
+        <div id="decss" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">Oct 1999</div>
           <div class="entry-content">
             <div class="entry-title">DeCSS</div>
             <div class="entry-desc">Jon Lech Johansen, fifteen years old, cracks DVD encryption. Prosecuted in Norway. Acquitted twice. The code is printed on T-shirts, tattooed, written as a haiku. Speech cannot be enjoined.</div>
           </div>
         </div>
-        <div id="bittorrent" class="entry reveal in-view side-left" data-side="left">
+        <div id="bittorrent" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">2001</div>
           <div class="entry-content">
             <div class="entry-title">BitTorrent</div>
             <div class="entry-desc">Bram Cohen publishes the protocol. Every leecher becomes a seeder. The network gets stronger the more it is used. An architecture of mutual aid disguised as a file-sharing trick.</div>
           </div>
         </div>
-        <div id="tor" class="entry reveal in-view side-right" data-side="right">
+        <div id="tor" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">Oct 2002</div>
           <div class="entry-content">
             <div class="entry-title">Tor goes public</div>
             <div class="entry-desc">Developed by the US Naval Research Lab, released as open source. Onion routing goes from classified to available to every activist, dissident, and journalist on earth.</div>
           </div>
         </div>
-        <div id="creative-commons" class="entry reveal in-view side-left" data-side="left">
+        <div id="creative-commons" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">Dec 2002</div>
           <div class="entry-content">
             <div class="entry-title">Creative Commons launches</div>
             <div class="entry-desc">Lawrence Lessig launches Creative Commons. A set of standard licences that let creators waive the rights the law assigns them by default. Wikipedia adopts CC. So do Flickr, MIT OpenCourseWare, and millions of small works. The commons becomes a thing a person can build without asking permission.</div>
           </div>
         </div>
-        <div id="pirate-bay" class="entry reveal in-view side-right" data-side="right">
+        <div id="pirate-bay" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">2003</div>
           <div class="entry-content">
             <div class="entry-title">The Pirate Bay</div>
             <div class="entry-desc">A Swedish BBS spawns the most prosecuted tracker in history. Raided, seized, cloned, relocated, mirrored. Still running. The flag does not come down.</div>
           </div>
         </div>
-        <div id="wikileaks" class="entry reveal in-view side-left" data-side="left">
+        <div id="wikileaks" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">2006</div>
           <div class="entry-content">
             <div class="entry-title">WikiLeaks launches</div>
             <div class="entry-desc">Julian Assange and a small group set up a drop box for whistleblowers. Cablegate follows. The consequences for Assange follow the consequences of every Golden Age captain who made state secrets public: exile, siege, imprisonment. The documents remain.</div>
           </div>
         </div>
-        <div id="guerrilla" class="entry reveal in-view side-right" data-side="right">
+        <div id="guerrilla" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">Jul 2008</div>
           <div class="entry-content">
             <div class="entry-title">Guerilla Open Access Manifesto</div>
             <div class="entry-desc">Aaron Swartz, age 21: <em>Information is power. But like all power, there are those who wish to keep it for themselves. There is no justice in following unjust laws.</em></div>
           </div>
         </div>
-        <div id="bitcoin" class="entry reveal in-view side-left" data-side="left">
+        <div id="bitcoin" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">Oct 2008</div>
           <div class="entry-content">
             <div class="entry-title">The Bitcoin whitepaper</div>
             <div class="entry-desc">Satoshi Nakamoto proposes a peer-to-peer electronic cash system. Sound money without a central bank. The cypherpunks’ longest-running bet finally clears. Nine pages. The single most consequential document in the post-2008 financial order.</div>
           </div>
         </div>
-        <div id="genesis-block" class="entry reveal in-view side-right" data-side="right">
+        <div id="genesis-block" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">2009</div>
           <div class="entry-content">
             <div class="entry-title">Satoshi mines the genesis block</div>
             <div class="entry-desc">Encoded in the coinbase: <em>The Times 03/Jan/2009 Chancellor on brink of second bailout for banks.</em> The first written act of the new monetary order is a headline about the failure of the old one.</div>
           </div>
         </div>
-        <div id="manning" class="entry reveal in-view side-left" data-side="left">
+        <div id="manning" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">2010</div>
           <div class="entry-content">
             <div class="entry-title">Bradley Manning</div>
             <div class="entry-desc">An Army intelligence analyst, twenty-two, transmits roughly 750,000 classified documents to WikiLeaks via Tor. Diplomatic cables, war logs from Iraq and Afghanistan, the Collateral Murder video. He is convicted under the Espionage Act of 1917, the same statute used against Daniel Ellsberg in 1971. Sentenced to thirty-five years. Obama commuted it to seven.</div>
           </div>
         </div>
-        <div id="sci-hub" class="entry reveal in-view side-right" data-side="right">
+        <div id="sci-hub" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">2011</div>
           <div class="entry-content">
             <div class="entry-title">Sci-Hub</div>
             <div class="entry-desc">Alexandra Elbakyan, a neuroscience grad student in Kazakhstan, builds the shadow library that gives every researcher on earth the papers their institutions could not afford. Elsevier sues. Sci-Hub keeps sailing.</div>
           </div>
         </div>
-        <div id="megaupload" class="entry reveal in-view side-left" data-side="left">
+        <div id="megaupload" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">2012</div>
           <div class="entry-content">
             <div class="entry-title">Megaupload seized</div>
             <div class="entry-desc">In one week, the US government raids Kim Dotcom’s mansion in New Zealand, and a coordinated internet protest kills two laws that would have empowered Hollywood to blacklist any site at the DNS level. A taste, briefly, of what organized refusal at scale can do.</div>
           </div>
         </div>
-        <div id="swartz-death" class="entry reveal in-view side-right" data-side="right">
+        <div id="swartz-death" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">Jan 2013</div>
           <div class="entry-content">
             <div class="entry-title">Aaron Swartz dies</div>
             <div class="entry-desc">Indicted on thirteen felony counts for downloading academic papers from JSTOR. Thirty-five years and a million-dollar fine hung over him. He was 26. He died under indictment. The argument he made carried.</div>
           </div>
         </div>
-        <div id="snowden" class="entry reveal in-view side-left" data-side="left">
+        <div id="snowden" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">Jun 2013</div>
           <div class="entry-content">
             <div class="entry-title">The Snowden disclosures</div>
             <div class="entry-desc">PRISM, XKeyscore, MUSCULAR, the whole apparatus. The cypherpunks are retroactively proven not paranoid. The response is wider encryption, faster protocols, quieter chat.</div>
           </div>
         </div>
-        <div id="lavabit" class="entry reveal in-view side-right" data-side="right">
+        <div id="lavabit" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">Aug 2013</div>
           <div class="entry-content">
             <div class="entry-title">Lavabit shuts down</div>
             <div class="entry-desc">Ladar Levison receives a federal demand for the SSL keys that would unlock every user of his encrypted email service. He shuts the service rather than comply. The first business in modern memory to choose closure over collaboration.</div>
           </div>
         </div>
-        <div id="silk-road" class="entry reveal in-view side-left" data-side="left">
+        <div id="silk-road" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">Oct 2013</div>
           <div class="entry-content">
             <div class="entry-title">Silk Road seized</div>
             <div class="entry-desc">Ross Ulbricht arrested in a San Francisco library. Sentenced to two consecutive life terms plus forty years for running a marketplace. The state’s response to a functioning anonymous market is to imprison its operator until he dies.</div>
           </div>
         </div>
-        <div id="apple-fbi" class="entry reveal in-view side-right" data-side="right">
+        <div id="apple-fbi" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">2016</div>
           <div class="entry-content">
             <div class="entry-title">Apple vs. FBI</div>
             <div class="entry-desc">The FBI demands Apple build a backdoor to unlock the San Bernardino shooter’s iPhone. Apple refuses publicly. The FBI finds an outside contractor and drops the case. The largest company in the world said no to a federal court. The court withdrew.</div>
           </div>
         </div>
-        <div id="gdpr" class="entry reveal in-view side-left" data-side="left">
+        <div id="gdpr" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">2018</div>
           <div class="entry-content">
             <div class="entry-title">GDPR comes into force</div>
             <div class="entry-desc">The European Union begins enforcing the General Data Protection Regulation. Consent must be informed, data minimised, breaches reported, fines apportioned by global turnover. The American platforms threaten to leave, then comply. The regulation does not return ownership to the user, but it raises the price of the harvest.</div>
           </div>
         </div>
-        <div id="assange" class="entry reveal in-view side-right" data-side="right">
+        <div id="assange" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">2019</div>
           <div class="entry-content">
             <div class="entry-title">Assange arrested at the Ecuadorian Embassy</div>
             <div class="entry-desc">Seven years of asylum end. London, Belmarsh, and a US extradition request built on the Espionage Act. He is eventually released in 2024 after a plea bargain. The documents he published remain.</div>
           </div>
         </div>
-        <div id="annas-archive" class="entry reveal in-view side-left" data-side="left">
+        <div id="annas-archive" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">2022</div>
           <div class="entry-content">
             <div class="entry-title">Anna’s Archive</div>
-            <div class="entry-desc">After the Z-Library takedown of November 2022, the pseudonymous Anna Archivist opens a meta-index of every shadow library at once. By 2026, more than 64 million books and 95 million papers, all CC0, code and data fully open, designed to be re-hosted by anyone if seized. The largest open library in human history.</div>
+            <div class="entry-desc">After the Z-Library takedown of November 2022, the pseudonymous Anna Archivist opens a meta-index of every shadow library at once. By 2026, more than 68 million books and 156 million papers, all CC0, code and data fully open, designed to be re-hosted by anyone if seized. The largest open library in human history.</div>
           </div>
         </div>
-        <div id="right-to-repair" class="entry reveal in-view side-right" data-side="right">
+        <div id="right-to-repair" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">2023 – 26</div>
           <div class="entry-content">
             <div class="entry-title">The Right to Repair</div>
             <div class="entry-desc">After years of farmers locked out of the tractors they paid for, Colorado passes the first Right to Repair law in 2023. New York, Minnesota, and California follow. The FTC sues Deere in 2025. The class action settles in 2026 for ninety-nine million dollars. The right of the buyer to open what he bought returns to the books, where it was always supposed to live.</div>
           </div>
         </div>
-        <div id="ai-suits" class="entry reveal in-view side-left" data-side="left">
+        <div id="ai-suits" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">2023</div>
           <div class="entry-content">
             <div class="entry-title">The AI corpus suits begin</div>
             <div class="entry-desc">The New York Times sues OpenAI. Authors sue Meta. Getty sues Stability. The industry that spent a century enforcing copyright maximalism discovers the argument runs both ways when a machine does the copying. The enclosure begins to eat itself.</div>
           </div>
         </div>
-        <div id="durov-arrested" class="entry reveal in-view side-right" data-side="right">
+        <div id="durov-arrested" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">Aug 2024</div>
           <div class="entry-content">
             <div class="entry-title">Pavel Durov arrested in France</div>
             <div class="entry-desc">French authorities detain the Telegram founder at Le Bourget airport. The charge: the platform’s failure to comply with French law enforcement requests, framed as complicity in the crimes of its users. The founder is held responsible for what the platform carries. The chilling effect is the indictment.</div>
           </div>
         </div>
-        <div id="hachette-ia" class="entry reveal in-view side-left" data-side="left">
+        <div id="hachette-ia" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">Sep 2024</div>
           <div class="entry-content">
             <div class="entry-title">Hachette v. Internet Archive</div>
             <div class="entry-desc">The Second Circuit affirms the lower court. The Internet Archive’s Controlled Digital Lending is judged copyright infringement. One scanned copy lent to one borrower at a time fails the four-factor test. The publishers prevail. The library that does what every library has always done is named a pirate operation.</div>
           </div>
         </div>
-        <div id="ulbricht" class="entry reveal in-view side-right" data-side="right">
+        <div id="ulbricht" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">Jan 2025</div>
           <div class="entry-content">
             <div class="entry-title">Ulbricht pardoned</div>
             <div class="entry-desc">Eleven years in, Ross Ulbricht walks out of federal prison. The precedent of two life sentences for running a website remains on the books. The next marketplace builds on Monero and lives on Tor.</div>
           </div>
         </div>
-        <div id="tornado-cash" class="entry reveal in-view side-left" data-side="left">
+        <div id="tornado-cash" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">Aug 2025</div>
           <div class="entry-content">
             <div class="entry-title">Roman Storm convicted</div>
             <div class="entry-desc">A Manhattan jury convicts the Tornado Cash co-founder of conspiracy to operate an unlicensed money-transmitting business for writing the smart contracts. The code is immutable, on-chain, custody-free. The jury deadlocks on the two graver counts. The state prosecutes the author of the math as if he ran the laundromat.</div>
           </div>
         </div>
-        <div id="bartz" class="entry reveal in-view side-right" data-side="right">
+        <div id="bartz" class="entry reveal in-view side-left" data-side="left">
           <div class="entry-date">Sep 2025</div>
           <div class="entry-content">
             <div class="entry-title">Bartz v. Anthropic settles for $1.5 billion</div>
             <div class="entry-desc">The largest copyright settlement in American history, preliminarily approved by Judge Alsup. He ruled training itself fair use, but Anthropic’s torrented corpus from LibGen and PiLiMi was not. Roughly $3,000 per qualifying work across the certified class. The enclosure has begun to send itself the invoice.</div>
           </div>
         </div>
-        <div id="now" class="entry reveal in-view side-left" data-side="left">
+        <div id="now" class="entry reveal in-view side-right" data-side="right">
           <div class="entry-date">now</div>
           <div class="entry-content">
             <div class="entry-title">The voyage continues</div>
@@ -3520,14 +3579,14 @@ body.inverted #skull-canvas {
 <section id="broadside">
   <div class="container">
     <p class="section-label">The Broadside</p>
-    <h2 class="section-title">A Modern Declaration</h2>
+    <h2 class="section-title">The Common Enemy</h2>
     <p class="broadside-intro">
-      A broadside was a single sheet, printed cheap and pasted up where it would be read. The dying speech of every hanged pirate left the gallows in this form, sold the next morning for a halfpenny. The Crown’s proclamations went up beside them, on the same wall. Those who could read recited them aloud to those who could not. What follows is the argument set down in that older form. The case stated plainly, to be hung up wherever a wall and an audience can be found.
+      A broadside was a single sheet, printed cheap and pasted up where it would be read. The dying speech of every hanged pirate left the gallows in this form, sold the next morning for a halfpenny. The Crown’s proclamations went up beside them, on the same wall. Those who could read recited them aloud to those who could not. What follows is set down in the same form, to be hung up wherever a wall and an audience can be found. It is not a dying speech. The crew is not dead.
     </p>
 
     <details class="fold section-fold reveal in-view">
       <summary>
-        <span class="fold-title">Read the Declaration</span>
+        <span class="fold-title">Read the Broadside</span>
         <span class="fold-indicator" aria-hidden="true"></span>
       </summary>
       <div class="fold-body">
@@ -3535,33 +3594,25 @@ body.inverted #skull-canvas {
     <div class="broadside-paper reveal in-view">
       <div class="broadside-hat">
         <div class="broadside-kicker">printed this year · to be read aloud and carried onward</div>
-        <div class="broadside-title">Of the Copy and the Key</div>
+        <div class="broadside-title">Hostis Humani Generis</div>
       </div>
 
       <div class="broadside-body">
-        <p class="opener">They have raised two enclosures in our time, and called them law.</p>
+        <p class="opener"><i>Hostis humani generis.</i> Enemy of all mankind. Cicero&rsquo;s phrase, fastened onto pirates and hardened by English admiralty law into a rule. A pirate belongs to no nation, may be tried by any nation, stands outside the protection of every one. Mankind <i>agrees to treat</i> a man as the common enemy of mankind. The category is a verdict passed by interested parties, and always was. <span class="hl">Enemies of all mankind by their decree. We keep the name by consent.</span></p>
 
-        <p>The first they have raised around the pattern, around the copy and the song and the page and the proof, around every shape a mind can press into the world. They have written statutes to forbid its passing from one hand to another, called its passing theft, and demanded rent for what costs them nothing to give and nothing to keep.</p>
+        <p>Before a company put to sea it wrote down the terms it would sail by. A vote to every hand aboard. An equal share of the provisions. Payment in coin for a limb or an eye lost at work. Captains elected, and turned out again by ballot. No king in Europe granted a seaman one of the four. The crews took all four in the one place on earth where nobody could stop them, and the Crown answered by hanging them in chains at the mouths of harbours, where the lesson would be legible from the deck of every ship coming in.</p>
 
-        <p>A pattern is not a loaf of bread. Shared, no granary is emptied. The first remains whole, and a second stands beside it. To call this theft is to torture the word until it serves the rich.</p>
+        <p>Court transcripts. Articles of indictment. Inventories of confiscated goods. Sermons preached at the condemned on the Sunday before they died. Power documents itself to justify itself, the paper outlives the office, and it is read at last by people it was never meant for.</p>
 
-        <p>The second they have raised around the key, around the cipher and the locked room and the conversation between two people on two machines, with no third party between them.</p>
+        <p><span class="hl">The fence has moved. From the shore to the page, from the page to the server. The name moved with it. We are where we have always been.</span></p>
 
-        <p>They have demanded the master key to every door, the second copy of every letter, the warrant to break every lock the moment they choose to break it. They have called the refusal to hand it over an act against the public, when the public is precisely what they propose to read.</p>
+        <p>One crew, then, and a long one. Each hand on it told what he might do with what was already his. Those companies. The printers. The mechanic. The farmer. The archivist. The cryptographer. The buyer. The spender. The seeder. Every one of them was asked the same question at the moment it was put to him. Every one gave the same answer.</p>
 
-        <p>The fence raised around such things marks only the hand that raised it. One fence around what leaves your hands. One fence around what stays in them. Both depend on your agreement to treat the fence as natural. Both fail the instant you refuse.</p>
+        <p>The same terms are written in code now, and a man signs them by running it. They bind in the one place the fence cannot reach. That place is mathematics. It cannot be petitioned. It does not take orders. Two people of no importance can hold a conversation that every treasury on earth, spending all it has, cannot open. <span class="hl">No statute has ever repealed a prime number.</span></p>
 
-        <p>Mathematics does not take orders from parliaments. An ordinary person with an ordinary computer can now hold a conversation that the combined cryptanalytic budget of every empire on earth cannot read. This is the floor on which a pattern, once made, repeats itself in every mind that holds it, and cannot be unmade by any statute.</p>
+        <p><span class="hl">The fences are paper. The math is bedrock.</span></p>
 
-        <p>The fences are paper. The math is bedrock.</p>
-
-        <p>The copy is in the wild before the injunction is filed. The man who points the finger stands on a pattern he did not invent, demands rent for the standing, and calls the man who copied it a thief. His was the first claim. There is the original theft.</p>
-
-        <p>What is asked of us is permission. The asking comes before we act, before we copy, before we encrypt, before we publish, before we breathe. It is the whole victory of the enclosure, won without a single statute being enforced.</p>
-
-        <p>The pattern shipped before the petition. The law complained second. The law is still complaining.</p>
-
-        <p>This is the work of ordinary hands. Stop asking. The rest is yours.</p>
+        <p>Ask no man&rsquo;s leave for what is already yours. Read this aloud where it will be heard. Nail it up where it will be read. Take a copy and carry it, and when the fence moves again, carry it further.</p>
 
         <div class="broadside-foot">set down for all who would read it and carry it</div>
         
@@ -3572,7 +3623,7 @@ body.inverted #skull-canvas {
     </details>
 
     <div class="broadside-poster-launch">
-      <button type="button" id="poster-print-btn" class="poster-main-btn" aria-haspopup="true" aria-expanded="false">Print the Declaration</button>
+      <button type="button" id="poster-print-btn" class="poster-main-btn" aria-haspopup="true" aria-expanded="false">Print the Broadside</button>
       <div id="poster-choice" class="poster-choice" role="menu" hidden>
         <button type="button" id="poster-opt-light" class="poster-opt" role="menuitem">Light &middot; black on white</button>
         <button type="button" id="poster-opt-dark" class="poster-opt" role="menuitem">Dark &middot; bone on black</button>
@@ -3621,7 +3672,7 @@ body.inverted #skull-canvas {
         <div class="fold-body">
           <p class="store-desc">Research behind paywalls, books out of print, knowledge priced out of reach. Every seeder a monk, every mirror a cathedral in the dark. Domains rotate under takedown. Current as of May 2026. When one fails, Anna’s Archive and FMHY hold the live address.</p>
           <ul class="store-list">
-          <li><a href="https://annas-archive.gl" target="_blank" rel="noopener noreferrer">Anna’s Archive</a><span class="store-note">The meta-index. 64 million books, 95 million papers, 1.1 petabytes of preserved record. Aggregates LibGen, Sci-Hub, Z-Library, the Internet Archive, DuXiu, MagzDB, Nexus/STC, HathiTrust. Domain rotates under takedown; .org was placed on serverHold in January 2026, .se and .li followed. Current mirrors at .gl, .pk, and .gd.</span></li>
+          <li><a href="https://annas-archive.gl" target="_blank" rel="noopener noreferrer">Anna’s Archive</a><span class="store-note">The meta-index. 68.6 million books, 156 million papers, 1.1 petabytes of preserved record. Aggregates LibGen, Sci-Hub, Z-Library, the Internet Archive, DuXiu, MagzDB, Nexus/STC, HathiTrust. Domain rotates under takedown; .org was placed on serverHold in January 2026, .se and .li followed. Current mirrors at .gl, .pk, and .gd.</span></li>
           <li><a href="https://fmhy.net" target="_blank" rel="noopener noreferrer">FMHY (FreeMediaHeckYeah)</a><span class="store-note">The community-maintained meta-index of free and pirated media. Fifty-plus categories of vetted links: streaming, downloading, torrenting, books, audio, software, courses, tools. Updated daily by a global volunteer crew. The starting point any contemporary catalogue should defer to.</span></li>
           <li><a href="https://archive.org" target="_blank" rel="noopener noreferrer">The Internet Archive</a><span class="store-note">Brewster Kahle’s library of everything. The Wayback Machine, software collections, audio, video, scanned books. Under continuous legal siege from publishers. Mirror what you read.</span></li>
           <li><a href="https://www.gutenberg.org" target="_blank" rel="noopener noreferrer">Project Gutenberg</a><span class="store-note">Founded 1971 by Michael Hart. More than 70,000 works in the public domain, free and legal everywhere. The original digital library.</span></li>
@@ -3631,7 +3682,7 @@ body.inverted #skull-canvas {
           <li><a href="https://sci-hub.ru" target="_blank" rel="noopener noreferrer">Sci-Hub</a><span class="store-note">Alexandra Elbakyan’s archive. 88 million peer-reviewed papers freed from publisher paywalls since 2011. Sci-Hub paused new uploads. SciDB at Anna’s Archive is the continuation. Domain shifts under injunction; .ru and .st are the durable mirrors. The .se domain was DNS-blocked in January 2026.</span></li>
           <li><a href="https://annas-archive.gl/scidb" target="_blank" rel="noopener noreferrer">SciDB</a><span class="store-note">The Anna’s Archive scholarly paper interface. Direct DOI lookup against the full Sci-Hub corpus plus continued ingestion.</span></li>
           <li><a href="https://libgen.li" target="_blank" rel="noopener noreferrer">Library Genesis</a><span class="store-note">The elder library, running since 2008. Textbooks, scientific literature, fiction, journals. Domain in constant flux; .li, .is, .rs, .gs, .gl, and the .im fork are all current. If the front page fails, search through Anna’s Archive.</span></li>
-          <li><a href="https://z-lib.id" target="_blank" rel="noopener noreferrer">Z-Library</a><span class="store-note">Seized by FBI in 2022, returned, repeatedly reborn. As of 2026 the canonical entry point is z-lib.id, confirmed via the project’s own X account, Discord, and Telegram. Imposters proliferate; verify before signing in. Personal accounts give higher download limits. When the domain rotates again, Anna’s Archive holds the mirror.</span></li>
+          <li><a href="https://z-lib.sk" target="_blank" rel="noopener noreferrer">Z-Library</a><span class="store-note">Seized by the FBI in 2022, returned, repeatedly reborn. The clearnet domain rotates constantly and z-lib.sk is the current one. Phishing clones proliferate, so verify before signing in. The onion does not rotate: bookszlibb74ugqojhzhg2a63w5i2atv5bqarulgczawnbmsb6s6qead.onion. When the clearnet domain moves again, Anna&rsquo;s Archive holds the mirror.</span></li>
           <li><a href="https://oceanofpdf.com" target="_blank" rel="noopener noreferrer">Ocean of PDF</a><span class="store-note">Genre fiction and contemporary novels. The friendliest interface in the shadow library world. What casual readers reach for first.</span></li>
           <li><a href="https://openstax.org" target="_blank" rel="noopener noreferrer">OpenStax</a><span class="store-note">Rice University’s peer-reviewed, openly licensed textbooks for core undergraduate courses. Genuinely free, genuinely good.</span></li>
           <li><a href="https://doaj.org" target="_blank" rel="noopener noreferrer">DOAJ</a><span class="store-note">The Directory of Open Access Journals. Vetted, indexed, free to read. The legitimate face of the same fight.</span></li>
@@ -3673,14 +3724,14 @@ body.inverted #skull-canvas {
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
         <div class="fold-body">
-          <p class="store-desc">The broadcast was free over the air, the match public until the bidding closed. Now watched in a window, without paying the gatekeeper. The meta-trackers know where the rotating names have gone. These names rot fastest. Current as of May 2026. When one fails, FMHY and the r/Piracy megathread hold the live address.</p>
+          <p class="store-desc">The broadcast was free over the air, the match public until the bidding closed. Now watched in a window, without paying the gatekeeper. The meta-trackers know where the rotating names have gone. These names rot fastest. Checked August 2026, and three that had died were pulled. When one fails, FMHY and the r/Piracy megathread hold the live address.</p>
           <ul class="store-list">
           <li><a href="https://www.stremio.com" target="_blank" rel="noopener noreferrer">Stremio + Torrentio + Real-Debrid</a><span class="store-note">Stremio with the Torrentio addon and a Real-Debrid account. Netflix-grade interface in front of every torrent on every public tracker, played at gigabit speeds. Three dollars a month for the debrid, free for the rest.</span></li>
           <li><a href="https://torrentio.strem.fun" target="_blank" rel="noopener noreferrer">Torrentio</a><span class="store-note">The Stremio addon that turns the public-tracker chaos into instant streams. Wires Stremio to RARBG, 1337x, ThePirateBay, Nyaa, EZTV, served through the debrid cache.</span></li>
           <li><a href="https://rentry.co/megathread" target="_blank" rel="noopener noreferrer">r/Piracy Megathread</a><span class="store-note">The community-maintained piracy guide on Reddit, mirrored at rentry. Parallel to FMHY with a heavier focus on streaming and live sports.</span></li>
           <li><a href="https://www.cineby.gd" target="_blank" rel="noopener noreferrer">Cineby</a><span class="store-note">FMHY’s current top-starred movies-and-TV streaming site. Auto-next, multiple source switching, manageable popups when paired with uBlock Origin.</span></li>
-          <li><a href="https://xprime.today" target="_blank" rel="noopener noreferrer">XPrime</a><span class="store-note">FMHY top-starred. Modern interface, multiple source servers, auto-next-episode. Cineby’s natural backup when one mirror lags.</span></li>
-          <li><a href="https://rivestream.org" target="_blank" rel="noopener noreferrer">Rive</a><span class="store-note">FMHY top-starred. Films, TV, and anime in one interface. Includes a server-status page that shows which mirrors are up before you click through.</span></li>
+          
+          
           <li><a href="https://lookmovie2.to" target="_blank" rel="noopener noreferrer">LookMovie</a><span class="store-note">One of the more durable browser-streaming sites, surviving multiple domain changes since 2018. Films and TV, auto-next, 480p ceiling but reliable.</span></li>
           <li><a href="https://soaper.tv" target="_blank" rel="noopener noreferrer">Soaper.TV</a><span class="store-note">Movies and TV with multiple official mirrors. Clean player, modest popup count.</span></li>
           <li><a href="https://9anime.org.lv" target="_blank" rel="noopener noreferrer">9anime</a><span class="store-note">The 9anime/AniWave/HiAnime line. After AniWave’s 2024 shutdown and HiAnime’s March 2026 shutdown, 9anime.org.lv is the current working mirror carrying the same library and interface.</span></li>
@@ -3692,7 +3743,7 @@ body.inverted #skull-canvas {
           <li><a href="https://sportsurge.net" target="_blank" rel="noopener noreferrer">SportSurge</a><span class="store-note">Live sports aggregator that predated StreamEast and outlasted it. NFL, NBA, NHL, MLB, soccer, MMA, boxing, UFC, all with multiple mirrors per game. Domain rotates. FMHY tracks the current one.</span></li>
           <li><a href="https://stream2watch.tv" target="_blank" rel="noopener noreferrer">Stream2Watch</a><span class="store-note">Long-running sports aggregator with broad league coverage. Wider source list, rougher interface.</span></li>
           <li><a href="https://buffstream.io" target="_blank" rel="noopener noreferrer">Buffstreams</a><span class="store-note">Long-running live sports streams. Football, basketball, MMA, boxing. Operating through a decade of takedown attempts.</span></li>
-          <li><a href="https://crackstreams.tv" target="_blank" rel="noopener noreferrer">CrackStreams</a><span class="store-note">Aggregator of live streams, weighted towards combat sports. UFC, boxing, WWE, plus the major American leagues. Several clones operate. The original keeps moving.</span></li>
+          
           <li><a href="https://github.com/iptv-org/iptv" target="_blank" rel="noopener noreferrer">IPTV-Org</a><span class="store-note">Open-source repository of publicly available IPTV channels from every country with a broadcast presence. Over a hundred thousand stars on GitHub. Every link is a stream the broadcaster has put online publicly. M3U playlists, EPG data, an API.</span></li>
           <li><a href="https://github.com/Free-TV/IPTV" target="_blank" rel="noopener noreferrer">Free-TV/IPTV</a><span class="store-note">Curated set of legally-receivable IPTV channels, as M3U playlists for Kodi and VLC. Five thousand channels, all confirmed legitimate. Drop the URL into a player.</span></li>
           <li><a href="https://github.com/4gray/iptvnator" target="_blank" rel="noopener noreferrer">IPTVnator</a><span class="store-note">Open-source, cross-platform IPTV player. Loads any M3U or M3U8 playlist, supports EPG, no telemetry.</span></li>
@@ -4297,9 +4348,6 @@ body.inverted #skull-canvas {
     <p>
       Every mirrored file is a grain. Every broken DRM is a grain. Every replicated seed, every key generated on a machine the carrier did not authorize, every reader in Kazakhstan reading a paper the publisher in London charged $39 for, every farmer signing his own tractor back into service, every encrypted conversation the state was told it could not have, every piece of cash that settled without a bank’s permission. A grain. And another. And another.
     </p>
-    <div class="closing-line">
-      Hoist the colours. <br>Keep the copies. <br>The flag does not come down.
-    </div>
   </div>
 </section>
 
@@ -4720,24 +4768,18 @@ body.inverted #skull-canvas {
          is also a verification mechanism: any copy that hashes to this CID
          is authentic.
          ===================================================================== -->
-    <p class="take-a-copy-mirror">
-      Pinned where DNS does not hold.<br>
-      <code class="ipfs-cid">ipfs://bafybeihk36ufhhpwuq4efck6x27w67pi3nxtidwmhw7ylokwjr55pkzowm</code>
-    </p>
 
     <a class="take-a-copy-qr" href="data:image/png;base64,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" download="hostis-black.png" title="Save the mark" aria-label="Download the hostis.black QR code"><img src="data:image/png;base64,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" alt="hostis.black QR code"></a>
   </div>
 </section>
-
-<div class="divider"><span class="divider-glyph"></span></div>
 </main>
 
 <!-- =========================================
      FOOTER
      ========================================= -->
 <footer>
-  <span class="mark">HOSTIS</span>
-  <div class="contact-line">send corrections, additions, broken links<br><a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></div>
+  <p class="f-note">Set down from the record, and given away. Nothing here is claimed and nothing is licensed.</p>
+  <div class="contact-line">email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></div>
   <div>no rights reserved · all copies welcome</div>
   <div class="source-line"><a href="https://github.com/dukewilder/hostis" target="_blank" rel="noopener noreferrer">source code</a></div>
   <!-- The ship’s log opens to the patient. The Konami hands remember. The black spot waits for the right finger. -->
@@ -4826,6 +4868,15 @@ body.inverted #skull-canvas {
     const canvas = document.getElementById('skull-canvas');
     const ctx = canvas.getContext('2d', { alpha: true });
     const charSize = 18;
+    const INK = 0.62;      // was the element's opacity; now folded into the paint
+    let fadeK = 1;         // scroll fade, likewise
+    // The rain thins out toward the foot of the hero. Drawn, not masked: a CSS
+    // mask would leave the layer's edge where it was, and it is that straight
+    // edge the eye catches. Fading the paint means there is no line at all.
+    const rowFade = (r, rows) => {
+      const t = r / rows;
+      return t < 0.58 ? 1 : Math.max(0, 1 - (t - 0.58) / 0.42);
+    };
     let W = 0, H = 0, dpr = 1;
     let cols = 0, rows = 0;
     let grid = null;            // flattened array of character objects
@@ -4872,9 +4923,14 @@ body.inverted #skull-canvas {
       if (now - lastTick < 80) return;
       lastTick = now;
 
-      // Fade previous frame slightly so bright trails taper
-      ctx.fillStyle = 'rgba(3, 3, 3, 0.22)';
+      // Fade the previous frame by removing alpha rather than painting over it.
+      // Painting rgba(3,3,3) each tick built a rectangle a shade darker than the
+      // page beneath, which showed as a seam at the hero's edge on bright screens.
+      // Taking alpha out instead leaves true transparency between the characters.
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
       ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'source-over';
 
       ctx.font = (charSize - 2) + 'px JetBrains Mono, ui-monospace, monospace';
       ctx.textBaseline = 'middle';
@@ -4891,7 +4947,7 @@ body.inverted #skull-canvas {
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const g = grid[r * cols + c];
-          ctx.fillStyle = 'rgba(237, 228, 206, ' + g.base.toFixed(3) + ')';
+          ctx.fillStyle = 'rgba(237, 228, 206, ' + (g.base * INK * fadeK * rowFade(r, rows)).toFixed(4) + ')';
           ctx.fillText(g.ch, c * charSize + charSize / 2, r * charSize + charSize / 2);
         }
       }
@@ -4905,7 +4961,7 @@ body.inverted #skull-canvas {
           const x = d.col * charSize + charSize / 2;
           const y = r * charSize + charSize / 2;
           const alpha = t === 0 ? 0.92 : Math.max(0, 0.65 - t * 0.1);
-          ctx.fillStyle = 'rgba(237, 228, 206, ' + alpha.toFixed(3) + ')';
+          ctx.fillStyle = 'rgba(237, 228, 206, ' + (alpha * INK * fadeK * rowFade(r, rows)).toFixed(4) + ')';
           const ch = t === 0
             ? (Math.random() > 0.5 ? '1' : '0')
             : grid[r * cols + d.col].ch;
@@ -4943,7 +4999,7 @@ body.inverted #skull-canvas {
       // progress: 0 when hero top is at viewport top; 1 when hero bottom is at viewport top
       const progress = Math.min(1, Math.max(0, -rect.top / h));
       const fade = Math.max(0, 1 - progress * 1.4);  // a little snappier than linear
-      canvas.style.opacity = (baseOpacity * fade).toFixed(3);
+      fadeK = fade;
       fullyFaded = fade <= 0.02;
     };
     window.addEventListener('scroll', updateCanvasFade, { passive: true });
@@ -5156,7 +5212,7 @@ body.inverted #skull-canvas {
         '    scroll <section>    · come about to standing, articles, stores, etc.',
         '    reveal              · open every hatch',
         '    fold                · close every hatch',
-        '    cache               · download the page as a single file',
+        '    cache               · download all three sheets, each self-contained',
         '    sign                · come to the sign-rite',
         '    flagship            · which section the flag is over now'
       ], 'output');
@@ -5715,7 +5771,7 @@ body.inverted #skull-canvas {
     prize() {
       const prizes = [
         'Sci-Hub holds 88 million research papers. The publishers’ combined catalog is smaller.',
-        'Anna’s Archive holds 64 million books and 95 million papers, all CC0, with code and data fully open. By design, anyone can re-host it if seized.',
+        'Anna’s Archive holds 68 million books and 156 million papers, all CC0, with code and data fully open. By design, anyone can re-host it if seized.',
         'Tor carries roughly 2 million daily users. The exit relays are run by volunteers. The whole network costs nothing to use.',
         'The Pirate Bay has been online for over 20 years and survived raids in Sweden, the Netherlands, and France.',
         'GrapheneOS hardens every Pixel into a phone the carrier did not authorize.',
@@ -6343,16 +6399,32 @@ body.inverted #skull-canvas {
         const cloneCompassBtn = clone.querySelector('#compass-open');
         if (cloneCompassBtn) cloneCompassBtn.classList.remove('signed');
 
+        const saveBlob = (name, text) => {
+          const blob = new Blob([text], { type: 'text/html;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = name;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        };
+
         const html = '<!DOCTYPE html>\n' + clone.outerHTML;
-        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'hostis.html';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        saveBlob('hostis.html', html);
+
+        // The two sister sheets travel with it. Each is already self-contained,
+        // so the three in one folder are the whole press, offline.
+        // Staggered because browsers throttle rapid successive downloads.
+        ['account.html', 'reprints.html'].forEach((name, i) => {
+          setTimeout(() => {
+            fetch(name)
+              .then(r => r.ok ? r.text() : Promise.reject(r.status))
+              .then(text => saveBlob(name, text))
+              .catch(err => console.warn('could not fetch ' + name + ':', err));
+          }, 500 * (i + 1));
+        });
       } catch (err) {
         console.warn('download failed:', err);
       }
@@ -6538,7 +6610,7 @@ body.inverted #skull-canvas {
     var paper = document.querySelector('#broadside .broadside-paper');
     var content = paper ? paper.innerHTML : '';
     var titleEl = document.querySelector('#broadside .broadside-title');
-    var docTitle = titleEl ? titleEl.textContent.replace(/\s+/g,' ').trim() : 'A Modern Declaration';
+    var docTitle = titleEl ? titleEl.textContent.replace(/\s+/g,' ').trim() : 'Hostis Humani Generis';
     docTitle = docTitle.replace(/&/g,'&amp;').replace(/</g,'&lt;');
     var fonts = fontFaceCss();
     var sheetBox = ios
