@@ -791,13 +791,7 @@ h2.section-title.left {
   user-select: none;
   -webkit-font-smoothing: antialiased;
   filter: drop-shadow(0 0 40px rgba(3, 3, 3, 0.9));
-  animation: sigilFade 2.2s ease-out both;
 }
-@keyframes sigilFade {
-  0% { opacity: 0; transform: translateY(8px) scale(0.98); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
-}
-
 /* The Crew's ensign: skull-and-crossbones (the unifying mark) above the hourglass
    (drawn from Bellamy, Blackbeard, Christopher Moody, and others who flew
    the hourglass as a memento mori for the merchantman). Composite, not literal. */
@@ -829,13 +823,7 @@ h2.section-title.left {
   line-height: 0.9;
   color: var(--bone);
   text-shadow: 0 0 18px rgba(3, 3, 3, 1), 0 0 60px rgba(3, 3, 3, 0.95);
-  animation: markFade 2.6s ease-out 0.3s both;
 }
-@keyframes markFade {
-  0% { opacity: 0; letter-spacing: 0.3em; }
-  100% { opacity: 1; letter-spacing: 0.14em; }
-}
-
 .hero-latin {
   font-family: var(--serif-italic);
   font-style: italic;
@@ -844,7 +832,6 @@ h2.section-title.left {
   color: var(--bone);
   text-shadow: 0 0 14px rgba(3, 3, 3, 1), 0 0 45px rgba(3, 3, 3, 0.9);
   margin: -0.6rem 0 0;
-  animation: fadeSlow 2s ease-out 0.8s both;
 }
 
 .hero-translation {
@@ -860,16 +847,10 @@ h2.section-title.left {
   justify-content: center;
   align-items: center;
   gap: 0 0.4rem;
-  animation: fadeSlow 2s ease-out 1.1s both;
 }
 .hero-translation .sep {
   color: var(--blood);
   font-size: 0.7em;
-}
-
-@keyframes fadeSlow {
-  from { opacity: 0; }
-  to { opacity: 1; }
 }
 
 .scroll-hint {
@@ -2631,10 +2612,7 @@ footer .sister-sep{color:var(--bone-ghost)}
 
 .hero-sheets{margin-top:1.6rem;margin-bottom:1.2rem;display:flex;gap:.9rem;
   justify-content:center;align-items:center;flex-wrap:wrap;
-  font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:.2em;text-transform:lowercase;
-  /* the hero arrives on a 0.3s step: sigil 0, mark 0.3, latin 0.8, translation 1.1.
-     these are the next in the line, not an afterthought bolted to the bottom. */
-  animation:fadeSlow 2s ease-out 1.4s both}
+  font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:.2em;text-transform:lowercase;}
 /* the floating hint must never land on them */
 @media (max-height:760px){ .scroll-hint{display:none} }
 .hero-sheets a{position:relative;color:var(--bone);text-decoration:none;
