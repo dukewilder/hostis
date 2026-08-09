@@ -519,6 +519,10 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
 .skip-link{position:absolute;left:-9999px;top:0;z-index:100;padding:10px 16px;background:var(--ink);
   color:var(--bg);font:400 12px var(--mono);letter-spacing:.14em;text-decoration:none}
 .skip-link:focus{left:8px;top:8px}
+
+/* the two section rules came out; the air they gave stays */
+.sechead{margin-bottom:26px}
+.mapframe{margin-top:26px}
 </style>
 </head>
 <body>
@@ -535,7 +539,6 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
 
 <section id="chartsec">
   <div class="sechead"><h2>THE LEDGER</h2><span class="cap">WHO SAILED WHEN, IN WHAT WATERS, AND HOW IT ENDED</span></div>
-  <div class="divider"><span class="divider-glyph"></span></div>
   <div class="controls">
     <label class="sortlab" for="sortsel">ORDER</label>
     <select id="sortsel" aria-label="Order the ledger">
@@ -570,7 +573,6 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
 
 <section id="recksec">
   <div class="sechead"><h2>THE RECKONING</h2><span class="cap">WHERE THE ACCOUNT CLOSED, MAN BY MAN</span></div>
-  <div class="divider"><span class="divider-glyph"></span></div>
   <div class="mapframe" id="reckmap"></div>
   <div class="maplegend">
     <span><i class="gr">&#9760;</i>SLAIN</span><span><i class="gr">&#8224;</i>GALLOWS OR GAOL</span><span><i class="gb">&#8776;</i>THE SEA</span><span><i class="gb">?</i>VANISHED</span><span><i class="gr">&#10005;</i>A BAD END</span><span><i class="gb">&#9873;</i>DIED FREE</span>
