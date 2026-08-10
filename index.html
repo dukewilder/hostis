@@ -2576,6 +2576,11 @@ footer .sister-line a{color:var(--bone-dim);text-decoration:none;
 footer .sister-line a:hover{color:var(--blood);border-color:var(--blood)}
 footer .sister-sep{color:var(--bone-ghost)}
 
+/* The hero centres its block in a viewport-height box, so on a tall phone the
+   slack above and below grows with the screen and the space under the buttons
+   ran past 250px. svh is also the honest unit here, since 100vh on iOS counts
+   the strip behind the URL bar. vh first for anything that does not know svh. */
+@media(max-width:820px){.hero{min-height:88vh;min-height:88svh;padding-bottom:2.5rem}}
 .hero-sheets{margin-top:1.6rem;margin-bottom:1.2rem;display:flex;gap:.9rem;
   justify-content:center;align-items:center;flex-wrap:wrap;
   font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:.2em;
