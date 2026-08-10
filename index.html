@@ -2576,11 +2576,13 @@ footer .sister-line a{color:var(--bone-dim);text-decoration:none;
 footer .sister-line a:hover{color:var(--blood);border-color:var(--blood)}
 footer .sister-sep{color:var(--bone-ghost)}
 
-/* The hero centres its block in a viewport-height box, so on a tall phone the
-   slack above and below grows with the screen and the space under the buttons
-   ran past 250px. svh is also the honest unit here, since 100vh on iOS counts
-   the strip behind the URL bar. vh first for anything that does not know svh. */
-@media(max-width:820px){.hero{min-height:88vh;min-height:88svh;padding-bottom:2.5rem}}
+/* The hero fills the screen on a phone, so nothing of the next section shows
+   under it. Shortening it to 88svh tightened the gap but let the passage peek
+   in from the bottom, which is worse. The block is centred, so heavy top
+   padding against none at the foot pushes it down and closes the gap without
+   costing any height. svh because 100vh on iOS counts the strip behind the
+   URL bar. vh first for anything that does not know svh. */
+@media(max-width:820px){.hero{min-height:100vh;min-height:100svh;padding-top:9rem;padding-bottom:0}}
 .hero-sheets{margin-top:1.6rem;margin-bottom:1.2rem;display:flex;gap:.9rem;
   justify-content:center;align-items:center;flex-wrap:wrap;
   font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:.2em;
