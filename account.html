@@ -397,7 +397,8 @@ body.lock{overflow:hidden}
 /* ---------- the record ---------- */
 .reccols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:26px;margin-top:4px}
 .reccols h3{font-family:var(--carved);font-weight:600;font-size:13px;letter-spacing:.2em;margin:0 0 12px;color:var(--ink);text-transform:uppercase}
-.recnote{margin-top:26px;padding-top:18px;border-top:1px solid rgba(237,228,206,.14);font-family:var(--serif-italic),Georgia,serif;font-style:italic;font-size:.86rem;line-height:1.7;color:rgba(237,228,206,.62);max-width:62ch}
+.recnote{margin:0 18px 22px;padding-top:20px;border-top:1px solid rgba(237,228,206,.14);font-family:var(--serif-italic),Georgia,serif;font-style:italic;font-size:14px;line-height:1.62;color:rgba(237,228,206,.62);text-align:center}
+.recnote span{display:block;max-width:58ch;margin:0 auto}
 .reclist{margin:0;padding:0;list-style:none}
 .reclist li{position:relative;padding-left:16px;margin:0 0 9px;font-size:14px;line-height:1.6;color:rgba(237,228,206,.62)}
 .reclist li::before{content:"\00b7";position:absolute;left:0;color:var(--red)}
@@ -602,7 +603,7 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
     <div>
       <h3>The period sources</h3>
       <ul class="reclist">
-        <li><b>Exquemelin, De Americaensche Zee-Roovers (Amsterdam, 1678).</b> Morgan’s own barber-surgeon, and the only inside account of the buccaneer generation. The English text everyone reads is not this one. It went Dutch to Spanish in 1681, gaining material, then Spanish to English as Bucaniers of America in 1684, gaining more. The nuns driven ahead of Morgan’s men appear in the English and not in the Dutch, which is what he sued Crooke and Malthus over, and won.</li>
+        <li><b>Exquemelin, De Americaensche Zee-Roovers (Amsterdam, 1678).</b> Morgan’s own barber-surgeon, and the only inside account of the buccaneer generation. The English Bucaniers of America of 1684 came by way of a Spanish translation and gained material at every stage, the nuns driven ahead of Morgan’s men among it, which he sued over and won.</li>
         <li><b>Ringrose, in Bucaniers of America (1685).</b> The journal of Sharp's South Sea raid, kept aboard by a man who was there.</li>
         <li><b>Capt. Charles Johnson, A General History of the Pyrates (1724).</b> The book every pirate myth descends from. Indispensable and unreliable in equal measure.</li>
         <li><b>The Tryals of Captain John Rackam and Other Pirates (Jamaica, 1721).</b> The court record for Rackham, Bonny, and Read.</li>
@@ -625,10 +626,7 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
       </ul>
     </div>
   </div>
-  <p class="recnote">Dates follow the Julian calendar as the English sources give them, with the year taken to begin
-  1 January rather than 25 March, which is where the civil year actually started until 1752. A clerk writing in
-  February 1722 would have dated it 1721. Continental sources are Gregorian and run eleven days ahead of the
-  English ones through this whole period.</p>
+  <p class="recnote"><span>Dates follow the Julian calendar as the English sources give them, with the year taken to begin 1 January rather than 25 March, which is where the civil year actually started until 1752. A clerk writing in February 1722 would have dated it 1721. Continental sources are Gregorian and run eleven days ahead of the English ones through this whole period.</span></p>
 </details>
 </section>
 <section id="samesec">
@@ -1205,7 +1203,7 @@ const DATA=[
  segs:[[1718.55,1718.9,"carib","Of the Buck mutiny with Davis"],[1718.9,1721.3,"atl","Under Roberts, Guinea to Newfoundland"],[1721.3,1723.3,"carib","His own command, and the mock trials in the cays"]],
  marks:[[1721.3,"Slips Roberts by night"],[1722.0,"The mock trials, waiting on a pardon"]],
  assoc:[["davis","of the Buck mutiny"],["roberts","deserted him at sea"],["kennedy","of the same mutiny"],["phillips","forced Phillips into the trade"]],
- route:[["nassau","start","Of the original Buck mutiny, 1718"],["trepassey","turn","In Roberts' company as far as Newfoundland"],["cubaCays","turn","Nine months careened at Cuba, where the crew held mock trials"],["tobago","death","Shot in his hammock by his own crew, 1723"]],
+ route:[["nassau","start","Of the original Buck mutiny, 1718"],["trepassey","turn","In Roberts's company as far as Newfoundland"],["cubaCays","turn","Nine months careened at Cuba, where the crew held mock trials"],["tobago","death","Shot in his hammock by his own crew, 1723"]],
  story:["Anstis was in on the Buck mutiny with Davis and Kennedy, served under Roberts through the best years of that command, and then did what Kennedy had done, more quietly and with less profit. On the night of 18 April 1721, while the squadron was standing across the Atlantic, he took the brigantine Good Fortune and slipped away in the dark with the men who preferred him. Roberts, deserted twice in eighteen months by his own shipmates, is nowhere recorded as surprised.",
   "His own command was competent, unlucky, and included one episode that no honest ledger should soften. Aboard a captured vessel, the Irwin, his crew took a woman passenger and raped and murdered her, and the trial record of the men later caught says so in the plain language of sworn evidence. It is the ugliest single fact on this page, and it was committed by a company that within a year would be petitioning the king in the language of aggrieved and forced innocents.",
   "That petition is the strangest document the age produced. Anstis's crew drew up a formal address to His Majesty pleading that they had been forced men under Roberts and asking for pardon, left it aboard a Jamaica sloop to be carried home, and then went to ground in the cays off Cuba to wait for the answer. They waited about nine months. They also went on taking prizes while the plea was in the post, which somewhat undercut the argument.",
