@@ -313,17 +313,19 @@ section{padding:44px 14px 8px;max-width:1500px;margin:0 auto}
 .seg.io{background:var(--io)}
 .seg.off{background:none;border:1px dashed #5a544c;top:18px;height:10px}
 .seg:hover{filter:brightness(1.35)}
-.mark{position:absolute;top:4px;transform:translateX(-50%);color:rgba(237,228,206,.42);font:400 8.5px var(--mono);z-index:3;cursor:default}
+.mark{position:absolute;top:0;transform:translateX(-50%);color:rgba(237,228,206,.66);font:400 13px var(--mono);line-height:1;z-index:3;cursor:default;padding:3px 6px 4px}
 .fate{position:absolute;top:17px;font:400 8px var(--mono);letter-spacing:.12em;white-space:nowrap;color:rgba(237,228,206,.45);z-index:2}
 .fate .g{margin-right:5px}
 .fate.f-red .g{color:var(--red)}
 .fate.f-bone .g{color:var(--dim)}
-.erarow .ncell{cursor:default;border-bottom:0;background:var(--panel);padding-top:22px;padding-bottom:4px;min-height:0}
-.erarow .tcell{border-bottom:0;height:auto;background:none}
+.erarow .ncell{cursor:default;border-bottom:0;background-color:var(--panel);background-image:linear-gradient(rgba(125,24,24,.11),rgba(125,24,24,.11));padding:0 10px 0 12px;min-height:30px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center}
+.erarow .tcell{border-bottom:0;height:auto;position:relative;min-height:26px;background-image:repeating-linear-gradient(90deg,rgba(237,228,206,.055) 0 1px,transparent 1px 140px),repeating-linear-gradient(90deg,rgba(237,228,206,.03) 0 1px,transparent 1px 70px),linear-gradient(rgba(125,24,24,.11),rgba(125,24,24,.11));background-position:66px 0,66px 0,0 0}
 .eratitle{font:400 8.5px var(--mono);letter-spacing:.3em;color:var(--faint);text-transform:uppercase;white-space:nowrap}
-.eratitle b{font-weight:400;color:var(--red);margin-right:8px}
+.eratitle b{font-weight:400;color:var(--red);margin-right:0}
+.erasub{display:block;font:400 7.5px var(--mono);letter-spacing:.15em;color:rgba(237,228,206,.3);text-transform:uppercase;white-space:nowrap;margin-top:3px}
+.etick{position:absolute;top:50%;transform:translate(-50%,-50%);font:400 8px var(--mono);letter-spacing:.08em;color:rgba(237,228,206,.3);background:var(--black);padding:0 4px}
 .axisrow .ncell{cursor:default;min-height:0;justify-content:flex-end;padding-bottom:6px}
-.axisrow .tcell{height:162px;border-bottom:1px solid var(--line)}
+.axisrow .tcell{height:34px;border-bottom:1px solid var(--line)}
 .axisrow.bottom .tcell{height:26px;border-bottom:0;border-top:1px solid var(--line)}
 .tick{position:absolute;bottom:5px;transform:translateX(-50%);font:400 8.5px var(--mono);letter-spacing:.08em;color:rgba(237,228,206,.34)}
 .axisrow.bottom .tick{bottom:auto;top:6px}
@@ -450,6 +452,7 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
   .rn{font-size:9px;margin-right:6px}
   .ncell{padding:0 10px}
   .crow .tcell,.crow .ncell{min-height:54px}
+  .erarow .ncell{padding:0 10px}
   .tcell{height:54px}
   .seg{top:20px}
  .seg.off{top:22px}
@@ -767,21 +770,11 @@ function baseMap(overlayId){
 }
 
 /* ============ the ledger ============ */
-const ERAS={braziliano:"I \u00b7 THE BUCCANEERS \u00b7 TORTUGA & PORT ROYAL",
- culliford:"II \u00b7 THE PIRATE ROUND",
- hornigold:"III \u00b7 THE NASSAU GENERATION \u00b7 THE REPUBLIC OF PIRATES",
- lowther:"IV \u00b7 THE LAST OF THE BREED"};
+const ERAS={braziliano:"THE BUCCANEERS \u00b7 1656 TO 1679",
+ culliford:"THE PIRATE ROUND \u00b7 1690 TO 1704",
+ hornigold:"THE NASSAU GENERATION \u00b7 1714 TO 1719",
+ lowther:"THE LAST OF THE BREED \u00b7 1721 TO 1726"};
 
-const EVENTS=[
- {y:1671.05,t:"PANAMA BURNS \u00b7 1671"},
- {y:1692.4,t:"PORT ROYAL SINKS \u00b7 1692"},
- {y:1701.4,t:"KIDD GIBBETED \u00b7 1701"},
- {y:1713.25,t:"UTRECHT \u00b7 1713"},
- {y:1715.55,t:"THE WRECKS \u00b7 1715"},
- {y:1718.55,t:"THE PARDON \u00b7 1718"},
- {y:1722.25,t:"CAPE COAST \u00b7 1722"},
- {y:1726.5,t:"THE AGE ENDS \u00b7 1726"}
-];
 
 const REGION={carib:"THE CARIBBEAN & SPANISH MAIN",atl:"THE ATLANTIC SEABOARD & OPEN SEA",waf:"THE GUINEA COAST",io:"THE INDIAN OCEAN & RED SEA",pac:"THE SOUTH SEA",off:"ALIVE, OFF THE ACCOUNT"};
 
@@ -1458,10 +1451,8 @@ const BONE="#ede4ce";
 function axisRow(pos){
  let t="";
  for(let y=1660;y<=1730;y+=10) t+=`<span class="tick" style="left:${X(y)}px">${y}</span>`;
- let ev="";
- if(pos==="top") EVENTS.forEach(e=>{ev+=`<span class="evl" style="left:${X(e.y)+3}px">${e.t}</span>`;});
  const lab=pos==="top"?`<span class="axlab">THE YEARS OF OUR LORD</span>`:"";
- return `<div class="axisrow${pos==="bottom"?" bottom":""}"><div class="ncell" tabindex="-1">${lab}</div><div class="tcell">${t}${ev}</div></div>`;
+ return `<div class="axisrow${pos==="bottom"?" bottom":""}"><div class="ncell" tabindex="-1">${lab}</div><div class="tcell">${t}</div></div>`;
 }
 
 function rowHTML(d){
@@ -1498,17 +1489,18 @@ function buildChart(){
  else if(MODE==="fate")  list=[...DATA].sort((a,b)=>
         (FATE_ORDER[a.fate.g]??9)-(FATE_ORDER[b.fate.g]??9) || a.segs[a.segs.length-1][1]-b.segs[b.segs.length-1][1]);
  ORDER=list.map(d=>d.id);
- let h=axisRow("top");
+ let h=axisRow("top"), first=true;
  list.forEach(d=>{
   if(MODE==="chrono"&&ERAS[d.id]){
    const parts=ERAS[d.id].split(" \u00b7 ");
-   h+=`<div class="erarow"><div class="ncell" tabindex="-1"><span class="eratitle"><b>${parts[0]}</b>${parts[1]}</span></div><div class="tcell" style="padding:20px 0 4px ${PADL}px"><span class="eratitle">${parts.slice(2).join(" \u00b7 ")}</span></div></div>`;
+   let et=""; if(!first) for(let y=1660;y<=1730;y+=10) et+=`<span class="etick" style="left:${X(y)}px">${y}</span>`;
+   first=false;
+   h+=`<div class="erarow"><div class="ncell" tabindex="-1"><span class="eratitle"><b>${parts[0]}</b><span class="erasub">${parts.slice(1).join(" \u00b7 ")}</span></span></div><div class="tcell">${et}</div></div>`;
   }
   h+=rowHTML(d);
  });
  h+=axisRow("bottom");
- h+=`<div class="evoverlay">${EVENTS.map(e=>`<div class="evline" style="left:${X(e.y)}px"></div>`).join("")}</div>`;
- chart.innerHTML=h;
+  chart.innerHTML=h;
  applyFilter();
  /* a narrow screen opens on the crowded years, not on four buccaneers */
  if (innerWidth < 760) {
