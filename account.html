@@ -283,7 +283,7 @@ section{padding:44px 14px 8px;max-width:1500px;margin:0 auto}
 .sw.pac{background:repeating-linear-gradient(-45deg,var(--io) 0 2px,#3b3833 2px 4.6px)}
 .sw.io{background:var(--io)}
 .sw.off{background:none;border:1px dashed #5a544c;height:7px}
-.lg-g i{font-style:normal;margin-right:5px}
+.lg-g i{font-style:normal;margin-right:7px;font-size:14px;line-height:0;vertical-align:-2px}
 .lg-g .gr{color:var(--red)}
 .lg-g .gb{color:var(--dim)}
 
@@ -304,7 +304,7 @@ section{padding:44px 14px 8px;max-width:1500px;margin:0 auto}
 .crow{transition:opacity .18s}
 .crow.dim{opacity:.25}
 .crow.assoc .ncell{box-shadow:inset 2px 0 0 var(--red)}
-.tcell{position:relative;height:46px;border-bottom:1px solid var(--line-soft);background-image:repeating-linear-gradient(90deg,rgba(237,228,206,.055) 0 1px,transparent 1px 140px),repeating-linear-gradient(90deg,rgba(237,228,206,.03) 0 1px,transparent 1px 70px);background-position:66px 0,66px 0}
+.tcell{position:relative;height:46px;border-bottom:1px solid var(--line-soft);background-image:linear-gradient(90deg,rgba(237,228,206,.055) 0 1px,transparent 1px),linear-gradient(90deg,rgba(237,228,206,.03) 0 1px,transparent 1px);background-size:var(--g10,140px) 100%,var(--g5,70px) 100%;background-repeat:repeat;background-position:var(--gx,122px) 0,var(--gx,122px) 0}
 .seg{position:absolute;top:16px;height:14px;z-index:2}
 .seg.carib{background:#7d1818}
 .seg.atl{background:#ede4ce}
@@ -313,20 +313,21 @@ section{padding:44px 14px 8px;max-width:1500px;margin:0 auto}
 .seg.io{background:var(--io)}
 .seg.off{background:none;border:1px dashed #5a544c;top:18px;height:10px}
 .seg:hover{filter:brightness(1.35)}
-.mark{position:absolute;top:0;transform:translateX(-50%);color:rgba(237,228,206,.66);font:400 13px var(--mono);line-height:1;z-index:3;cursor:default;padding:3px 6px 4px}
+.mark{position:absolute;top:0;transform:translateX(-50%);color:rgba(237,228,206,.78);font:400 16px var(--mono);line-height:1;z-index:3;cursor:default;padding:1px 3px 2px}
 .fate{position:absolute;top:17px;font:400 8px var(--mono);letter-spacing:.12em;white-space:nowrap;color:rgba(237,228,206,.45);z-index:2}
-.fate .g{margin-right:5px}
+.fate .g{margin-right:6px;font-size:14px;line-height:0;vertical-align:-2px}
 .fate.f-red .g{color:var(--red)}
 .fate.f-bone .g{color:var(--dim)}
 .erarow .ncell{cursor:default;border-bottom:0;background-color:var(--panel);background-image:linear-gradient(rgba(125,24,24,.11),rgba(125,24,24,.11));padding:0 10px 0 12px;min-height:30px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center}
-.erarow .tcell{border-bottom:0;height:auto;position:relative;min-height:26px;background-image:repeating-linear-gradient(90deg,rgba(237,228,206,.055) 0 1px,transparent 1px 140px),repeating-linear-gradient(90deg,rgba(237,228,206,.03) 0 1px,transparent 1px 70px),linear-gradient(rgba(125,24,24,.11),rgba(125,24,24,.11));background-position:66px 0,66px 0,0 0}
+.erarow .tcell{border-bottom:0;height:auto;position:relative;min-height:26px;background-image:linear-gradient(90deg,rgba(237,228,206,.055) 0 1px,transparent 1px),linear-gradient(90deg,rgba(237,228,206,.03) 0 1px,transparent 1px),linear-gradient(rgba(125,24,24,.11),rgba(125,24,24,.11));background-size:var(--g10,140px) 100%,var(--g5,70px) 100%,auto;background-repeat:repeat,repeat,no-repeat;background-position:var(--gx,122px) 0,var(--gx,122px) 0,0 0}
 .eratitle{font:400 8.5px var(--mono);letter-spacing:.3em;color:var(--faint);text-transform:uppercase;white-space:nowrap}
 .eratitle b{font-weight:400;color:var(--red);margin-right:0}
 .erasub{display:block;font:400 7.5px var(--mono);letter-spacing:.15em;color:rgba(237,228,206,.3);text-transform:uppercase;white-space:nowrap;margin-top:3px}
 .etick{position:absolute;top:50%;transform:translate(-50%,-50%);font:400 8px var(--mono);letter-spacing:.08em;color:rgba(237,228,206,.3);background:var(--black);padding:0 4px}
-.axisrow .ncell{cursor:default;min-height:0;justify-content:flex-end;padding-bottom:6px}
+.axisrow .ncell{cursor:default;min-height:0;justify-content:flex-end;padding-bottom:6px;border-bottom:1px solid var(--line)}
 .axisrow .tcell{height:34px;border-bottom:1px solid var(--line)}
 .axisrow.bottom .tcell{height:26px;border-bottom:0;border-top:1px solid var(--line)}
+.axisrow.bottom .ncell{border-bottom:0;border-top:1px solid var(--line)}
 .tick{position:absolute;bottom:5px;transform:translateX(-50%);font:400 8.5px var(--mono);letter-spacing:.08em;color:rgba(237,228,206,.34)}
 .axisrow.bottom .tick{bottom:auto;top:6px}
 .evl{position:absolute;bottom:24px;writing-mode:vertical-rl;transform:rotate(180deg);font:400 7.5px var(--mono);letter-spacing:.06em;color:rgba(237,228,206,.36);white-space:nowrap;cursor:default}
@@ -371,7 +372,7 @@ body.lock{overflow:hidden}
 .mplate .ps.trad{color:var(--dim)}
 .mplate .ps.none{color:var(--faint)}
 .fatebanner{margin:24px 0 0;border:1px solid rgba(197,40,40,.4);padding:12px 14px;font:400 9.5px var(--mono);letter-spacing:.13em;line-height:1.85;color:rgba(237,228,206,.78);text-transform:uppercase}
-.fatebanner .g{color:var(--red);margin-right:8px}
+.fatebanner .g{color:var(--red);margin-right:9px;font-size:15px;line-height:0;vertical-align:-2px}
 .fatebanner.softline{border-color:rgba(237,228,206,.15)}
 .fatebanner.softline .g{color:var(--dim)}
 .meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);margin:18px 0 0}
@@ -674,7 +675,7 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
 /* ============ helpers, geography, base chart-map ============ */
 "use strict";
 const $=q=>document.querySelector(q);
-const Y0=1656, PADL=66;
+const Y0=1650, PADL=66;
 /* The span is 74 years. At a fixed 14px a year the chart is 1450px wide, which on a
    phone leaves 8 per cent of it visible behind the name column. The scale now follows
    the screen: wide enough to read on a desk, short enough to swipe through on a phone. */
@@ -682,7 +683,7 @@ const NAMEW = () => innerWidth < 460 ? 170 : innerWidth < 760 ? 196 : 238;
 const PPY_FOR = w => w < 460 ? 6 : w < 760 ? 9 : 14;
 let PPY = PPY_FOR(innerWidth);
 const X=y=>PADL+(y-Y0)*PPY;
-const CHARTW = () => PADL + 76*PPY;
+const CHARTW = () => PADL + 80*PPY + (innerWidth < 460 ? 120 : 100);
 const INK="#ede4ce", RED="#c52828", REDUP="#ed5555", DIMC="rgba(237,228,206,.5)";
 
 /* ---- places, pre-projected to the 1110x570 chart (equirect, 100W-85E / 55N-40S) ---- */
@@ -780,7 +781,7 @@ const REGION={carib:"THE CARIBBEAN & SPANISH MAIN",atl:"THE ATLANTIC SEABOARD & 
 
 const DATA=[
 {id:"braziliano",n:"01",name:"ROCHE BRAZILIANO",alias:"Gerrit Gerritszoon",life:"FL. 1654 TO C.1671",
- era:"1654-1671",yearsTxt:"About fifteen years",theatres:"The Caribbean and the logwood coast",
+ era:"1656-1671",yearsTxt:"About fifteen years",theatres:"The Caribbean and the logwood coast",
  ships:"Captured Spanish barques out of Port Royal",take:"Spanish shipping off Campeche and the Cuban coast",
  flag:{att:"none",cap:"Jamaican commissions out of Port Royal, when the governor troubled to issue one."},
  fate:{g:"?",c:"bone",short:"VANISHED C.1671",banner:"SAILED FOR THE CAMPECHE COAST AROUND 1671. EXQUEMELIN, THE ONLY MAN WHO WROTE HIM DOWN, STOPS THERE."},
@@ -875,7 +876,7 @@ const DATA=[
  src:"RINGROSE, IN BUCANIERS OF AMERICA (1685); ADMIRALTY TRIAL RECORDS (1682)"},
 
 {id:"culliford",n:"06",name:"ROBERT CULLIFORD",alias:"",life:"C.1666 TO AFTER 1702",
- era:"1690-1702",yearsTxt:"About twelve years",theatres:"The Caribbean, then the Indian Ocean",
+ era:"1690-1699",yearsTxt:"Five years at sea, seven ashore",theatres:"The Caribbean, then the Indian Ocean",
  ships:"The Blessed William, stolen, and the Mocha frigate, mutinied into",take:"The Great Mohammed, some 130,000 pounds",
  flag:{att:"none",cap:""},
  fate:{g:"?",c:"bone",short:"VANISHED 1702",banner:"PARDONED, CONVICTED REGARDLESS, THEN FREED TO GIVE EVIDENCE AGAINST ANOTHER MAN. LEFT THE MARSHALSEA ABOUT 1702 AND LEFT NO FURTHER RECORD."},
@@ -930,7 +931,7 @@ const DATA=[
  src:"JOHNSON (1724); EAST INDIA COMPANY RECORDS; REX V. DAWSON (1696)"},
 
 {id:"kidd",n:"09",name:"WILLIAM KIDD",alias:"",life:"C.1645 TO 1701",
- era:"1696-1699",yearsTxt:"Three years at sea, two in irons",theatres:"The Atlantic and the Indian Ocean",
+ era:"1696-1699",yearsTxt:"Three years at sea, two in irons",theatres:"The Atlantic, the Indian Ocean, the Caribbean",
  ships:"The Adventure Galley, 34 guns, and the Quedagh Merchant",take:"The Quedagh Merchant, taken on French passes",
  flag:{att:"none",cap:"He sailed under a royal commission."},
  fate:{g:"\u2020",c:"red",short:"HANGED 1701",banner:"HANGED AT EXECUTION DOCK, WAPPING, 23 MAY 1701. THE ROPE BROKE AND HE WAS HANGED AGAIN. HIS TARRED BODY HUNG IN CHAINS AT TILBURY POINT."},
@@ -1023,7 +1024,7 @@ const DATA=[
  era:"1715-1718",yearsTxt:"Under three years",theatres:"The Caribbean and the Florida Straits",
  ships:"The Barsheba and the Mary",take:"Some 350,000 pieces of eight from the Florida salvage camp",
  flag:{att:"none",cap:""},
- fate:{g:"\u2691",c:"bone",short:"DIED FREE",banner:"TOOK THE PARDON IN 1718 AND RETIRED TO BERMUDA WITH HIS FORTUNE INTACT."},
+ fate:{g:"\u2691",c:"bone",short:"PARDONED 1718",banner:"TOOK THE PARDON IN 1718 AND RETIRED TO BERMUDA WITH HIS FORTUNE INTACT. HE DIED THERE A RESPECTABLE COLONIST AND THE RECORD DOES NOT TROUBLE ITSELF WITH THE YEAR."},
  segs:[[1715.6,1718.3,"carib","Privateer turned raider, of Nassau's hard faction"]],
  marks:[[1716.05,"The salvage camp raid"]],
  assoc:[["hornigold","rival for the rule of Nassau"],["vane","of his hard faction"]],
@@ -1039,7 +1040,7 @@ const DATA=[
  src:"JOHNSON (1724); SPANISH COLONIAL COMPLAINTS"},
 
 {id:"levasseur",n:"15",name:"OLIVIER LEVASSEUR",alias:"La Buse",life:"C.1689 TO 1730",
- era:"1716-1730",yearsTxt:"Fourteen years",theatres:"The Caribbean, West Africa, the Indian Ocean",
+ era:"1716-1722",yearsTxt:"Seven years at sea, eight in hiding",theatres:"The Caribbean, West Africa, the Indian Ocean",
  ships:"The Postillion, the Indian Queen, the Victorieux",take:"The Nossa Senhora do Cabo, taken with Taylor in 1721",
  flag:{att:"none",cap:""},
  fate:{g:"\u2020",c:"red",short:"HANGED 1730",banner:"HANGED ON BOURBON, 7 JULY 1730. LEGEND HAS HIM THROWING A CRYPTOGRAM FROM THE SCAFFOLD. NOTHING CONTEMPORARY RECORDS IT."},
@@ -1171,7 +1172,7 @@ const DATA=[
  src:"JOHNSON (1724); SNELGRAVE'S ACCOUNT (1734)"},
 
 {id:"kennedy",n:"22",name:"WALTER KENNEDY",alias:"",life:"C.1695 TO 1721",
- era:"1718-1721",yearsTxt:"Three years",theatres:"The Caribbean, the Guinea coast, the North Atlantic",
+ era:"1718-1721",yearsTxt:"Under two years at sea",theatres:"The Caribbean, the Guinea coast, the North Atlantic",
  ships:"The Buck, and the Royal Rover, stolen entire",take:"The Royal Rover and her treasure, taken from Roberts",
  flag:{att:"none",cap:""},
  fate:{g:"\u2020",c:"red",short:"HANGED 1721",banner:"IDENTIFIED IN A DEPTFORD BROTHEL AND HANGED AT EXECUTION DOCK, WAPPING, 21 JULY 1721."},
@@ -1212,7 +1213,7 @@ const DATA=[
  era:"1718-1721",yearsTxt:"Three years",theatres:"The Atlantic, Brazil, the Indian Ocean",
  ships:"The Dragon, renamed the Fiery Dragon",take:"A Surat ship worth some 150,000 pounds",
  flag:{att:"tradition",cap:"Three death's heads in a row on black."},
- fate:{g:"\u2691",c:"bone",short:"DIED FREE 1770",banner:"PARDONED AT BOURBON IN 1721. MARRIED THE GOVERNOR'S SISTER-IN-LAW, BECAME A SAINT-MALO SHIPOWNER, AND DIED IN 1770."},
+ fate:{g:"\u2691",c:"bone",short:"PARDONED 1721",banner:"PARDONED AT BOURBON IN 1721. MARRIED THE GOVERNOR'S SISTER-IN-LAW, BECAME A SAINT-MALO SHIPOWNER, AND DIED IN 1770."},
  segs:[[1718.55,1719.3,"atl","Out of Nassau ahead of Rogers, to Cape Verde and the Brazil coast"],[1719.3,1721.3,"io","The Fiery Dragon and the Surat prize"],[1721.3,1721.8,"off","The pardon at Bourbon, and the governor's sister-in-law"]],
  marks:[[1720.8,"The Surat prize, no man harmed"]],
  assoc:[["halsey","whose old hands sailed with him"]],
@@ -1231,7 +1232,7 @@ const DATA=[
  era:"1720",yearsTxt:"Two months under arms",theatres:"The Caribbean",
  ships:"The sloop William, twelve tons, stolen at night",take:"Coasters and fishing craft off Jamaica",
  flag:{att:"tradition",cap:"Rackham's colours, a skull above two crossed cutlasses."},
- fate:{g:"?",c:"bone",short:"NO FURTHER RECORD",banner:"CONVICTED 28 NOVEMBER 1720 AND PLEADED HER BELLY. THE RECORD ENDS THERE."},
+ fate:{g:"?",c:"bone",short:"NO RECORD AFTER 1721",banner:"CONVICTED 28 NOVEMBER 1720 AND PLEADED HER BELLY. THE RECORD ENDS THERE."},
  segs:[[1718.6,1720.63,"off","Nassau, married to an informer and done waiting"],[1720.63,1720.81,"carib","The cruise of the William"],[1720.81,1721.0,"off","Spanish Town gaol and the belly plea"]],
  marks:[[1720.63,"Steals away on the William"]],
  assoc:[["rackham","lover and captain"],["read","the other half of the crew's courage"]],
@@ -1280,11 +1281,11 @@ const DATA=[
  "The Flanders service was in both horse and foot. The armies she fought in never learned. The pirates who took her ship did, and shrugged."],
  src:"THE TRYALS (1721); JOHNSON (1724)"},
 
-{id:"taylor",n:"28",name:"JOHN TAYLOR",alias:"",life:"FL. 1719 TO 1723 \u00b7 TRACED TO 1744",
- era:"1719-1723",yearsTxt:"Four years",theatres:"The Caribbean, the Guinea coast, the Indian Ocean",
+{id:"taylor",n:"28",name:"JOHN TAYLOR",alias:"",life:"FL. 1718 TO 1723 \u00b7 TRACED TO 1744",
+ era:"1718-1723",yearsTxt:"Four years",theatres:"The Caribbean, the Guinea coast, the Indian Ocean",
  ships:"The Victory, and the Cassandra, taken and kept",take:"The Nossa Senhora do Cabo, taken with Levasseur in 1721",
  flag:{att:"none",cap:""},
- fate:{g:"\u2691",c:"bone",short:"DIED FREE",banner:"TOOK A SPANISH COAST-GUARD COMMISSION AT PORTOBELO IN 1723, GIVING UP THE CASSANDRA. A FORMER PRISONER PLACES HIM ON A CUBAN PLANTATION AS LATE AS 1744."},
+ fate:{g:"\u2691",c:"bone",short:"TURNED COAT 1723",banner:"TOOK A SPANISH COAST-GUARD COMMISSION AT PORTOBELO IN 1723, GIVING UP THE CASSANDRA. A FORMER PRISONER PLACES HIM ON A CUBAN PLANTATION AS LATE AS 1744."},
  segs:[[1718.8,1719.15,"carib","Of England's company out of Nassau"],[1719.15,1719.95,"waf","The Guinea coast"],[1719.95,1723.0,"io","The Cassandra, then the Cabo with Levasseur"],[1723.0,1723.5,"carib","Portobelo, trading plunder for a pardon"]],
  marks:[[1720.55,"The Cassandra action, and the vote for Macrae's death"],[1721.27,"The Cabo, shared with La Buse"]],
  assoc:[["england","the mercy he voted against"],["levasseur","the Cabo, shared"]],
@@ -1446,26 +1447,39 @@ let ORDER=[], MODE="chrono", CUR=-1, FILTQ="";
 const byId=Object.fromEntries(DATA.map(d=>[d.id,d]));
 const solid=d=>d.segs.reduce((a,s)=>a+(s[2]==="off"?0:s[1]-s[0]),0);
 const fy=y=>Math.floor(y);
+/* a band inside one year should read as that year, not "1719 to 1719" */
+const fspan=(a,b)=>fy(a)===fy(b)?String(fy(a)):fy(a)+" to "+fy(b);
 const BONE="#ede4ce";
 
 function axisRow(pos){
  let t="";
- for(let y=1660;y<=1730;y+=10) t+=`<span class="tick" style="left:${X(y)}px">${y}</span>`;
+ for(let y=1650;y<=1730;y+=10) t+=`<span class="tick" style="left:${X(y)}px">${y}</span>`;
  const lab=pos==="top"?`<span class="axlab">THE YEARS OF OUR LORD</span>`:"";
  return `<div class="axisrow${pos==="bottom"?" bottom":""}"><div class="ncell" tabindex="-1">${lab}</div><div class="tcell">${t}</div></div>`;
 }
 
 function rowHTML(d){
  let inner="";
- let cur=-1e9;
+ const MINW = PPY < 8 ? 2 : 3;
+ let cur=-1e9, lay=[];
  d.segs.forEach(s=>{
   const l=Math.max(X(s[0]),cur);
-  const w=Math.max(3,X(s[1])-l);
-  cur=l+w;
-  inner+=`<div class="seg ${s[2]}" style="left:${l.toFixed(1)}px;width:${w.toFixed(1)}px" data-tip="${d.name} \u00b7 ${REGION[s[2]]} \u00b7 ${fy(s[0])} to ${fy(s[1])}${s[3]?" \u00b7 "+s[3]:""}"></div>`;
+  const w=Math.max(MINW,X(s[1])-l);
+  cur=l+w; lay.push([l,w]);
  });
+ /* the floor pushes short bands right. Split the residual so the row sits centred on its true span. */
+ const slip=(lay[lay.length-1][0]+lay[lay.length-1][1])-X(d.segs[d.segs.length-1][1]);
+ const shift=slip>0.5?slip/2:0;
+ let li=0;
+ d.segs.forEach(s=>{
+  const l=lay[li][0]-shift, w=lay[li][1]; li++;
+  inner+=`<div class="seg ${s[2]}" style="left:${l.toFixed(1)}px;width:${w.toFixed(1)}px" data-tip="${d.name} \u00b7 ${REGION[s[2]]} \u00b7 ${fspan(s[0],s[1])}${s[3]?" \u00b7 "+s[3]:""}"></div>`;
+ });
+ let mc=-1e9;
  d.marks.forEach(m=>{
-  inner+=`<span class="mark" data-tip="${m[1]} \u00b7 ${fy(m[0])}" style="left:${X(m[0])}px">\u25be</span>`;
+  const mx=Math.max(X(m[0]),mc);
+  mc=mx+11;
+  inner+=`<span class="mark" data-tip="${m[1]} \u00b7 ${fy(m[0])}" style="left:${mx.toFixed(1)}px">\u25bc</span>`;
  });
  const end=d.segs[d.segs.length-1][1];
  inner+=`<span class="fate f-${d.fate.c}" data-tip="${d.fate.banner}" style="left:${(X(end)+7).toFixed(1)}px"><span class="g">${d.fate.g}</span>${d.fate.short}</span>`;
@@ -1493,14 +1507,17 @@ function buildChart(){
  list.forEach(d=>{
   if(MODE==="chrono"&&ERAS[d.id]){
    const parts=ERAS[d.id].split(" \u00b7 ");
-   let et=""; if(!first) for(let y=1660;y<=1730;y+=10) et+=`<span class="etick" style="left:${X(y)}px">${y}</span>`;
+   let et=""; if(!first) for(let y=1650;y<=1730;y+=10) et+=`<span class="etick" style="left:${X(y)}px">${y}</span>`;
    first=false;
    h+=`<div class="erarow"><div class="ncell" tabindex="-1"><span class="eratitle"><b>${parts[0]}</b><span class="erasub">${parts.slice(1).join(" \u00b7 ")}</span></span></div><div class="tcell">${et}</div></div>`;
   }
   h+=rowHTML(d);
  });
  h+=axisRow("bottom");
-  chart.innerHTML=h;
+  chart.style.setProperty("--gx",X(1660).toFixed(1)+"px");
+ chart.style.setProperty("--g10",(10*PPY).toFixed(1)+"px");
+ chart.style.setProperty("--g5",(5*PPY).toFixed(1)+"px");
+ chart.innerHTML=h;
  applyFilter();
  /* a narrow screen opens on the crowded years, not on four buccaneers */
  if (innerWidth < 760) {
