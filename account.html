@@ -283,7 +283,7 @@ section{padding:44px 14px 8px;max-width:1500px;margin:0 auto}
 .sw.pac{background:repeating-linear-gradient(-45deg,var(--io) 0 2px,#3b3833 2px 4.6px)}
 .sw.io{background:var(--io)}
 .sw.off{background:none;border:1px dashed #5a544c;height:7px}
-.lg-g i{font-style:normal;margin-right:7px;font-size:14px;line-height:0;vertical-align:-2px}
+.lg-g i{font-style:normal;margin-right:7px;font-size:14px;line-height:0;vertical-align:-3px}
 .lg-g .gr{color:var(--red)}
 .lg-g .gb{color:var(--dim)}
 
@@ -315,7 +315,7 @@ section{padding:44px 14px 8px;max-width:1500px;margin:0 auto}
 .seg:hover{filter:brightness(1.35)}
 .mark{position:absolute;top:0;transform:translateX(-50%);color:rgba(237,228,206,.78);font:400 16px var(--mono);line-height:1;z-index:3;cursor:default;padding:1px 3px 2px}
 .fate{position:absolute;top:17px;font:400 8px var(--mono);letter-spacing:.12em;white-space:nowrap;color:rgba(237,228,206,.45);z-index:2}
-.fate .g{margin-right:6px;font-size:14px;line-height:0;vertical-align:-2px}
+.fate .g{margin-right:6px;font-size:14px;line-height:0;vertical-align:-3px}
 .fate.f-red .g{color:var(--red)}
 .fate.f-bone .g{color:var(--dim)}
 .erarow .ncell{cursor:default;border-bottom:0;background-color:var(--panel);background-image:linear-gradient(rgba(125,24,24,.11),rgba(125,24,24,.11));padding:0 10px 0 12px;min-height:30px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center}
@@ -457,6 +457,8 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
   .tcell{height:54px}
   .seg{top:20px}
  .seg.off{top:22px}
+  .fate{top:21px}
+  .mark{top:4px}
 }
 @media (max-width:460px){
   .nm{font-size:12px;letter-spacing:0}
@@ -581,11 +583,11 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
       <span><i class="sw pac"></i>THE SOUTH SEA · PACIFIC</span>
       <span><i class="sw off"></i>ALIVE, OFF THE ACCOUNT</span>
       <span class="lg-g"><i class="gb">&#9662;</i>NOTED EVENT</span>
-      <span class="lg-g"><i class="gr">&#9760;</i>SLAIN</span>
+      <span class="lg-g"><i class="gr" style="vertical-align:-2px">&#9760;</i>SLAIN</span>
       <span class="lg-g"><i class="gr">&#8224;</i>GALLOWS OR GAOL</span>
       <span class="lg-g"><i class="gb">&#8776;</i>THE SEA</span>
       <span class="lg-g"><i class="gb">?</i>VANISHED</span>
-      <span class="lg-g"><i class="gr">&#10005;</i>A BAD END</span>
+      <span class="lg-g"><i class="gr" style="vertical-align:-2px">&#10005;</i>A BAD END</span>
       <span class="lg-g"><i class="gb">&#9873;</i>DIED FREE</span>
     </div>
   </details>
@@ -1446,6 +1448,8 @@ const chart=$("#chart");
 let ORDER=[], MODE="chrono", CUR=-1, FILTQ="";
 const byId=Object.fromEntries(DATA.map(d=>[d.id,d]));
 const solid=d=>d.segs.reduce((a,s)=>a+(s[2]==="off"?0:s[1]-s[0]),0);
+/* ink-centre offsets, measured per glyph against the label */
+const GOFF={"\u2020":-3,"?":-3,"\u2248":-3,"\u2691":-3,"\u2620":-2,"\u2715":-2};
 const fy=y=>Math.floor(y);
 /* a band inside one year should read as that year, not "1719 to 1719" */
 const fspan=(a,b)=>fy(a)===fy(b)?String(fy(a)):fy(a)+" to "+fy(b);
@@ -1482,7 +1486,7 @@ function rowHTML(d){
   inner+=`<span class="mark" data-tip="${m[1]} \u00b7 ${fy(m[0])}" style="left:${mx.toFixed(1)}px">\u25bc</span>`;
  });
  const end=d.segs[d.segs.length-1][1];
- inner+=`<span class="fate f-${d.fate.c}" data-tip="${d.fate.banner}" style="left:${(X(end)+7).toFixed(1)}px"><span class="g">${d.fate.g}</span>${d.fate.short}</span>`;
+ inner+=`<span class="fate f-${d.fate.c}" data-tip="${d.fate.banner}" style="left:${(X(end)+7).toFixed(1)}px"><span class="g" style="vertical-align:${GOFF[d.fate.g]||-1.15}px">${d.fate.g}</span>${d.fate.short}</span>`;
  return `<div class="crow" data-id="${d.id}"><div class="ncell" role="button" tabindex="0" aria-label="Open the dossier: ${d.name}"><span class="nm">${d.name}</span></div><div class="tcell">${inner}</div></div>`;
 }
 
