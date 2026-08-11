@@ -1355,7 +1355,7 @@ h2.section-title.left {
    category title starts at the same x-position regardless of numeral length.
    Sized for the widest numerals (VIII, XIII). */
 .stores-grid .fold > summary .fold-roman {
-  min-width: 3rem;
+  min-width: 1.4rem;
   display: inline-block;
 }
 
@@ -1432,7 +1432,13 @@ h2.section-title.left {
 
 /* Section-fold: the main "Read the X" collapsibles wrapping whole sections
    (Articles, Annals, Crew). Bigger, more declarative. */
-.fold.section-fold {
+.fold.stores-fold {
+  max-width: 1100px;
+}
+.stores-fold > .fold-body {
+  padding-bottom: 0;
+}
+.section-fold {
   max-width: 860px;
   margin: 0 auto;
   border-top: none;
@@ -3675,11 +3681,18 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
       The quartermaster held the stores and kept the count. He was elected by the crew and his first duty was to the men aboard. The provisions were common stock. Every hand had an equal title to them by article. Below is the working hold of the present crew. Each entry is a project that is actively maintained and vouched for by the community that lives by it.
     </p>
 
+    <details class="fold section-fold stores-fold reveal in-view">
+      <summary>
+        <span class="fold-title">Read the Stores</span>
+        <span class="fold-indicator" aria-hidden="true"></span>
+      </summary>
+      <div class="fold-body">
+
     <div class="stores-grid">
 
       <details id="libraries" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">I</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Shadow Libraries</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -3733,7 +3746,7 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 
       <details id="streaming" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">II</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Streaming</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -3767,7 +3780,7 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 
       <details id="models" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">III</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Models on Your Own Iron</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -3796,7 +3809,7 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 
       <details id="unseen" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">IV</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Moving Unseen</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -3827,7 +3840,7 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 
       <details id="browsers" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">V</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Browsers as Bridges</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -3868,7 +3881,7 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 
       <details id="unheard" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">VI</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Speaking Unheard</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -3900,7 +3913,7 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 
       <details id="encryption" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">VII</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Encryption of All Things</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -3930,7 +3943,7 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 
       <details id="erasure" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">VIII</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Anti-Forensics &amp; Erasure</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -3957,7 +3970,7 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 
       <details id="money" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">IX</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Sound Money</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -3995,7 +4008,7 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 
       <details id="hosting" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">X</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Owning Your Own Ship</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -4052,7 +4065,7 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 
       <details id="repair" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">XI</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Keeping Your Tools Yours</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -4086,7 +4099,7 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 
       <details id="protocols" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">XII</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Open Protocols</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -4120,7 +4133,7 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 
       <details id="workshops" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">XIII</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Free Workshops</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -4177,7 +4190,7 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 
       <details id="free-os" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">XIV</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Free Operating Systems</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -4203,7 +4216,7 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 
       <details id="whistle" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">XV</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Whistle and Tip</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -4226,7 +4239,7 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
 
       <details id="study" class="fold reveal in-view">
         <summary>
-          <span class="fold-roman">XVI</span>
+          <span class="fold-roman" aria-hidden="true"></span>
           <span class="fold-title">Further Study</span>
           <span class="fold-indicator" aria-hidden="true"></span>
         </summary>
@@ -4288,6 +4301,9 @@ footer .f-note { max-width: 640px; margin: 0 auto 1.6rem; font-family: var(--ser
       </details>
 
         </div>
+
+      </div>
+    </details>
   </div>
 </section>
 
