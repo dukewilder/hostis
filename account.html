@@ -279,8 +279,8 @@ section{padding:44px 14px 8px;max-width:1500px;margin:0 auto}
 .sw{display:inline-block;width:24px;height:9px;margin-right:7px;vertical-align:-1px}
 .sw.carib{background:#7d1818}
 .sw.atl{background:#ede4ce}
-.sw.waf{background:repeating-linear-gradient(45deg,#ede4ce 0 2.5px,transparent 2.5px 6px);box-shadow:inset 0 0 0 1px rgba(237,228,206,.35)}
-.sw.pac{background:repeating-linear-gradient(-45deg,var(--io) 0 2.5px,transparent 2.5px 6px);box-shadow:inset 0 0 0 1px rgba(168,160,151,.45)}
+.sw.waf{background:repeating-linear-gradient(45deg,#ede4ce 0 2px,#4a4339 2px 4.6px)}
+.sw.pac{background:repeating-linear-gradient(-45deg,var(--io) 0 2px,#3b3833 2px 4.6px)}
 .sw.io{background:var(--io)}
 .sw.off{background:none;border:1px dashed #5a544c;height:7px}
 .lg-g i{font-style:normal;margin-right:5px}
@@ -308,8 +308,8 @@ section{padding:44px 14px 8px;max-width:1500px;margin:0 auto}
 .seg{position:absolute;top:16px;height:14px;z-index:2}
 .seg.carib{background:#7d1818}
 .seg.atl{background:#ede4ce}
-.seg.waf{background:repeating-linear-gradient(45deg,#ede4ce 0 2.5px,#0a0a0a 2.5px 6px);box-shadow:inset 0 0 0 1px rgba(237,228,206,.4)}
-.seg.pac{background:repeating-linear-gradient(-45deg,var(--io) 0 2.5px,#0a0a0a 2.5px 6px);box-shadow:inset 0 0 0 1px rgba(168,160,151,.5)}
+.seg.waf{background:repeating-linear-gradient(45deg,#ede4ce 0 2px,#4a4339 2px 4.6px)}
+.seg.pac{background:repeating-linear-gradient(-45deg,var(--io) 0 2px,#3b3833 2px 4.6px)}
 .seg.io{background:var(--io)}
 .seg.off{background:none;border:1px dashed #5a544c;top:18px;height:10px}
 .seg:hover{filter:brightness(1.35)}
@@ -452,6 +452,7 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
   .crow .tcell,.crow .ncell{min-height:54px}
   .tcell{height:54px}
   .seg{top:20px}
+ .seg.off{top:22px}
 }
 @media (max-width:460px){
   .nm{font-size:12px;letter-spacing:0}
@@ -828,7 +829,7 @@ const DATA=[
  ships:"The Oxford, the Satisfaction, and thirty-six sail at Panama",take:"Portobelo, Maracaibo and Panama",
  flag:{att:"none",cap:"English colours under a privateering commission."},
  fate:{g:"\u2691",c:"bone",short:"DIED IN BED 1688",banner:"KNIGHTED 1674 AND MADE LIEUTENANT GOVERNOR OF JAMAICA. DIED AT HOME, 25 AUGUST 1688. THE 1692 EARTHQUAKE DROPPED HIS GRAVE INTO THE HARBOUR."},
- segs:[[1663.0,1671.6,"carib","Commissioned out of Port Royal as admiral of the Brethren"]],
+ segs:[[1663.0,1671.6,"carib","Commissioned out of Port Royal as admiral of the Brethren"],[1671.6,1688.65,"off","Arrested, knighted, and sent back to govern the island"]],
  marks:[[1668.5,"Portobelo stormed"],[1669.3,"The Maracaibo fireship"],[1671.05,"Panama burns"]],
  assoc:[["lolonnais","contemporary in the same hard trade"],["braziliano","the trade's ungovernable face"],["deGraaf","the Dutchman he could not catch"]],
  route:[["portRoyal","start","Commissioned Admiral of the Coast"],["portobelo","prize","Stormed with 460 men, July 1668"],["maracaibo","prize","The fireship and the false landing, 1669"],["panama","prize","Marched the isthmus and burned the city, January 1671"],["portRoyal","end","Knighted 1674, Lieutenant Governor of Jamaica"]],
@@ -940,7 +941,7 @@ const DATA=[
  ships:"The Adventure Galley, 34 guns, and the Quedagh Merchant",take:"The Quedagh Merchant, taken on French passes",
  flag:{att:"none",cap:"He sailed under a royal commission."},
  fate:{g:"\u2020",c:"red",short:"HANGED 1701",banner:"HANGED AT EXECUTION DOCK, WAPPING, 23 MAY 1701. THE ROPE BROKE AND HE WAS HANGED AGAIN. HIS TARRED BODY HUNG IN CHAINS AT TILBURY POINT."},
- segs:[[1696.4,1697.1,"atl","Fitting out, London to New York to sea"],[1697.1,1699.0,"io","The Madagascar station and the cruise that broke him"],[1699.0,1699.3,"carib","Hispaniola, where the Quedagh Merchant was abandoned"],[1699.3,1699.55,"atl","Gardiners Island, then Boston and the arrest"]],
+ segs:[[1696.4,1697.1,"atl","Fitting out, London to New York to sea"],[1697.1,1699.0,"io","The Madagascar station and the cruise that broke him"],[1699.0,1699.3,"carib","Hispaniola, where the Quedagh Merchant was abandoned"],[1699.3,1699.55,"atl","Gardiners Island, then Boston and the arrest"],[1699.55,1701.4,"off","Newgate, the trial, and Execution Dock"]],
  marks:[[1697.8,"Moore killed with a bucket"],[1698.05,"Quedagh Merchant taken"]],
  assoc:[["tew","named as prey in his commission"],["every","the man the syndicate feared"],["culliford","stole his ship at Nevis, then his crew at Sainte-Marie"]],
  route:[["london","start","The Adventure Galley, fitted with Whig money under a royal commission, 1696"],["newYork","turn","Crewed at New York"],["johanna","turn","Fever took a third of the crew",["capeGoodHope"]],["malabar","prize","The Quedagh Merchant, January 1698"],["sainteMarie","turn","Burned the rotten Adventure Galley"],["gardiners","turn","Buried treasure on Gardiners Island",["capeGoodHope"]],["boston","turn","Lured ashore and arrested, July 1699"],["london","death","Execution Dock, 23 May 1701. The rope broke and he was hanged again"]],
@@ -1465,9 +1466,12 @@ function axisRow(pos){
 
 function rowHTML(d){
  let inner="";
+ let cur=-1e9;
  d.segs.forEach(s=>{
-  const w=Math.max(3,(s[1]-s[0])*PPY);
-  inner+=`<div class="seg ${s[2]}" style="left:${X(s[0])}px;width:${w.toFixed(1)}px" data-tip="${d.name} \u00b7 ${REGION[s[2]]} \u00b7 ${fy(s[0])} to ${fy(s[1])}${s[3]?" \u00b7 "+s[3]:""}"></div>`;
+  const l=Math.max(X(s[0]),cur);
+  const w=Math.max(3,X(s[1])-l);
+  cur=l+w;
+  inner+=`<div class="seg ${s[2]}" style="left:${l.toFixed(1)}px;width:${w.toFixed(1)}px" data-tip="${d.name} \u00b7 ${REGION[s[2]]} \u00b7 ${fy(s[0])} to ${fy(s[1])}${s[3]?" \u00b7 "+s[3]:""}"></div>`;
  });
  d.marks.forEach(m=>{
   inner+=`<span class="mark" data-tip="${m[1]} \u00b7 ${fy(m[0])}" style="left:${X(m[0])}px">\u25be</span>`;
