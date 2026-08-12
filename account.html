@@ -409,14 +409,22 @@ body.lock{overflow:hidden}
 
 /* ---------- epigraph + footer ---------- */
 footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;text-align:center}
-.f-contact{margin:22px 0 0;font:400 12px var(--mono);letter-spacing:.12em;text-transform:lowercase}
-.f-contact a{color:var(--dim)}
-.f-contact a:hover{color:var(--redup)}
+    /* Footer lines. Identical across index, account and reprints.
+       Colours written literally so the three sheets cannot drift apart
+       through their separate token names. */
+    footer .f-contact,
+    footer .f-copy,
+    footer .f-source{margin:1rem 0 0;font-family:var(--mono);font-size:.76rem;
+      letter-spacing:.1em;line-height:1.7;color:rgba(237,228,206,.55);text-transform:none}
+    footer .f-contact{margin-top:0}
+    footer .f-contact a,
+    footer .f-source a{color:rgba(237,228,206,.82);text-decoration:none;
+      border-bottom:1px solid rgba(237,228,206,.22);
+      transition:color .2s ease,border-color .2s ease}
+    footer .f-contact a:hover,
+    footer .f-source a:hover{color:#c52828;border-color:#c52828}
+
 .f-sep{color:var(--faint);margin:0 12px}
-.f-copy{margin-top:16px;font:400 11.5px var(--mono);letter-spacing:.2em;color:var(--dim);text-transform:lowercase}
-    .f-source{margin:16px 0 0;font:400 11.5px var(--mono);letter-spacing:.12em;text-transform:lowercase}
-    .f-source a{color:var(--dim)}
-    .f-source a:hover{color:var(--redup)}
 .f-mark{margin-top:20px;font:400 11px var(--mono);letter-spacing:.34em;color:rgba(237,228,206,.28);text-transform:uppercase}
 .f-mark a{color:inherit}
 .f-mark a:hover{color:var(--dim)}
@@ -661,8 +669,8 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
 
 </main>
 <footer>
-  <p class="f-contact">email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>
-  <p class="f-copy">no rights reserved &#183; all copies welcome</p>
+  <p class="f-contact">Email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>
+  <p class="f-copy">No rights reserved &#183; All copies welcome</p>
   <p class="f-source"><a href="https://github.com/dukewilder/hostis" target="_blank" rel="noopener noreferrer">source code</a></p>
 </footer>
 

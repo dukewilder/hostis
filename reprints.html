@@ -252,9 +252,23 @@ img{max-width:100%;height:auto;display:block}
 footer{text-align:center;padding:clamp(3rem,8vw,6rem) var(--gutter) clamp(2.5rem,6vw,4rem);
   border-top:1px solid rgba(237,228,206,.08);margin-top:clamp(3rem,8vw,6rem);
   font-family:var(--mono);font-size:.76rem;letter-spacing:.06em;color:var(--bone-faint)}
+    /* Footer lines. Identical across index, account and reprints.
+       Colours written literally so the three sheets cannot drift apart
+       through their separate token names. */
+    footer .f-contact,
+    footer .f-copy,
+    footer .f-source{margin:1rem 0 0;font-family:var(--mono);font-size:.76rem;
+      letter-spacing:.1em;line-height:1.7;color:rgba(237,228,206,.55);text-transform:none}
+    footer .f-contact{margin-top:0}
+    footer .f-contact a,
+    footer .f-source a{color:rgba(237,228,206,.82);text-decoration:none;
+      border-bottom:1px solid rgba(237,228,206,.22);
+      transition:color .2s ease,border-color .2s ease}
+    footer .f-contact a:hover,
+    footer .f-source a:hover{color:#c52828;border-color:#c52828}
+
 footer .mark{font-family:'IM Fell DW Pica SC',var(--serif-sc);font-size:1.6rem;
   color:var(--bone-dim);letter-spacing:.15em;margin-bottom:1rem;display:block}
-footer .contact-line{margin:.5rem 0 1rem;line-height:1.7}
 footer a{color:var(--bone-dim);text-decoration:none;border-bottom:1px solid var(--bone-ghost);
   transition:color .18s,border-color .18s}
 footer a:hover{color:var(--blood);border-color:var(--blood)}
@@ -273,10 +287,6 @@ footer .sisters{margin-top:1.6rem;display:flex;gap:1.6rem;justify-content:center
 .fb-mark:hover{color:var(--bone)}
 .fb-mark:hover .sk{color:var(--blood-bright)}
 .sheet-head{padding-top:clamp(2.2rem,6vw,4rem)}
-footer .f-contact{margin:1.4rem 0 0;font-family:var(--mono);font-size:.76rem;letter-spacing:.1em}
-footer .f-copy{margin:1rem 0 0;font-family:var(--mono);font-size:.74rem;letter-spacing:.16em;
-  color:var(--bone-faint)}
-    footer .f-source{margin:1rem 0 0;font-family:var(--mono);font-size:.74rem;letter-spacing:.1em}
 
 /* ---- the divider, as on hostis.black ---- */
 .divider{display:flex;align-items:center;justify-content:center;gap:1.5rem;
@@ -477,8 +487,8 @@ main{padding-bottom:2rem}
 </section>
 </main>
 <footer>
-  <p class="f-contact">email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>
-  <p class="f-copy">no rights reserved &#183; all copies welcome</p>
+  <p class="f-contact">Email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>
+  <p class="f-copy">No rights reserved &#183; All copies welcome</p>
   <p class="f-source"><a href="https://github.com/dukewilder/hostis" target="_blank" rel="noopener noreferrer">source code</a></p>
 </footer>
 </body>
