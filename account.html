@@ -380,6 +380,32 @@ body.lock{overflow:hidden}
 .meta .k{font:400 7.5px var(--mono);letter-spacing:.22em;color:var(--faint);text-transform:uppercase;margin-bottom:6px}
 .meta .v{font-size:14.5px;line-height:1.5;color:rgba(237,228,206,.82)}
 .h3{font-family:var(--carved);font-weight:600;font-size:14.5px;letter-spacing:.2em;margin:32px 0 10px;color:var(--ink)}
+    .speech-link{font:inherit;color:var(--redup);background:none;border:0;padding:0;
+      border-bottom:1px solid rgba(237,228,206,.28);cursor:pointer;transition:border-color .2s ease}
+    .speech-link:hover,.speech-link:focus-visible{border-color:var(--redup);outline:none}
+    #speech{position:fixed;inset:0;z-index:9000;display:none;padding:24px;
+      background:rgba(3,3,3,.94);overflow-y:auto;-webkit-overflow-scrolling:touch}
+    #speech.on{display:block}
+    .speech-sheet{max-width:660px;margin:min(9vh,90px) auto;background:var(--panel);
+      border:1px solid var(--line);padding:clamp(26px,5vw,52px);position:relative}
+    .speech-close{position:absolute;top:10px;right:14px;background:none;border:0;cursor:pointer;
+      color:var(--faint);font:400 24px/1 var(--mono);padding:6px 8px}
+    .speech-close:hover,.speech-close:focus-visible{color:var(--redup);outline:none}
+    .speech-kicker{font-family:var(--mono);font-size:10.5px;letter-spacing:.24em;
+      color:var(--faint);text-transform:uppercase;margin:0 0 14px}
+    .speech-sheet h2{font-family:var(--carved);font-weight:600;font-size:clamp(19px,3.4vw,25px);
+      letter-spacing:.11em;color:var(--ink);margin:0 0 6px;text-transform:uppercase}
+    .speech-sub{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--dim);
+      margin:0 0 26px;text-transform:uppercase}
+    .speech-sheet blockquote{margin:0;font-family:var(--serif);font-size:clamp(15.5px,2.3vw,17.5px);
+      line-height:1.85;color:var(--bonedim)}
+    .speech-sheet blockquote p{margin:0 0 1.1em}
+    .speech-beer{font-family:var(--mono);font-size:12px;line-height:1.9;letter-spacing:.03em;
+      color:var(--dim);margin:0 0 1.5em;padding-left:16px;border-left:1px solid var(--ghost)}
+    .speech-rule{border:0;border-top:1px solid var(--line-soft);margin:30px 0 18px}
+    .speech-note{font-family:var(--mono);font-size:11.5px;line-height:1.85;color:var(--faint);margin:0 0 .9em}
+    .speech-note:last-child{margin:0}
+
 .h3::before{content:"";display:block;width:32px;border-top:1px solid var(--red);margin-bottom:9px}
 .story{font-size:17px;line-height:1.76;color:rgba(237,228,206,.82)}
 .story p{margin:0 0 14px}
@@ -668,6 +694,27 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
 
 
 </main>
+
+<div id="speech" role="dialog" aria-modal="true" aria-labelledby="speech-title" hidden>
+  <div class="speech-sheet">
+    <button type="button" class="speech-close" data-speech-close aria-label="Close">&#215;</button>
+    <p class="speech-kicker">Off Rhode Island &#183; 1717</p>
+    <h2 id="speech-title">I am a free Prince</h2>
+    <p class="speech-sub">Bellamy to Captain Beer, as printed by Charles Johnson, 1724</p>
+    <blockquote>
+      <p>D--n my B---d, says he, I am sorry they won&rsquo;t let you have your Sloop again, for I scorn to do any one a Mischief, when it is not to my Advantage; damn the Sloop, we must sink her, and she might be of Use to you. Tho&rsquo;, damn ye, you are a sneaking Puppy, and so are all those who will submit to be governed by Laws which rich Men have made for their own Security, for the cowardly Whelps have not the Courage otherwise to defend what they get by their Knavery; but damn ye altogether: Damn them for a Pack of crafty Rascals, and you, who serve them, for a Parcel of hen-hearted Numskuls.</p>
+      <p>They villify us, the Scoundrels do, when there is only this Difference, they rob the Poor under the Cover of Law, forsooth, and we plunder the Rich under the Protection of our own Courage; had you not better make One of us than sneak after the A---s of those Villains for Employment?</p>
+    </blockquote>
+    <p class="speech-beer">Captain Beer told him, that his Conscience would not allow him to break thro&rsquo; the Laws of God and Man.</p>
+    <blockquote>
+      <p>You are a devilish Conscience Rascal, d--n ye, reply&rsquo;d Bellamy, I am a free Prince, and I have as much Authority to make War on the whole World, as he who has a hundred Sail of Ships at Sea, and an Army of 100,000 Men in the Field; and this my Conscience tells me; but there is no arguing with such snivelling Puppies, who allow Superiors to kick them about Deck at Pleasure; and pin their Faith upon a Pimp of a Parson; a Squab, who neither practices nor believes what he puts upon the chuckle-headed Fools he preaches to.</p>
+    </blockquote>
+    <hr class="speech-rule">
+    <p class="speech-note">Bellamy meant to give the sloop back. His company voted to sink her, so she was sunk. Beer was put ashore on Block Island.</p>
+    <p class="speech-note">A General History of the Robberies and Murders of the Most Notorious Pyrates, London, 1724. Spelling and pointing as printed.</p>
+  </div>
+</div>
+
 <footer>
   <p class="f-contact">Email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>
   <p class="f-copy">no rights reserved &#183; all copies welcome</p>
@@ -1080,11 +1127,11 @@ const DATA=[
  assoc:[["hornigold","the captain he replaced"],["levasseur","consort, 1716"],["teach","shipmate under Hornigold"]],
  route:[["nassau","base","Elected captain when the company voted Hornigold out, 1716"],["tortuga","turn","The Windward Passage with La Buse"],["crookedIsl","prize","Ran down the Whydah Gally, February 1717"],["capeCod","death","The nor'easter off Wellfleet, 26 April 1717"]],
  story:["Bellamy was a Devon man who came to Cape Cod around 1715 with nothing, and left it fourteen months later at the head of his own company. The local tradition gives him a young woman at Eastham, Maria Hallett, and a promise to come back rich, which is unprovable and has been retold on that coast for three centuries anyway. What is documented is that he and Paulsgrave Williams went south to work the wrecks of the 1715 treasure fleet, arrived to find the Spanish had already salvaged and guarded them, and went instead to New Providence and signed with Hornigold.",
-  "He was elected captain in the summer of 1716 when Hornigold's crew tired of sparing English shipping, and he ran his companies on articles that split the take close to evenly and gave every man a vote. The speeches attributed to him are the best political writing in the whole literature of piracy. The merchant captain is scorned as a sneaking puppy who lets rich men make laws for his own safety, the pirates called Robin Hood's men, and the free prince speech to Captain Beer. Whether Bellamy said it or Defoe wrote it for him, his crews behaved like men who believed it, and prisoners repeatedly reported being asked to join rather than compelled.",
+  "He was elected captain in the summer of 1716 when Hornigold's crew tired of sparing English shipping, and he ran his companies on articles that split the take close to evenly and gave every man a vote. The speeches attributed to him are the best political writing in the whole literature of piracy. The merchant captain is scorned as a sneaking puppy who lets rich men make laws for his own safety, the pirates called Robin Hood's men, and the <button type=\"button\" class=\"speech-link\" data-speech>free prince speech</button> to Captain Beer. Whether Bellamy said it or Defoe wrote it for him, his crews behaved like men who believed it, and prisoners repeatedly reported being asked to join rather than compelled.",
   "He took better than fifty prizes in a little over a year, working from the Caribbean up the American coast with Williams in consort. In late February 1717 he ran down the Whydah Gally on the Bahama Banks after a chase of three days. She was a purpose-built London slaver on the last leg of her triangle, homeward bound with sugar, indigo, ivory, and the coin from the sale of her human cargo, and she was fast, new, and worth more than everything else he had taken together. He gave her captain the Sultana in exchange and made the Whydah his flagship.",
   "Two months later, on the night of 26 April 1717, a nor'easter caught her off Wellfleet on Cape Cod and drove her stern-first onto a sandbar in fifteen feet of water. She rolled, her masts went, and she broke up in the surf within a quarter mile of the beach. One hundred forty-four men drowned, Bellamy among them, and two came ashore alive. Locals were on the sand by first light collecting what washed in, which they went on doing for generations. The survivors were tried in Boston, and six were hanged.",
   "The wreck was found in 1984 by Barry Clifford, the first pirate ship ever authenticated, identified by her bell reading THE WHYDAH GALLY 1716. What has come up since is the fullest physical record of a pirate company anywhere. Tens of thousands of coins, weapons, navigational instruments, a leg bone inside a silk stocking and shoe, and gold in quantities that confirm the ledger. Fourteen months, and by the arithmetic of what the sea gave back, the largest per-man share on this page."],
- mar:["The free prince speech, real or ghostwritten, is the closest thing the age left to a manifesto.",
+ mar:["The <button type=\"button\" class=\"speech-link\" data-speech>free prince speech</button>, real or ghostwritten, is the closest thing the age left to a manifesto.",
  "The Whydah project's accounting makes his fourteen months the best documented per-man haul of the era, with tens of thousands of coins recovered and still coming up.",
  "His crew called themselves Robin Hood's men."],
  src:"JOHNSON (1724); THE WHYDAH WRECK RECORD"},
@@ -1697,6 +1744,36 @@ function buildMaster(){
 buildChart(); buildMaster();
 /* the key opens when it is wanted, not on arrival */
 
+
+
+  // The free prince speech, opened from Bellamy's marginalia.
+  (function(){
+    const sheet = document.getElementById('speech');
+    if (!sheet) return;
+    let lastFocus = null;
+    const open = () => {
+      lastFocus = document.activeElement;
+      sheet.hidden = false;
+      sheet.classList.add('on');
+      document.body.style.overflow = 'hidden';
+      const c = sheet.querySelector('[data-speech-close]');
+      if (c) c.focus();
+    };
+    const close = () => {
+      sheet.classList.remove('on');
+      sheet.hidden = true;
+      document.body.style.overflow = '';
+      if (lastFocus && lastFocus.focus) lastFocus.focus();
+    };
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('[data-speech]')) { e.preventDefault(); open(); return; }
+      if (e.target.closest('[data-speech-close]')) { close(); return; }
+      if (e.target === sheet) close();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && sheet.classList.contains('on')) close();
+    });
+  })();
 
 </script>
 </body>
