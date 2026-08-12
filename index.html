@@ -2384,25 +2384,6 @@ footer .mark {
 }
 
 /* Contact line: corrections, additions, errors */
-.contact-line {
-  margin-top: 0.5rem;
-  margin-bottom: 1rem;
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-  color: var(--bone-faint);
-  line-height: 1.6;
-}
-.contact-line a, .source-line a {
-  color: var(--bone-dim);
-  text-decoration: none;
-  border-bottom: 1px solid var(--bone-faint);
-  transition: color 0.2s ease, border-color 0.2s ease;
-}
-.contact-line a:hover, .source-line a:hover {
-  color: var(--blood);
-  border-color: var(--blood);
-}
 .compass-contact {
   margin-top: 1.5rem;
   padding-top: 1.5rem;
@@ -2609,6 +2590,21 @@ footer .sister-sep{color:var(--bone-ghost)}
 
 /* The footer takes the plain rule and the italic note the other two sheets use. */
 footer { border-top: 1px solid rgba(237,228,206,.1); }
+    /* Footer lines. Identical across index, account and reprints.
+       Colours written literally so the three sheets cannot drift apart
+       through their separate token names. */
+    footer .f-contact,
+    footer .f-copy,
+    footer .f-source{margin:1rem 0 0;font-family:var(--mono);font-size:.76rem;
+      letter-spacing:.1em;line-height:1.7;color:rgba(237,228,206,.55);text-transform:none}
+    footer .f-contact{margin-top:0}
+    footer .f-contact a,
+    footer .f-source a{color:rgba(237,228,206,.82);text-decoration:none;
+      border-bottom:1px solid rgba(237,228,206,.22);
+      transition:color .2s ease,border-color .2s ease}
+    footer .f-contact a:hover,
+    footer .f-source a:hover{color:#c52828;border-color:#c52828}
+
 </style>
 </head>
 <body>
@@ -2681,7 +2677,7 @@ footer { border-top: 1px solid rgba(237,228,206,.1); }
     </div>
 
     <div class="compass-contact">
-      email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a>
+      Email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a>
     </div>
   </div>
 </div>
@@ -4885,9 +4881,9 @@ footer { border-top: 1px solid rgba(237,228,206,.1); }
      FOOTER
      ========================================= -->
 <footer>
-  <div class="contact-line">email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></div>
-  <div>no rights reserved · all copies welcome</div>
-  <div class="source-line"><a href="https://github.com/dukewilder/hostis" target="_blank" rel="noopener noreferrer">source code</a></div>
+  <p class="f-contact">Email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>
+  <p class="f-copy">No rights reserved &#183; All copies welcome</p>
+  <p class="f-source"><a href="https://github.com/dukewilder/hostis" target="_blank" rel="noopener noreferrer">source code</a></p>
   <!-- The ship’s log opens to the patient. The Konami hands remember. The black spot waits for the right finger. -->
   <button id="black-spot" type="button" aria-label="black spot" title="" tabindex="-1"></button>
 </footer>
