@@ -1,0 +1,5 @@
+# Every sheet here is free to read, copy and index.
+User-agent: *
+Allow: /
+
+Sitemap: https://hostis.black/sitemap.xml
