@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en"><head>
+<html lang="en-GB"><head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>The Reprints</title>
-<meta name="description" content="This press takes records nobody owns and nobody can reach, sets them entire, and puts them back into the world with no rights reserved. It claims nothing and licenses nothing.">
+<title>The Reprints · Records Set Entire · HOSTIS</title>
+<meta name="description" content="Public-domain records set entire and put back into the world with no rights reserved. Volume one is Cotton Mather’s tract on the pirate William Fly, Boston, 1726.">
 <meta name="author" content="HOSTIS">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <meta property="og:title" content="The Reprints · Records Set Entire">
@@ -11,7 +11,7 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://hostis.black/reprints.html">
 <meta property="og:site_name" content="HOSTIS">
-<meta property="og:locale" content="en_US">
+<meta property="og:locale" content="en_GB">
 <meta property="og:image" content="https://hostis.black/og-reprints.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -35,7 +35,7 @@
   "name": "The Reprints",
   "url": "https://hostis.black/reprints.html",
   "description": "Public-domain records set entire and put back into the world with no rights reserved.",
-  "inLanguage": "en",
+  "inLanguage": "en-GB",
   "isPartOf": { "@type": "WebSite", "name": "HOSTIS", "url": "https://hostis.black/" },
   "publisher": { "@type": "Organization", "name": "HOSTIS", "url": "https://hostis.black/" },
   "license": "https://creativecommons.org/publicdomain/zero/1.0/",
@@ -48,7 +48,8 @@
     "inLanguage": "en",
     "numberOfPages": 132,
     "license": "https://creativecommons.org/publicdomain/zero/1.0/",
-    "isbn": "9798191380599"
+    "isbn": "9798191380599",
+    "sameAs": "https://archive.org/details/the-vial-poured-out-upon-the-sea"
   }]
 }
 </script>
@@ -366,6 +367,10 @@ main{padding-bottom:2rem}
 .hostis-body a:hover{color:var(--blood);border-color:var(--blood)}
 .hostis-body .hl{font-family:var(--serif-sc);color:var(--bone);letter-spacing:.02em}
 
+/* Line breaks. Running text keeps its last word company, and headings and
+   short centred lines break evenly. Browsers without text-wrap ignore it. */
+p,li{text-wrap:pretty}
+h1,h2,h3{text-wrap:balance}
 </style>
 </head>
 <body>
