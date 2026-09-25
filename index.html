@@ -4949,9 +4949,10 @@ footer { border-top: 1px solid rgba(237,228,206,.1); }
   } catch (err) { /* ornament is decorative, fail silently */ }
 
   // -------- 1. BINARY RAIN (hero background) --------
-  // No Path2D detection, no skull shape detection. The skull is now an SVG
-  // in the markup. This canvas just produces the atmospheric 0/1 noise that
-  // surrounds the sigil. Throttled to 10fps so it's easy on the CPU.
+  // The atmospheric 0/1 noise behind the sigil, throttled to about 12fps.
+  // It draws only while the hero is in view and the rain is on. Scrolling
+  // back up, or `rain on` in the terminal, wakes it again.
+  let wakeRain = () => {};
   try {
     // Respect prefers-reduced-motion: skip the animation entirely.
     const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -4967,6 +4968,8 @@ footer { border-top: 1px solid rgba(237,228,206,.1); }
     // The element carried an opacity of its own until an inline value left over from
     // a saved DOM pinned it at 0.076 and all but put the rain out. One number now.
     let fadeK = 1;         // scroll fade, likewise
+    let fullyFaded = false;
+    let running = false;
     // The rain thins out toward the foot of the hero. Drawn, not masked: a CSS
     // mask would leave the layer's edge where it was, and it is that straight
     // edge the eye catches. Fading the paint means there is no line at all.
@@ -5015,6 +5018,8 @@ footer { border-top: 1px solid rgba(237,228,206,.1); }
     }
 
     function draw(now) {
+      // Nothing to paint once the hero is out of sight or the rain is off.
+      if (fullyFaded || canvas.style.display === 'none') { running = false; return; }
       requestAnimationFrame(draw);
       // Throttle to ~12 fps; nothing here benefits from 60
       if (now - lastTick < 80) return;
@@ -5082,13 +5087,17 @@ footer { border-top: 1px solid rgba(237,228,206,.1); }
       window.addEventListener('resize', resize, { passive: true });
     }
     resize();
-    requestAnimationFrame(draw);
+
+    wakeRain = () => {
+      if (running || fullyFaded || canvas.style.display === 'none') return;
+      running = true;
+      requestAnimationFrame(draw);
+    };
 
     // Fade the canvas opacity as the reader scrolls past the hero so it doesn't
-    // cut off abruptly. Once fully scrolled out, the RAF can stop to save CPU.
+    // cut off abruptly. Once the hero is fully scrolled out the loop stops, and
+    // scrolling back starts it again.
     const hero = document.getElementById('colours');
-    const baseOpacity = 0.32;
-    let fullyFaded = false;
     const updateCanvasFade = () => {
       if (!hero) return;
       const rect = hero.getBoundingClientRect();
@@ -5098,9 +5107,11 @@ footer { border-top: 1px solid rgba(237,228,206,.1); }
       const fade = Math.max(0, 1 - progress * 1.4);  // a little snappier than linear
       fadeK = fade;
       fullyFaded = fade <= 0.02;
+      wakeRain();
     };
     window.addEventListener('scroll', updateCanvasFade, { passive: true });
     updateCanvasFade();
+    wakeRain();
   } catch (err) {
     console.warn('binary rain disabled:', err);
   }
@@ -6117,6 +6128,7 @@ footer { border-top: 1px solid rgba(237,228,206,.1); }
       else if (a === 'off' || a === 'stop' || a === 'down') target = true;
       else target = canvas.style.display !== 'none';
       canvas.style.display = target ? 'none' : '';
+      if (!target) wakeRain();
       termLine(target ? 'the rain has stopped.' : 'the rain falls again.', 'output emphasis');
     },
 
@@ -6464,64 +6476,71 @@ footer { border-top: 1px solid rgba(237,228,206,.1); }
       });
     }
 
-    // Download: serialize the current document back to itself.
-    // No external file needed. The reader takes a copy of exactly what they are reading.
+    // Download: hand over the sheet as it was published, not as it now stands
+    // in the reader's browser. The live page holds what belongs to the reader
+    // alone: the Mirror's readout of their machine, the name they signed, the
+    // terminal they opened. None of it goes in the copy.
+    // Online, the file is fetched from the site as the reader nears a download
+    // control, so the click can save those bytes at once and untouched. They
+    // hash the same as the published file. Offline, or before the fetch lands,
+    // the page is cloned and every trace of the session scrubbed from the clone.
     // Wired to both the compass-sheet button and the main-page Take a Copy section.
-    // The serializer clones the live DOM, strips any session state the reader has
-    // toggled (inverted colours, opened easter-egg overlays, served black spot,
-    // doubloon rain layer, an open compass sheet), then writes the canonical copy.
-    // The reader's own page is left untouched.
+    let published = null;
+    const fetchPublished = () => {
+      if (published !== null || !/^https?:$/.test(location.protocol)) return;
+      published = '';
+      fetch(location.href.split('#')[0])
+        .then(r => r.ok ? r.text() : Promise.reject(r.status))
+        .then(t => { if (t.indexOf('id="take-a-copy"') !== -1) published = t; })
+        .catch(() => {});
+    };
+
+    const scrubbedCopy = () => {
+      const clone = document.documentElement.cloneNode(true);
+      const one = (sel, fn) => { const n = clone.querySelector(sel); if (n) fn(n); };
+      const all = (sel, fn) => clone.querySelectorAll(sel).forEach(fn);
+      one('body', n => n.classList.remove('inverted'));
+      all('#konami-overlay, #black-spot-overlay, .doubloon-rain, iframe', n => n.remove());
+      one('#black-spot', n => n.classList.remove('served'));
+      one('#compass-sheet', n => { n.classList.remove('open'); n.setAttribute('aria-hidden', 'true'); });
+      one('#compass-open', n => { n.classList.remove('signed'); n.setAttribute('aria-expanded', 'false'); });
+      one('#terminal', n => n.classList.remove('open'));
+      one('#sign-rite', n => n.classList.remove('signed'));
+      one('#signed-block', n => n.setAttribute('hidden', ''));
+      all('#mirror-readout, #terminal-body, #signed-mark, #signed-mark-meta', n => { n.textContent = ''; });
+      one('#skull-canvas', n => { n.removeAttribute('style'); n.removeAttribute('width'); n.removeAttribute('height'); });
+      all('details[open]', n => n.removeAttribute('open'));
+      all('.poster-choice', n => n.setAttribute('hidden', ''));
+      all('[aria-haspopup]', n => n.setAttribute('aria-expanded', 'false'));
+      return '<!DOCTYPE html>\n' + clone.outerHTML;
+    };
+
+    const saveBlob = (name, text) => {
+      const blob = new Blob([text], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+
     const downloadCopy = (e) => {
-      e.preventDefault();
+      if (e && e.preventDefault) e.preventDefault();
       try {
-        const clone = document.documentElement.cloneNode(true);
+        saveBlob('hostis.html', published || scrubbedCopy());
 
-        // Strip body-level state classes (invert).
-        const cloneBody = clone.querySelector('body');
-        if (cloneBody) cloneBody.classList.remove('inverted');
-
-        // Remove transient easter-egg overlays and the doubloon-rain layer.
-        clone.querySelectorAll('#konami-overlay, #black-spot-overlay, .doubloon-rain').forEach(n => n.remove());
-
-        // Reset the served black spot button so the next reader can serve it themselves.
-        const cloneSpot = clone.querySelector('#black-spot');
-        if (cloneSpot) cloneSpot.classList.remove('served');
-
-        // Close any open compass sheet so the copy boots to the canonical first view.
-        const cloneSheet = clone.querySelector('#compass-sheet');
-        if (cloneSheet) {
-          cloneSheet.classList.remove('open');
-          cloneSheet.setAttribute('aria-hidden', 'true');
-        }
-
-        // Strip the signed indicator from the compass button. Signing is local
-        // state tied to the reader's localStorage, not to the document itself.
-        const cloneCompassBtn = clone.querySelector('#compass-open');
-        if (cloneCompassBtn) cloneCompassBtn.classList.remove('signed');
-
-        const saveBlob = (name, text) => {
-          const blob = new Blob([text], { type: 'text/html;charset=utf-8' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = name;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
-        };
-
-        const html = '<!DOCTYPE html>\n' + clone.outerHTML;
-        saveBlob('hostis.html', html);
-
-        // The two sister sheets travel with it. Each is already self-contained,
-        // so the three in one folder are the whole press, offline.
+        // The two sister sheets travel with it. On the site they link home to
+        // index.html. In the downloaded folder the home sheet is hostis.html, so
+        // those links are pointed there before the files are written.
         // Staggered because browsers throttle rapid successive downloads.
         ['account.html', 'reprints.html'].forEach((name, i) => {
           setTimeout(() => {
             fetch(name)
               .then(r => r.ok ? r.text() : Promise.reject(r.status))
-              .then(text => saveBlob(name, text))
+              .then(text => saveBlob(name, text.split('href="index.html"').join('href="hostis.html"')))
               .catch(err => console.warn('could not fetch ' + name + ':', err));
           }, 500 * (i + 1));
         });
@@ -6535,6 +6554,21 @@ footer { border-top: 1px solid rgba(237,228,206,.1); }
     const mainDownload = document.getElementById('main-download');
     if (mainDownload) {
       mainDownload.addEventListener('click', downloadCopy);
+    }
+    // Fetch the published file early: when the compass opens, when a download
+    // control is pointed at or focused, and when the Take a Copy section nears.
+    if (compassBtn) compassBtn.addEventListener('click', fetchPublished);
+    [compassDownload, mainDownload].forEach(el => {
+      if (!el) return;
+      el.addEventListener('pointerenter', fetchPublished);
+      el.addEventListener('focus', fetchPublished);
+    });
+    const copySection = document.getElementById('take-a-copy');
+    if (copySection && 'IntersectionObserver' in window) {
+      const near = new IntersectionObserver((entries) => {
+        if (entries.some(x => x.isIntersecting)) { fetchPublished(); near.disconnect(); }
+      }, { rootMargin: '800px 0px' });
+      near.observe(copySection);
     }
     // expose for terminal access
     window.__hostisDownloadCopy = downloadCopy;
@@ -6593,6 +6627,11 @@ footer { border-top: 1px solid rgba(237,228,206,.1); }
 
       const existing = loadExisting();
       if (existing) renderSigned(existing);
+      else {
+        // An unsigned reader sees an unsigned page, whatever the saved file says.
+        signedBlock.hidden = true;
+        rite.classList.remove('signed');
+      }
 
       form.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -6927,6 +6966,7 @@ footer { border-top: 1px solid rgba(237,228,206,.1); }
   'use strict';
   var readout = document.getElementById('mirror-readout');
   if (!readout) return;
+  readout.textContent = '';   // the glass shows this machine only, whatever the saved page held
 
   function shorten(s, n){ s = String(s); return s.length > n ? s.slice(0, n - 1) + '\u2026' : s; }
   function timeOffset(){
