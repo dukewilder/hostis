@@ -241,18 +241,12 @@ body::after{content:"";position:fixed;inset:0;z-index:97;pointer-events:none;opa
 .fb-mark .sk{font-family:'Noto Sans Symbols 2','Apple Symbols','Segoe UI Symbol',var(--serif);font-size:30px;line-height:1;margin-right:12px;color:var(--ink);transition:color .15s}
 .fb-mark:hover{color:var(--ink)}
 .fb-mark:hover .sk{color:var(--redup)}
-.fb-right{font:400 8.5px var(--mono);letter-spacing:.26em;color:var(--faint);text-transform:lowercase}
-.fb-right a{color:var(--dim)}
-.fb-right a:hover{color:var(--redup)}
 
 /* ---------- masthead ---------- */
 .masthead{text-align:center;padding:64px 18px 30px}
 h1{font-family:var(--sc);font-weight:400;font-size:clamp(40px,8.4vw,86px);line-height:.98;letter-spacing:.09em;margin:0 0 6px}
 .mh-sub{font:italic 400 clamp(15px,3vw,19px) var(--serif);letter-spacing:.1em;color:var(--soft);margin:10px 0 0}
 .mh-desc{max-width:620px;margin:30px auto 0;font-size:16.5px;line-height:1.65;color:rgba(237,228,206,.7)}
-.mh-hint{margin-top:20px;font:400 8px var(--mono);letter-spacing:.3em;color:rgba(237,228,206,.28);text-transform:uppercase}
-
-/* ---------- stats strip ---------- */
 
 /* ---------- sections ---------- */
 section{padding:44px 14px 8px;max-width:1500px;margin:0 auto}
@@ -263,12 +257,6 @@ section{padding:44px 14px 8px;max-width:1500px;margin:0 auto}
 /* ---------- controls + key ---------- */
 .controls{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;margin:0 2px 14px}
 .sortlab{font:400 8.5px var(--mono);letter-spacing:.26em;color:var(--faint);text-transform:uppercase}
-.sortbtn{background:none;border:1px solid rgba(237,228,206,.18);color:var(--dim);font:400 9px var(--mono);letter-spacing:.18em;padding:8px 13px;cursor:pointer;text-transform:uppercase;transition:border-color .15s,color .15s}
-.sortbtn:hover{color:var(--ink)}
-.sortbtn.on{border-color:var(--red);color:var(--ink)}
-#filt{background:none;border:1px solid rgba(237,228,206,.18);border-radius:0;color:var(--ink);font:400 9.5px var(--mono);letter-spacing:.14em;padding:8px 12px;width:180px;text-transform:uppercase}
-#filt::placeholder{color:var(--faint);letter-spacing:.2em}
-#filt:focus{outline:1px solid var(--red);outline-offset:0;border-color:var(--red)}
 .keybox{margin:0 2px 14px;border:1px solid var(--line)}
 .keybox summary{cursor:pointer;list-style:none;padding:15px 18px;font:400 12px var(--mono);letter-spacing:.22em;color:var(--faint);text-transform:uppercase}
 .keybox summary::-webkit-details-marker{display:none}
@@ -299,7 +287,6 @@ section{padding:44px 14px 8px;max-width:1500px;margin:0 auto}
 .crow,.axisrow,.erarow{display:grid;grid-template-columns:var(--namew,238px) var(--timew,1212px)}
 .ncell{position:sticky;left:0;z-index:6;overflow:hidden;background:linear-gradient(90deg,var(--panel) 88%,rgba(10,10,10,0));border:0;border-bottom:1px solid var(--line-soft);display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:0 12px;text-align:left;cursor:pointer;min-height:46px}
 .ncell .nm{font-family:var(--sc);font-size:17px;letter-spacing:.02em;color:var(--ink);line-height:1.12;transition:color .15s}
-.ncell .al{font:400 7.5px var(--mono);letter-spacing:.13em;color:rgba(237,228,206,.34);text-transform:uppercase;margin-top:3px}
 .crow:hover .ncell .nm,.ncell:focus-visible .nm{color:var(--redup)}
 .crow{transition:opacity .18s}
 .crow.dim{opacity:.25}
@@ -330,9 +317,6 @@ section{padding:44px 14px 8px;max-width:1500px;margin:0 auto}
 .axisrow.bottom .ncell{border-bottom:0;border-top:1px solid var(--line)}
 .tick{position:absolute;bottom:5px;transform:translateX(-50%);font:400 8.5px var(--mono);letter-spacing:.08em;color:rgba(237,228,206,.34)}
 .axisrow.bottom .tick{bottom:auto;top:6px}
-.evl{position:absolute;bottom:24px;writing-mode:vertical-rl;transform:rotate(180deg);font:400 7.5px var(--mono);letter-spacing:.06em;color:rgba(237,228,206,.36);white-space:nowrap;cursor:default}
-.evoverlay{position:absolute;left:var(--namew,238px);top:0;width:var(--timew,1212px);height:100%;pointer-events:none;z-index:1}
-.evline{position:absolute;top:0;bottom:0;border-left:1px dashed rgba(237,228,206,.10)}
 .chartfoot{margin:12px 2px 0;font:italic 13.5px var(--serif);color:var(--faint);line-height:1.65}
 
 /* ---------- tooltip ---------- */
@@ -426,7 +410,7 @@ body.lock{overflow:hidden}
 /* ---------- the record ---------- */
 .reccols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:26px;margin-top:4px}
 .reccols h3{font-family:var(--carved);font-weight:600;font-size:13px;letter-spacing:.2em;margin:0 0 12px;color:var(--ink);text-transform:uppercase}
-.recnote{margin:0 18px 22px;padding-top:20px;border-top:1px solid rgba(237,228,206,.14);font-family:var(--serif-italic),Georgia,serif;font-style:italic;font-size:14px;line-height:1.62;color:rgba(237,228,206,.62);text-align:center}
+.recnote{margin:0 18px 22px;padding-top:20px;border-top:1px solid rgba(237,228,206,.14);font-family:var(--serif);font-style:italic;font-size:14px;line-height:1.62;color:rgba(237,228,206,.62);text-align:center}
 .recnote span{display:block;max-width:58ch;margin:0 auto}
 .reclist{margin:0;padding:0;list-style:none}
 .reclist li{position:relative;padding-left:16px;margin:0 0 9px;font-size:14px;line-height:1.6;color:rgba(237,228,206,.62)}
@@ -449,12 +433,6 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
       transition:color .2s ease,border-color .2s ease}
     footer .f-contact a:hover,
     footer .f-source a:hover{color:#c52828;border-color:#c52828}
-
-.f-sep{color:var(--faint);margin:0 12px}
-.f-mark{margin-top:20px;font:400 11px var(--mono);letter-spacing:.34em;color:rgba(237,228,206,.28);text-transform:uppercase}
-.f-mark a{color:inherit}
-.f-mark a:hover{color:var(--dim)}
-.f-mark b{color:var(--red);font-weight:400}
 
 @media (max-width:640px){
   .masthead{padding-top:56px}
@@ -517,9 +495,7 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
 .same q{quotes:none;font-style:italic;color:var(--ink)}
 .same i{color:var(--ink)}
 .same .hl{color:var(--ink);font-family:var(--sc);letter-spacing:.02em}
-.same-close{font-family:var(--sc);font-size:19px;letter-spacing:.02em;color:var(--ink);
-  text-align:center;margin-top:2.2em;line-height:1.5}
-@media (max-width:760px){.same p{font-size:16px}.same-close{font-size:17px}}
+@media (max-width:760px){.same p{font-size:16px}}
 .same a{color:var(--ink);text-decoration:none;border-bottom:1px solid rgba(237,228,206,.34);
   transition:color .18s,border-color .18s}
 .same a:hover{color:var(--red);border-color:var(--red)}
@@ -531,6 +507,7 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
 .chartfoot,.mapcap{text-align:center}
 .maplegend{justify-content:center}
 .keybox summary,.recbox summary{text-align:center}
+.keybox summary::before,.recbox summary::before{width:auto;margin-right:9px}
 .legend{justify-content:center}
 .recbox .reccols{text-align:center}
 .recbox h3{text-align:center}
@@ -538,18 +515,6 @@ footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;t
   margin-left:auto;margin-right:auto}
 .recbox .reclist li::before{content:none}   /* the dot has nothing to hang off once centred */
 .same p{text-align:center}
-
-/* ---- everything on the page reads from the centre ---- */
-.sechead{text-align:center}
-.chartfoot,.mapcap{text-align:center}
-.controls{justify-content:center}
-.keybox summary,.recbox summary{text-align:center}
-.keybox summary::before,.recbox summary::before{width:auto;margin-right:9px}
-.legend{justify-content:center}
-.maplegend{justify-content:center}
-.same p{text-align:center}
-.recbox h3{text-align:center}
-.recbox .reclist li{text-align:center}
 
 /* ---- the divider, as on hostis.black ---- */
 .divider{display:flex;align-items:center;justify-content:center;gap:1.5rem;
