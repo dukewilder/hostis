@@ -16,7 +16,7 @@
 
 End to end, tested from a cloud machine through the PC Lantern: the Log arrives in 6 to 12 seconds, a station's log syncs, the clock picks the track, the right chunk comes from a carrier and decodes. A live broadcast from one node was followed chunk by chunk by another.
 
-On the phone the node starts, joins the Log and finds the PC Lantern. Sound out of the phone's speaker is the one thing not yet heard: the phone was locked all night and Android freezes a locked app.
+On the phone the node starts, joins the Log and finds the PC Lantern. Confirmed by Dylan on the morning of 9 November: it plays, and keeps playing with the screen locked.
 
 **On the air**
 
