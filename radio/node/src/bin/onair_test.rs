@@ -7,7 +7,7 @@ use serde_json::json;
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let boot = vec![args[1].parse()?];
-    let cfg = |d: &str| Config { dir: PathBuf::from(d), quota: 1 << 30, lantern: false, bootstrap: boot.clone(), public_dns: false, private: true, ballast: 0, release_keys: vec![] };
+    let cfg = |d: &str| Config { dir: PathBuf::from(d), quota: 1 << 30, lantern: false, bootstrap: boot.clone(), public_dns: false, private: true, ballast: 0, carry_all: false, release_keys: vec![] };
     let s = Node::start(cfg("/tmp/oa-station"))?;
     let l = Node::start(cfg("/tmp/oa-listener"))?;
     let r = s.call(&json!({ "cmd": "raise", "name": "Night Watch Live", "about": "test" }));

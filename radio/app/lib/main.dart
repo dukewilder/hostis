@@ -895,6 +895,12 @@ class _ColoursPageState extends State<ColoursPage> {
             Text(mine['call_sign'] ?? '', style: mono(12)),
             const SizedBox(height: 6),
             Text('${mine['tracks']} ${mine['tracks'] == 1 ? 'recording' : 'recordings'} on the clock', style: serif(14, color: boneFaint, italic: true)),
+            if (mine['direct'] == true)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text('No ship would take your station along the stem, so it is on the air straight from this phone. Listeners\' nodes can see this phone\'s address until the fleet grows.',
+                    style: serif(13, color: brass, italic: true)),
+              ),
           ]),
         ),
       ]),

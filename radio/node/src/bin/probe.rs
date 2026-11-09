@@ -13,7 +13,7 @@ fn main() -> anyhow::Result<()> {
     let dir = PathBuf::from(get("--dir").unwrap_or_else(|| "probe-data".into()));
     let bootstrap = get("--bootstrap").map(|b| b.split(',').filter_map(|s| s.trim().parse().ok()).collect()).unwrap_or_default();
     let wait: u64 = get("--wait").and_then(|w| w.parse().ok()).unwrap_or(45);
-    let node = Node::start(Config { dir, quota: 1_000_000_000, lantern: false, bootstrap, public_dns: args.iter().any(|a| a == "--public-dns"), private: args.iter().any(|a| a == "--private"), ballast: 0, release_keys: get("--release-keys").map(|p| std::fs::read_to_string(p).unwrap_or_default().lines().filter_map(|l| pyrate_core::StationId::from_hex(l.trim()).ok().map(|i| i.0)).collect()).unwrap_or_default() })?;
+    let node = Node::start(Config { dir, quota: 1_000_000_000, lantern: false, bootstrap, public_dns: args.iter().any(|a| a == "--public-dns"), private: args.iter().any(|a| a == "--private"), ballast: 0, carry_all: false, release_keys: get("--release-keys").map(|p| std::fs::read_to_string(p).unwrap_or_default().lines().filter_map(|l| pyrate_core::StationId::from_hex(l.trim()).ok().map(|i| i.0)).collect()).unwrap_or_default() })?;
     println!("probe node {}", node.id());
     let t0 = std::time::Instant::now();
     let mut stations = serde_json::Value::Null;

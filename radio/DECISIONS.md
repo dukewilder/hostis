@@ -53,7 +53,7 @@ The site's light imagery (the second candle lit from the first, the cathedral in
 
 **The look is the site.** IM Fell English for the colours, JetBrains Mono for the instruments, bone on black, red only for ON AIR and the live dot. The red is `#ed5555`, the accessible one the audit settled on. The app is the site's sister sheet, the way On the Account and the Reprints are. No new look is invented.
 
-**A station's flag is drawn from its key.** Every station gets a black flag generated from its public key, in the manner of the site's black spot and Mirror. Two stations can never share a flag, nobody can forge one, and no image is ever uploaded. This is also the content-safety decision in section VII.
+**A station's flag is drawn from its key.** Every station gets a black flag generated from its public key, in the manner of the site's black spot and Mirror. Two stations can never share a flag and nobody can forge one. Stations may also raise art (section XV); the flag stands wherever they have none.
 
 ## IV. The machinery
 
@@ -131,7 +131,7 @@ The colours make the argument. The radio is a press, and a press carries whateve
 - **No transmitter.** Nothing leaves the phone as a radio wave. Pyrate Radio is radio in spirit and the internet in fact, so no unlicensed broadcasting arises.
 - **No locks broken.** The app contains nothing that strips DRM or defeats access controls.
 - **No inducement.** HOSTIS's own stations carry public domain and HOSTIS's own words. The project does not advertise the app as a way to get anyone's catalogue. The case law on file sharing turned on exactly that.
-- **No images at launch.** Audio, text and the key-drawn flag. Nothing anyone can upload as a picture means the worst material on any open network has nowhere to sit.
+- **Pictures never ride as ballast.** Stations carry art (section XV), but no phone holds a stranger's picture on its disk for the fleet, and browsing keeps pictures in memory only.
 - **Strike colours is honoured.** A station that strikes its colours signs a strike notice, and every honest node drops its archive. The sign rite says it: the mark stays as long as the hand that made it chooses to honour it.
 - **The crew chooses what it carries.** Every node can maroon any station, which hides it, stops it being carried and drops what was held. The choice stays on that device and is told to no one. There is no shared list and no one to report to: HOSTIS answers for HOSTIS's stations and its own Lantern, and every other hand answers for its own.
 - **The truth about addresses.** Peers can see each other's IP address, as on BitTorrent. The app says so on the first Raise colours screen, in one sentence, and points to the Practice for those whose threat model needs a VPN or Tor. A route through Tor (Arti) is the first privacy feature after launch.
@@ -231,3 +231,9 @@ Only what cannot be done from here:
 - **Art is never ballast, and browsing never writes it down.** Pictures seen in the Log live in memory and are gone when the app closes. Art lands on a phone's disk, sealed, only for stations the owner keeps, listens to or broadcasts. A phone at the end of a stem holds a broadcaster's art in memory until the Lanterns take it aboard; Lanterns carry art for the stations they carry. Exits pass chunks through without keeping them.
 - **A Lantern's seed folder takes `station.jpg` and `banner.jpg`** as the station's art; `cover.jpg` beside recordings is their track art.
 - **The mark is the skull; the wordmark is PYRATE ☠ RADIO**, traced from Dylan's choice, in HOSTIS bone. Files in `brand/`.
+
+## XVI. What a Lantern answers for (9 November 2026)
+
+- **A Lantern carries its own stations, and nothing else, unless its keeper says otherwise.** It serves, relays and passes traffic through, but only `--carry-all` makes it mirror the Log, take strangers' stems aboard or keep their art. The HOSTIS Lantern runs without it. A keeper answers for what sits on his disk, so the choice is his.
+- **A Lantern that carries its own never ends a stranger's stem.** It hands the cargo on to the next ship.
+- **A station nobody can hear is worse than one heard from a known address.** If three stems in a row find no taker, the broadcaster's phone goes on the air directly and its Colours page says so in one line. As the fleet grows, stems land and the stem's cover returns.

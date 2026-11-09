@@ -14,9 +14,9 @@ fn walk(p: &std::path::Path) -> usize {
 fn main() -> anyhow::Result<()> {
     let a: Vec<String> = std::env::args().collect();
     let boot = vec![a[1].parse()?];
-    let cfg = |d: &str| Config { dir: PathBuf::from(d), quota: 1 << 30, lantern: false, bootstrap: boot.clone(), public_dns: false, private: true, ballast: 0, release_keys: vec![] };
-    let s = Node::start(cfg("/home/claude/arttest/station"))?;
-    let l = Node::start(cfg("/home/claude/arttest/listener"))?;
+    let cfg = |d: &str| Config { dir: PathBuf::from(d), quota: 1 << 30, lantern: false, bootstrap: boot.clone(), public_dns: false, private: true, ballast: 0, carry_all: false, release_keys: vec![] };
+    let s = Node::start(cfg("/home/claude/arttest4/station"))?;
+    let l = Node::start(cfg("/home/claude/arttest4/listener"))?;
     let id = s.call(&json!({ "cmd": "raise", "name": "Art Test", "about": "pictures" }))["id"].as_str().unwrap().to_string();
     println!("cover: {}", s.call(&json!({ "cmd": "art_set", "station": id, "kind": "cover", "path": a[2] })));
     println!("banner: {}", s.call(&json!({ "cmd": "art_set", "station": id, "kind": "banner", "path": a[2] })));
@@ -26,7 +26,7 @@ fn main() -> anyhow::Result<()> {
     println!("jobs: {}", s.call(&json!({ "cmd": "status" }))["jobs"]);
     let arch = s.archive(&pyrate_core::StationId::from_hex(&id)?).unwrap();
     println!("track art entries: {}", arch.entries().iter().filter(|e| matches!(e.entry.body(), pyrate_core::Body::TrackArt { .. })).count());
-    let before = files("/home/claude/arttest/listener");
+    let before = files("/home/claude/arttest4/listener");
     for i in 0..30 {
         std::thread::sleep(Duration::from_secs(3));
         let list = l.call(&json!({ "cmd": "stations" }));
@@ -36,7 +36,7 @@ fn main() -> anyhow::Result<()> {
         l.call(&json!({ "cmd": "art_want", "station": id, "hash": cover }));
         if let Some((w, h, px)) = l.art_pixels(cover) {
             println!("listener sees cover {w}x{h} ({} bytes RGBA), accent {}", px.len(), st["accent"]);
-            println!("cover on listener disk: {} (files before {before}, after {})", l.on_disk(cover), files("/home/claude/arttest/listener"));
+            println!("cover on listener disk: {} (files before {before}, after {})", l.on_disk(cover), files("/home/claude/arttest4/listener"));
             return Ok(());
         }
     }

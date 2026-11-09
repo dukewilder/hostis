@@ -58,7 +58,7 @@ pub fn folder_cover(track: &Path) -> Option<Vec<u8>> {
 impl Inner {
     /// Whether this device may write a station's art to its hold.
     fn art_kept_here(&self, st: &StationId) -> bool {
-        if self.cfg.lantern || self.is_own(st) {
+        if (self.cfg.lantern && self.cfg.carry_all) || self.is_own(st) {
             return true;
         }
         if self.tuned.lock().unwrap().as_ref().is_some_and(|t| &t.station == st) {

@@ -10,7 +10,7 @@
 | Core | `core/` | Keys and 24-word export, call signs, signed hash-linked log, Opus chunks, file ingest. 16 tests |
 | The clock | `core/src/clock.rs` | Same answer on every node to the millisecond. Weekly rounds, blocks, ident on the bell |
 | Node | `node/` | Store with quota, wire protocol, the Log over gossip, proof of work, aboard sketches, playout, ON AIR |
-| Lantern | `node/src/bin/lantern.rs` | Running on Dylan's PC. Carries every station and raises HOSTIS's own from folders, rescanning every ten minutes |
+| Lantern | `node/src/bin/lantern.rs` | Running on Dylan's PC. Carries its own stations (every station with `--carry-all`) and raises HOSTIS's own from folders, rescanning every ten minutes |
 | App | `app/` | Flutter, Android first, in the site's type and ink. The dial, the Log, colours, ON AIR, the library, the key, strike |
 | Page | `index.html` (built by `site/build_page.py`) | `hostis.black/radio/`, on this branch only |
 
