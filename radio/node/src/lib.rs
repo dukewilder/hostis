@@ -413,7 +413,9 @@ impl Inner {
         }
         let own_set: std::collections::HashSet<StationId> = self.store.lock().unwrap().own().into_iter().collect();
         for (station, head) in carried {
-            if self.cfg.private && own_set.contains(&station) {
+            // A phone never says what it listened to: it announces only its ballast,
+            // which the hash chose for it.
+            if self.cfg.private && (own_set.contains(&station) || !self.store.lock().unwrap().pinned.contains(&station)) {
                 continue;
             }
             let g = Gossip::Carrier { station, node: me, head };
@@ -492,7 +494,31 @@ impl Inner {
 
 impl Inner {
     /// The Log as the app and the web listener show it: fresh stations, most aboard first.
+    /// Kept and marooned stations: the owner's own chart, on this device only.
+    fn chart(&self) -> (std::collections::HashSet<String>, std::collections::HashSet<String>) {
+        let v: Value = std::fs::read(self.cfg.dir.join("chart.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(json!({}));
+        let set = |k: &str| v[k].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(String::from)).collect();
+        (set("kept"), set("marooned"))
+    }
+
+    fn set_chart(&self, id: &str, kind: &str, on: bool) -> Result<()> {
+        let (mut kept, mut marooned) = self.chart();
+        let target = if kind == "kept" { &mut kept } else { &mut marooned };
+        if on { target.insert(id.to_string()); } else { target.remove(id); }
+        if kind == "marooned" && on { kept.remove(id); }
+        if kind == "kept" && on { marooned.remove(id); }
+        std::fs::write(self.cfg.dir.join("chart.json"), json!({ "kept": kept, "marooned": marooned }).to_string())?;
+        Ok(())
+    }
+
     pub fn stations(&self) -> Value {
+        self.stations_with(false)
+    }
+
+    /// Kept stations first, then by how many are aboard. Marooned stations are left out
+    /// unless asked for.
+    pub fn stations_with(&self, marooned_too: bool) -> Value {
+        let (kept, marooned) = self.chart();
         let now = now_ms();
         let log = self.log.lock().unwrap();
         let mut v: Vec<(u64, Value)> = log
@@ -501,9 +527,15 @@ impl Inner {
             .filter_map(|(id, l)| {
                 let a = l.announce.as_ref()?;
                 let aboard = l.aboard(now);
-                Some((aboard, json!({
-                    "id": id.to_hex(), "call_sign": id.call_sign(), "name": a.name, "about": a.about,
-                    "port": a.port, "live": a.live, "aboard": aboard,
+                let hex = id.to_hex();
+                let is_marooned = marooned.contains(&hex);
+                if is_marooned && !marooned_too {
+                    return None;
+                }
+                let is_kept = kept.contains(&hex);
+                Some((aboard + if is_kept { 1 << 40 } else { 0 }, json!({
+                    "id": hex, "call_sign": id.call_sign(), "name": a.name, "about": a.about,
+                    "port": a.port, "live": a.live, "aboard": aboard, "kept": is_kept, "marooned": is_marooned,
                     "carriers": l.carriers.values().filter(|(_, s)| now - s < 10 * 60_000).count(),
                 })))
             })
@@ -941,7 +973,21 @@ impl Node {
                 let live = inner.live.lock().unwrap().map(|(s, t)| json!({ "station": s.to_hex(), "since_ms": now_ms() - t }));
                 Ok(json!({ "node": self.id().to_string(), "mine": mine, "jobs": jobs, "tuned": tuned, "now": np, "live": live }))
             }
-            "stations" => Ok(inner.stations()),
+            "stations" => Ok(inner.stations_with(req["marooned"].as_bool().unwrap_or(false))),
+            "keep" | "maroon" => {
+                let st = station()?;
+                let kind = if cmd == "keep" { "kept" } else { "marooned" };
+                inner.set_chart(&st.to_hex(), kind, req["value"].as_bool().unwrap_or(true))?;
+                Ok(json!({ "ok": true }))
+            }
+            "clear_hold" => {
+                let tuned = inner.tuned.lock().unwrap().is_some();
+                if tuned {
+                    anyhow::bail!("stop listening first");
+                }
+                let n = inner.store.lock().unwrap().clear_hold()?;
+                Ok(json!({ "cleared": n }))
+            }
             "tune" => {
                 let st = station()?;
                 say(&format!("tune {}", st.call_sign()));

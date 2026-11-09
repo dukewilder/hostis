@@ -420,7 +420,7 @@ class LogPage extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('THE LOG', style: carved(22, spacing: 0.3)),
             const SizedBox(height: 8),
-            Text('Every station on the air, by how many are aboard. Kept by every node, owned by none.',
+            Text('Every station on the air, by how many are aboard, your kept stations first. Hold a station to keep it or maroon it.',
                 style: serif(15, color: boneFaint, italic: true)),
             if (radio.carrying > 0)
               Padding(
@@ -453,6 +453,35 @@ class LogPage extends StatelessWidget {
               radio.tune(id);
               onTune();
             },
+            onLongPress: () => showModalBottomSheet(
+              context: context,
+              backgroundColor: panel,
+              shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+              builder: (c) => SafeArea(
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Padding(padding: const EdgeInsets.fromLTRB(24, 20, 24, 4), child: Text(s['name'] ?? '', style: serif(22))),
+                  Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 8), child: Text('Your chart is yours alone. Nothing here leaves this phone.', style: serif(13, color: boneFaint, italic: true))),
+                  ListTile(
+                    title: Text(s['kept'] == true ? 'STOP KEEPING' : 'KEEP', style: carved(12)),
+                    subtitle: Text('Kept stations sit at the top of the Log and the dial.', style: serif(13, color: boneFaint, italic: true)),
+                    onTap: () {
+                      Native.call({'cmd': 'keep', 'station': id, 'value': s['kept'] != true});
+                      Navigator.pop(c);
+                    },
+                  ),
+                  ListTile(
+                    title: Text('MAROON', style: carved(12, color: bloodBright)),
+                    subtitle: Text('Gone from your Log and your dial. Undo it under Colours.', style: serif(13, color: boneFaint, italic: true)),
+                    onTap: () {
+                      Native.call({'cmd': 'maroon', 'station': id, 'value': true});
+                      if (radio.tuned == id) radio.stop();
+                      Navigator.pop(c);
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                ]),
+              ),
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               child: Row(children: [
@@ -463,6 +492,7 @@ class LogPage extends StatelessWidget {
                     Row(children: [
                       Flexible(child: Text(s['name'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(19, color: tuned ? bone : boneDim))),
                       if (live) ...[const SizedBox(width: 8), Text('ON AIR', style: carved(9, color: bloodBright, spacing: 0.3))],
+                      if (s['kept'] == true) ...[const SizedBox(width: 8), Text('KEPT', style: carved(9, color: brass, spacing: 0.3))],
                     ]),
                     const SizedBox(height: 2),
                     Text(s['call_sign'] ?? '', style: mono(10, color: boneGhost)),
@@ -613,7 +643,40 @@ class _ColoursPageState extends State<ColoursPage> {
         ]),
       ] else
         ..._station(mine),
+      ..._chart(),
     ]);
+  }
+
+  List<Widget> _chart() {
+    final all = Native.call({'cmd': 'stations', 'marooned': true});
+    final marooned = all is List ? all.where((x) => x['marooned'] == true).toList() : [];
+    return [
+      const SizedBox(height: 34),
+      if (marooned.isNotEmpty) ...[
+        Text('MAROONED', style: carved(14)),
+        const SizedBox(height: 6),
+        for (final m in marooned)
+          Row(children: [
+            Expanded(child: Text(m['name'] ?? '', style: serif(16, color: boneDim))),
+            TextButton(
+              onPressed: () => setState(() => Native.call({'cmd': 'maroon', 'station': m['id'], 'value': false})),
+              child: Text('BRING BACK', style: carved(10, color: boneFaint)),
+            ),
+          ]),
+        const SizedBox(height: 26),
+      ],
+      Text('THE HOLD', style: carved(14)),
+      const SizedBox(height: 8),
+      Text('What you listen to is kept here so your phone can play it without waiting. It is sealed: nothing on the phone says what any of it is. Clearing it leaves your own station and the ballast you carry for the fleet.',
+          style: serif(14, color: boneFaint, italic: true)),
+      const SizedBox(height: 10),
+      Row(children: [
+        button('CLEAR THE HOLD', () {
+          final r = Native.call({'cmd': 'clear_hold'});
+          setState(() => error = (r is Map && r['error'] != null) ? r['error'] : null);
+        }),
+      ]),
+    ];
   }
 
   List<Widget> _onAir(String id) {
