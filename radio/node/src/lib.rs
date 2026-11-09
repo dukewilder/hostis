@@ -4,6 +4,7 @@
 //! No rights reserved.
 
 pub mod hop;
+pub mod clockfix;
 pub mod net;
 #[cfg(feature = "playback")]
 pub mod player;
@@ -52,8 +53,13 @@ pub fn say(msg: &str) {
     eprintln!("{msg}");
 }
 
-pub fn now_ms() -> u64 {
+pub fn raw_now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64
+}
+
+/// The network's time: our clock, corrected by the median of the stations we hear.
+pub fn now_ms() -> u64 {
+    (raw_now_ms() as i64 + clockfix::offset_ms()) as u64
 }
 
 #[derive(Clone, Debug)]
@@ -80,6 +86,10 @@ struct Listing {
     announce: Option<Announce>,
     carriers: HashMap<[u8; 32], (u64, u64)>,
     sketches: HashMap<u64, Sketch>,
+    /// Tokens already counted, by hour, so a token gossiped twice counts once.
+    heard: HashMap<u64, std::collections::HashSet<[u8; 32]>>,
+    /// Tokens this node vouches for and has yet to gossip.
+    outbox: Vec<([u8; 32], u64, u64)>,
 }
 
 impl Listing {
@@ -127,6 +137,8 @@ pub struct Inner {
     handle: tokio::runtime::Handle,
     ballast_ok: std::sync::atomic::AtomicBool,
     tokens_sent: Mutex<HashMap<StationId, u64>>,
+    /// On mobile data a phone listens and broadcasts, and carries nobody else's traffic.
+    relay_ok: std::sync::atomic::AtomicBool,
 }
 
 pub struct Node {
@@ -315,6 +327,28 @@ impl Inner {
                 if a.at_ms > now + 5 * 60_000 || !a.verify() {
                     return None;
                 }
+                // A card signed by a deputy the station has since revoked is refused.
+                if let Some(p) = a.proof.as_ref().and_then(|b| SignedEntry::from_bytes(b).ok()) {
+                    if let Body::Deputy { key, .. } = &p.entry.body {
+                        let store = self.store.lock().unwrap();
+                        if let Some(arch) = store.logs.get(&a.station) {
+                            if arch.len() > p.entry.seq && !arch.deputies().contains(key) {
+                                return None;
+                            }
+                        }
+                    }
+                }
+                let fresh = log.get(&a.station).and_then(|l| l.announce.as_ref()).is_none_or(|old| a.at_ms > old.at_ms);
+                if fresh && now.saturating_sub(a.at_ms) < 60_000 {
+                    clockfix::sample(a.at_ms, raw_now_ms());
+                }
+                // The Log keeps at most 5,000 cards: past that, a new station must outdo the weakest.
+                if log.len() >= 5_000 && !log.contains_key(&a.station) {
+                    let weakest = log.iter().min_by_key(|(_, l)| (l.aboard(now), l.announce.as_ref().map(|x| x.at_ms).unwrap_or(0))).map(|(k, _)| *k);
+                    if let Some(w) = weakest {
+                        log.remove(&w);
+                    }
+                }
                 let l = log.entry(a.station).or_default();
                 if l.announce.is_none() {
                     say(&format!("in the Log: {} {}", a.station.call_sign(), a.name));
@@ -336,10 +370,12 @@ impl Inner {
                     return Some(station);
                 }
             }
-            Gossip::Aboard { station, hour, sketch } => {
-                if hour + 2 >= now / 3_600_000 {
-                    log.entry(station).or_default().sketches.entry(hour).or_default().merge(&sketch);
+            Gossip::Aboard { station, hour, tokens } => {
+                drop(log);
+                for (token, nonce) in tokens.into_iter().take(10_000) {
+                    self.accept_token(station, hour, token, nonce, false);
                 }
+                return None;
             }
         }
         None
@@ -399,7 +435,8 @@ impl Inner {
                 let proof = (key.id() != id).then(|| {
                     log.entries().iter().find(|e| matches!(&e.entry.body, Body::Deputy { key: k, .. } if *k == key.id().0)).and_then(|e| e.to_bytes().ok())
                 }).flatten();
-                Announce { station: id, head: log.len(), name, about, port, live, at_ms: now, pow: 0, proof, sig: [0; 64] }
+                let since = log.entries().first().map(|e| e.entry.at_ms).unwrap_or(now);
+                Announce { station: id, head: log.len(), name, about, port, live, at_ms: now, pow: 0, since, proof, sig: [0; 64] }
                     .pipe_pow(pow)
                     .sign(key)
             };
@@ -428,27 +465,33 @@ impl Inner {
         }
         let tuned = self.tuned.lock().unwrap().as_ref().map(|t| t.station);
         if let Some(station) = tuned {
-            let token = self.token(&station, hour);
-            if self.cfg.private {
-                // Counted by a stranger two hops away, once an hour, so neighbours never see what we hear.
-                let due = self.tokens_sent.lock().unwrap().get(&station) != Some(&hour);
-                if due {
-                    self.private_token(station, token).await;
-                    self.tokens_sent.lock().unwrap().insert(station, hour);
+            let due = self.tokens_sent.lock().unwrap().get(&station) != Some(&hour);
+            if due {
+                self.tokens_sent.lock().unwrap().insert(station, hour);
+                let token = self.token(&station, hour);
+                let nonce = tokio::task::spawn_blocking(move || net::token_find(&station, hour, &token)).await.unwrap_or(0);
+                if self.cfg.private {
+                    // Counted by a stranger two hops away, so neighbours never see what we hear.
+                    self.private_token(station, hour, token, nonce).await;
+                } else {
+                    self.accept_token(station, hour, token, nonce, true);
                 }
-            } else {
-                self.log.lock().unwrap().entry(station).or_default().sketches.entry(hour).or_default().add(&token);
             }
         }
-        let held: std::collections::HashSet<StationId> = self.store.lock().unwrap().logs.keys().copied().collect();
-        let sketches: Vec<Gossip> = {
-            let log = self.log.lock().unwrap();
-            log.iter()
-                .filter_map(|(st, l)| l.sketches.get(&hour).map(|s| Gossip::Aboard { station: *st, hour, sketch: s.0.to_vec() }))
-                .filter(|g| matches!(g, Gossip::Aboard { station, .. } if self.cfg.lantern || held.contains(station) || self.cfg.private))
+        let outgoing: Vec<Gossip> = {
+            let mut log = self.log.lock().unwrap();
+            log.iter_mut()
+                .filter(|(_, l)| !l.outbox.is_empty())
+                .flat_map(|(st, l)| {
+                    let mut by_hour: HashMap<u64, Vec<([u8; 32], u64)>> = HashMap::new();
+                    for (t, n, h) in l.outbox.drain(..) {
+                        by_hour.entry(h).or_default().push((t, n));
+                    }
+                    by_hour.into_iter().map(|(hour, tokens)| Gossip::Aboard { station: *st, hour, tokens }).collect::<Vec<_>>()
+                })
                 .collect()
         };
-        for g in sketches {
+        for g in outgoing {
             self.broadcast(&g).await;
         }
     }
@@ -535,7 +578,7 @@ impl Inner {
                 let is_kept = kept.contains(&hex);
                 Some((aboard + if is_kept { 1 << 40 } else { 0 }, json!({
                     "id": hex, "call_sign": id.call_sign(), "name": a.name, "about": a.about,
-                    "port": a.port, "live": a.live, "aboard": aboard, "kept": is_kept, "marooned": is_marooned,
+                    "port": a.port, "live": a.live, "aboard": aboard, "kept": is_kept, "marooned": is_marooned, "since": a.since,
                     "carriers": l.carriers.values().filter(|(_, s)| now - s < 10 * 60_000).count(),
                 })))
             })
@@ -544,13 +587,41 @@ impl Inner {
         json!(v.into_iter().map(|x| x.1).collect::<Vec<_>>())
     }
 
+    /// Counts a token once, if its work is real and its hour current. Returns whether it was new.
+    pub fn accept_token(&self, station: StationId, hour: u64, token: [u8; 32], nonce: u64, vouch: bool) -> bool {
+        let now_hour = now_ms() / 3_600_000;
+        if hour + 1 < now_hour || hour > now_hour + 1 || !net::token_ok(&station, hour, &token, nonce) {
+            return false;
+        }
+        let mut log = self.log.lock().unwrap();
+        let l = log.entry(station).or_default();
+        l.heard.retain(|h, _| h + 2 >= now_hour);
+        l.sketches.retain(|h, _| h + 2 >= now_hour);
+        if !l.heard.entry(hour).or_default().insert(token) {
+            return false;
+        }
+        l.sketches.entry(hour).or_default().add(&token);
+        if vouch {
+            l.outbox.push((token, nonce, hour));
+        }
+        true
+    }
+
     /// Counts a listener who has no node of their own, such as a browser tab.
-    pub fn count_guest(&self, station: &StationId, guest: &[u8; 32]) {
+    pub fn count_guest(self: &Arc<Self>, station: &StationId, guest: &[u8; 32]) {
         let hour = now_ms() / 3_600_000;
         let mut h = blake3::Hasher::new_keyed(&self.secret);
         h.update(guest);
         h.update(&hour.to_le_bytes());
-        self.log.lock().unwrap().entry(*station).or_default().sketches.entry(hour).or_default().add(h.finalize().as_bytes());
+        let token = *h.finalize().as_bytes();
+        let (me, st) = (self.clone(), *station);
+        // One guest at a time does the work, so a flood of tabs cannot flood the CPU.
+        static WORK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        std::thread::spawn(move || {
+            let _g = WORK.lock().unwrap();
+            let nonce = net::token_find(&st, hour, &token);
+            me.accept_token(st, hour, token, nonce, true);
+        });
     }
 
     pub fn archive(&self, id: &StationId) -> Option<Archive> {
@@ -710,6 +781,15 @@ impl Node {
             }
         };
         let secret_bytes = secret.to_bytes();
+        // Every peer met before is a starting point next time, so no single Lantern is the door.
+        let mut cfg = cfg;
+        if let Ok(t) = std::fs::read_to_string(cfg.dir.join("peers")) {
+            for p in t.lines().filter_map(|l| l.trim().parse::<EndpointId>().ok()).take(24) {
+                if !cfg.bootstrap.contains(&p) {
+                    cfg.bootstrap.push(p);
+                }
+            }
+        }
         let proto = Proto(Arc::new(Mutex::new(None)));
         let public_dns = cfg.public_dns;
         let (endpoint, router, gossip) = rt.block_on(async {
@@ -758,6 +838,7 @@ impl Node {
             handle: rt.handle().clone(),
             ballast_ok: std::sync::atomic::AtomicBool::new(false),
             tokens_sent: Mutex::new(HashMap::new()),
+            relay_ok: std::sync::atomic::AtomicBool::new(!cfg.private),
         });
         *proto.0.lock().unwrap() = Some(inner.clone());
 
@@ -826,8 +907,12 @@ impl Node {
                     i2.ballast().await;
                 }
                 if n % 30 == 0 {
-                    let s = i2.store.lock().unwrap();
-                    let _ = s.enforce_quota();
+                    {
+                        let s = i2.store.lock().unwrap();
+                        let _ = s.enforce_quota();
+                    }
+                    let peers: Vec<String> = i2.known_nodes_pub().into_iter().take(24).map(|p| p.to_string()).collect();
+                    let _ = std::fs::write(i2.cfg.dir.join("peers"), peers.join("\n"));
                 }
                 n += 1;
                 tokio::time::sleep(Duration::from_secs(10)).await;
@@ -1045,6 +1130,7 @@ impl Node {
             }
             "ballast_ok" => {
                 inner.ballast_ok.store(req["value"].as_bool().unwrap_or(false), std::sync::atomic::Ordering::Relaxed);
+                inner.relay_ok.store(req["unmetered"].as_bool().unwrap_or(false), std::sync::atomic::Ordering::Relaxed);
                 Ok(json!({ "ok": true, "carrying": inner.store.lock().unwrap().pinned.len() }))
             }
             "clear_job" => {

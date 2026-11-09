@@ -30,6 +30,9 @@ TextStyle mono(double size, {Color color = boneFaint, FontWeight weight = FontWe
 
 const _service = MethodChannel('pyrate/service');
 
+/// The stations a first open lands on when no station has yet earned it: HOSTIS's own.
+List<String> harbour = [];
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -80,8 +83,9 @@ class Tuner extends ChangeNotifier {
   }
 
   Future<void> _checkBallast() async {
-    final ok = await _service.invokeMethod<bool>('conditions').catchError((_) => false) ?? false;
-    final r = Native.call({'cmd': 'ballast_ok', 'value': ok});
+    final c = await _service.invokeMethod<Map>('conditions').catchError((_) => <dynamic, dynamic>{}) ?? {};
+    final unmetered = c['unmetered'] == true;
+    final r = Native.call({'cmd': 'ballast_ok', 'value': unmetered && c['charging'] == true, 'unmetered': unmetered});
     if (r is Map && r['carrying'] is int) carrying = r['carrying'];
   }
 
@@ -99,9 +103,19 @@ class Tuner extends ChangeNotifier {
       }
     }
     // First open plays sound: the station with the most aboard.
+    // A first open lands on the busiest station that has earned it: a week on the air and
+    // three independent carriers. A bought count alone cannot win a stranger's first minute.
     if (!firstTuneDone && stations.isNotEmpty) {
-      firstTuneDone = true;
-      tune(stations.first['id'] as String);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final earned = stations.where((s) =>
+          s['kept'] == true ||
+          ((s['carriers'] as num? ?? 0) >= 3 && now - ((s['since'] as num?)?.toInt() ?? now) > 7 * 86400000)).toList();
+      final home = stations.where((s) => harbour.contains(s['id'])).toList();
+      final pick = earned.isNotEmpty ? earned.first : (home.isNotEmpty ? home.first : null);
+      if (pick != null || _ticks > 20) {
+        firstTuneDone = true;
+        tune((pick ?? stations.first)['id'] as String);
+      }
     }
     notifyListeners();
   }

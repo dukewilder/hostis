@@ -43,9 +43,14 @@ footer{text-align:center;font-family:var(--carved);font-size:.65rem;letter-spaci
 <audio id="a" preload="none"></audio>
 </section>
 <section class="log">
-<h2>THE LOG</h2>
-<p>Every station on the air, by how many are aboard. Kept by every node, owned by none.</p>
+<h2>ON THIS LANTERN</h2>
+<p>The stations this Lantern raises. Hundreds more are on the air, and the app hears them all.</p>
 <div id="rows"></div>
+<h2 style="margin-top:2.6rem">HEAR EVERY STATION</h2>
+<p>Pyrate Radio is an app with no store, no account and no server. Every phone that plays it carries the stations it hears, so nothing on the air can be taken down from one place. <a href="https://hostis.black/radio/" style="color:inherit">Take the set</a>.</p>
+<h2 style="margin-top:2.6rem">RAISE YOUR OWN</h2>
+<p>Open the app, go to Colours, name a station and drop recordings in. It plays all day and all night. To put your stations on your own site the way this page does, run a Lantern with <code>--http</code> and point a name at it. Every station also streams to any web page with one line:</p>
+<pre id="embed" style="white-space:pre-wrap;word-break:break-all;font-family:var(--mono);font-size:.7rem;color:var(--bone-faint);border:.5px solid var(--bone-ghost);padding:.8rem"></pre>
 </section>
 <footer><a href="https://hostis.black/radio/">take the set</a> · no rights reserved</footer>
 <script>
@@ -53,7 +58,7 @@ const $=id=>document.getElementById(id), a=$('a');
 let stations=[], cur=null, playing=false;
 function bits(id){const b=[];for(const c of id){const v=parseInt(c,16);for(let i=3;i>=0;i--)b.push((v>>i)&1)}return b}
 function flag(el,id,live){const b=bits(id);let h='';for(let r=0;r<6;r++)for(let c=0;c<9;c++){const half=c<5?c:8-c;const on=b[(r*5+half)%b.length];h+=on?'<b>1</b>':'<span>0</span>'}el.innerHTML=h;el.classList.toggle('live',!!live)}
-function show(s){cur=s;flag($('flag'),s.id,s.live);$('name').textContent=s.name;$('cs').textContent=s.call_sign+' · '+s.aboard+' aboard';$('air').innerHTML=s.live?'<span class="air">ON AIR</span>':'';$('go').hidden=false;$('go').textContent=playing?'■ STOP':'▶ LISTEN';document.querySelectorAll('.row').forEach(r=>r.classList.toggle('on',r.dataset.id===s.id));now()}
+function show(s){cur=s;$('embed').textContent='<audio controls src="'+location.origin+'/listen/'+s.id+'.mp3"></audio>';flag($('flag'),s.id,s.live);$('name').textContent=s.name;$('cs').textContent=s.call_sign+' · '+s.aboard+' aboard';$('air').innerHTML=s.live?'<span class="air">ON AIR</span>':'';$('go').hidden=false;$('go').textContent=playing?'■ STOP':'▶ LISTEN';document.querySelectorAll('.row').forEach(r=>r.classList.toggle('on',r.dataset.id===s.id));now()}
 function tune(s){show(s);a.src='/listen/'+s.id+'.mp3';a.play().then(()=>{playing=true;$('go').textContent='■ STOP'}).catch(()=>{playing=false;$('go').textContent='▶ LISTEN'})}
 $('go').onclick=()=>{if(playing){a.pause();a.removeAttribute('src');a.load();playing=false;$('go').textContent='▶ LISTEN'}else if(cur)tune(cur)};
 async function now(){if(!cur)return;try{const n=await (await fetch('/now/'+cur.id)).json();$('np').textContent=n.live?'Live':(n.title||'');$('by').textContent=n.by||''}catch(e){}}

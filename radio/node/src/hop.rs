@@ -42,7 +42,7 @@ enum Ask {
     Log { station: StationId, from: u64 },
     Chunk { station: StationId, hash: Hash },
     /// A listener's hourly token, merged into the station's aboard sketch by the exit.
-    Token { station: StationId, token: [u8; 32] },
+    Token { station: StationId, hour: u64, token: [u8; 32], nonce: u64 },
 }
 
 fn x_secret(seed: &[u8; 32]) -> x25519_dalek::StaticSecret {
@@ -102,6 +102,10 @@ impl Inner {
         v
     }
 
+    pub(crate) fn known_nodes_pub(&self) -> Vec<EndpointId> {
+        self.known_nodes()
+    }
+
     async fn hop(&self, node: EndpointId, hop: &Hop) -> Result<Vec<u8>> {
         match self.ask(node, &Request::Hop(postcard::to_stdvec(hop)?)).await? {
             Response::Hop(b) => Ok(b),
@@ -150,13 +154,16 @@ impl Inner {
         Err(anyhow!("no private route answered"))
     }
 
-    pub(crate) async fn private_token(&self, station: StationId, token: [u8; 32]) {
-        let _ = self.ask_privately(&Ask::Token { station, token }).await;
+    pub(crate) async fn private_token(&self, station: StationId, hour: u64, token: [u8; 32], nonce: u64) {
+        let _ = self.ask_privately(&Ask::Token { station, hour, token, nonce }).await;
     }
 
     /// Answers a hop. Forward passes it on; Sealed is opened and answered; Stem moves on or spreads.
     pub(crate) async fn on_hop(self: &Arc<Self>, bytes: &[u8]) -> Vec<u8> {
         let Ok(hop) = postcard::from_bytes::<Hop>(bytes) else { return vec![] };
+        if !self.relay_ok.load(std::sync::atomic::Ordering::Relaxed) {
+            return vec![];
+        }
         match hop {
             Hop::Forward { next, blob } => {
                 let Ok(next) = EndpointId::from_bytes(&next) else { return vec![] };
@@ -178,9 +185,8 @@ impl Inner {
                         self.serve(Request::Log { station, from })
                     }
                     Ask::Chunk { station, hash } => Response::Chunk(self.chunk_direct(&station, &hash).await.ok()),
-                    Ask::Token { station, token } => {
-                        let hour = now_ms() / 3_600_000;
-                        self.log.lock().unwrap().entry(station).or_default().sketches.entry(hour).or_default().add(&token);
+                    Ask::Token { station, hour, token, nonce } => {
+                        self.accept_token(station, hour, token, nonce, true);
                         Response::Entries(vec![])
                     }
                 };
@@ -207,14 +213,19 @@ impl Inner {
 
     /// The end of the stem: take the cargo into the hold and show it to the network as a carrier.
     async fn fluff(self: &Arc<Self>, station: StationId, entries: Vec<Vec<u8>>, chunks: Vec<(Hash, Vec<u8>)>, announce: Option<Announce>) {
-        {
-            let s = self.store.lock().unwrap();
-            for (h, b) in &chunks {
-                let _ = s.put_chunk(h, b);
-            }
-        }
         let list: Vec<SignedEntry> = entries.iter().filter_map(|b| SignedEntry::from_bytes(b).ok()).collect();
         let _ = self.store.lock().unwrap().put_entries(station, list);
+        {
+            // Only chunks the station's signed log names are taken aboard: no one can fill a
+            // carrier's disk with junk that merely matches its own hash.
+            let s = self.store.lock().unwrap();
+            let named: std::collections::HashSet<Hash> = s.chunks_of(&station).into_iter().collect();
+            for (h, b) in &chunks {
+                if named.contains(h) {
+                    let _ = s.put_chunk(h, b);
+                }
+            }
+        }
         let head = self.store.lock().unwrap().logs.get(&station).map(|a| a.len()).unwrap_or(0);
         let me = *self.endpoint.id().as_bytes();
         let carrier = Gossip::Carrier { station, node: me, head };
@@ -235,8 +246,11 @@ impl Inner {
                 return Some(g);
             }
         }
-        // Prefer a bootstrap Lantern; otherwise any node.
-        let g = self.cfg.bootstrap.iter().find(|b| known.contains(b)).copied().or_else(|| known.first().copied())?;
+        // Prefer anyone but the well-known Lanterns: a guard everyone shares would hold every
+        // broadcaster's address in one place, and that place could be compelled to hand it over.
+        let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.cfg.bootstrap.contains(n)).copied().collect();
+        others.shuffle(&mut rand::thread_rng());
+        let g = others.first().copied().or_else(|| known.first().copied())?;
         let _ = std::fs::write(&path, g.to_string());
         Some(g)
     }

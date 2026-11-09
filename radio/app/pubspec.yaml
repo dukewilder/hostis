@@ -17,6 +17,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/bootstrap.txt
+    - assets/harbour.txt
   fonts:
     - family: Cinzel
       fonts:

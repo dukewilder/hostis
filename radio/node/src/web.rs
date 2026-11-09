@@ -37,10 +37,19 @@ type Towers = Arc<Mutex<HashMap<StationId, broadcast::Sender<Bytes>>>>;
 struct Web {
     inner: Arc<Inner>,
     towers: Towers,
+    /// The gangway carries only its own Lantern's stations unless told otherwise. A public
+    /// page that streams any station makes its keeper the distributor of whatever is on air.
+    every_station: bool,
 }
 
-pub async fn serve(inner: Arc<Inner>, addr: SocketAddr) -> anyhow::Result<()> {
-    let web = Web { inner, towers: Arc::new(Mutex::new(HashMap::new())) };
+impl Web {
+    fn allowed(&self, st: &StationId) -> bool {
+        self.every_station || self.inner.store.lock().unwrap().keys.contains_key(st)
+    }
+}
+
+pub async fn serve(inner: Arc<Inner>, addr: SocketAddr, every_station: bool) -> anyhow::Result<()> {
+    let web = Web { inner, towers: Arc::new(Mutex::new(HashMap::new())), every_station };
     let app = Router::new()
         .route("/", get(|| async { Html(PAGE) }))
         .route("/log.json", get(log))
@@ -54,7 +63,11 @@ pub async fn serve(inner: Arc<Inner>, addr: SocketAddr) -> anyhow::Result<()> {
 }
 
 async fn log(State(w): State<Web>) -> impl IntoResponse {
-    ([(header::CACHE_CONTROL, "no-store"), (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")], axum::Json(w.inner.stations()))
+    let all = w.inner.stations();
+    let list: Vec<serde_json::Value> = all.as_array().into_iter().flatten()
+        .filter(|s| s["id"].as_str().and_then(|i| StationId::from_hex(i).ok()).is_some_and(|i| w.allowed(&i)))
+        .cloned().collect();
+    ([(header::CACHE_CONTROL, "no-store"), (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")], axum::Json(list))
 }
 
 fn describe(a: &Archive, track: &[u8; 32]) -> (String, String) {
@@ -81,6 +94,9 @@ fn live_tail(a: &Archive, now: u64) -> Option<Vec<(u64, pyrate_core::Chunk, u8)>
 
 async fn now(State(w): State<Web>, Path(id): Path<String>) -> Response {
     let Ok(st) = StationId::from_hex(&id) else { return StatusCode::NOT_FOUND.into_response() };
+    if !w.allowed(&st) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     let Some(a) = w.inner.archive(&st) else { return StatusCode::NOT_FOUND.into_response() };
     let t = now_ms();
     if live_tail(&a, t).is_some() {
@@ -100,6 +116,9 @@ async fn now(State(w): State<Web>, Path(id): Path<String>) -> Response {
 async fn listen(State(w): State<Web>, Path(id): Path<String>) -> Response {
     let id = id.trim_end_matches(".mp3");
     let Ok(st) = StationId::from_hex(id) else { return StatusCode::NOT_FOUND.into_response() };
+    if !w.allowed(&st) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     let mut guest = [0u8; 32];
     if getrandom_fill(&mut guest).is_ok() {
         w.inner.count_guest(&st, &guest);

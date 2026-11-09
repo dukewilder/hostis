@@ -201,3 +201,16 @@ Only what cannot be done from here:
 **Clear the hold.** One button empties everything carried except the owner's station and the ballast.
 
 **Keep and maroon.** Each listener keeps a chart on their own device: kept stations at the top of the Log and the dial, marooned stations gone from both. Nothing about the chart leaves the phone.
+
+## XIII. Stress test (9 November 2026)
+
+- **Counts are checked token by token.** A gossiped sketch could be forged to show millions aboard. Listeners now send single tokens, each bound to the station and the hour and carrying a proof of work (a second or two on a phone, once an hour), and every node builds its own count from tokens it has checked. Counts can still be bought, at a price in work.
+- **The gangway carries only its Lantern's own stations.** A public page that streams any station makes its keeper the distributor of whatever is on air. Any Lantern can do what HOSTIS does: `--http` serves its own stations, with an embed line for any site.
+- **A stranger's first minute must be earned.** First open lands on the busiest station with a week on the air and three independent carriers, or on HOSTIS's own stations until one exists.
+- **Mobile data carries nobody else's traffic.** Phones relay hops and stems only on unmetered networks.
+- **No single door.** Every node remembers the peers it has met as starting points, and a Lantern is one Docker command (`LANTERN.md`).
+- **Raising a station costs 24 bits of work**, several seconds on a phone, and the Log keeps at most 5,000 cards, the weakest giving way.
+- **Time is the network's.** Each node corrects its clock by the median of the station cards it hears.
+- **Carriers take aboard only chunks the station's signed log names**, so nobody can fill a disk with junk that merely matches its own hash.
+- **Revoked deputies cannot sign cards** that any node holding the log will accept.
+- **Guards are spread.** A broadcaster's first hop avoids the well-known Lanterns, so no one machine holds every broadcaster's address.
