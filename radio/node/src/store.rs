@@ -120,6 +120,8 @@ impl Store {
         let a = self.logs.entry(id).or_insert_with(|| Archive::new(id));
         // A deputy wraps what it writes, so carriers can check the deputy's signature.
         let body = if key.id() == id { body } else { Body::Deputed { by: key.id().0, body: Box::new(body) } };
+        // Two entries in one millisecond would break the log's order; the second waits a tick.
+        let at_ms = a.entries().last().map_or(at_ms, |l| at_ms.max(l.entry.at_ms + 1));
         let e = pyrate_core::Entry { station: id, seq: a.len(), prev: a.head(), at_ms, body };
         let signed = SignedEntry::sign(key, e)?;
         self.put_entries(id, vec![signed.clone()])?;
@@ -247,7 +249,8 @@ impl Store {
 
     /// Evicts carried chunks, oldest-touched first, until under quota.
     pub fn enforce_quota(&self) -> Result<u64> {
-        let keep: HashSet<String> = self.own().iter().chain(self.pinned.iter()).flat_map(|id| self.chunks_of(id)).flat_map(|h| [Self::sealed_name(&h), hex(&h)]).collect();
+        let own_art = self.own().iter().filter_map(|id| self.logs.get(id)).flat_map(|a| a.art_hashes()).collect::<Vec<_>>();
+        let keep: HashSet<String> = self.own().iter().chain(self.pinned.iter()).flat_map(|id| self.chunks_of(id)).chain(own_art).flat_map(|h| [Self::sealed_name(&h), hex(&h)]).collect();
         let mut files = Vec::new();
         let mut total = 0u64;
         for sub in fs::read_dir(self.dir.join("chunks"))? {

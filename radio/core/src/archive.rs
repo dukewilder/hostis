@@ -73,6 +73,18 @@ pub enum Body {
     /// A new version of the app, carried like a recording. Phones trust it only when two of
     /// the three release keys have signed it, whoever wrote the entry.
     Release { version: String, code: u32, sha256: [u8; 32], size: u64, chunks: Vec<Chunk>, notes: String, sigs: Vec<(u8, Vec<u8>)> },
+    /// The station's art and the colour its pages are drawn in. The latest one rules.
+    Art { cover: Option<ArtRef>, banner: Option<ArtRef>, accent: [u8; 3] },
+    /// The picture that shows while a track plays: usually its album cover.
+    TrackArt { track: Hash, art: ArtRef },
+}
+
+/// A picture named by its fingerprint. Only plain JPEGs of the sizes in `art` count.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArtRef {
+    pub hash: Hash,
+    pub w: u16,
+    pub h: u16,
 }
 
 /// What each release key signs.
@@ -275,6 +287,35 @@ impl Archive {
             Body::Rota(r) => Some(r.clone()),
             _ => None,
         }).unwrap_or_default()
+    }
+
+    /// The station's latest art, if it has raised any.
+    pub fn art(&self) -> Option<(Option<ArtRef>, Option<ArtRef>, [u8; 3])> {
+        self.entries.iter().rev().find_map(|e| match e.entry.body() {
+            Body::Art { cover, banner, accent } => Some((*cover, *banner, *accent)),
+            _ => None,
+        })
+    }
+
+    /// The art for one track, by the track's entry hash.
+    pub fn track_art(&self, track: &Hash) -> Option<ArtRef> {
+        self.entries.iter().rev().find_map(|e| match e.entry.body() {
+            Body::TrackArt { track: t, art } if t == track => Some(*art),
+            _ => None,
+        })
+    }
+
+    /// Every picture this station's log names.
+    pub fn art_hashes(&self) -> Vec<Hash> {
+        let mut out = Vec::new();
+        for e in &self.entries {
+            match e.entry.body() {
+                Body::Art { cover, banner, .. } => out.extend(cover.iter().chain(banner.iter()).map(|a| a.hash)),
+                Body::TrackArt { art, .. } => out.push(art.hash),
+                _ => {}
+            }
+        }
+        out
     }
 
     /// Tracks in the library, oldest first, minus any withdrawn. Each with its entry hash.

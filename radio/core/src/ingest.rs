@@ -25,6 +25,8 @@ pub struct Ingested {
     pub duration_ms: u64,
     pub channels: u8,
     pub bitrate: u32,
+    /// The picture embedded in the file, front cover first, as it was found.
+    pub picture: Option<Vec<u8>>,
 }
 
 /// Folds any channel layout into the profile's: mono averages, stereo keeps the first two.
@@ -56,6 +58,17 @@ pub fn ingest(path: &Path, profile: Profile) -> Result<Ingested> {
     let mut format = symphonia::default::get_probe()
         .probe(&hint, mss, FormatOptions::default(), MetadataOptions::default())
         .map_err(|e| Error::Decode(e.to_string()))?;
+    let picture = {
+        let mut m = format.metadata();
+        m.skip_to_latest();
+        m.current().and_then(|rev| {
+            let all: Vec<_> = rev.media.visuals.iter().chain(rev.per_track.iter().flat_map(|p| p.metadata.visuals.iter())).collect();
+            all.iter()
+                .find(|v| v.usage == Some(symphonia::core::meta::StandardVisualKey::FrontCover))
+                .or(all.first())
+                .map(|v| v.data.to_vec())
+        })
+    };
     let track = format.default_track(TrackType::Audio).ok_or(Error::Decode("no audio track".into()))?;
     let track_id = track.id;
     let params = track
@@ -192,5 +205,6 @@ pub fn ingest(path: &Path, profile: Profile) -> Result<Ingested> {
         duration_ms: total_frames * 1000 / SAMPLE_RATE as u64,
         channels: profile.channels(),
         bitrate: profile.bitrate(),
+        picture,
     })
 }

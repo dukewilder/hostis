@@ -142,11 +142,14 @@ impl Inner {
         Err(anyhow!("no private route answered"))
     }
 
-    pub(crate) async fn private_chunk(&self, station: StationId, hash: Hash) -> Result<Vec<u8>> {
+    pub(crate) async fn private_chunk(&self, station: StationId, hash: Hash, keep: bool) -> Result<Vec<u8>> {
         for _ in 0..3 {
             let Ok(raw) = self.ask_privately(&Ask::Chunk { station, hash }).await else { continue };
             if let Ok(Response::Chunk(Some(b))) = postcard::from_bytes::<Response>(&raw) {
-                if self.store.lock().unwrap().put_chunk(&hash, &b).is_ok() {
+                if blake3::hash(&b).as_bytes() != &hash {
+                    continue;
+                }
+                if !keep || self.store.lock().unwrap().put_chunk(&hash, &b).is_ok() {
                     return Ok(b);
                 }
             }
@@ -184,7 +187,9 @@ impl Inner {
                         let _ = self.sync_log_direct(station).await;
                         self.serve(Request::Log { station, from })
                     }
-                    Ask::Chunk { station, hash } => Response::Chunk(self.chunk_direct(&station, &hash).await.ok()),
+                    // An exit passes what it fetches straight through: nothing it relays for a stranger
+                    // lands on its own device.
+                    Ask::Chunk { station, hash } => Response::Chunk(self.chunk_direct(&station, &hash, false).await.ok()),
                     Ask::Token { station, hour, token, nonce } => {
                         self.accept_token(station, hour, token, nonce, true);
                         Response::Entries(vec![])
@@ -220,9 +225,18 @@ impl Inner {
             // carrier's disk with junk that merely matches its own hash.
             let s = self.store.lock().unwrap();
             let named: std::collections::HashSet<Hash> = s.chunks_of(&station).into_iter().collect();
+            let pics: std::collections::HashSet<Hash> = s.logs.get(&station).map(|a| a.art_hashes()).unwrap_or_default().into_iter().collect();
             for (h, b) in &chunks {
                 if named.contains(h) {
                     let _ = s.put_chunk(h, b);
+                } else if pics.contains(h) && b.len() <= pyrate_core::art::MAX_BYTES {
+                    // Art reaches a Lantern's disk; a phone holds it in memory only, long
+                    // enough for the Lanterns to take it aboard.
+                    if self.cfg.lantern {
+                        let _ = s.put_chunk(h, b);
+                    } else {
+                        self.art_mem.lock().unwrap().put(*h, b.clone());
+                    }
                 }
             }
         }
@@ -271,6 +285,8 @@ impl Inner {
                 let hashes: Vec<Hash> = match e.entry.body() {
                     Body::Track { chunks, .. } => chunks.iter().map(|c| c.hash).collect(),
                     Body::Live { chunk, .. } => vec![chunk.hash],
+                    Body::Art { cover, banner, .. } => cover.iter().chain(banner.iter()).map(|r| r.hash).collect(),
+                    Body::TrackArt { art, .. } => vec![art.hash],
                     _ => vec![],
                 };
                 for h in hashes {

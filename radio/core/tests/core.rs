@@ -224,3 +224,18 @@ fn releases_need_two_of_three() {
     let thief = StationKey::generate().unwrap();
     assert!(!pyrate_core::release_trusted(&pubs, 12, &sha, &[sig(0), (1, thief.sign(&msg).to_vec())]));
 }
+
+#[test]
+fn art_is_redrawn_and_only_jpeg_is_read_back() {
+    use pyrate_core::art::{Kind, decode, prepare};
+    let mut png = Vec::new();
+    let img = image::RgbImage::from_fn(1200, 900, |x, _| if x % 50 < 25 { image::Rgb([180, 30, 40]) } else { image::Rgb([10, 10, 10]) });
+    image::DynamicImage::ImageRgb8(img).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+    let p = prepare(&png, Kind::Cover).unwrap();
+    assert_eq!((p.w, p.h), (640, 640));
+    assert!(p.jpeg.starts_with(&[0xFF, 0xD8]));
+    assert!(p.accent[0] > p.accent[1], "a red cover gives a red page");
+    assert_eq!(decode(&p.jpeg).unwrap().0, 640);
+    assert!(decode(&png).is_err(), "nothing but plain JPEG is decoded from the network");
+    assert_eq!(prepare(&png, Kind::Banner).map(|b| (b.w, b.h)).unwrap(), (1500, 500));
+}

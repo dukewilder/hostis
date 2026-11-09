@@ -48,6 +48,9 @@ pub struct Announce {
     pub since: u64,
     /// When a deputy signs: the master-signed entry appointing it.
     pub proof: Option<Vec<u8>>,
+    /// The station's cover and page colour, signed with the rest of the card.
+    pub cover: Option<[u8; 32]>,
+    pub accent: Option<[u8; 3]>,
     #[serde(with = "serde_bytes64")]
     pub sig: [u8; 64],
 }
@@ -55,7 +58,7 @@ pub struct Announce {
 impl Announce {
     fn message(&self) -> Vec<u8> {
         let mut m = b"pyrate/announce/v1\0".to_vec();
-        let body = (&self.station, self.head, &self.name, &self.about, &self.port, self.live, self.at_ms, self.pow, self.since, &self.proof);
+        let body = (&self.station, self.head, &self.name, &self.about, &self.port, self.live, self.at_ms, self.pow, self.since, &self.proof, &self.cover, &self.accent);
         m.extend(postcard::to_stdvec(&body).unwrap_or_default());
         m
     }
@@ -216,7 +219,7 @@ mod tests {
         let k = StationKey::generate().unwrap();
         let a = Announce {
             station: k.id(), head: 3, name: "HOSTIS".into(), about: "".into(), port: None,
-            live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, sig: [0; 64],
+            live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None, sig: [0; 64],
         }
         .sign(&k);
         assert!(a.verify());
