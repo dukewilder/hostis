@@ -132,6 +132,7 @@ impl Store {
         let hashes = self.chunks_of(id);
         for h in hashes {
             let _ = fs::remove_file(self.chunk_path(&h));
+            let _ = fs::remove_file(self.legacy_path(&h));
         }
         Ok(())
     }
@@ -149,40 +150,98 @@ impl Store {
         out
     }
 
+    /// Chunks are sealed on disk, after Freenet's content-hash keys: the file is named by a
+    /// hash of the chunk's address and encrypted with a key drawn from the address itself.
+    /// A seized device holds unlabelled noise. Nothing on it says what any file is; only
+    /// someone who already holds a station's log can test for that station's chunks.
+    fn sealed_name(h: &Hash) -> String {
+        hex(&blake3::derive_key("pyrate/hold-name/v1", h))
+    }
+
+    fn seal_cipher(h: &Hash) -> chacha20poly1305::ChaCha20Poly1305 {
+        use chacha20poly1305::KeyInit;
+        chacha20poly1305::ChaCha20Poly1305::new(&blake3::derive_key("pyrate/hold-key/v1", h).into())
+    }
+
     fn chunk_path(&self, h: &Hash) -> PathBuf {
+        let x = Self::sealed_name(h);
+        self.dir.join("chunks").join(&x[..2]).join(x)
+    }
+
+    /// Where unsealed chunks lived before sealing. Read once, sealed, removed.
+    fn legacy_path(&self, h: &Hash) -> PathBuf {
         let x = hex(h);
         self.dir.join("chunks").join(&x[..2]).join(x)
     }
 
     pub fn has_chunk(&self, h: &Hash) -> bool {
-        self.chunk_path(h).exists()
+        self.chunk_path(h).exists() || self.legacy_path(h).exists()
     }
 
     pub fn put_chunk(&self, h: &Hash, bytes: &[u8]) -> Result<()> {
+        use chacha20poly1305::aead::Aead;
         if blake3::hash(bytes).as_bytes() != h {
             anyhow::bail!("chunk does not match its hash");
         }
+        let sealed = Self::seal_cipher(h)
+            .encrypt(chacha20poly1305::Nonce::from_slice(&[0; 12]), bytes)
+            .map_err(|_| anyhow::anyhow!("seal"))?;
         let p = self.chunk_path(h);
         fs::create_dir_all(p.parent().unwrap())?;
         let tmp = p.with_extension("part");
-        fs::write(&tmp, bytes)?;
+        fs::write(&tmp, sealed)?;
         fs::rename(tmp, p)?;
         Ok(())
     }
 
     pub fn get_chunk(&self, h: &Hash) -> Option<Vec<u8>> {
+        use chacha20poly1305::aead::Aead;
         let p = self.chunk_path(h);
-        let bytes = fs::read(&p).ok()?;
-        // Touch, so carrying keeps what is listened to.
-        if let Ok(f) = fs::File::options().append(true).open(&p) {
-            let _ = f.set_modified(SystemTime::now());
+        if let Ok(sealed) = fs::read(&p) {
+            let bytes = Self::seal_cipher(h).decrypt(chacha20poly1305::Nonce::from_slice(&[0; 12]), sealed.as_slice()).ok()?;
+            // Touch, so carrying keeps what is listened to.
+            if let Ok(f) = fs::File::options().append(true).open(&p) {
+                let _ = f.set_modified(SystemTime::now());
+            }
+            return Some(bytes);
+        }
+        let legacy = self.legacy_path(h);
+        let bytes = fs::read(&legacy).ok()?;
+        if self.put_chunk(h, &bytes).is_ok() {
+            let _ = fs::remove_file(legacy);
         }
         Some(bytes)
     }
 
+    /// Empties the hold: every carried chunk and log that is neither ours nor ballast.
+    pub fn clear_hold(&mut self) -> Result<usize> {
+        let keep_ids: HashSet<StationId> = self.own().into_iter().chain(self.pinned.iter().copied()).collect();
+        let keep: HashSet<String> = keep_ids.iter().flat_map(|id| self.chunks_of(id)).flat_map(|h| [Self::sealed_name(&h), hex(&h)]).collect();
+        let mut n = 0;
+        for sub in fs::read_dir(self.dir.join("chunks"))? {
+            let sub = sub?;
+            if !sub.file_type()?.is_dir() {
+                continue;
+            }
+            for f in fs::read_dir(sub.path())? {
+                let f = f?;
+                if !keep.contains(&f.file_name().to_string_lossy().to_string()) {
+                    fs::remove_file(f.path())?;
+                    n += 1;
+                }
+            }
+        }
+        let gone: Vec<StationId> = self.logs.keys().filter(|id| !keep_ids.contains(id)).copied().collect();
+        for id in gone {
+            let _ = fs::remove_file(self.log_path(&id));
+            self.logs.remove(&id);
+        }
+        Ok(n)
+    }
+
     /// Evicts carried chunks, oldest-touched first, until under quota.
     pub fn enforce_quota(&self) -> Result<u64> {
-        let keep: HashSet<String> = self.own().iter().chain(self.pinned.iter()).flat_map(|id| self.chunks_of(id)).map(|h| hex(&h)).collect();
+        let keep: HashSet<String> = self.own().iter().chain(self.pinned.iter()).flat_map(|id| self.chunks_of(id)).flat_map(|h| [Self::sealed_name(&h), hex(&h)]).collect();
         let mut files = Vec::new();
         let mut total = 0u64;
         for sub in fs::read_dir(self.dir.join("chunks"))? {

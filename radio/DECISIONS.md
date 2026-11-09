@@ -191,3 +191,13 @@ Only what cannot be done from here:
 **The stem.** New entries and chunks leave the broadcaster along a stem of relaying nodes before they spread, after Dandelion++ in Bitcoin. Every node relays stems, so the first hop cannot tell an origin from a relay. Broadcasters keep long-lived guard nodes for the first hop, as Tor does. The cost is well under a second on a six-second chunk.
 
 **The clock's foreknowledge.** The schedule is computed, so every node knows which chunks it will need hours before it needs them. Everything predictable is fetched ahead through anonymous routes, where latency costs nothing. Every fetch takes two hops, the first seeing who asks and the second what is asked. Tune-in costs a few hundred milliseconds more. Listener tokens for the aboard count travel the same way, so neighbours never see what a node hears. A broadcaster's node never announces itself as a carrier of its own station. Dark running (relay-only, over Tor through Orbot's HTTP tunnel port) is the next switch, for those who face an adversary on their own line.
+
+## XII. The listener's protection, and their own chart (9 November 2026)
+
+**A phone never announces what it listened to.** Phones announce themselves as carriers only of their ballast, which the hash chose for them. What they heard is served by Lanterns and ballast holders.
+
+**The hold is sealed.** Every chunk on disk is named by a hash of its address and encrypted with a key drawn from the address, after Freenet's content-hash keys. A seized device holds unlabelled noise; only someone who already holds a station's log can test for that station. Older unsealed chunks are sealed the first time they are read.
+
+**Clear the hold.** One button empties everything carried except the owner's station and the ballast.
+
+**Keep and maroon.** Each listener keeps a chart on their own device: kept stations at the top of the Log and the dial, marooned stations gone from both. Nothing about the chart leaves the phone.
