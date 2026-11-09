@@ -70,6 +70,14 @@ class MainActivity : FlutterActivity() {
                     val unmetered = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
                     result.success(mapOf("charging" to bm.isCharging, "unmetered" to unmetered))
                 }
+                "install" -> {
+                    val f = java.io.File(call.argument<String>("path") ?: "")
+                    val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.updates", f)
+                    startActivity(Intent(Intent.ACTION_VIEW)
+                        .setDataAndType(uri, "application/vnd.android.package-archive")
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
+                    result.success(null)
+                }
                 "stop" -> {
                     stopService(Intent(this, PlaybackService::class.java))
                     result.success(null)

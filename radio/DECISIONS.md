@@ -214,3 +214,10 @@ Only what cannot be done from here:
 - **Carriers take aboard only chunks the station's signed log names**, so nobody can fill a disk with junk that merely matches its own hash.
 - **Revoked deputies cannot sign cards** that any node holding the log will accept.
 - **Guards are spread.** A broadcaster's first hop avoids the well-known Lanterns, so no one machine holds every broadcaster's address.
+
+## XIV. Releases and refusals (9 November 2026)
+
+- **Releases are a station.** Release key one is the Releases station; its log carries versions of the app as chunks, each trusted only when two of the three release keys have signed it. Every node pins it, so an update spreads phone to phone with nothing to block. Phones offer a release and install it only on the owner's tap.
+- **Dylan holds all three release keys for now**, as word sheets kept in three places. A second and third holder can take one each later without changing a line of code.
+- **The refusal list is a station.** Release key two is the HOSTIS refusal list; its entries refuse or unrefuse stations. Nodes that follow it will not list, play, carry or serve those stations, and drop what they carried. Following is on by default and every listener can turn it off. The list hides; it deletes nothing from anyone who does not follow it.
+- **The Lantern publishes from folders**: `releases/` for signed builds, `refusals.txt` for the list. The keys that sign never sit on it.

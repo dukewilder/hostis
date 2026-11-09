@@ -9,6 +9,21 @@ use std::{
 use pyrate_node::{Config, Node};
 
 static NODE: OnceLock<Node> = OnceLock::new();
+static RELEASE_KEYS: std::sync::Mutex<Vec<[u8; 32]>> = std::sync::Mutex::new(Vec::new());
+
+fn release_keys() -> Vec<[u8; 32]> {
+    RELEASE_KEYS.lock().unwrap().clone()
+}
+
+/// The release keys this build trusts, one hex key per line. Call before `pyrate_start`.
+#[unsafe(no_mangle)]
+pub extern "C" fn pyrate_set_release_keys(text: *const c_char) {
+    *RELEASE_KEYS.lock().unwrap() = text_of(text).lines().filter_map(|l| pyrate_node::store_hex32(l.trim())).collect();
+}
+
+fn text_of(p: *const c_char) -> String {
+    text(p)
+}
 static START_MUTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn text(p: *const c_char) -> String {
@@ -34,6 +49,7 @@ pub extern "C" fn pyrate_start(dir: *const c_char, bootstrap: *const c_char) -> 
         public_dns: cfg!(target_os = "android"),
         private: true,
         ballast: 1_000_000_000,
+        release_keys: release_keys(),
     };
     match Node::start(cfg) {
         Ok(n) => {

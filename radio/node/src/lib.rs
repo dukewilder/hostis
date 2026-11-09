@@ -4,6 +4,7 @@
 //! No rights reserved.
 
 pub mod hop;
+pub mod trust;
 pub mod clockfix;
 pub mod net;
 #[cfg(feature = "playback")]
@@ -75,6 +76,9 @@ pub struct Config {
     pub private: bool,
     /// Bytes donated to the fleet as ballast, filled only when the app says conditions allow.
     pub ballast: u64,
+    /// The three release keys. The first is also the Releases station, the second the
+    /// HOSTIS refusal list. Empty means this build trusts no updates and follows no list.
+    pub release_keys: Vec<[u8; 32]>,
 }
 
 /// Relays run by HOSTIS and the crew, used alongside number0's. Any iroh relay will do;
@@ -183,7 +187,7 @@ impl Inner {
     fn serve(&self, req: Request) -> Response {
         let store = self.store.lock().unwrap();
         match req {
-            Request::Log { station, from } => {
+            Request::Log { station, from } if !self.refused_quick(&station) => {
                 let out = store
                     .logs
                     .get(&station)
@@ -193,6 +197,7 @@ impl Inner {
                     .unwrap_or_default();
                 Response::Entries(out)
             }
+            Request::Log { .. } => Response::Entries(vec![]),
             Request::Chunk { hash } => Response::Chunk(store.get_chunk(&hash)),
             Request::Hop(_) => Response::Hop(vec![]),
         }
@@ -498,8 +503,13 @@ impl Inner {
 
     /// Lanterns keep a whole copy of every station they carry.
     async fn mirror(self: &Arc<Self>) {
-        let stations: Vec<StationId> = self.log.lock().unwrap().keys().copied().collect();
+        let mut stations: Vec<StationId> = self.log.lock().unwrap().keys().copied().collect();
+        stations.extend(self.special_ids());
+        let refused = self.refused();
         for st in stations {
+            if refused.contains(&st) {
+                continue;
+            }
             let _ = self.sync_log(st).await;
             let missing: Vec<Hash> = {
                 let s = self.store.lock().unwrap();
@@ -562,6 +572,7 @@ impl Inner {
     /// unless asked for.
     pub fn stations_with(&self, marooned_too: bool) -> Value {
         let (kept, marooned) = self.chart();
+        let refused = self.refused();
         let now = now_ms();
         let log = self.log.lock().unwrap();
         let mut v: Vec<(u64, Value)> = log
@@ -570,6 +581,9 @@ impl Inner {
             .filter_map(|(id, l)| {
                 let a = l.announce.as_ref()?;
                 let aboard = l.aboard(now);
+                if refused.contains(id) || self.special(id) {
+                    return None;
+                }
                 let hex = id.to_hex();
                 let is_marooned = marooned.contains(&hex);
                 if is_marooned && !marooned_too {
@@ -718,7 +732,7 @@ impl Inner {
         let mut budget = self.cfg.ballast;
         let mut pinned = std::collections::HashSet::new();
         for st in stations {
-            if budget < 10_000_000 || self.is_own(&st) {
+            if budget < 10_000_000 || self.is_own(&st) || self.refused().contains(&st) {
                 continue;
             }
             let _ = self.sync_log_direct(st).await;
@@ -901,6 +915,15 @@ impl Node {
             let mut n = 0u64;
             loop {
                 i2.tick().await;
+                if n % 6 == 2 {
+                    for st in i2.special_ids() {
+                        let _ = i2.sync_log(st).await;
+                    }
+                    i2.drop_refused();
+                    if i2.cfg.lantern {
+                        i2.lantern_duties().await;
+                    }
+                }
                 if i2.cfg.lantern && n % 3 == 1 {
                     i2.mirror().await;
                 } else if !i2.cfg.lantern && n % 6 == 3 && i2.ballast_ok.load(std::sync::atomic::Ordering::Relaxed) {
@@ -1075,6 +1098,9 @@ impl Node {
             }
             "tune" => {
                 let st = station()?;
+                if inner.refused().contains(&st) {
+                    anyhow::bail!("refused by a list you follow");
+                }
                 say(&format!("tune {}", st.call_sign()));
                 *inner.tuned.lock().unwrap() = Some(Tuned { station: st, since: now_ms(), playhead: None });
                 #[cfg(feature = "playback")]
@@ -1132,6 +1158,16 @@ impl Node {
                 inner.ballast_ok.store(req["value"].as_bool().unwrap_or(false), std::sync::atomic::Ordering::Relaxed);
                 inner.relay_ok.store(req["unmetered"].as_bool().unwrap_or(false), std::sync::atomic::Ordering::Relaxed);
                 Ok(json!({ "ok": true, "carrying": inner.store.lock().unwrap().pinned.len() }))
+            }
+            "update" => Ok(match self.rt.block_on(inner.check_update(req["code"].as_u64().unwrap_or(0) as u32)) {
+                Ok(v) => v,
+                Err(e) => json!({ "available": false, "why": e.to_string() }),
+            }),
+            "lists" => {
+                if let Some(on) = req["follow"].as_bool() {
+                    inner.set_following(on)?;
+                }
+                Ok(json!({ "follow": inner.following(), "refused": inner.refused().len() }))
             }
             "clear_job" => {
                 inner.jobs.lock().unwrap().remove(&req["job"].as_u64().unwrap_or(0));
@@ -1191,6 +1227,10 @@ impl Node {
 
 pub fn hex(h: &[u8]) -> String {
     h.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+pub fn store_hex32(s: &str) -> Option<[u8; 32]> {
+    unhex(s).ok()
 }
 
 pub fn unhex(s: &str) -> Result<Hash> {

@@ -208,3 +208,19 @@ fn deputies_broadcast_but_cannot_strike() {
     }).unwrap();
     assert!(a.append(forged).is_err());
 }
+
+#[test]
+fn releases_need_two_of_three() {
+    let keys: Vec<StationKey> = (0..3).map(|i| StationKey::from_seed([40 + i; 32])).collect();
+    let pubs: Vec<[u8; 32]> = keys.iter().map(|k| k.id().0).collect();
+    let sha = [7u8; 32];
+    let msg = pyrate_core::release_message(12, &sha);
+    let sig = |i: usize| (i as u8, keys[i].sign(&msg).to_vec());
+    assert!(!pyrate_core::release_trusted(&pubs, 12, &sha, &[sig(0)]));
+    assert!(!pyrate_core::release_trusted(&pubs, 12, &sha, &[sig(0), sig(0)]));
+    assert!(pyrate_core::release_trusted(&pubs, 12, &sha, &[sig(0), sig(2)]));
+    // A signature for one build does not carry over to another.
+    assert!(!pyrate_core::release_trusted(&pubs, 13, &sha, &[sig(0), sig(2)]));
+    let thief = StationKey::generate().unwrap();
+    assert!(!pyrate_core::release_trusted(&pubs, 12, &sha, &[sig(0), (1, thief.sign(&msg).to_vec())]));
+}
