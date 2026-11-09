@@ -24,7 +24,7 @@ class MainActivity : FlutterActivity() {
 
     private var pendingLink: String? = null
 
-    /** A station link (pyrate://station/<id>, hostis.black/radio/#<id>, or pyrateradio.hostis.black/listen/#<id>) or a bell's tap. */
+    /** A station link (pyrate://station/<id>, hostis.black/radio/#<id>, or hostis.black/pyrateradio/listen/#<id>) or a bell's tap. */
     private fun takeLink(i: Intent?) {
         if (i == null) return
         i.getStringExtra("station")?.let { if (i.action == "tune") { pendingLink = it; return } }
