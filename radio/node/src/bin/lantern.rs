@@ -25,6 +25,24 @@ fn main() -> anyhow::Result<()> {
     println!("LANTERN LIT");
     println!("node id: {}", node.id());
 
+    // --withdraw "words": takes matching recordings off our own stations' clocks.
+    let withdraw: Vec<String> = args.windows(2).filter(|w| w[0] == "--withdraw").map(|w| w[1].to_lowercase()).collect();
+    if !withdraw.is_empty() {
+        let mine: Vec<String> = node.call(&serde_json::json!({ "cmd": "status" }))
+            .get("mine").and_then(|m| m.get("id")).and_then(|v| v.as_str()).map(String::from).into_iter().collect();
+        let _ = mine;
+        for name in seeds.iter().filter_map(|s| s.split('|').next()) {
+            let Some(id) = node.inner_store_find(name) else { continue };
+            let lib = node.call(&serde_json::json!({ "cmd": "library", "station": id.to_hex() }));
+            for t in lib.as_array().into_iter().flatten() {
+                let title = format!("{} {}", t["by"].as_str().unwrap_or(""), t["title"].as_str().unwrap_or("")).to_lowercase();
+                if withdraw.iter().any(|w| title.contains(w)) {
+                    node.call(&serde_json::json!({ "cmd": "withdraw", "station": id.to_hex(), "track": t["hash"] }));
+                    println!("withdrew {title}");
+                }
+            }
+        }
+    }
     seed_all(&node, &seeds)?;
     for line in node.call(&serde_json::json!({ "cmd": "status" }))["mine"].as_object().into_iter() {
         let _ = line;
