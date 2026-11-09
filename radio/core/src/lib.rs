@@ -12,13 +12,16 @@ pub mod art;
 pub mod audio;
 pub mod callsign;
 pub mod clock;
+#[cfg(feature = "codec")]
 pub mod ingest;
 pub mod keys;
 pub mod tape;
 
 pub use archive::{ArtRef, Archive, Body, Chunk, Entry, SignedEntry, release_message, release_trusted};
 pub use clock::{NowPlaying, Rota};
-pub use audio::{ChunkEncoder, Profile, decode_chunk};
+pub use audio::Profile;
+#[cfg(feature = "codec")]
+pub use audio::{ChunkEncoder, decode_chunk};
 pub use keys::{StationId, StationKey};
 
 /// A BLAKE3 hash. The same hash iroh-blobs uses, so chunks are blobs as they stand.
@@ -48,6 +51,7 @@ pub enum Error {
     Chunk,
     #[error("encoding: {0}")]
     Encoding(#[from] postcard::Error),
+    #[cfg(feature = "codec")]
     #[error("opus: {0}")]
     Opus(#[from] opus::Error),
     #[error("cannot read audio: {0}")]

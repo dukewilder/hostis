@@ -1,0 +1,27 @@
+[package]
+name = "pyrate-browser"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Pyrate Radio in a browser tab: a full listener on the network, reaching it through relays.
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyrate-core = { path = "../core", default-features = false }
+iroh = { version = "1.4", default-features = false, features = ["tls-ring"] }
+iroh-gossip = { version = "0.102", default-features = false, features = ["net"] }
+n0-future = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+postcard = { version = "1.1", features = ["use-std"] }
+blake3 = "1.8"
+anyhow = "1"
+wasm-bindgen = "=0.2.130"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["console"] }
+getrandom = { version = "0.3", features = ["wasm_js"] }

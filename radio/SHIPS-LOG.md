@@ -30,6 +30,13 @@ On the phone the node starts, joins the Log and finds the PC Lantern. Confirmed 
 3. Release signing: the key stays with Dylan. Builds are signed with the debug key until then.
 4. Not yet built: web listener, Hail, Tape it, Local filter, Pass it on, F-Droid repository, reproducible builds, export notice, security review.
 
+**9 November: the radio plays in a browser**
+
+- `browser/` builds the listener to WebAssembly: 3 MB, 1.3 MB over the wire. `browser/build.sh` writes the static site to `browser/www/dist`.
+- Tested in Chrome against a private network on the cloud machine (its own relay and a Lantern with a test station): the log arrived in 0.4 s and the card by gossip in 9 s. Twenty-two seconds of recorded output had the right tones in every second and no gaps on either decoder. The tab counted itself aboard within 5 s.
+- Not yet heard against the public network from here, because this machine's proxy will not carry the relay's WebSocket. The first real test is opening the page on a phone or PC.
+- Not yet tested: a live broadcast in the tab, Safari, and the locked-screen trick on an iPhone.
+
 **9 November: the Lantern moves to dukewilder**
 
 - The HOSTIS Lantern now runs on dukewilder, inside the gluetun tunnel with the arr stack, with no ports open. Node id `a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442`, now the app's first peer.

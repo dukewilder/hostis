@@ -268,3 +268,16 @@ What was weighed and set down, for now:
 - **The browser node.** The whole network in a web page, so iPhones hear every station. A project of its own, and the hard part (playing on a locked iPhone) needs a real iPhone to prove.
 - **Tape it as a video clip** for X and TikTok, and a podcast feed of HOSTIS's stations. Both wait until the core is on the air.
 - **The deputy key in the phone's secure hardware.** The PIN covers a casual look; the hardware vault is next.
+
+## XVIII. The browser (9 November 2026)
+
+A tab is a node. `browser/` builds the listener to WebAssembly from the same core and the same wire protocol as the app (`node/src/net.rs`, shared as it stands), so a tab joins the Log by gossip, checks every card and entry against the station's key, follows the station's clock and fetches chunks by fingerprint from whoever carries them. Nothing runs on a server: the page is static files any host or mirror can serve, and taking one copy down takes nothing off the air.
+
+- A browser opens no ports, so a tab reaches everyone through relays. The stations it hears from never learn its address; the relay sees only sealed traffic.
+- A fresh node key every visit, so one visit cannot be tied to the next. The hourly listener token comes from a separate key the tab keeps, so a reload is not counted twice.
+- Chunks and logs live in memory and go when the tab closes. While open, the tab answers others for what it holds.
+- Opus decodes with the browser's own WebCodecs, kept warm across a track so the six-second seams never show. Browsers without it get a portable decoder (opus-decoder, MIT, 88 KB), loaded only when needed.
+- On iPhones the sound goes out through an audio element, which keeps playing with the screen locked.
+- Maroon lists work in the tab, in the same format as the app's and a Lantern's maroon.txt.
+- Listening only, for now. Raising and broadcasting stay in the app.
+- `PYRATE_RELAYS` (node) and `PYRATE_HARBOUR` / `PYRATE_RELAYS` (browser build) name a private network's own relays and peers.
