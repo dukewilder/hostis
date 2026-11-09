@@ -70,24 +70,35 @@ impl Store {
             }
             s.logs.insert(id, a);
         }
-        // Logs from before bodies were framed. A station whose master key is here starts a
-        // fresh log with its colours and art; its seed folder, if it has one, refills the
-        // library. Anything else is set aside, to be fetched again in the new form.
+        // Logs from before bodies were framed. A station whose master key is here is written
+        // again, entry by entry and at the same times, so it keeps its library, its clock and
+        // its place in the hour; its recordings are already aboard. Anything else is set aside,
+        // to be fetched again in the new form.
         for (id, path, bytes) in legacy {
             let _ = fs::rename(&path, path.with_extension("legacy"));
             let master = s.keys.get(&id).is_some_and(|k| k.id() == id);
             if !master {
                 continue;
             }
-            let (colours, art) = pyrate_core::archive::legacy::colours_and_art(&bytes);
-            let Some(colours) = colours else { continue };
-            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
-            s.logs.insert(id, Archive::new(id));
-            let _ = s.write(id, now, colours);
-            if let Some(art) = art {
-                let _ = s.write(id, now + 1, art);
+            let old = pyrate_core::archive::legacy::entries(&bytes);
+            if old.iter().any(|(_, b, _)| *b == Body::Strike) {
+                continue;
             }
-            eprintln!("carried {} into the new log format", id.call_sign());
+            s.logs.insert(id, Archive::new(id));
+            let mut moved = std::collections::HashMap::new();
+            let mut kept = 0;
+            for (at, body, was) in old {
+                if matches!(body, Body::Release { .. }) {
+                    continue;
+                }
+                if let Ok(e) = s.write(id, at, crate::remap(body, &moved)) {
+                    if let Ok(h) = e.hash() {
+                        moved.insert(was, h);
+                    }
+                    kept += 1;
+                }
+            }
+            eprintln!("carried {} into the new log format: {kept} entries", id.call_sign());
         }
         Ok(s)
     }

@@ -21,3 +21,13 @@ This makes three release keys as 24 words each (`release-key-1.txt` to `-3.txt`)
 A release with fewer than two good signatures is never published and never installed. Phones install only on the owner's tap, and Android asks again.
 
 **What a Lantern carries** is its operator's choice: one station id per line in its `maroon.txt` and it will not list, play or carry that station. The file stays on the box and is published nowhere.
+
+**The Android signing key (once, offline).** Android accepts a new version only if it carries the same signature as the one installed.
+
+    release android-init release-keys
+
+makes `android-key.txt` (24 words: write them down apart from the release keys, then delete the file) and `android-cert.der` (public). For each release, after building the unsigned APK:
+
+    release sign-apk android-key.txt android-cert.der unsigned.apk "Pyrate Radio.apk"
+
+The first signed build needs one reinstall over the test builds; every release after installs as an update.

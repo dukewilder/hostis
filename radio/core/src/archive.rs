@@ -447,7 +447,6 @@ pub mod legacy {
         seq: u64,
         #[allow(dead_code)]
         prev: Hash,
-        #[allow(dead_code)]
         at_ms: u64,
         body: Body,
     }
@@ -455,6 +454,26 @@ pub mod legacy {
     #[derive(Deserialize)]
     struct OldSigned {
         entry: OldEntry,
+    }
+
+    /// Every entry of an old log this version can read, in order: when it was written, what it
+    /// said, and the hash it was known by. Entries written by a deputy are left out.
+    pub fn entries(bytes: &[u8]) -> Vec<(u64, Body, Hash)> {
+        let mut out = Vec::new();
+        let mut at = 0;
+        while at + 4 <= bytes.len() {
+            let n = u32::from_be_bytes(bytes[at..at + 4].try_into().unwrap()) as usize;
+            at += 4;
+            if at + n > bytes.len() {
+                break;
+            }
+            let rec = &bytes[at..at + n];
+            if let Ok(e) = postcard::from_bytes::<OldSigned>(rec) {
+                out.push((e.entry.at_ms, e.entry.body, *blake3::hash(rec).as_bytes()));
+            }
+            at += n;
+        }
+        out
     }
 
     /// The last colours and art found in an old log file's length-prefixed records.

@@ -2,6 +2,7 @@
 //! voyage_test <work dir> <wav> <picture>
 use std::{path::PathBuf, time::Duration};
 use pyrate_core::{Body, StationKey};
+
 use pyrate_node::{Config, Node};
 use serde::Serialize;
 use serde_json::json;
@@ -27,10 +28,21 @@ fn old_log(dir: &PathBuf) -> StationKey {
     std::fs::create_dir_all(dir.join("logs")).unwrap();
     std::fs::create_dir_all(dir.join("keys")).unwrap();
     std::fs::write(dir.join("keys").join(k.id().to_hex()), k.seed()).unwrap();
-    let rec = OldSigned { entry: OldEntry { station: k.id(), seq: 0, prev: [0; 32], at_ms: 5, body: Body::Colours { name: "The Old Port".into(), about: "from before".into(), port: None, tip: None } }, sig: (0, 0, 0, 0, 0, 0, 0, 0) };
-    let b = postcard::to_stdvec(&rec).unwrap();
-    let mut f = (b.len() as u32).to_be_bytes().to_vec();
-    f.extend(b);
+    let mut f = Vec::new();
+    let mut hashes = Vec::new();
+    let chunk = pyrate_core::Chunk { hash: [9; 32], len: 10, frames: 300 };
+    let mut add = |at: u64, body: Body, f: &mut Vec<u8>, hashes: &mut Vec<[u8; 32]>| {
+        let rec = OldSigned { entry: OldEntry { station: k.id(), seq: hashes.len() as u64, prev: [0; 32], at_ms: at, body }, sig: (0, 0, 0, 0, 0, 0, 0, 0) };
+        let b = postcard::to_stdvec(&rec).unwrap();
+        hashes.push(*blake3::hash(&b).as_bytes());
+        f.extend((b.len() as u32).to_be_bytes());
+        f.extend(b);
+    };
+    add(1_700_000_000_000, Body::Colours { name: "The Old Port".into(), about: "from before".into(), port: None, tip: None }, &mut f, &mut hashes);
+    add(1_700_000_001_000, Body::Track { title: "Kept".into(), by: "".into(), source: "".into(), channels: 1, bitrate: 24_000, chunks: vec![chunk; 3] }, &mut f, &mut hashes);
+    add(1_700_000_002_000, Body::Track { title: "Gone".into(), by: "".into(), source: "".into(), channels: 1, bitrate: 24_000, chunks: vec![chunk; 3] }, &mut f, &mut hashes);
+    let gone = hashes[2];
+    add(1_700_000_003_000, Body::Withdraw { track: gone }, &mut f, &mut hashes);
     std::fs::write(dir.join("logs").join(format!("{}.log", k.id().to_hex())), f).unwrap();
     k
 }
@@ -47,6 +59,10 @@ fn main() -> anyhow::Result<()> {
     let st = lantern.call(&json!({ "cmd": "status" }));
     check(st["mine"]["name"] == "The Old Port", &format!("an old-format log is carried into the new format ({})", st["mine"]["name"]));
     check(work.join("lantern/logs").join(format!("{}.legacy", old.id().to_hex())).exists(), "the old file is set aside, not deleted");
+    let lib = lantern.call(&json!({ "cmd": "library", "station": old.id().to_hex() }));
+    let titles: Vec<String> = lib.as_array().into_iter().flatten().filter_map(|t| t["title"].as_str().map(String::from)).collect();
+    check(titles == vec!["Kept".to_string()], &format!("the old library and its withdrawals come across ({titles:?})"));
+    check(lantern.archive(&old.id()).is_some_and(|a| a.entries().first().is_some_and(|e| e.entry.at_ms == 1_700_000_000_000)), "at the times they were first written");
     let boot = vec![lantern.id()];
     let s = Node::start(cfg("station", false, boot.clone()))?;
     let l = Node::start(cfg("listener", false, boot.clone()))?;
