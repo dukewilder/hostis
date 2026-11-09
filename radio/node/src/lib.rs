@@ -1056,6 +1056,10 @@ impl Node {
                     relays.insert(url.clone(), Arc::new(iroh::RelayConfig::from(url)));
                 }
             }
+            // PYRATE_RELAYS, a list of relay URLs, replaces these: for a private network.
+            let custom: Vec<iroh::RelayUrl> = std::env::var("PYRATE_RELAYS").unwrap_or_default().split(',').filter_map(|r| r.trim().parse().ok()).collect();
+            let private_net = !custom.is_empty();
+            let relays = if custom.is_empty() { relays } else { iroh::RelayMap::from_iter(custom) };
             let mut b = Endpoint::builder(presets::N0).secret_key(secret).relay_mode(iroh::RelayMode::Custom(relays));
             if public_dns {
                 b = b.dns_resolver(
@@ -1065,7 +1069,7 @@ impl Node {
                         .build(),
                 );
             }
-            if std::env::var_os("HTTPS_PROXY").is_some() {
+            if std::env::var_os("HTTPS_PROXY").is_some() && !private_net {
                 b = b.proxy_from_env().ca_tls_config(iroh::tls::CaTlsConfig::system());
             }
             let ep = b.bind().await.map_err(|e| anyhow!("bind: {e}"))?;

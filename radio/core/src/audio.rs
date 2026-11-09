@@ -3,9 +3,12 @@
 //! A chunk's bytes are its frames, each preceded by its length as a big-endian u16.
 //! Nothing else: the entry that names the chunk carries channels and bitrate.
 
+#[cfg(feature = "codec")]
 use opus::{Application, Bitrate, Channels};
 
-use crate::{Chunk, Error, Result};
+#[cfg(feature = "codec")]
+use crate::Chunk;
+use crate::{Error, Result};
 
 pub const SAMPLE_RATE: u32 = 48_000;
 /// Samples per channel in one 20 ms frame.
@@ -37,6 +40,7 @@ impl Profile {
     }
 }
 
+#[cfg(feature = "codec")]
 fn opus_channels(n: u8) -> Result<Channels> {
     match n {
         1 => Ok(Channels::Mono),
@@ -45,6 +49,7 @@ fn opus_channels(n: u8) -> Result<Channels> {
     }
 }
 
+#[cfg(feature = "codec")]
 /// Takes interleaved 48 kHz PCM, gives back finished chunks.
 pub struct ChunkEncoder {
     enc: opus::Encoder,
@@ -55,6 +60,7 @@ pub struct ChunkEncoder {
     packet: Vec<u8>,
 }
 
+#[cfg(feature = "codec")]
 impl ChunkEncoder {
     pub fn new(profile: Profile) -> Result<Self> {
         let app = match profile {
@@ -143,12 +149,14 @@ pub fn packets(bytes: &[u8]) -> Result<Vec<&[u8]>> {
     Ok(out)
 }
 
+#[cfg(feature = "codec")]
 /// Keeps decoder state across chunks, so a stream plays without seams.
 pub struct ChunkDecoder {
     dec: opus::Decoder,
     channels: usize,
 }
 
+#[cfg(feature = "codec")]
 impl ChunkDecoder {
     pub fn new(channels: u8) -> Result<Self> {
         Ok(Self { dec: opus::Decoder::new(SAMPLE_RATE, opus_channels(channels)?)?, channels: channels as usize })
@@ -177,6 +185,7 @@ impl ChunkDecoder {
     }
 }
 
+#[cfg(feature = "codec")]
 /// Decodes one chunk on its own, as a listener tuning in mid-stream does.
 pub fn decode_chunk(bytes: &[u8], channels: u8) -> Result<Vec<i16>> {
     ChunkDecoder::new(channels)?.decode(bytes)

@@ -12,14 +12,23 @@ serde = { version = "1", features = ["derive"] }
 postcard = { version = "1.1", features = ["use-std"] }
 bip39 = "3"
 getrandom = "0.3"
-opus = "0.4"
-symphonia = { version = "0.6", features = ["all-codecs", "all-formats"] }
-rubato = "5"
+opus = { version = "0.4", optional = true }
+symphonia = { version = "0.6", optional = true, features = ["all-codecs", "all-formats"] }
+rubato = { version = "5", optional = true }
 thiserror = "2"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp"] }
-ebur128 = "0.1"
+ebur128 = { version = "0.1", optional = true }
+
+[features]
+default = ["codec"]
+# Encoding, decoding and reading audio files. The browser build leaves it out and decodes
+# with the browser's own Opus.
+codec = ["dep:opus", "dep:symphonia", "dep:rubato", "dep:ebur128"]
 
 [dev-dependencies]
 postcard = { version = "1.1", features = ["use-std"] }
 serde = { version = "1", features = ["derive"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }

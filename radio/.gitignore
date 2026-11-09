@@ -1,2 +1,4 @@
 target/
 .cargo/
+browser/www/pkg/
+browser/www/dist/
