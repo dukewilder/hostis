@@ -90,6 +90,53 @@ pub struct Config {
 /// a relay only forwards traffic it cannot read.
 pub const CREW_RELAYS: &[&str] = &["https://relay.hostis.black"];
 
+/// Points a rewritten entry's references at the entries' new hashes.
+fn remap(body: Body, moved: &HashMap<Hash, Hash>) -> Body {
+    let m = |h: Hash| *moved.get(&h).unwrap_or(&h);
+    match body {
+        Body::Withdraw { track } => Body::Withdraw { track: m(track) },
+        Body::TrackArt { track, art } => Body::TrackArt { track: m(track), art },
+        Body::Rota(mut r) => {
+            for b in &mut r.blocks {
+                for t in &mut b.tracks {
+                    *t = m(*t);
+                }
+            }
+            r.ident = r.ident.map(m);
+            Body::Rota(r)
+        }
+        b => b,
+    }
+}
+
+/// A track's title and artist, by its entry hash.
+pub(crate) fn describe_track(a: &Archive, track: &Hash) -> (String, String) {
+    for e in a.entries() {
+        if let Body::Track { title, by, .. } = e.entry.body() {
+            if e.hash().ok().as_ref() == Some(track) {
+                return (title.clone(), by.clone());
+            }
+        }
+    }
+    (String::new(), String::new())
+}
+
+/// One chunk as it played, kept briefly for Tape it.
+pub(crate) struct Heard {
+    station: StationId,
+    channels: u8,
+    bytes: Vec<u8>,
+    title: String,
+}
+
+fn keep_heard(inner: &Inner, station: StationId, channels: u8, bytes: &[u8], title: String) {
+    let mut h = inner.heard.lock().unwrap();
+    h.push_back(Heard { station, channels, bytes: bytes.to_vec(), title });
+    while h.len() > 25 {
+        h.pop_front();
+    }
+}
+
 #[derive(Default)]
 struct Listing {
     announce: Option<Announce>,
@@ -151,6 +198,12 @@ pub struct Inner {
     /// Our stations no stem would take, now on the air straight from this device, and how
     /// many stems in a row have found no taker.
     pub(crate) direct: Mutex<std::collections::HashSet<StationId>>,
+    /// The maroon list as last read, and when.
+    pub(crate) refused_cache: Mutex<(u64, std::collections::HashSet<StationId>)>,
+    /// The last two and a half minutes of what played, for Tape it.
+    pub(crate) heard: Mutex<std::collections::VecDeque<Heard>>,
+    /// Never fall back to asking a carrier directly; stutter rather than show this address.
+    pub(crate) strict: std::sync::atomic::AtomicBool,
     stem_misses: Mutex<HashMap<StationId, u32>>,
     /// On mobile data a phone listens and broadcasts, and carries nobody else's traffic.
     relay_ok: std::sync::atomic::AtomicBool,
@@ -261,6 +314,68 @@ impl Inner {
         v.into_iter().filter_map(|(n, _, _)| EndpointId::from_bytes(&n).ok()).collect()
     }
 
+    /// One of our own stations, which another phone (a hand, or the captain) may also write.
+    /// Our copy is checked against the network's from the start: newer entries come aboard,
+    /// and if two phones wrote at once, ours are rewritten on top of the network's.
+    async fn sync_own(&self, station: StationId) -> Result<usize> {
+        let remote: Vec<SignedEntry> = {
+            let mut got = None;
+            if self.cfg.private {
+                if let Ok(raw) = self.ask_privately(&hop::Ask::Log { station, from: 0 }).await {
+                    if let Ok(Response::Entries(list)) = postcard::from_bytes::<Response>(&raw) {
+                        got = Some(list);
+                    }
+                }
+            }
+            if got.is_none() && !self.strict.load(std::sync::atomic::Ordering::Relaxed) {
+                for node in self.carriers(&station) {
+                    if let Ok(Response::Entries(list)) = self.ask(node, &Request::Log { station, from: 0 }).await {
+                        got = Some(list);
+                        break;
+                    }
+                }
+            }
+            got.unwrap_or_default().iter().filter_map(|b| SignedEntry::from_bytes(b).ok()).collect()
+        };
+        if remote.is_empty() {
+            return Ok(0);
+        }
+        self.reconcile(station, remote)
+    }
+
+    /// Brings our copy of an own station's log level with the network's.
+    pub(crate) fn reconcile(&self, station: StationId, remote: Vec<SignedEntry>) -> Result<usize> {
+        let mut s = self.store.lock().unwrap();
+        let ours: Vec<SignedEntry> = s.logs.get(&station).map(|a| a.entries().to_vec()).unwrap_or_default();
+        let k = ours.iter().zip(remote.iter()).take_while(|(a, b)| a == b).count();
+        if k == ours.len() {
+            // Behind or level: take what is new.
+            return s.put_entries(station, remote[k..].to_vec());
+        }
+        if k == remote.len() {
+            // Ahead: the network will catch up from us.
+            return Ok(0);
+        }
+        // Two phones wrote at once. The network's copy stands; ours are written again after it.
+        let mut fresh = Archive::new(station);
+        for e in &remote {
+            fresh.append(e.clone())?;
+        }
+        s.replace_log(station, fresh)?;
+        let mut moved: HashMap<Hash, Hash> = HashMap::new();
+        let mut redone = 0;
+        for e in &ours[k..] {
+            let old = e.hash()?;
+            let body = remap(e.entry.body().clone(), &moved);
+            if let Ok(n) = s.write(station, now_ms(), body) {
+                moved.insert(old, n.hash()?);
+                redone += 1;
+            }
+        }
+        say(&format!("{}: two phones wrote at once; {redone} of ours rewritten after the network's", station.call_sign()));
+        Ok(redone)
+    }
+
     pub async fn sync_log_direct(&self, station: StationId) -> Result<usize> {
         let mut added = 0;
         for node in self.carriers(&station) {
@@ -289,7 +404,7 @@ impl Inner {
     /// Brings a station's log up to date: privately on phones, directly on Lanterns.
     pub async fn sync_log(&self, station: StationId) -> Result<usize> {
         if self.is_own(&station) {
-            return Ok(0);
+            return self.sync_own(station).await;
         }
         if self.cfg.private {
             if let Ok(n) = self.private_log(station).await {
@@ -314,6 +429,9 @@ impl Inner {
         if self.cfg.private {
             if let Ok(b) = self.private_chunk(*station, *hash, keep).await {
                 return Ok(b);
+            }
+            if self.strict.load(std::sync::atomic::Ordering::Relaxed) {
+                return Err(anyhow!("private route failed, and this node never asks directly"));
             }
             say("private route failed for a chunk; asking a carrier directly");
         }
@@ -455,7 +573,7 @@ impl Inner {
                 if log.is_struck() {
                     continue;
                 }
-                let live = log.entries().last().is_some_and(|e| matches!(e.entry.body(), Body::Live { .. }) && now - e.entry.at_ms < 25_000);
+                let live = log.entries().last().is_some_and(|e| matches!(e.entry.body(), Body::Live { .. }) && now.saturating_sub(e.entry.at_ms) < 25_000);
                 let key = s.keys.get(&id).unwrap();
                 let proof = (key.id() != id).then(|| {
                     log.entries().iter().find(|e| matches!(&e.entry.body, Body::Deputy { key: k, .. } if *k == key.id().0)).and_then(|e| e.to_bytes().ok())
@@ -464,8 +582,12 @@ impl Inner {
                 let art = log.art();
                 let cover = art.and_then(|a| a.0).map(|a| a.hash);
                 let accent = art.map(|a| a.2);
-                Announce { station: id, head: log.len(), name, about, port, live, at_ms: now, pow: 0, since, proof, cover, accent, sig: [0; 64] }
-                    .pipe_pow(pow)
+                let (kinds, mature) = log.details().unwrap_or_default();
+                let tip = match log.colours() {
+                    Some(Body::Colours { tip, .. }) => tip.clone(),
+                    _ => None,
+                };
+                net::Card { station: id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof, cover, accent, kinds, mature, tip }
                     .sign(key)
             };
             if self.cfg.private && !self.direct.lock().unwrap().contains(&id) {
@@ -483,7 +605,7 @@ impl Inner {
                     *e += 1;
                     *e
                 };
-                if misses < 3 {
+                if misses < 3 || self.strict.load(std::sync::atomic::Ordering::Relaxed) {
                     continue;
                 }
                 self.direct.lock().unwrap().insert(id);
@@ -578,6 +700,63 @@ impl Inner {
 }
 
 impl Inner {
+    /// Provisions for the voyage: on Wi-Fi, the next six hours of up to three kept stations
+    /// come aboard ahead of time, sealed in the hold, so they play through a flight or a tunnel.
+    async fn provision(self: &Arc<Self>) {
+        if self.cfg.dir.join("provisions-off").exists() {
+            return;
+        }
+        let kept: Vec<StationId> = self.chart().0.iter().filter_map(|h| StationId::from_hex(h).ok()).take(3).collect();
+        let now = now_ms();
+        let mut budget = 200usize;
+        for st in kept {
+            let _ = self.sync_log(st).await;
+            let want: Vec<Hash> = {
+                let s = self.store.lock().unwrap();
+                let Some(a) = s.logs.get(&st) else { continue };
+                let Ok(clock) = pyrate_core::clock::Clock::new(a) else { continue };
+                let mut want = Vec::new();
+                for (start, track, _) in clock.upcoming(now, now + 6 * 3_600_000) {
+                    let Some(Body::Track { chunks, .. }) = a.entries().iter().find(|e| e.hash().ok() == Some(track)).map(|e| e.entry.body()) else { continue };
+                    let mut t = start;
+                    for c in chunks {
+                        let end = t + c.duration_ms();
+                        if end > now && !s.has_chunk(&c.hash) {
+                            want.push(c.hash);
+                        }
+                        t = end;
+                    }
+                }
+                want.dedup();
+                want
+            };
+            for h in want {
+                if budget == 0 {
+                    return;
+                }
+                budget -= 1;
+                if self.fetch(&st, &h, true).await.is_err() {
+                    break;
+                }
+            }
+        }
+    }
+
+    /// An hourly note of how many are aboard each of our own stations, for the owner's chart.
+    fn log_aboard(&self) {
+        let own = self.store.lock().unwrap().own();
+        let now = now_ms();
+        for st in own {
+            let aboard = self.log.lock().unwrap().get(&st).map(|l| l.aboard(now)).unwrap_or(0);
+            let p = self.cfg.dir.join(format!("aboard-{}", st.to_hex()));
+            let mut text = std::fs::read_to_string(&p).unwrap_or_default();
+            text.push_str(&format!("{now} {aboard}\n"));
+            let lines: Vec<&str> = text.lines().collect();
+            let keep = lines[lines.len().saturating_sub(24 * 60)..].join("\n");
+            let _ = std::fs::write(&p, keep + "\n");
+        }
+    }
+
     /// Ingests a file and adds it to one of our stations' libraries.
     pub fn add_track(&self, station: StationId, path: &std::path::Path, title: &str, by: &str, source: &str, profile: Profile) -> Result<Hash> {
         let got = pyrate_core::ingest::ingest(path, profile)?;
@@ -659,12 +838,13 @@ impl Inner {
                 let show = !is_marooned && (is_kept || !kept_art_only);
                 let accent = a.accent.map(|c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]));
                 Some((aboard + if is_kept { 1 << 40 } else { 0 }, json!({
+                    "kinds": a.kinds, "mature": a.mature, "tip": a.tip,
                     "cover": a.cover.filter(|_| show).map(|h| crate::hex(&h)),
                     "banner": banners.get(id).filter(|_| show),
                     "accent": accent,
                     "id": hex, "call_sign": id.call_sign(), "name": a.name, "about": a.about,
                     "port": a.port, "live": a.live, "aboard": aboard, "kept": is_kept, "marooned": is_marooned, "since": a.since,
-                    "carriers": l.carriers.values().filter(|(_, s)| now - s < 10 * 60_000).count(),
+                    "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),
                 })))
             })
             .collect();
@@ -754,7 +934,7 @@ impl Inner {
                 std::thread::sleep(Duration::from_millis(200));
                 let pcm: Vec<i16> = match &file_pcm {
                     Some(f) => {
-                        let due = ((now_ms() - started) * 48) as usize;
+                        let due = (now_ms().saturating_sub(started) * 48) as usize;
                         let end = due.min(f.len());
                         let out = f[fed.min(end)..end].to_vec();
                         fed = end;
@@ -840,17 +1020,6 @@ impl Inner {
     }
 }
 
-trait PipePow {
-    fn pipe_pow(self, pow: u64) -> Self;
-}
-
-impl PipePow for Announce {
-    fn pipe_pow(mut self, pow: u64) -> Self {
-        self.pow = pow;
-        self
-    }
-}
-
 impl Node {
     pub fn start(cfg: Config) -> Result<Self> {
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build()?;
@@ -925,6 +1094,9 @@ impl Node {
             ballast_ok: std::sync::atomic::AtomicBool::new(false),
             tokens_sent: Mutex::new(HashMap::new()),
             direct: Mutex::new(std::collections::HashSet::new()),
+            refused_cache: Mutex::new((0, std::collections::HashSet::new())),
+            heard: Mutex::new(std::collections::VecDeque::new()),
+            strict: std::sync::atomic::AtomicBool::new(cfg.dir.join("strict").exists()),
             stem_misses: Mutex::new(HashMap::new()),
             relay_ok: std::sync::atomic::AtomicBool::new(!cfg.private),
         });
@@ -1003,6 +1175,12 @@ impl Node {
                 } else if !i2.cfg.lantern && n % 6 == 3 && i2.ballast_ok.load(std::sync::atomic::Ordering::Relaxed) {
                     i2.ballast().await;
                 }
+                if !i2.cfg.lantern && n % 60 == 5 && i2.relay_ok.load(std::sync::atomic::Ordering::Relaxed) {
+                    i2.provision().await;
+                }
+                if n % 360 == 7 {
+                    i2.log_aboard();
+                }
                 if n % 30 == 0 {
                     {
                         let s = i2.store.lock().unwrap();
@@ -1068,6 +1246,21 @@ impl Node {
     }
 
     /// Master acts from the 24 words: strike, or revoke every deputy and appoint this device.
+    /// Appoints a co-host's key as a deputy, with the station's 24 words.
+    fn appoint(&self, station: StationId, words: &str, key: Hash, label: &str) -> Result<()> {
+        let master = pyrate_core::StationKey::from_phrase(words)?;
+        if master.id() != station {
+            anyhow::bail!("those words are not this station's key");
+        }
+        let mut s = self.inner.store.lock().unwrap();
+        let mut a = s.logs.get(&station).cloned().unwrap_or_else(|| Archive::new(station));
+        let before = a.len();
+        let now = now_ms().max(a.entries().last().map(|e| e.entry.at_ms + 1).unwrap_or(0));
+        a.write(&master, now, Body::Deputy { key, label: label.chars().take(40).collect() })?;
+        s.put_entries(station, a.entries()[before as usize..].to_vec())?;
+        Ok(())
+    }
+
     fn with_master(&self, station: StationId, words: &str, act: &str) -> Result<()> {
         let master = pyrate_core::StationKey::from_phrase(words)?;
         if master.id() != station {
@@ -1167,7 +1360,7 @@ impl Node {
                 let np = inner.np.lock().unwrap().clone();
                 #[cfg(not(feature = "playback"))]
                 let np = Value::Null;
-                let live = inner.live.lock().unwrap().map(|(s, t)| json!({ "station": s.to_hex(), "since_ms": now_ms() - t }));
+                let live = inner.live.lock().unwrap().map(|(s, t)| json!({ "station": s.to_hex(), "since_ms": now_ms().saturating_sub(t) }));
                 Ok(json!({ "node": self.id().to_string(), "mine": mine, "jobs": jobs, "tuned": tuned, "now": np, "live": live }))
             }
             "stations" => Ok(inner.stations_with(req["marooned"].as_bool().unwrap_or(false))),
@@ -1175,8 +1368,230 @@ impl Node {
                 let st = station()?;
                 let kind = if cmd == "keep" { "kept" } else { "marooned" };
                 inner.set_chart(&st.to_hex(), kind, req["value"].as_bool().unwrap_or(true))?;
+                inner.refused_changed();
                 inner.drop_refused();
                 Ok(json!({ "ok": true }))
+            }
+            "details_set" => {
+                let st = station()?;
+                let kinds: Vec<String> = req["kinds"].as_array().into_iter().flatten().filter_map(|k| k.as_str().map(|s| s.to_lowercase())).take(5).collect();
+                inner.store.lock().unwrap().write(st, now_ms(), Body::Details { kinds, mature: req["mature"].as_bool().unwrap_or(false) })?;
+                Ok(json!({ "ok": true }))
+            }
+            "colours_set" => {
+                let st = station()?;
+                let mut s = inner.store.lock().unwrap();
+                let Some(Body::Colours { name, about, port, tip }) = s.logs.get(&st).and_then(|a| a.colours().cloned()) else { anyhow::bail!("no colours yet") };
+                let pick = |k: &str, old: Option<String>| match &req[k] {
+                    Value::Null => old,
+                    Value::String(v) if v.trim().is_empty() => None,
+                    Value::String(v) => Some(v.trim().to_string()),
+                    _ => old,
+                };
+                let name = pick("name", Some(name)).unwrap_or_default();
+                if name.is_empty() {
+                    anyhow::bail!("a station needs a name");
+                }
+                let body = Body::Colours { name, about: pick("about", Some(about)).unwrap_or_default(), port: pick("port", port), tip: pick("tip", tip) };
+                s.write(st, now_ms(), body)?;
+                Ok(json!({ "ok": true }))
+            }
+            "details" => {
+                let st = station()?;
+                let s = inner.store.lock().unwrap();
+                let a = s.logs.get(&st).context("no log")?;
+                let (kinds, mature) = a.details().unwrap_or_default();
+                let (port, tip) = match a.colours() {
+                    Some(Body::Colours { port, tip, .. }) => (port.clone(), tip.clone()),
+                    _ => (None, None),
+                };
+                Ok(json!({ "kinds": kinds, "mature": mature, "port": port, "tip": tip }))
+            }
+            "schedule" => {
+                let st = station()?;
+                if inner.store.lock().unwrap().logs.get(&st).is_none_or(|a| a.len() == 0) {
+                    let _ = self.rt.block_on(async { tokio::time::timeout(Duration::from_secs(8), inner.sync_log(st)).await });
+                }
+                let hours = req["hours"].as_u64().unwrap_or(24).min(168);
+                let s = inner.store.lock().unwrap();
+                let a = s.logs.get(&st).context("this station's log has not arrived yet")?;
+                let clock = pyrate_core::clock::Clock::new(a)?;
+                let now = now_ms();
+                let bill: Vec<Value> = clock.upcoming(now, now + hours * 3_600_000).into_iter().map(|(start, track, dur)| {
+                    let (title, by) = describe_track(a, &track);
+                    json!({ "start_ms": start, "duration_ms": dur, "title": title, "by": by, "track": hex(&track), "art": a.track_art(&track).map(|r| hex(&r.hash)) })
+                }).collect();
+                Ok(json!(bill))
+            }
+            "now_for" => {
+                let s = inner.store.lock().unwrap();
+                let now = now_ms();
+                let mut out = serde_json::Map::new();
+                for id in req["stations"].as_array().into_iter().flatten().filter_map(|v| v.as_str()).take(200) {
+                    let Ok(st) = StationId::from_hex(id) else { continue };
+                    let Some(a) = s.logs.get(&st) else { continue };
+                    let Some(np) = pyrate_core::clock::Clock::new(a).ok().and_then(|c| c.now(now)) else { continue };
+                    let (title, by) = describe_track(a, &np.track);
+                    out.insert(id.to_string(), json!({ "title": title, "by": by }));
+                }
+                Ok(Value::Object(out))
+            }
+            "tune_next" => {
+                let list = inner.stations_with(false);
+                let ids: Vec<String> = list.as_array().into_iter().flatten().filter_map(|s| s["id"].as_str().map(String::from)).collect();
+                if ids.is_empty() {
+                    anyhow::bail!("no stations yet");
+                }
+                let cur = inner.tuned.lock().unwrap().as_ref().map(|t| t.station.to_hex());
+                let i = cur.and_then(|c| ids.iter().position(|x| *x == c)).map(|i| i as i64).unwrap_or(-1);
+                let step = if req["dir"].as_i64().unwrap_or(1) < 0 { -1 } else { 1 };
+                let next = &ids[((i + step).rem_euclid(ids.len() as i64)) as usize];
+                return Ok(self.call(&json!({ "cmd": "tune", "station": next })));
+            }
+            "rota" => {
+                let st = station()?;
+                let s = inner.store.lock().unwrap();
+                let r = s.logs.get(&st).map(|a| a.rota()).unwrap_or(pyrate_core::Rota { blocks: vec![], ident: None, ident_every_min: 60 });
+                Ok(json!({
+                    "blocks": r.blocks.iter().map(|b| json!({ "start_min": b.start_min, "end_min": b.end_min, "tracks": b.tracks.iter().map(|h| hex(h)).collect::<Vec<_>>(), "shuffle": b.shuffle })).collect::<Vec<_>>(),
+                    "ident": r.ident.map(|h| hex(&h)), "ident_every_min": r.ident_every_min,
+                }))
+            }
+            "rota_set" => {
+                let st = station()?;
+                let mut blocks = Vec::new();
+                for b in req["blocks"].as_array().into_iter().flatten() {
+                    let start = b["start_min"].as_u64().unwrap_or(0).min(1439) as u16;
+                    let end = b["end_min"].as_u64().unwrap_or(0).min(1440) as u16;
+                    let tracks = b["tracks"].as_array().into_iter().flatten().filter_map(|h| h.as_str().and_then(|h| unhex(h).ok())).collect();
+                    blocks.push(pyrate_core::clock::Block { start_min: start, end_min: end, tracks, shuffle: b["shuffle"].as_bool().unwrap_or(true) });
+                }
+                let ident = req["ident"].as_str().and_then(|h| unhex(h).ok());
+                let every = req["ident_every_min"].as_u64().unwrap_or(60).clamp(5, 1440) as u16;
+                inner.store.lock().unwrap().write(st, now_ms(), Body::Rota(pyrate_core::Rota { blocks, ident, ident_every_min: every }))?;
+                Ok(json!({ "ok": true }))
+            }
+            "tape" => {
+                let secs = req["seconds"].as_u64().unwrap_or(120).clamp(6, 150);
+                let path = PathBuf::from(req["path"].as_str().context("path")?);
+                let h = inner.heard.lock().unwrap();
+                let Some(last) = h.back() else { anyhow::bail!("nothing has played yet") };
+                let (st, ch) = (last.station, last.channels);
+                let mut take: Vec<&Heard> = h.iter().rev().take_while(|x| x.station == st && x.channels == ch).take((secs / 6) as usize).collect();
+                take.reverse();
+                let title = take.last().map(|x| x.title.clone()).unwrap_or_default();
+                let name = inner.log.lock().unwrap().get(&st).and_then(|l| l.announce.as_ref().map(|a| a.name.clone())).unwrap_or_else(|| st.call_sign());
+                let chunks: Vec<Vec<u8>> = take.iter().map(|x| x.bytes.clone()).collect();
+                std::fs::write(&path, pyrate_core::tape::ogg_opus(&chunks, ch, &title, &name))?;
+                Ok(json!({ "path": path, "seconds": chunks.len() * 6, "title": title, "station": name }))
+            }
+            "hand_request" => {
+                let key = pyrate_core::StationKey::generate()?;
+                std::fs::write(inner.cfg.dir.join("hand.key"), key.seed())?;
+                Ok(json!({ "code": key.id().to_hex() }))
+            }
+            "hand_join" => {
+                let st = station()?;
+                let seed = std::fs::read(inner.cfg.dir.join("hand.key")).context("ask for a hand's code first")?;
+                let seed: [u8; 32] = seed.as_slice().try_into().context("hand key")?;
+                inner.store.lock().unwrap().add_key_for(st, pyrate_core::StationKey::from_seed(seed))?;
+                let _ = std::fs::remove_file(inner.cfg.dir.join("hand.key"));
+                let i2 = inner.clone();
+                self.rt.spawn(async move {
+                    let _ = i2.sync_log(st).await;
+                });
+                Ok(json!({ "ok": true }))
+            }
+            "hand_appoint" => {
+                let st = station()?;
+                let code = unhex(req["code"].as_str().context("code")?.trim())?;
+                self.appoint(st, req["words"].as_str().context("words")?, code, req["label"].as_str().unwrap_or("hand"))?;
+                Ok(json!({ "ok": true }))
+            }
+            "maroon_export" => {
+                let (_, marooned) = inner.chart();
+                let log = inner.log.lock().unwrap();
+                let lines: Vec<String> = marooned.iter().map(|h| {
+                    let name = StationId::from_hex(h).ok().and_then(|id| log.get(&id).and_then(|l| l.announce.as_ref().map(|a| a.name.clone()))).unwrap_or_default();
+                    if name.is_empty() { h.clone() } else { format!("{h}  # {name}") }
+                }).collect();
+                Ok(json!({ "text": format!("# A Pyrate Radio maroon list: one station per line. Take it aboard under Colours, or drop it in a Lantern's maroon.txt.\n{}\n", lines.join("\n")), "count": lines.len() }))
+            }
+            "maroon_import" => {
+                let text = req["text"].as_str().context("text")?;
+                let own: std::collections::HashSet<StationId> = inner.store.lock().unwrap().own().into_iter().collect();
+                let mut n = 0;
+                for line in text.lines() {
+                    let Some(tok) = line.split_whitespace().next() else { continue };
+                    let Ok(id) = StationId::from_hex(tok) else { continue };
+                    if own.contains(&id) {
+                        continue;
+                    }
+                    inner.set_chart(&id.to_hex(), "marooned", true)?;
+                    n += 1;
+                }
+                inner.refused_changed();
+                inner.drop_refused();
+                Ok(json!({ "added": n }))
+            }
+            "aboard_history" => {
+                let st = station()?;
+                let text = std::fs::read_to_string(inner.cfg.dir.join(format!("aboard-{}", st.to_hex()))).unwrap_or_default();
+                let pts: Vec<Value> = text.lines().filter_map(|l| {
+                    let (t, c) = l.split_once(' ')?;
+                    Some(json!([t.parse::<u64>().ok()?, c.parse::<u64>().ok()?]))
+                }).collect();
+                Ok(json!(pts))
+            }
+            "strict" => {
+                if let Some(on) = req["value"].as_bool() {
+                    let p = inner.cfg.dir.join("strict");
+                    if on { std::fs::write(&p, b"")?; } else { let _ = std::fs::remove_file(&p); }
+                    inner.strict.store(on, std::sync::atomic::Ordering::Relaxed);
+                }
+                Ok(json!({ "value": inner.strict.load(std::sync::atomic::Ordering::Relaxed) }))
+            }
+            "provisions" => {
+                let p = inner.cfg.dir.join("provisions-off");
+                if let Some(on) = req["value"].as_bool() {
+                    if on { let _ = std::fs::remove_file(&p); } else { std::fs::write(&p, b"")?; }
+                }
+                Ok(json!({ "value": !p.exists() }))
+            }
+            "pin_set" => {
+                let p = inner.cfg.dir.join("pin");
+                match req["pin"].as_str().filter(|s| s.len() >= 4) {
+                    Some(pin) => {
+                        let salt: [u8; 16] = rand::random();
+                        let h = blake3::keyed_hash(blake3::hash(&salt).as_bytes(), pin.as_bytes());
+                        std::fs::write(&p, [salt.as_slice(), h.as_bytes()].concat())?;
+                    }
+                    None => { let _ = std::fs::remove_file(&p); }
+                }
+                Ok(json!({ "ok": true }))
+            }
+            "pin_check" => {
+                let Ok(b) = std::fs::read(inner.cfg.dir.join("pin")) else { return Ok(json!({ "ok": true, "set": false })) };
+                let (salt, want) = b.split_at(16.min(b.len()));
+                let h = blake3::keyed_hash(blake3::hash(salt).as_bytes(), req["pin"].as_str().unwrap_or("").as_bytes());
+                Ok(json!({ "ok": req["pin"].is_string() && h.as_bytes().as_slice() == want, "set": true }))
+            }
+            "qr" => {
+                let code = qrcode::QrCode::new(req["text"].as_str().context("text")?.as_bytes())?;
+                let w = code.width();
+                let bits: String = code.to_colors().iter().map(|c| if *c == qrcode::Color::Dark { '1' } else { '0' }).collect();
+                Ok(json!({ "size": w, "bits": bits }))
+            }
+            "pref" => {
+                // Small settings the app keeps beside the node: sort order, filters, and the like.
+                let p = inner.cfg.dir.join("prefs.json");
+                let mut all: serde_json::Map<String, Value> = std::fs::read(&p).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+                let key = req["key"].as_str().context("key")?.to_string();
+                if !req["value"].is_null() {
+                    all.insert(key.clone(), req["value"].clone());
+                    std::fs::write(&p, Value::Object(all.clone()).to_string())?;
+                }
+                Ok(all.get(&key).cloned().unwrap_or(Value::Null))
             }
             "art_want" => {
                 let st = station()?;
@@ -1307,12 +1722,15 @@ impl Node {
                 Ok(json!({ "phrase": s.keys.get(&st).context("not our station")?.phrase() }))
             }
             "restore" => {
-                let key = pyrate_core::StationKey::from_phrase(req["phrase"].as_str().context("phrase")?)?;
-                let id = inner.store.lock().unwrap().add_key(key)?;
-                let i2 = inner.clone();
-                self.rt.spawn(async move {
-                    let _ = i2.sync_log(id).await;
-                });
+                // The station's log comes aboard first, so the revocation follows its last entry;
+                // then every old deputy is shut out and this phone gets a new one.
+                let phrase = req["phrase"].as_str().context("phrase")?;
+                let id = pyrate_core::StationKey::from_phrase(phrase)?.id();
+                let _ = self.rt.block_on(async { tokio::time::timeout(Duration::from_secs(25), inner.sync_log(id)).await });
+                if inner.store.lock().unwrap().logs.get(&id).is_none_or(|a| a.len() == 0) {
+                    anyhow::bail!("the station's log could not be found yet; try again in a minute, ideally on Wi-Fi");
+                }
+                self.with_master(id, phrase, "restore")?;
                 Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign() }))
             }
             "go_live" => {
@@ -1438,7 +1856,7 @@ mod playout {
                 st = State { station: Some(station), playhead: None, track: None, decoder: None, live_seq: None };
             }
             let now = now_ms();
-            if now - last_sync > if st.live_seq.is_some() { 2_500 } else { 8_000 } {
+            if now.saturating_sub(last_sync) > if st.live_seq.is_some() { 2_500 } else { 8_000 } {
                 last_sync = now;
                 let _ = inner.sync_log(station).await;
             }
@@ -1482,6 +1900,7 @@ mod playout {
                     let Some((_, dec)) = st.decoder.as_mut() else { break };
                     if let Ok(pcm) = dec.decode(&bytes) {
                         push(&inner, &pcm, ch, 0);
+                        keep_heard(&inner, station, ch, &bytes, "Live".into());
                     }
                     if st.live_seq.is_none() {
                         say(&format!("sound: live, entry {seq}"));
@@ -1526,6 +1945,7 @@ mod playout {
                     say(&format!("sound: chunk {} of a track, {} ms in", np.chunk, skip));
                 }
                 push(&inner, &pcm, *channels, skip);
+                keep_heard(&inner, station, *channels, &bytes, describe(&archive, &np.track).0);
                 let chunk_start = at - np.chunk_offset_ms;
                 st.playhead = Some(chunk_start + chunk.duration_ms());
             }

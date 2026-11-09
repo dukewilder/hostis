@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Error, Hash, Result, StationId, StationKey};
 
-const DOMAIN: &[u8] = b"pyrate/entry/v1\0";
+const DOMAIN: &[u8] = b"pyrate/entry/v2\0";
 
 /// Six seconds of Opus, addressed by the BLAKE3 hash of its bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,7 +69,11 @@ pub enum Body {
     /// Master only: a deputy's key stops counting, from this entry on.
     Revoke { key: [u8; 32] },
     /// An entry written by a deputy. The signature on it is the deputy's.
-    Deputed { by: [u8; 32], body: Box<Body> },
+    Deputed {
+        by: [u8; 32],
+        #[serde(with = "framed_box")]
+        body: Box<Body>,
+    },
     /// A new version of the app, carried like a recording. Phones trust it only when two of
     /// the three release keys have signed it, whoever wrote the entry.
     Release { version: String, code: u32, sha256: [u8; 32], size: u64, chunks: Vec<Chunk>, notes: String, sigs: Vec<(u8, Vec<u8>)> },
@@ -77,6 +81,74 @@ pub enum Body {
     Art { cover: Option<ArtRef>, banner: Option<ArtRef>, accent: [u8; 3] },
     /// The picture that shows while a track plays: usually its album cover.
     TrackArt { track: Hash, art: ArtRef },
+    /// What kind of station this is, for the Log's filters, and whether it calls itself mature.
+    /// The station's own word: nobody else can set it. The latest one rules.
+    Details { kinds: Vec<String>, mature: bool },
+    /// An entry from a later version of the app. Kept and passed on exactly as it came, so
+    /// old and new nodes share one log; this version does nothing with it.
+    ///
+    /// The rule that keeps this working: a variant, once released, never changes. New
+    /// information goes in a new variant.
+    #[serde(skip)]
+    Unknown(Vec<u8>),
+}
+
+/// Bodies travel inside a length prefix, so a node can step over a variant it does not know.
+mod framed {
+    use super::Body;
+    use serde::{Deserializer, Serializer};
+
+    pub fn encode(b: &Body) -> Vec<u8> {
+        match b {
+            Body::Unknown(raw) => raw.clone(),
+            b => postcard::to_stdvec(b).unwrap_or_default(),
+        }
+    }
+
+    pub fn decode(raw: Vec<u8>) -> Body {
+        match postcard::take_from_bytes::<Body>(&raw) {
+            Ok((b, rest)) if rest.is_empty() => b,
+            _ => Body::Unknown(raw),
+        }
+    }
+
+    pub fn serialize<S: Serializer>(b: &Body, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_bytes(&encode(b))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Body, D::Error> {
+        Ok(decode(serde_bytes_vec(d)?))
+    }
+
+    fn serde_bytes_vec<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
+        struct V;
+        impl<'de> serde::de::Visitor<'de> for V {
+            type Value = Vec<u8>;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("bytes")
+            }
+            fn visit_bytes<E: serde::de::Error>(self, v: &[u8]) -> Result<Vec<u8>, E> {
+                Ok(v.to_vec())
+            }
+            fn visit_byte_buf<E: serde::de::Error>(self, v: Vec<u8>) -> Result<Vec<u8>, E> {
+                Ok(v)
+            }
+        }
+        d.deserialize_bytes(V)
+    }
+}
+
+mod framed_box {
+    use super::Body;
+    use serde::{Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(b: &Box<Body>, s: S) -> Result<S::Ok, S::Error> {
+        super::framed::serialize(b, s)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Box<Body>, D::Error> {
+        super::framed::deserialize(d).map(Box::new)
+    }
 }
 
 /// A picture named by its fingerprint. Only plain JPEGs of the sizes in `art` count.
@@ -117,7 +189,8 @@ impl Body {
         }
     }
 
-    /// Acts only the master key may sign.
+    /// Acts only the master key may sign. An entry this version cannot read is never
+    /// taken as one of them.
     pub fn master_only(&self) -> bool {
         matches!(self, Body::Deputy { .. } | Body::Revoke { .. } | Body::Strike | Body::Deputed { .. })
     }
@@ -133,6 +206,7 @@ pub struct Entry {
     pub prev: Hash,
     /// Milliseconds since the Unix epoch, by the station's clock.
     pub at_ms: u64,
+    #[serde(with = "framed")]
     pub body: Body,
 }
 
@@ -289,6 +363,14 @@ impl Archive {
         }).unwrap_or_default()
     }
 
+    /// The station's own word on what it is, if it has said.
+    pub fn details(&self) -> Option<(Vec<String>, bool)> {
+        self.entries.iter().rev().find_map(|e| match e.entry.body() {
+            Body::Details { kinds, mature } => Some((kinds.clone(), *mature)),
+            _ => None,
+        })
+    }
+
     /// The station's latest art, if it has raised any.
     pub fn art(&self) -> Option<(Option<ArtRef>, Option<ArtRef>, [u8; 3])> {
         self.entries.iter().rev().find_map(|e| match e.entry.body() {
@@ -349,5 +431,51 @@ mod sig_bytes {
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<[u8; 64], D::Error> {
         let v: &[u8] = Deserialize::deserialize(d)?;
         v.try_into().map_err(|_| serde::de::Error::invalid_length(v.len(), &"64 bytes"))
+    }
+}
+
+/// Logs written before bodies were framed (until 9 November 2026). Read only to carry a
+/// station's colours and art into a fresh log; nothing else in them survives the change.
+pub mod legacy {
+    use super::*;
+
+    #[derive(Deserialize)]
+    struct OldEntry {
+        #[allow(dead_code)]
+        station: StationId,
+        #[allow(dead_code)]
+        seq: u64,
+        #[allow(dead_code)]
+        prev: Hash,
+        #[allow(dead_code)]
+        at_ms: u64,
+        body: Body,
+    }
+
+    #[derive(Deserialize)]
+    struct OldSigned {
+        entry: OldEntry,
+    }
+
+    /// The last colours and art found in an old log file's length-prefixed records.
+    pub fn colours_and_art(bytes: &[u8]) -> (Option<Body>, Option<Body>) {
+        let (mut colours, mut art) = (None, None);
+        let mut at = 0;
+        while at + 4 <= bytes.len() {
+            let n = u32::from_be_bytes(bytes[at..at + 4].try_into().unwrap()) as usize;
+            at += 4;
+            if at + n > bytes.len() {
+                break;
+            }
+            if let Ok(e) = postcard::from_bytes::<OldSigned>(&bytes[at..at + n]) {
+                match e.entry.body {
+                    b @ Body::Colours { .. } => colours = Some(b),
+                    b @ Body::Art { .. } => art = Some(b),
+                    _ => {}
+                }
+            }
+            at += n;
+        }
+        (colours, art)
     }
 }

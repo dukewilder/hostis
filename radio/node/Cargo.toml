@@ -26,7 +26,18 @@ rand = "0.8"
 axum = "0.8"
 mp3lame-encoder = "0.3"
 iroh-relay = { version = "1.4", features = ["server"] }
+qrcode = { version = "0.14", default-features = false }
+
+p256 = { version = "0.13", features = ["ecdsa", "pkcs8"], optional = true }
+rcgen = { version = "0.14", default-features = false, features = ["ring"], optional = true }
 
 [features]
 default = []
 playback = ["dep:cpal"]
+# The offline key tool's Android signing, kept out of the app and the Lantern.
+keytool = ["dep:p256", "dep:rcgen"]
+
+[[bin]]
+name = "release"
+path = "src/bin/release/main.rs"
+required-features = ["keytool"]

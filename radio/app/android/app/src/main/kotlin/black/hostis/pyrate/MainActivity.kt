@@ -22,8 +22,28 @@ class MainActivity : FlutterActivity() {
         external fun setStartMuted(muted: Boolean)
     }
 
+    private var pendingLink: String? = null
+
+    /** A station link (pyrate://station/<id>, or hostis.black/radio/#<id>) or a bell's tap. */
+    private fun takeLink(i: Intent?) {
+        if (i == null) return
+        i.getStringExtra("station")?.let { if (i.action == "tune") { pendingLink = it; return } }
+        val u = i.data ?: return
+        val id = when (u.scheme) {
+            "pyrate" -> u.lastPathSegment
+            else -> u.fragment ?: u.getQueryParameter("s")
+        }
+        if (id != null && id.matches(Regex("[0-9a-f]{64}"))) pendingLink = id
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        takeLink(intent)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        takeLink(intent)
         initNative(applicationContext)
         setStartMuted(intent?.getBooleanExtra("mute", false) == true)
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -79,7 +99,64 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "stop" -> {
-                    stopService(Intent(this, PlaybackService::class.java))
+                    try { startService(Intent(this, PlaybackService::class.java).setAction("stop")) } catch (e: Exception) {
+                        stopService(Intent(this, PlaybackService::class.java))
+                    }
+                    result.success(null)
+                }
+                "take_link" -> { result.success(pendingLink); pendingLink = null }
+                "bell_set" -> {
+                    Bells.setBell(this, call.argument<Int>("id") ?: 0, (call.argument<Number>("at") ?: 0).toLong(),
+                        call.argument<String>("title") ?: "", call.argument<String>("station") ?: "", call.argument<String>("name") ?: "")
+                    result.success(null)
+                }
+                "bell_cancel" -> { Bells.cancelBell(this, call.argument<Int>("id") ?: 0); result.success(null) }
+                "bells" -> result.success(Bells.bells(this))
+                "wake_set" -> {
+                    Bells.setWake(this, call.argument<Boolean>("on") == true, call.argument<Int>("hour") ?: 7, call.argument<Int>("minute") ?: 0,
+                        call.argument<String>("station"), call.argument<String>("name"))
+                    result.success(null)
+                }
+                "wake_get" -> result.success(Bells.wake(this).toString())
+                "exact_ok" -> {
+                    val am = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+                    result.success(Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms())
+                }
+                "exact_settings" -> {
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        try { startActivity(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, android.net.Uri.parse("package:$packageName"))) } catch (e: Exception) {}
+                    }
+                    result.success(null)
+                }
+                "record_start" -> {
+                    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                        requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2)
+                        result.success(null)
+                    } else {
+                        try { result.success(Ship.recordStart(this)) } catch (e: Exception) { result.success(null) }
+                    }
+                }
+                "record_stop" -> result.success(Ship.recordStop())
+                "share_text" -> { Ship.shareText(this, call.argument<String>("text") ?: ""); result.success(null) }
+                "share_file" -> { Ship.shareFile(this, call.argument<String>("path") ?: "", call.argument<String>("mime") ?: "audio/ogg"); result.success(null) }
+                "share_app" -> { try { Ship.shareApp(this) } catch (e: Exception) {}; result.success(null) }
+                "pass_start" -> result.success(try { Ship.passStart(this) } catch (e: Exception) { null })
+                "pass_stop" -> { Ship.passStop(); result.success(null) }
+                "open_uri" -> {
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(call.argument<String>("uri") ?: "")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        result.success(true)
+                    } catch (e: Exception) { result.success(false) }
+                }
+                "plain_set" -> { Ship.setPlain(this, call.argument<Boolean>("value") == true); result.success(null) }
+                "plain_get" -> result.success(Ship.isPlain(this))
+                "plain_lock_set" -> {
+                    getSharedPreferences("pyrate", Context.MODE_PRIVATE).edit().putBoolean("plain_lock", call.argument<Boolean>("value") == true).apply()
+                    result.success(null)
+                }
+                "plain_lock_get" -> result.success(getSharedPreferences("pyrate", Context.MODE_PRIVATE).getBoolean("plain_lock", false))
+                "remember" -> {
+                    getSharedPreferences("pyrate", Context.MODE_PRIVATE).edit().putString("last", call.argument<String>("station")).apply()
                     result.success(null)
                 }
                 else -> result.notImplemented()

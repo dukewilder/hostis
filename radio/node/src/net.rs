@@ -6,7 +6,7 @@
 use pyrate_core::{Hash, StationId, StationKey};
 use serde::{Deserialize, Serialize};
 
-pub const ALPN: &[u8] = b"pyrate/0";
+pub const ALPN: &[u8] = b"pyrate/1";
 pub const MAX_FRAME: usize = 16 * 1024 * 1024;
 /// Leading zero bits a station's proof of work must show. About a second on a phone, once.
 pub const POW_BITS: u32 = 24;
@@ -14,7 +14,7 @@ pub const POW_BITS: u32 = 24;
 pub const TOKEN_BITS: u32 = 20;
 
 pub fn log_topic() -> [u8; 32] {
-    *blake3::hash(b"pyrate/log/v1").as_bytes()
+    *blake3::hash(b"pyrate/log/v2").as_bytes()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -33,9 +33,11 @@ pub enum Response {
     Hop(Vec<u8>),
 }
 
-/// A station's card in the Log, signed by the station.
+/// The signed face of a station's card. Fields are only ever added at the end: an older
+/// node reads the ones it knows, ignores the rest, and still checks the signature over every
+/// byte, so new versions can say more without splitting the Log.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Announce {
+pub struct Card {
     pub station: StationId,
     pub head: u64,
     pub name: String,
@@ -48,24 +50,80 @@ pub struct Announce {
     pub since: u64,
     /// When a deputy signs: the master-signed entry appointing it.
     pub proof: Option<Vec<u8>>,
-    /// The station's cover and page colour, signed with the rest of the card.
+    /// The station's cover and page colour.
     pub cover: Option<[u8; 32]>,
     pub accent: Option<[u8; 3]>,
-    #[serde(with = "serde_bytes64")]
+    /// The station's own word on what it is: its kinds, and whether it calls itself mature.
+    pub kinds: Vec<String>,
+    pub mature: bool,
+    /// Where tips go, paid from the listener's own wallet.
+    pub tip: Option<String>,
+}
+
+const CARD_DOMAIN: &[u8] = b"pyrate/announce/v2\0";
+
+impl Card {
+    pub fn sign(self, key: &StationKey) -> Announce {
+        let raw = postcard::to_stdvec(&self).unwrap_or_default();
+        let mut m = CARD_DOMAIN.to_vec();
+        m.extend_from_slice(&raw);
+        Announce { sig: key.sign(&m), card: self, raw }
+    }
+}
+
+/// A station's card in the Log, signed by the station.
+#[derive(Clone, Debug)]
+pub struct Announce {
+    pub card: Card,
+    raw: Vec<u8>,
     pub sig: [u8; 64],
+}
+
+impl std::ops::Deref for Announce {
+    type Target = Card;
+    fn deref(&self) -> &Card {
+        &self.card
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct AnnounceWire {
+    #[serde(with = "serde_bytes_vec")]
+    card: Vec<u8>,
+    #[serde(with = "serde_bytes64")]
+    sig: [u8; 64],
+}
+
+mod serde_bytes_vec {
+    use serde::{Deserialize, Deserializer, Serializer};
+    pub fn serialize<S: Serializer>(v: &Vec<u8>, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_bytes(v)
+    }
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
+        Vec::<u8>::deserialize(d)
+    }
+}
+
+impl Serialize for Announce {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        AnnounceWire { card: self.raw.clone(), sig: self.sig }.serialize(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for Announce {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let w = AnnounceWire::deserialize(d)?;
+        // Trailing fields from later versions are ignored here and kept in `raw`.
+        let card: Card = postcard::from_bytes(&w.card).map_err(serde::de::Error::custom)?;
+        Ok(Announce { card, raw: w.card, sig: w.sig })
+    }
 }
 
 impl Announce {
     fn message(&self) -> Vec<u8> {
-        let mut m = b"pyrate/announce/v1\0".to_vec();
-        let body = (&self.station, self.head, &self.name, &self.about, &self.port, self.live, self.at_ms, self.pow, self.since, &self.proof, &self.cover, &self.accent);
-        m.extend(postcard::to_stdvec(&body).unwrap_or_default());
+        let mut m = CARD_DOMAIN.to_vec();
+        m.extend_from_slice(&self.raw);
         m
-    }
-
-    pub fn sign(mut self, key: &StationKey) -> Self {
-        self.sig = key.sign(&self.message());
-        self
     }
 
     pub fn verify(&self) -> bool {
@@ -217,14 +275,45 @@ mod tests {
     #[test]
     fn announce_signs_and_proves() {
         let k = StationKey::generate().unwrap();
-        let a = Announce {
+        let a = Card {
             station: k.id(), head: 3, name: "HOSTIS".into(), about: "".into(), port: None,
-            live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None, sig: [0; 64],
+            live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None,
+            kinds: vec!["talk".into()], mature: false, tip: None,
         }
         .sign(&k);
         assert!(a.verify());
-        let mut forged = a.clone();
-        forged.head = 4;
+        let wire = postcard::to_stdvec(&a).unwrap();
+        let back: Announce = postcard::from_bytes(&wire).unwrap();
+        assert!(back.verify());
+        assert_eq!(back.kinds, vec!["talk".to_string()]);
+        let mut forged = back.clone();
+        forged.card.head = 4;
+        forged.raw = postcard::to_stdvec(&forged.card).unwrap();
         assert!(!forged.verify());
+    }
+
+    #[test]
+    fn a_card_from_a_later_version_still_verifies() {
+        // A later version appends a field to the card. This one reads what it knows.
+        #[derive(Serialize)]
+        struct Later<'a> {
+            card: &'a Card,
+            extra: u32,
+        }
+        let k = StationKey::generate().unwrap();
+        let card = Card {
+            station: k.id(), head: 1, name: "Later".into(), about: "".into(), port: None,
+            live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None,
+            kinds: vec![], mature: false, tip: None,
+        };
+        let mut raw = postcard::to_stdvec(&card).unwrap();
+        raw.extend(postcard::to_stdvec(&Later { card: &card, extra: 9 }.extra).unwrap());
+        let mut m = CARD_DOMAIN.to_vec();
+        m.extend_from_slice(&raw);
+        let wire = postcard::to_stdvec(&AnnounceWire { card: raw, sig: k.sign(&m) }).unwrap();
+        let a: Announce = postcard::from_bytes(&wire).unwrap();
+        assert!(a.verify());
+        assert_eq!(a.name, "Later");
+        assert_eq!(postcard::to_stdvec(&a).unwrap(), wire, "passed on byte for byte");
     }
 }

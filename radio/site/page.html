@@ -38,6 +38,12 @@ footer a{color:inherit}
 </head>
 <body>
 <main>
+<div id="passed" hidden style="border:.5px solid var(--bone-ghost,#ede4ce38);padding:1rem 1.2rem;margin:0 0 2rem;font-style:italic"></div>
+<script>
+// A station link: hostis.black/radio/#<station id>. With the app installed, it opens there.
+(function(){var id=(location.hash||'').slice(1);if(!/^[0-9a-f]{64}$/.test(id))return;var b=document.getElementById('passed');
+b.innerHTML='Someone passed you a station. With the app on this phone, <a style="font-style:normal" href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;end">open it in Pyrate Radio</a>. Without it, take the set below, open it, and follow the link again.';b.hidden=false})();
+</script>
 <div class="eyebrow"><a href="/">Hostis.black</a> · The practical arm</div>
 <h1>Pyrate<br>Radio</h1>
 <p class="lead">A radio that plays all day and all night, that anyone can raise in three taps, that every listener carries, and that answers to no server, no store and no account.</p>

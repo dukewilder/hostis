@@ -41,8 +41,12 @@ impl Store {
                 s.keys.insert(station, StationKey::from_seed(seed));
             }
         }
+        let mut legacy = Vec::new();
         for f in fs::read_dir(dir.join("logs"))? {
             let f = f?;
+            if f.path().extension().is_none_or(|e| e != "log") {
+                continue;
+            }
             let name = f.file_name().to_string_lossy().trim_end_matches(".log").to_string();
             let Ok(id) = StationId::from_hex(&name) else { continue };
             let bytes = fs::read(f.path())?;
@@ -60,7 +64,30 @@ impl Store {
                 }
                 at += n;
             }
+            if a.len() == 0 && !bytes.is_empty() {
+                legacy.push((id, f.path(), bytes));
+                continue;
+            }
             s.logs.insert(id, a);
+        }
+        // Logs from before bodies were framed. A station whose master key is here starts a
+        // fresh log with its colours and art; its seed folder, if it has one, refills the
+        // library. Anything else is set aside, to be fetched again in the new form.
+        for (id, path, bytes) in legacy {
+            let _ = fs::rename(&path, path.with_extension("legacy"));
+            let master = s.keys.get(&id).is_some_and(|k| k.id() == id);
+            if !master {
+                continue;
+            }
+            let (colours, art) = pyrate_core::archive::legacy::colours_and_art(&bytes);
+            let Some(colours) = colours else { continue };
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+            s.logs.insert(id, Archive::new(id));
+            let _ = s.write(id, now, colours);
+            if let Some(art) = art {
+                let _ = s.write(id, now + 1, art);
+            }
+            eprintln!("carried {} into the new log format", id.call_sign());
         }
         Ok(s)
     }
@@ -214,6 +241,25 @@ impl Store {
             let _ = fs::remove_file(legacy);
         }
         Some(bytes)
+    }
+
+    /// Replaces a log outright: used only when two phones wrote one station at once.
+    pub fn replace_log(&mut self, id: StationId, a: Archive) -> Result<()> {
+        let mut bytes = Vec::new();
+        for e in a.entries() {
+            let b = e.to_bytes()?;
+            bytes.extend((b.len() as u32).to_be_bytes());
+            bytes.extend(b);
+        }
+        fs::write(self.log_path(&id), bytes)?;
+        self.logs.insert(id, a);
+        Ok(())
+    }
+
+    /// Drops a log this node no longer carries.
+    pub fn forget_log(&mut self, id: &StationId) {
+        self.logs.remove(id);
+        let _ = fs::remove_file(self.log_path(id));
     }
 
     pub fn remove_chunk(&self, h: &Hash) {
