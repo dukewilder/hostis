@@ -23,6 +23,29 @@ fn main() -> anyhow::Result<()> {
 
     let node = Node::start(Config { dir: dir.clone(), quota, lantern: true, bootstrap, public_dns: args.iter().any(|a| a == "--public-dns") })?;
     println!("LANTERN LIT");
+    // --http 127.0.0.1:8080 serves the web listener; --relay 127.0.0.1:3340 runs a relay. Both
+    // bind to loopback by default: a tunnel puts them on the public internet, not this machine.
+    if let Some(addr) = get("--http").and_then(|a| a.parse().ok()) {
+        let inner = node.inner.clone();
+        node.rt.spawn(async move {
+            if let Err(e) = pyrate_node::web::serve(inner, addr).await {
+                println!("web listener: {e}");
+            }
+        });
+    }
+    if let Some(addr) = get("--relay").and_then(|a| a.parse::<std::net::SocketAddr>().ok()) {
+        node.rt.spawn(async move {
+            let mut cfg = iroh_relay::server::ServerConfig::default();
+            cfg.relay = Some(iroh_relay::server::RelayConfig::new(addr));
+            match iroh_relay::server::Server::spawn(cfg).await {
+                Ok(server) => {
+                    println!("relay on http://{addr}");
+                    std::mem::forget(server);
+                }
+                Err(e) => println!("relay: {e}"),
+            }
+        });
+    }
     println!("node id: {}", node.id());
 
     // --withdraw "words": takes matching recordings off our own stations' clocks.

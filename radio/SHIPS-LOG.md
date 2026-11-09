@@ -36,6 +36,13 @@ On the phone the node starts, joins the Log and finds the PC Lantern. Confirmed 
 - The station keys, logs and recordings were copied over the LAN and adopted. A fresh node that knew only dukewilder found both stations in 12 seconds and played from them.
 - Public relays throttle bulk transfer (12 MB in 15 minutes) but carry a stream at radio speed. A HOSTIS relay on a public server lifts the throttle for listeners behind VPNs.
 
+**9 November: the gangway**
+
+- The Lantern serves a web listener (`--http`): the Log as JSON, each station as an endless 128 kbit/s MP3 stream that any browser and any iPhone plays, and a page in the site's type and ink. One encoder per station, however many tabs listen. Browser listeners count toward aboard.
+- The Lantern runs an iroh relay (`--relay`). Every node now knows `relay.hostis.black` alongside number0's relays and falls back to number0 while it is dark.
+- Both bind to loopback inside the tunnel. A Cloudflare tunnel, itself running inside the Proton tunnel, puts them at `radio.hostis.black` and `relay.hostis.black`. The house address appears nowhere.
+- Next: a second relay route through Proton port forwarding, its moving address published in the signed Log, so the relay outlives Cloudflare.
+
 **The PC Lantern (stopped)**
 
 - Folder: `Documents\Pyrate Radio` on Dylan's PC. Data in `lantern-data`, audio in `stations\public-domain` and `stations\readings`.

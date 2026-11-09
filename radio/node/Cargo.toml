@@ -18,6 +18,9 @@ anyhow = "1"
 futures-lite = "2"
 cpal = { version = "0.16", optional = true }
 tracing = "0.1"
+axum = "0.8"
+mp3lame-encoder = "0.3"
+iroh-relay = { version = "1.4", features = ["server"] }
 
 [features]
 default = []
