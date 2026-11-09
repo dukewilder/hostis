@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pyrate Radio · HOSTIS</title>
+<meta name="description" content="A radio that plays all day and all night, that anyone can raise in three taps, that every listener carries, and that answers to no server, no store and no account.">
+<style>
+/*FONTS*/
+:root{--black:#030303;--bone:#ede4ce;--bone-dim:rgba(237,228,206,.82);--bone-faint:rgba(237,228,206,.55);--bone-ghost:rgba(237,228,206,.22);--blood:#c52828;--blood-bright:#ed5555;--panel:#0f0f0f;--carved:'Cinzel',serif;--serif:'IM Fell English',Georgia,serif;--mono:'JetBrains Mono','Courier New',monospace;--measure:62ch;--gutter:clamp(1.25rem,4vw,3rem)}
+*{box-sizing:border-box}html{background:var(--black);color:var(--bone)}
+body{margin:0;font-family:var(--serif);font-size:1.15rem;line-height:1.55;-webkit-font-smoothing:antialiased}
+main{max-width:var(--measure);margin:0 auto;padding:clamp(3rem,10vh,6rem) var(--gutter) 4rem}
+.eyebrow{font-family:var(--carved);font-size:.72rem;letter-spacing:.4em;color:var(--bone-faint);text-transform:uppercase}
+.eyebrow a{color:inherit;text-decoration:none}
+h1{font-family:var(--carved);font-weight:900;font-size:clamp(2.4rem,9vw,4.2rem);letter-spacing:.12em;margin:.6rem 0 1.2rem;line-height:1.05}
+h2{font-family:var(--carved);font-weight:400;font-size:.95rem;letter-spacing:.3em;text-transform:uppercase;margin:3.5rem 0 1rem;color:var(--bone)}
+.lead{font-style:italic;font-size:1.35rem;color:var(--bone-dim)}
+p{margin:0 0 1rem}.faint{color:var(--bone-faint);font-style:italic}
+hr{border:0;border-top:.5px solid var(--bone-ghost);margin:3rem 0}
+.flag{font-family:var(--mono);font-size:.82rem;line-height:1.1;color:var(--bone-ghost);letter-spacing:.35em;margin:2.5rem 0 0;white-space:pre}
+.flag b{color:var(--bone);font-weight:700}
+.set{display:grid;gap:1px;background:var(--bone-ghost);border:.5px solid var(--bone-ghost);margin:1.2rem 0}
+.set a{display:block;background:var(--black);padding:1.1rem 1.2rem;color:var(--bone);text-decoration:none}
+.set a:hover,.set a:focus-visible{background:var(--panel);outline:none}
+.set .what{font-family:var(--carved);font-size:.85rem;letter-spacing:.25em;text-transform:uppercase}
+.set .how{display:block;color:var(--bone-faint);font-style:italic;font-size:1rem;margin-top:.25rem}
+code,.mono{font-family:var(--mono);font-size:.78rem;color:var(--bone-faint);word-break:break-all}
+ol{padding-left:1.3rem}li{margin-bottom:.5rem}
+.station{display:flex;justify-content:space-between;gap:1rem;padding:.9rem 0;border-bottom:.5px solid var(--bone-ghost)}
+.station b{font-weight:400;font-size:1.25rem}.station .cs{font-family:var(--mono);font-size:.72rem;color:var(--bone-ghost);display:block}
+.station i{color:var(--bone-faint);display:block;font-size:.98rem}
+.articles p{padding-left:1.2rem;border-left:.5px solid var(--bone-ghost)}
+.air{color:var(--blood-bright);font-family:var(--carved);letter-spacing:.3em;font-size:.72rem}
+footer{max-width:var(--measure);margin:0 auto;padding:2rem var(--gutter) 4rem;font-family:var(--carved);font-size:.7rem;letter-spacing:.3em;color:var(--bone-faint);text-transform:uppercase}
+footer a{color:inherit}
+</style>
+</head>
+<body>
+<main>
+<div class="eyebrow"><a href="/">Hostis.black</a> · The practical arm</div>
+<h1>Pyrate<br>Radio</h1>
+<p class="lead">A radio that plays all day and all night, that anyone can raise in three taps, that every listener carries, and that answers to no server, no store and no account.</p>
+<div class="flag" aria-hidden="true">0 0 0 <b>1</b> 0 <b>1</b> 0 0 0
+0 0 <b>1</b> 0 0 0 <b>1</b> 0 0
+0 0 0 0 <b>1</b> 0 0 0 0
+0 0 <b>1</b> 0 0 0 <b>1</b> 0 0
+0 0 <b>1 1 1 1 1</b> 0 0
+0 <b>1</b> 0 <b>1 1 1</b> 0 <b>1</b> 0</div>
+
+<h2>Turn it on</h2>
+<p>Open it and it plays. No sign-up, no tour, no permission screens before sound. It tunes to the station with the most aboard and you hear it within seconds. Swipe for the next station. Hold to scan.</p>
+<p>Every station runs on a clock. Nobody has to be awake for it to broadcast. Every phone works out what is on from the station's signed log and the hour, and every phone gets the same answer, so tune in and you join mid-song, as everyone aboard is hearing it.</p>
+
+<h2>Take the set</h2>
+<div class="set">
+<a href="pyrate-radio-0.1.0.apk"><span class="what">Android</span><span class="how">Pyrate Radio 0.1.0 · 37 MB · arm64</span></a>
+<a href="https://github.com/dukewilder/hostis/tree/radio/radio"><span class="what">Source</span><span class="how">Rust and Flutter, CC0. Build it yourself and compare.</span></a>
+<a href="https://github.com/dukewilder/hostis/tree/radio/radio/node/src/bin/lantern.rs"><span class="what">Lantern</span><span class="how">The always-on node, for a spare machine. Carries every station, relays for anyone.</span></a>
+</div>
+<p class="mono">sha-256 {{SHA}}</p>
+<p class="faint">Verify what you install. The checksum above is the build on this page. Builds are signed by the key printed here once signing begins.</p>
+
+<h2>On stock Android</h2>
+<p>Pyrate Radio does not register with Google. Show no papers. From 2026 in some countries, and everywhere in 2027, Google's phones ask once before installing an app from a developer who will not hand over an identity.</p>
+<ol>
+<li>Settings, About phone. Tap Build number seven times.</li>
+<li>Settings, System, Developer options. Allow apps from unverified developers.</li>
+<li>Google makes you wait 24 hours, once. After that it installs like anything else.</li>
+</ol>
+<p class="faint">GrapheneOS, LineageOS and other de-Googled phones need none of this. Installs over ADB need none of it either.</p>
+
+<h2>On the air</h2>
+<div class="station"><div><b>The Public Domain</b><span class="cs">GAHAGU·3695</span><i>Recordings published in 1925 or earlier, free in the United States since 1 January 2026. Every January the fence moves back another year.</i></div></div>
+<div class="station"><div><b>Readings</b><span class="cs">DEVAKA·F42C</span><i>LibriVox recordings, every one in the public domain, read aloud around the clock. Johnson's General History of the Pyrates first.</i></div></div>
+<p class="faint" style="margin-top:1rem">These are the stations HOSTIS raises. Every other station on the Log belongs to whoever holds its key. HOSTIS ranks none of them. The Log sorts by how many are aboard, and the listeners decide.</p>
+
+<h2>Raise colours</h2>
+<p>Name a station, drop recordings in, and it is on the air. Press the red button and you are live from your phone's microphone, ten to twenty seconds behind, and when you stop the clock takes back the hour.</p>
+<p>A station is a key made on your phone. It never leaves unless you write down its twenty-four words. Whoever holds them is the station. Nobody can recover them for you, and nobody can take the station from you.</p>
+
+<h2>The articles of the set</h2>
+<div class="articles">
+<p>Every install carries. The stations you listen to live on your phone, up to the space you give them, and your phone hands them to the next listener. A station with a thousand aboard cannot be found in any one place to be shut.</p>
+<p>The Log is kept by every node and owned by none. Each station's card is signed by its key and paid for in work, so raising ten thousand junk stations costs ten thousand times the effort of raising one.</p>
+<p>Counts are honest and anonymous. Each phone adds a token that changes every hour into a sketch nobody can read a name from. The number shown is rounded. HOSTIS cannot see who the forty are.</p>
+<p>No store, no account, no analytics, no ads, no coin of our own. A thing that watches its bearer is not his.</p>
+<p>While you broadcast, other nodes can see your network address, as on BitTorrent. The <a href="/#practice" style="color:inherit">Practice</a> covers what to do if that matters to you.</p>
+</div>
+<hr>
+<p class="faint">The site will be taken down. The radio is built so that when it is, nothing on the air goes quiet.</p>
+</main>
+<footer>no rights reserved · all copies welcome · <a href="https://github.com/dukewilder/hostis/tree/radio/radio">source code</a></footer>
+</body>
+</html>
