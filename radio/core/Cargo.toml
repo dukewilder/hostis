@@ -16,3 +16,7 @@ opus = "0.4"
 symphonia = { version = "0.6", features = ["all-codecs", "all-formats"] }
 rubato = "5"
 thiserror = "2"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp"] }
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

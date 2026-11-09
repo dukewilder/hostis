@@ -85,6 +85,30 @@ pub extern "C" fn pyrate_free(s: *mut c_char) {
     }
 }
 
+/// A picture for the app, decoded here in memory-safe code: 8 bytes of width and height
+/// (little-endian u32 each), then RGBA. Null if the picture has not arrived. Free with
+/// `pyrate_free_bytes`, passing the length written to `len`.
+#[unsafe(no_mangle)]
+pub extern "C" fn pyrate_art(hash: *const c_char, len: *mut usize) -> *mut u8 {
+    let Some((w, h, px)) = NODE.get().and_then(|n| n.art_pixels(&text(hash))) else { return std::ptr::null_mut() };
+    let mut out = Vec::with_capacity(8 + px.len());
+    out.extend(w.to_le_bytes());
+    out.extend(h.to_le_bytes());
+    out.extend(px);
+    let mut b = out.into_boxed_slice();
+    unsafe { *len = b.len() };
+    let p = b.as_mut_ptr();
+    std::mem::forget(b);
+    p
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn pyrate_free_bytes(p: *mut u8, len: usize) {
+    if !p.is_null() {
+        drop(unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(p, len)) });
+    }
+}
+
 /// Hands Rust the Android context, which the audio output needs.
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]

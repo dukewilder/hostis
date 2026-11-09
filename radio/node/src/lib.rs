@@ -3,6 +3,7 @@
 //!
 //! No rights reserved.
 
+pub mod art;
 pub mod hop;
 pub mod trust;
 pub mod clockfix;
@@ -136,6 +137,8 @@ pub struct Inner {
     queue: player::SharedQueue,
     #[cfg(feature = "playback")]
     np: Mutex<Value>,
+    /// Art seen while browsing: held in memory only, never written to the device.
+    pub(crate) art_mem: Mutex<art::Shelf>,
     /// The live broadcast in progress: station and when it began.
     live: Mutex<Option<(StationId, u64)>>,
     handle: tokio::runtime::Handle,
@@ -198,7 +201,7 @@ impl Inner {
                 Response::Entries(out)
             }
             Request::Log { .. } => Response::Entries(vec![]),
-            Request::Chunk { hash } => Response::Chunk(store.get_chunk(&hash)),
+            Request::Chunk { hash } => Response::Chunk(store.get_chunk(&hash).or_else(|| self.art_mem.lock().unwrap().get(&hash))),
             Request::Hop(_) => Response::Hop(vec![]),
         }
     }
@@ -291,25 +294,34 @@ impl Inner {
 
     /// A chunk from the hold, or from the network: privately on phones, directly on Lanterns.
     pub async fn chunk(&self, station: &StationId, hash: &Hash) -> Result<Vec<u8>> {
+        self.fetch(station, hash, true).await
+    }
+
+    /// Fetches a chunk by its fingerprint. `keep` writes it to the hold; without it, the
+    /// bytes pass through memory and nothing lands on the device.
+    pub async fn fetch(&self, station: &StationId, hash: &Hash, keep: bool) -> Result<Vec<u8>> {
         if let Some(b) = self.store.lock().unwrap().get_chunk(hash) {
             return Ok(b);
         }
         if self.cfg.private {
-            if let Ok(b) = self.private_chunk(*station, *hash).await {
+            if let Ok(b) = self.private_chunk(*station, *hash, keep).await {
                 return Ok(b);
             }
             say("private route failed for a chunk; asking a carrier directly");
         }
-        self.chunk_direct(station, hash).await
+        self.chunk_direct(station, hash, keep).await
     }
 
-    pub async fn chunk_direct(&self, station: &StationId, hash: &Hash) -> Result<Vec<u8>> {
+    pub async fn chunk_direct(&self, station: &StationId, hash: &Hash, keep: bool) -> Result<Vec<u8>> {
         if let Some(b) = self.store.lock().unwrap().get_chunk(hash) {
             return Ok(b);
         }
         for node in self.carriers(station) {
             if let Ok(Response::Chunk(Some(b))) = self.ask(node, &Request::Chunk { hash: *hash }).await {
-                if self.store.lock().unwrap().put_chunk(hash, &b).is_ok() {
+                if blake3::hash(&b).as_bytes() != hash {
+                    continue;
+                }
+                if !keep || self.store.lock().unwrap().put_chunk(hash, &b).is_ok() {
                     return Ok(b);
                 }
             }
@@ -441,7 +453,10 @@ impl Inner {
                     log.entries().iter().find(|e| matches!(&e.entry.body, Body::Deputy { key: k, .. } if *k == key.id().0)).and_then(|e| e.to_bytes().ok())
                 }).flatten();
                 let since = log.entries().first().map(|e| e.entry.at_ms).unwrap_or(now);
-                Announce { station: id, head: log.len(), name, about, port, live, at_ms: now, pow: 0, since, proof, sig: [0; 64] }
+                let art = log.art();
+                let cover = art.and_then(|a| a.0).map(|a| a.hash);
+                let accent = art.map(|a| a.2);
+                Announce { station: id, head: log.len(), name, about, port, live, at_ms: now, pow: 0, since, proof, cover, accent, sig: [0; 64] }
                     .pipe_pow(pow)
                     .sign(key)
             };
@@ -520,6 +535,15 @@ impl Inner {
                     break;
                 }
             }
+            if self.cfg.lantern {
+                let pics: Vec<Hash> = {
+                    let s = self.store.lock().unwrap();
+                    s.logs.get(&st).map(|a| a.art_hashes()).unwrap_or_default().into_iter().filter(|h| !s.has_chunk(h)).collect()
+                };
+                for h in pics.into_iter().take(50) {
+                    let _ = self.fetch(&st, &h, true).await;
+                }
+            }
         }
     }
 }
@@ -540,7 +564,15 @@ impl Inner {
             bitrate: got.bitrate,
             chunks: got.chunks.iter().map(|(c, _)| *c).collect(),
         })?;
-        Ok(e.hash()?)
+        let track = e.hash()?;
+        // The album cover inside the file, or a cover picture beside it in its folder.
+        let picture = got.picture.or_else(|| art::folder_cover(path));
+        if let Some(p) = picture.and_then(|raw| pyrate_core::art::prepare(&raw, pyrate_core::art::Kind::Track).ok()) {
+            let hash = *blake3::hash(&p.jpeg).as_bytes();
+            s.put_chunk(&hash, &p.jpeg)?;
+            s.write(station, now_ms(), Body::TrackArt { track, art: pyrate_core::ArtRef { hash, w: p.w, h: p.h } })?;
+        }
+        Ok(track)
     }
 
 }
@@ -574,6 +606,11 @@ impl Inner {
         let (kept, marooned) = self.chart();
         let refused = self.refused();
         let now = now_ms();
+        let kept_art_only = self.cfg.dir.join("art-kept-only").exists();
+        let banners: HashMap<StationId, String> = {
+            let s = self.store.lock().unwrap();
+            s.logs.iter().filter_map(|(id, a)| Some((*id, hex(&a.art()?.1?.hash)))).collect()
+        };
         let log = self.log.lock().unwrap();
         let mut v: Vec<(u64, Value)> = log
             .iter()
@@ -590,7 +627,12 @@ impl Inner {
                     return None;
                 }
                 let is_kept = kept.contains(&hex);
+                let show = !is_marooned && (is_kept || !kept_art_only);
+                let accent = a.accent.map(|c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]));
                 Some((aboard + if is_kept { 1 << 40 } else { 0 }, json!({
+                    "cover": a.cover.filter(|_| show).map(|h| crate::hex(&h)),
+                    "banner": banners.get(id).filter(|_| show),
+                    "accent": accent,
                     "id": hex, "call_sign": id.call_sign(), "name": a.name, "about": a.about,
                     "port": a.port, "live": a.live, "aboard": aboard, "kept": is_kept, "marooned": is_marooned, "since": a.since,
                     "carriers": l.carriers.values().filter(|(_, s)| now - s < 10 * 60_000).count(),
@@ -759,7 +801,7 @@ impl Inner {
                 if self.store.lock().unwrap().has_chunk(h) {
                     continue;
                 }
-                if self.chunk_direct(&st, h).await.is_err() || !self.ballast_ok.load(std::sync::atomic::Ordering::Relaxed) {
+                if self.chunk_direct(&st, h, true).await.is_err() || !self.ballast_ok.load(std::sync::atomic::Ordering::Relaxed) {
                     break;
                 }
             }
@@ -848,6 +890,7 @@ impl Node {
             queue: queue.clone(),
             #[cfg(feature = "playback")]
             np: Mutex::new(Value::Null),
+            art_mem: Mutex::new(art::Shelf::default()),
             live: Mutex::new(None),
             handle: rt.handle().clone(),
             ballast_ok: std::sync::atomic::AtomicBool::new(false),
@@ -1045,6 +1088,16 @@ impl Node {
         }).collect()).unwrap_or_default()
     }
 
+    /// Whether a chunk sits in this device's hold (tests use it to prove art stayed in memory).
+    pub fn on_disk(&self, hash: &str) -> bool {
+        unhex(hash).is_ok_and(|h| self.inner.store.lock().unwrap().has_chunk(&h))
+    }
+
+    /// A picture decoded to RGBA, if this node has it. Width, height, pixels.
+    pub fn art_pixels(&self, hash: &str) -> Option<(u32, u32, Vec<u8>)> {
+        self.inner.art_pixels(&unhex(hash).ok()?)
+    }
+
     /// The JSON face the app talks to.
     pub fn call(&self, req: &Value) -> Value {
         match self.call_inner(req) {
@@ -1068,7 +1121,11 @@ impl Node {
                         _ => String::new(),
                     });
                     let tracks = a.map(|a| a.library().map(|l| l.len()).unwrap_or(0)).unwrap_or(0);
-                    json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": name, "tracks": tracks })
+                    let art = a.and_then(|a| a.art());
+                    json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": name, "tracks": tracks,
+                        "cover": art.and_then(|x| x.0).map(|r| hex(&r.hash)),
+                        "banner": art.and_then(|x| x.1).map(|r| hex(&r.hash)),
+                        "accent": art.map(|x| format!("#{:02x}{:02x}{:02x}", x.2[0], x.2[1], x.2[2])) })
                 });
                 mine_v
                 };
@@ -1088,6 +1145,31 @@ impl Node {
                 inner.set_chart(&st.to_hex(), kind, req["value"].as_bool().unwrap_or(true))?;
                 inner.drop_refused();
                 Ok(json!({ "ok": true }))
+            }
+            "art_want" => {
+                let st = station()?;
+                let h = unhex(req["hash"].as_str().context("hash")?)?;
+                inner.art_want(st, h);
+                Ok(json!({ "ok": true }))
+            }
+            "art_set" => {
+                let st = station()?;
+                let raw = std::fs::read(req["path"].as_str().context("path")?)?;
+                inner.set_art(st, req["kind"].as_str().unwrap_or("cover"), &raw)?;
+                Ok(json!({ "ok": true }))
+            }
+            "art_clear" => {
+                inner.clear_art(station()?, req["kind"].as_str().unwrap_or("cover"))?;
+                Ok(json!({ "ok": true }))
+            }
+            "art_kept_only" => {
+                let p = inner.cfg.dir.join("art-kept-only");
+                match req["value"].as_bool() {
+                    Some(true) => std::fs::write(&p, b"")?,
+                    Some(false) => { let _ = std::fs::remove_file(&p); }
+                    None => {}
+                }
+                Ok(json!({ "value": p.exists() }))
             }
             "clear_hold" => {
                 let tuned = inner.tuned.lock().unwrap().is_some();
@@ -1421,10 +1503,11 @@ mod playout {
                 if let Some(np) = clock.now(now.saturating_sub(0)) {
                     let (title, by) = describe(&archive, &np.track);
                     let starved = inner.queue.lock().unwrap().starved;
+                    let pic = archive.track_art(&np.track).map(|a| hex(&a.hash));
                     *inner.np.lock().unwrap() = json!({
                         "station": station.to_hex(),
                         "state": if starved { "searching" } else { "playing" },
-                        "title": title, "by": by,
+                        "title": title, "by": by, "art": pic,
                         "position_ms": np.offset_ms, "duration_ms": np.duration_ms,
                     });
                 }

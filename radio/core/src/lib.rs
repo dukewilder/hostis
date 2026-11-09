@@ -8,13 +8,14 @@
 //! No rights reserved.
 
 pub mod archive;
+pub mod art;
 pub mod audio;
 pub mod callsign;
 pub mod clock;
 pub mod ingest;
 pub mod keys;
 
-pub use archive::{Archive, Body, Chunk, Entry, SignedEntry, release_message, release_trusted};
+pub use archive::{ArtRef, Archive, Body, Chunk, Entry, SignedEntry, release_message, release_trusted};
 pub use clock::{NowPlaying, Rota};
 pub use audio::{ChunkEncoder, Profile, decode_chunk};
 pub use keys::{StationId, StationKey};
