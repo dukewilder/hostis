@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#030303">
+<title>Pyrate Radio</title>
+<style>
+/*FONTS*/
+:root{--black:#030303;--bone:#ede4ce;--bone-dim:rgba(237,228,206,.82);--bone-faint:rgba(237,228,206,.55);--bone-ghost:rgba(237,228,206,.22);--blood-bright:#ed5555;--panel:#0f0f0f;--carved:'Cinzel',serif;--serif:'IM Fell English',Georgia,serif;--mono:'JetBrains Mono','Courier New',monospace}
+*{box-sizing:border-box}html{background:var(--black);color:var(--bone)}
+body{margin:0;font-family:var(--serif);-webkit-font-smoothing:antialiased;min-height:100vh;display:flex;flex-direction:column}
+.dial{flex:0 0 auto;text-align:center;padding:2.2rem 1.5rem 1.6rem;border-bottom:.5px solid var(--bone-ghost)}
+.eyebrow{font-family:var(--carved);font-size:.7rem;letter-spacing:.4em;color:var(--bone-faint)}
+.flag{display:inline-grid;grid-template-columns:repeat(9,1fr);gap:0 .45em;font-family:var(--mono);font-size:.8rem;line-height:1.15;padding:.9rem 1.1rem;border:.5px solid var(--bone-ghost);margin:1.4rem 0 1.1rem}
+.flag.live{border-color:var(--blood-bright)}.flag span{color:rgba(237,228,206,.12)}.flag b{color:var(--bone);font-weight:700}
+h1{font-weight:400;font-size:2rem;margin:0}.cs{font-family:var(--mono);font-size:.75rem;color:var(--bone-faint);margin:.3rem 0 .8rem}
+.np{font-style:italic;color:var(--bone-dim);font-size:1.15rem;min-height:1.6em}.by{font-family:var(--carved);font-size:.68rem;letter-spacing:.2em;color:var(--bone-faint);min-height:1.2em}
+.air{display:inline-block;border:.5px solid var(--blood-bright);color:var(--blood-bright);font-family:var(--carved);font-size:.7rem;letter-spacing:.35em;padding:.15rem .6rem;margin-bottom:.7rem}
+button{background:none;color:var(--bone);border:.8px solid var(--bone-faint);font-family:var(--carved);letter-spacing:.25em;font-size:.8rem;padding:.9rem 2rem;margin-top:1.2rem;cursor:pointer}
+button:hover{border-color:var(--bone)}
+.log{flex:1;max-width:40rem;width:100%;margin:0 auto;padding:1.4rem 1.5rem 3rem}
+.log h2{font-family:var(--carved);font-weight:400;letter-spacing:.3em;font-size:.9rem;margin:0 0 .3rem}
+.log p{color:var(--bone-faint);font-style:italic;margin:0 0 1rem;font-size:.95rem}
+.row{display:flex;align-items:center;gap:1rem;padding:.85rem 0;border-top:.5px solid var(--bone-ghost);cursor:pointer}
+.row:hover .name,.row.on .name{color:var(--bone)}.name{font-size:1.2rem;color:var(--bone-dim)}
+.row .cs{margin:0;font-size:.65rem;color:var(--bone-ghost)}.row .about{font-style:italic;color:var(--bone-faint);font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .meta{flex:1;min-width:0}.count{font-family:var(--mono);font-weight:700;text-align:right}.count small{display:block;font-family:var(--carved);font-weight:400;font-size:.55rem;letter-spacing:.2em;color:var(--bone-ghost)}
+.mini{display:grid;grid-template-columns:repeat(9,1fr);font-family:var(--mono);font-size:.38rem;line-height:1.1;padding:.3rem .35rem;border:.5px solid var(--bone-ghost);flex:0 0 auto}.mini span{color:rgba(237,228,206,.12)}.mini b{color:var(--bone)}.mini.live{border-color:var(--blood-bright)}
+footer{text-align:center;font-family:var(--carved);font-size:.65rem;letter-spacing:.3em;color:var(--bone-faint);padding:1.5rem}footer a{color:inherit}
+</style>
+</head>
+<body>
+<section class="dial">
+<div class="eyebrow">PYRATE RADIO</div>
+<div id="flag" class="flag"></div>
+<div id="air"></div>
+<h1 id="name">Searching the Log</h1>
+<div id="cs" class="cs"></div>
+<div id="np" class="np"></div>
+<div id="by" class="by"></div>
+<button id="go" hidden>▶ LISTEN</button>
+<audio id="a" preload="none"></audio>
+</section>
+<section class="log">
+<h2>THE LOG</h2>
+<p>Every station on the air, by how many are aboard. Kept by every node, owned by none.</p>
+<div id="rows"></div>
+</section>
+<footer><a href="https://hostis.black/radio/">take the set</a> · no rights reserved</footer>
+<script>
+const $=id=>document.getElementById(id), a=$('a');
+let stations=[], cur=null, playing=false;
+function bits(id){const b=[];for(const c of id){const v=parseInt(c,16);for(let i=3;i>=0;i--)b.push((v>>i)&1)}return b}
+function flag(el,id,live){const b=bits(id);let h='';for(let r=0;r<6;r++)for(let c=0;c<9;c++){const half=c<5?c:8-c;const on=b[(r*5+half)%b.length];h+=on?'<b>1</b>':'<span>0</span>'}el.innerHTML=h;el.classList.toggle('live',!!live)}
+function show(s){cur=s;flag($('flag'),s.id,s.live);$('name').textContent=s.name;$('cs').textContent=s.call_sign+' · '+s.aboard+' aboard';$('air').innerHTML=s.live?'<span class="air">ON AIR</span>':'';$('go').hidden=false;$('go').textContent=playing?'■ STOP':'▶ LISTEN';document.querySelectorAll('.row').forEach(r=>r.classList.toggle('on',r.dataset.id===s.id));now()}
+function tune(s){show(s);a.src='/listen/'+s.id+'.mp3';a.play().then(()=>{playing=true;$('go').textContent='■ STOP'}).catch(()=>{playing=false;$('go').textContent='▶ LISTEN'})}
+$('go').onclick=()=>{if(playing){a.pause();a.removeAttribute('src');a.load();playing=false;$('go').textContent='▶ LISTEN'}else if(cur)tune(cur)};
+async function now(){if(!cur)return;try{const n=await (await fetch('/now/'+cur.id)).json();$('np').textContent=n.live?'Live':(n.title||'');$('by').textContent=n.by||''}catch(e){}}
+async function log(){try{stations=await (await fetch('/log.json')).json()}catch(e){return}
+const rows=$('rows');rows.innerHTML='';for(const s of stations){const r=document.createElement('div');r.className='row';r.dataset.id=s.id;r.innerHTML='<div class="mini"></div><div class="meta"><div class="name"></div><div class="cs"></div><div class="about"></div></div><div class="count"></div>';flag(r.querySelector('.mini'),s.id,s.live);r.querySelector('.name').textContent=s.name+(s.live?'  · ON AIR':'');r.querySelector('.cs').textContent=s.call_sign;r.querySelector('.about').textContent=s.about||'';r.querySelector('.count').innerHTML=s.aboard+'<small>ABOARD</small>';r.onclick=()=>tune(s);rows.appendChild(r)}
+if(!cur&&stations.length)show(stations[0]);else if(cur){const u=stations.find(x=>x.id===cur.id);if(u){cur=u;$('cs').textContent=u.call_sign+' · '+u.aboard+' aboard'}}}
+log();setInterval(log,15000);setInterval(now,5000);
+</script>
+</body>
+</html>

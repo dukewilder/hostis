@@ -7,6 +7,7 @@ pub mod net;
 #[cfg(feature = "playback")]
 pub mod player;
 pub mod store;
+pub mod web;
 
 use std::{
     collections::HashMap,
@@ -64,6 +65,10 @@ pub struct Config {
     /// Ask public resolvers instead of the system's. For processes with no Android context.
     pub public_dns: bool,
 }
+
+/// Relays run by HOSTIS and the crew, used alongside number0's. Any iroh relay will do;
+/// a relay only forwards traffic it cannot read.
+pub const CREW_RELAYS: &[&str] = &["https://relay.hostis.black"];
 
 #[derive(Default)]
 struct Listing {
@@ -421,6 +426,40 @@ impl Inner {
 }
 
 impl Inner {
+    /// The Log as the app and the web listener show it: fresh stations, most aboard first.
+    pub fn stations(&self) -> Value {
+        let now = now_ms();
+        let log = self.log.lock().unwrap();
+        let mut v: Vec<(u64, Value)> = log
+            .iter()
+            .filter(|(_, l)| l.fresh(now))
+            .filter_map(|(id, l)| {
+                let a = l.announce.as_ref()?;
+                let aboard = l.aboard(now);
+                Some((aboard, json!({
+                    "id": id.to_hex(), "call_sign": id.call_sign(), "name": a.name, "about": a.about,
+                    "port": a.port, "live": a.live, "aboard": aboard,
+                    "carriers": l.carriers.values().filter(|(_, s)| now - s < 10 * 60_000).count(),
+                })))
+            })
+            .collect();
+        v.sort_by(|a, b| b.0.cmp(&a.0).then(a.1["name"].as_str().cmp(&b.1["name"].as_str())));
+        json!(v.into_iter().map(|x| x.1).collect::<Vec<_>>())
+    }
+
+    /// Counts a listener who has no node of their own, such as a browser tab.
+    pub fn count_guest(&self, station: &StationId, guest: &[u8; 32]) {
+        let hour = now_ms() / 3_600_000;
+        let mut h = blake3::Hasher::new_keyed(&self.secret);
+        h.update(guest);
+        h.update(&hour.to_le_bytes());
+        self.log.lock().unwrap().entry(*station).or_default().sketches.entry(hour).or_default().add(h.finalize().as_bytes());
+    }
+
+    pub fn archive(&self, id: &StationId) -> Option<Archive> {
+        self.store.lock().unwrap().logs.get(id).cloned()
+    }
+
     /// ON AIR. Samples from `source` become six-second Talk chunks and Live entries
     /// until the broadcast is ended. `source` is the microphone, or a file played in real time.
     pub fn go_live(self: &Arc<Self>, station: StationId, file: Option<PathBuf>) -> Result<()> {
@@ -517,7 +556,13 @@ impl Node {
         let proto = Proto(Arc::new(Mutex::new(None)));
         let public_dns = cfg.public_dns;
         let (endpoint, router, gossip) = rt.block_on(async {
-            let mut b = Endpoint::builder(presets::N0).secret_key(secret);
+            let relays = iroh::defaults::prod::default_relay_map();
+            for r in CREW_RELAYS {
+                if let Ok(url) = r.parse::<iroh::RelayUrl>() {
+                    relays.insert(url.clone(), Arc::new(iroh::RelayConfig::from(url)));
+                }
+            }
+            let mut b = Endpoint::builder(presets::N0).secret_key(secret).relay_mode(iroh::RelayMode::Custom(relays));
             if public_dns {
                 b = b.dns_resolver(
                     iroh::dns::DnsResolver::builder()
@@ -722,25 +767,7 @@ impl Node {
                 let live = inner.live.lock().unwrap().map(|(s, t)| json!({ "station": s.to_hex(), "since_ms": now_ms() - t }));
                 Ok(json!({ "node": self.id().to_string(), "mine": mine, "jobs": jobs, "tuned": tuned, "now": np, "live": live }))
             }
-            "stations" => {
-                let now = now_ms();
-                let log = inner.log.lock().unwrap();
-                let mut v: Vec<(u64, Value)> = log
-                    .iter()
-                    .filter(|(_, l)| l.fresh(now))
-                    .filter_map(|(id, l)| {
-                        let a = l.announce.as_ref()?;
-                        let aboard = l.aboard(now);
-                        Some((aboard, json!({
-                            "id": id.to_hex(), "call_sign": id.call_sign(), "name": a.name, "about": a.about,
-                            "port": a.port, "live": a.live, "aboard": aboard,
-                            "carriers": l.carriers.values().filter(|(_, s)| now - s < 10 * 60_000).count(),
-                        })))
-                    })
-                    .collect();
-                v.sort_by(|a, b| b.0.cmp(&a.0).then(a.1["name"].as_str().cmp(&b.1["name"].as_str())));
-                Ok(json!(v.into_iter().map(|x| x.1).collect::<Vec<_>>()))
-            }
+            "stations" => Ok(inner.stations()),
             "tune" => {
                 let st = station()?;
                 say(&format!("tune {}", st.call_sign()));
