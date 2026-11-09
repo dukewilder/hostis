@@ -20,12 +20,15 @@ pub enum Request {
     /// Signed entries from `from` onward, as postcard bytes.
     Log { station: StationId, from: u64 },
     Chunk { hash: Hash },
+    /// A hop of a private route or a stem. See `hop.rs`.
+    Hop(Vec<u8>),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Response {
     Entries(Vec<Vec<u8>>),
     Chunk(Option<Vec<u8>>),
+    Hop(Vec<u8>),
 }
 
 /// A station's card in the Log, signed by the station.
@@ -39,6 +42,8 @@ pub struct Announce {
     pub live: bool,
     pub at_ms: u64,
     pub pow: u64,
+    /// When a deputy signs: the master-signed entry appointing it.
+    pub proof: Option<Vec<u8>>,
     #[serde(with = "serde_bytes64")]
     pub sig: [u8; 64],
 }
@@ -46,7 +51,7 @@ pub struct Announce {
 impl Announce {
     fn message(&self) -> Vec<u8> {
         let mut m = b"pyrate/announce/v1\0".to_vec();
-        let body = (&self.station, self.head, &self.name, &self.about, &self.port, self.live, self.at_ms, self.pow);
+        let body = (&self.station, self.head, &self.name, &self.about, &self.port, self.live, self.at_ms, self.pow, &self.proof);
         m.extend(postcard::to_stdvec(&body).unwrap_or_default());
         m
     }
@@ -57,7 +62,21 @@ impl Announce {
     }
 
     pub fn verify(&self) -> bool {
-        pow_ok(&self.station, self.pow) && self.station.verify(&self.message(), &self.sig).is_ok()
+        if !pow_ok(&self.station, self.pow) {
+            return false;
+        }
+        let signer = match &self.proof {
+            None => self.station,
+            Some(bytes) => {
+                let Ok(p) = pyrate_core::SignedEntry::from_bytes(bytes) else { return false };
+                let pyrate_core::Body::Deputy { key, .. } = &p.entry.body else { return false };
+                if p.entry.station != self.station || p.verify().is_err() {
+                    return false;
+                }
+                StationId(*key)
+            }
+        };
+        signer.verify(&self.message(), &self.sig).is_ok()
     }
 }
 
@@ -173,7 +192,7 @@ mod tests {
         let k = StationKey::generate().unwrap();
         let a = Announce {
             station: k.id(), head: 3, name: "HOSTIS".into(), about: "".into(), port: None,
-            live: false, at_ms: 1, pow: pow_find(&k.id()), sig: [0; 64],
+            live: false, at_ms: 1, pow: pow_find(&k.id()), proof: None, sig: [0; 64],
         }
         .sign(&k);
         assert!(a.verify());

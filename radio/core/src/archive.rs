@@ -63,7 +63,31 @@ pub enum Body {
     Strike,
     /// The station's standing schedule. The latest one rules.
     Rota(crate::clock::Rota),
+    /// Master only: lets another key broadcast for the station. A phone holds a deputy;
+    /// the 24 words of the master stay off it.
+    Deputy { key: [u8; 32], label: String },
+    /// Master only: a deputy's key stops counting, from this entry on.
+    Revoke { key: [u8; 32] },
+    /// An entry written by a deputy. The signature on it is the deputy's.
+    Deputed { by: [u8; 32], body: Box<Body> },
 }
+
+impl Body {
+    /// What the entry says, whoever signed it.
+    pub fn inner(&self) -> &Body {
+        match self {
+            Body::Deputed { body, .. } => body.inner(),
+            b => b,
+        }
+    }
+
+    /// Acts only the master key may sign.
+    pub fn master_only(&self) -> bool {
+        matches!(self, Body::Deputy { .. } | Body::Revoke { .. } | Body::Strike | Body::Deputed { .. })
+    }
+}
+
+
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
@@ -74,6 +98,13 @@ pub struct Entry {
     /// Milliseconds since the Unix epoch, by the station's clock.
     pub at_ms: u64,
     pub body: Body,
+}
+
+impl Entry {
+    /// What the entry says, whoever signed it.
+    pub fn body(&self) -> &Body {
+        self.body.inner()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -95,8 +126,13 @@ impl SignedEntry {
         Ok(Self { entry, sig })
     }
 
+    /// Checks the signature against the key the entry claims: the station's, or a deputy's.
     pub fn verify(&self) -> Result<()> {
-        self.entry.station.verify(&Self::message(&self.entry)?, &self.sig)
+        let signer = match &self.entry.body {
+            Body::Deputed { by, .. } => StationId(*by),
+            _ => self.entry.station,
+        };
+        signer.verify(&Self::message(&self.entry)?, &self.sig)
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
@@ -119,11 +155,12 @@ pub struct Archive {
     station: StationId,
     entries: Vec<SignedEntry>,
     head: Hash,
+    deputies: std::collections::HashSet<[u8; 32]>,
 }
 
 impl Archive {
     pub fn new(station: StationId) -> Self {
-        Self { station, entries: Vec::new(), head: [0; 32] }
+        Self { station, entries: Vec::new(), head: [0; 32], deputies: Default::default() }
     }
 
     pub fn station(&self) -> StationId {
@@ -150,6 +187,11 @@ impl Archive {
         matches!(self.entries.last(), Some(e) if e.entry.body == Body::Strike)
     }
 
+    /// Deputy keys currently allowed to write for the station.
+    pub fn deputies(&self) -> Vec<[u8; 32]> {
+        self.deputies.iter().copied().collect()
+    }
+
     /// Checks an entry against the log and appends it. Nothing invalid gets in.
     pub fn append(&mut self, signed: SignedEntry) -> Result<()> {
         let e = &signed.entry;
@@ -170,7 +212,21 @@ impl Archive {
                 return Err(Error::Time);
             }
         }
+        if let Body::Deputed { by, body } = &e.body {
+            if !self.deputies.contains(by) || body.master_only() {
+                return Err(Error::Signature);
+            }
+        }
         signed.verify()?;
+        match &e.body {
+            Body::Deputy { key, .. } => {
+                self.deputies.insert(*key);
+            }
+            Body::Revoke { key } => {
+                self.deputies.remove(key);
+            }
+            _ => {}
+        }
         self.head = signed.hash()?;
         self.entries.push(signed);
         Ok(())
@@ -186,12 +242,12 @@ impl Archive {
 
     /// The colours currently flown, if any.
     pub fn colours(&self) -> Option<&Body> {
-        self.entries.iter().rev().map(|e| &e.entry.body).find(|b| matches!(b, Body::Colours { .. }))
+        self.entries.iter().rev().map(|e| e.entry.body()).find(|b| matches!(b, Body::Colours { .. }))
     }
 
     /// The rota in force, or the default: the whole library, shuffled, all day.
     pub fn rota(&self) -> crate::clock::Rota {
-        self.entries.iter().rev().find_map(|e| match &e.entry.body {
+        self.entries.iter().rev().find_map(|e| match e.entry.body() {
             Body::Rota(r) => Some(r.clone()),
             _ => None,
         }).unwrap_or_default()
@@ -201,13 +257,13 @@ impl Archive {
     pub fn library(&self) -> Result<Vec<(Hash, &SignedEntry)>> {
         let mut withdrawn = std::collections::HashSet::new();
         for e in &self.entries {
-            if let Body::Withdraw { track } = &e.entry.body {
+            if let Body::Withdraw { track } = e.entry.body() {
                 withdrawn.insert(*track);
             }
         }
         let mut out = Vec::new();
         for e in &self.entries {
-            if matches!(e.entry.body, Body::Track { .. }) {
+            if matches!(e.entry.body(), Body::Track { .. }) {
                 let h = e.hash()?;
                 if !withdrawn.contains(&h) {
                     out.push((h, e));

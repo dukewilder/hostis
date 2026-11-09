@@ -32,6 +32,8 @@ pub extern "C" fn pyrate_start(dir: *const c_char, bootstrap: *const c_char) -> 
         lantern: false,
         bootstrap,
         public_dns: cfg!(target_os = "android"),
+        private: true,
+        ballast: 1_000_000_000,
     };
     match Node::start(cfg) {
         Ok(n) => {

@@ -21,7 +21,7 @@ fn main() -> anyhow::Result<()> {
     let seeds: Vec<String> = args.windows(2).filter(|w| w[0] == "--seed").map(|w| w[1].clone()).collect();
     std::fs::create_dir_all(&dir)?;
 
-    let node = Node::start(Config { dir: dir.clone(), quota, lantern: true, bootstrap, public_dns: args.iter().any(|a| a == "--public-dns") })?;
+    let node = Node::start(Config { dir: dir.clone(), quota, lantern: true, bootstrap, public_dns: args.iter().any(|a| a == "--public-dns"), private: false, ballast: 0 })?;
     println!("LANTERN LIT");
     // --http 127.0.0.1:8080 serves the web listener; --relay 127.0.0.1:3340 runs a relay. Both
     // bind to loopback by default: a tunnel puts them on the public internet, not this machine.
