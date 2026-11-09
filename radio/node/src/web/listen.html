@@ -197,12 +197,12 @@ footer{text-align:center;font-family:var(--carved);font-size:.65rem;letter-spaci
 <p>The stations this Lantern raises. Hundreds more are on the air, and the app hears them all.</p>
 <div id="rows"></div>
 <h2 style="margin-top:2.6rem">HEAR EVERY STATION</h2>
-<p>Pyrate Radio is an app with no store, no account and no server. Every phone that plays it carries the stations it hears, so nothing on the air can be taken down from one place. <a href="https://hostis.black/radio/" style="color:inherit">Take the set</a>.</p>
+<p>Pyrate Radio is an app with no store, no account and no server. Every phone that plays it carries the stations it hears, so nothing on the air can be taken down from one place. <a href="https://pyrateradio.hostis.black/" style="color:inherit">Take the set</a>.</p>
 <h2 style="margin-top:2.6rem">RAISE YOUR OWN</h2>
 <p>Open the app, go to Colours, name a station and drop recordings in. It plays all day and all night. To put your stations on your own site the way this page does, run a Lantern with <code>--http</code> and point a name at it. Every station also streams to any web page with one line:</p>
 <pre id="embed" style="white-space:pre-wrap;word-break:break-all;font-family:var(--mono);font-size:.7rem;color:var(--bone-faint);border:.5px solid var(--bone-ghost);padding:.8rem"></pre>
 </section>
-<footer><a href="https://hostis.black/radio/">take the set</a> · no rights reserved</footer>
+<footer><a href="https://pyrateradio.hostis.black/">take the set</a> · no rights reserved</footer>
 <script>
 const $=id=>document.getElementById(id), a=$('a');
 let stations=[], cur=null, playing=false;
@@ -218,7 +218,7 @@ const rows=$('rows');rows.innerHTML='';for(const s of stations){const r=document
 if(!cur&&stations.length)show(stations[0]);else if(cur){const u=stations.find(x=>x.id===cur.id);if(u){cur=u;$('cs').textContent=u.call_sign+' · '+u.aboard+' aboard'}}}
 // A station link (#<id>) tunes here if this Lantern carries the station, and offers the app if not.
 function followLink(){const id=(location.hash||'').slice(1);if(!/^[0-9a-f]{64}$/.test(id))return;const s=stations.find(x=>x.id===id);const box=$('elsewhere');if(s){box.hidden=true;show(s);return}
-box.innerHTML='Someone passed you a station that plays in the app.<br><br><a href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url='+encodeURIComponent('https://hostis.black/radio/')+';end">OPEN IN PYRATE RADIO</a> &nbsp;·&nbsp; <a href="https://hostis.black/radio/">TAKE THE SET</a>';box.hidden=false}
+box.innerHTML='Someone passed you a station that plays in the app.<br><br><a href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url='+encodeURIComponent('https://pyrateradio.hostis.black/')+';end">OPEN IN PYRATE RADIO</a> &nbsp;·&nbsp; <a href="https://pyrateradio.hostis.black/">TAKE THE SET</a>';box.hidden=false}
 log().then(followLink);window.addEventListener('hashchange',followLink);setInterval(log,15000);setInterval(now,5000);
 </script>
 </body>

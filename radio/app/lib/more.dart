@@ -451,7 +451,7 @@ Future<void> tapeIt(BuildContext context) async {
 
 void shareStation(Map s) {
   ship.invokeMethod('share_text', {
-    'text': 'Tune in to ${s['name']} on Pyrate Radio: https://hostis.black/radio/#${s['id']}',
+    'text': 'Tune in to ${s['name']} on Pyrate Radio: https://pyrateradio.hostis.black/listen/#${s['id']}',
   });
 }
 
