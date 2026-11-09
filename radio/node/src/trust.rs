@@ -1,9 +1,9 @@
-//! Updates and refusal lists, carried as stations.
+//! Updates carried as a station, and each node's own choice of what it carries.
 //!
 //! The Releases station is release key one; its log holds versions of the app, each signed by
-//! two of the three release keys. The HOSTIS refusal list is release key two; its log holds
-//! stations that nodes following it will not list, play or carry. Both spread like any station,
-//! so neither needs a server, and neither can be taken down from one place.
+//! two of the three release keys. It spreads like any station, so it needs no server and
+//! cannot be taken down from one place. There is no shared list of stations to refuse: each
+//! node decides for itself, privately, and tells no one.
 //!
 //! No rights reserved.
 
@@ -31,53 +31,21 @@ impl Inner {
         self.cfg.release_keys.first().map(|k| StationId(*k))
     }
 
-    fn list_station(&self) -> Option<StationId> {
-        self.cfg.release_keys.get(1).map(|k| StationId(*k))
-    }
-
     pub(crate) fn special_ids(&self) -> Vec<StationId> {
-        self.release_station().into_iter().chain(self.list_station()).collect()
+        self.release_station().into_iter().collect()
     }
 
     pub(crate) fn special(&self, id: &StationId) -> bool {
         self.special_ids().contains(id)
     }
 
-    pub fn following(&self) -> bool {
-        !self.cfg.dir.join("unfollow-lists").exists()
-    }
-
-    pub fn set_following(&self, on: bool) -> Result<()> {
-        let p = self.cfg.dir.join("unfollow-lists");
-        if on {
-            let _ = std::fs::remove_file(p);
-        } else {
-            std::fs::write(p, b"")?;
-        }
-        Ok(())
-    }
-
-    /// Stations refused by the lists this node follows.
+    /// Stations this node will not list, play or carry: the owner's marooned stations, plus
+    /// any ids a Lantern operator puts in maroon.txt (one per line). Kept on this device only.
     pub fn refused(&self) -> HashSet<StationId> {
-        let mut out = HashSet::new();
-        if !self.following() {
-            return out;
-        }
-        let Some(list) = self.list_station() else { return out };
-        let store = self.store.lock().unwrap();
-        let Some(a) = store.logs.get(&list) else { return out };
-        for e in a.entries() {
-            match e.entry.body() {
-                Body::Refuse { station, .. } => {
-                    out.insert(StationId(*station));
-                }
-                Body::Unrefuse { station } => {
-                    out.remove(&StationId(*station));
-                }
-                _ => {}
-            }
-        }
-        out
+        let (_, marooned) = self.chart();
+        let file = std::fs::read_to_string(self.cfg.dir.join("maroon.txt")).unwrap_or_default();
+        marooned.iter().map(String::as_str).chain(file.lines().map(|l| l.split_whitespace().next().unwrap_or("")))
+            .filter_map(|h| StationId::from_hex(h).ok()).collect()
     }
 
     /// Cheap check for the request path, which already holds the store lock.
@@ -85,7 +53,7 @@ impl Inner {
         false
     }
 
-    /// A refused station's recordings leave the hold and the ballast.
+    /// A marooned station's recordings leave the hold and the ballast.
     pub(crate) fn drop_refused(&self) {
         let refused = self.refused();
         if refused.is_empty() {
@@ -135,17 +103,12 @@ impl Inner {
         Ok(json!({ "available": true, "version": version, "code": code, "notes": notes, "path": path.to_string_lossy() }))
     }
 
-    /// What a Lantern holding the Releases or refusal-list deputy does on its own: publish what
-    /// the operator drops in its folders.
+    /// What a Lantern holding the Releases deputy does on its own: publish what the operator
+    /// drops in its releases folder.
     pub(crate) async fn lantern_duties(self: &Arc<Self>) {
         if let Some(st) = self.release_station().filter(|s| self.store.lock().unwrap().keys.contains_key(s)) {
             if let Err(e) = self.publish_releases(st) {
                 say(&format!("releases: {e}"));
-            }
-        }
-        if let Some(st) = self.list_station().filter(|s| self.store.lock().unwrap().keys.contains_key(s)) {
-            if let Err(e) = self.publish_refusals(st) {
-                say(&format!("refusals: {e}"));
             }
         }
     }
@@ -192,31 +155,6 @@ impl Inner {
             }
             s.write(st, now_ms(), Body::Release { version: version.into(), code, sha256: sha, size: apk.len() as u64, chunks, notes, sigs })?;
             say(&format!("published release {version} ({code})"));
-        }
-        Ok(())
-    }
-
-    /// refusals.txt: one station id per line, a space, then the reason. Removing a line unrefuses.
-    fn publish_refusals(&self, st: StationId) -> Result<()> {
-        let Ok(text) = std::fs::read_to_string(self.cfg.dir.join("refusals.txt")) else { return Ok(()) };
-        let wanted: Vec<(StationId, String)> = text.lines().filter_map(|l| {
-            let (id, why) = l.trim().split_once(' ').unwrap_or((l.trim(), ""));
-            Some((StationId::from_hex(id).ok()?, why.to_string()))
-        }).collect();
-        let now: HashSet<StationId> = {
-            let follow = self.following();
-            let r = if follow { self.refused() } else { HashSet::new() };
-            r
-        };
-        let mut s = self.store.lock().unwrap();
-        for (id, why) in &wanted {
-            if !now.contains(id) {
-                s.write(st, now_ms(), Body::Refuse { station: id.0, reason: why.clone() })?;
-            }
-        }
-        let keep: HashSet<StationId> = wanted.iter().map(|(i, _)| *i).collect();
-        for id in now.difference(&keep) {
-            s.write(st, now_ms(), Body::Unrefuse { station: id.0 })?;
         }
         Ok(())
     }

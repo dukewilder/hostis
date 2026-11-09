@@ -3,8 +3,8 @@
 //! release init <folder>
 //!     Makes the three release keys. Writes each as 24 words to its own file, the public keys to
 //!     release_keys.txt (these go into the app), and a lantern-genesis folder holding the
-//!     Releases station and the HOSTIS refusal list, each with a deputy key for the Lantern.
-//!     The deputies can publish; only signed releases are ever installed.
+//!     Releases station with a deputy key for the Lantern. The deputy can publish; only
+//!     releases signed by two of the three keys are ever installed.
 //!
 //! release sign <words file> <key number 1-3> <apk> <version code>
 //!     Prints one signature line for the .sigs file beside the APK.
@@ -33,7 +33,6 @@ fn main() -> anyhow::Result<()> {
             let mut store = Store::open(&out.join("lantern-genesis"), 1 << 30)?;
             for (k, name, about) in [
                 (&keys[0], "Pyrate Radio Releases", "New versions of the app, signed by two of three release keys."),
-                (&keys[1], "HOSTIS Refusals", "Stations HOSTIS will not list, play or carry. Following it is a choice."),
             ] {
                 let deputy = StationKey::generate()?;
                 let mut log = Archive::new(k.id());

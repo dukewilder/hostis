@@ -133,7 +133,7 @@ The colours make the argument. The radio is a press, and a press carries whateve
 - **No inducement.** HOSTIS's own stations carry public domain and HOSTIS's own words. The project does not advertise the app as a way to get anyone's catalogue. The case law on file sharing turned on exactly that.
 - **No images at launch.** Audio, text and the key-drawn flag. Nothing anyone can upload as a picture means the worst material on any open network has nowhere to sit.
 - **Strike colours is honoured.** A station that strikes its colours signs a strike notice, and every honest node drops its archive. The sign rite says it: the mark stays as long as the hand that made it chooses to honour it.
-- **The crew chooses what it carries.** Every node can refuse to carry any station. Nodes can subscribe to signed refusal lists published by anyone they trust. HOSTIS publishes one, for material that is illegal everywhere, and takes reports at hostisblack@pm.me. The HOSTIS list is on by default. Every list, that one included, can be turned off by the owner of the node and nobody else.
+- **The crew chooses what it carries.** Every node can maroon any station, which hides it, stops it being carried and drops what was held. The choice stays on that device and is told to no one. There is no shared list and no one to report to: HOSTIS answers for HOSTIS's stations and its own Lantern, and every other hand answers for its own.
 - **The truth about addresses.** Peers can see each other's IP address, as on BitTorrent. The app says so on the first Raise colours screen, in one sentence, and points to the Practice for those whose threat model needs a VPN or Tor. A route through Tor (Arti) is the first privacy feature after launch.
 - **United States export.** The app uses standard published encryption. Before the first public release, the notice to the Bureau of Industry and Security and the NSA for publicly available encryption source code is sent by email. It is one email.
 
@@ -215,9 +215,9 @@ Only what cannot be done from here:
 - **Revoked deputies cannot sign cards** that any node holding the log will accept.
 - **Guards are spread.** A broadcaster's first hop avoids the well-known Lanterns, so no one machine holds every broadcaster's address.
 
-## XIV. Releases and refusals (9 November 2026)
+## XIV. Releases (9 November 2026)
 
 - **Releases are a station.** Release key one is the Releases station; its log carries versions of the app as chunks, each trusted only when two of the three release keys have signed it. Every node pins it, so an update spreads phone to phone with nothing to block. Phones offer a release and install it only on the owner's tap.
 - **Dylan holds all three release keys for now**, as word sheets kept in three places. A second and third holder can take one each later without changing a line of code.
-- **The refusal list is a station.** Release key two is the HOSTIS refusal list; its entries refuse or unrefuse stations. Nodes that follow it will not list, play, carry or serve those stations, and drop what they carried. Following is on by default and every listener can turn it off. The list hides; it deletes nothing from anyone who does not follow it.
-- **The Lantern publishes from folders**: `releases/` for signed builds, `refusals.txt` for the list. The keys that sign never sit on it.
+- **The Lantern publishes from a folder**: `releases/` for signed builds. The keys that sign never sit on it.
+- **No refusal list.** One was built and taken out. A shared list is a lever, and whoever holds a lever gets leaned on. Each node maroons for itself, privately; a Lantern operator adds ids to `maroon.txt` on his own box.

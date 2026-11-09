@@ -1,12 +1,12 @@
-# Releases and the refusal list
+# Releases
 
-Both travel as stations, so neither needs a server.
+Releases travel as a station, so they need no server.
 
 **Once, offline, on the keyholder's machine:**
 
     release init release-keys
 
-This makes three release keys as 24 words each (`release-key-1.txt` to `-3.txt`), `release_keys.txt` (the public keys, which go into the app), and `lantern-genesis` (the Releases station and the HOSTIS refusal list, each with a deputy key for the Lantern). Write each word file down, keep the three in three places, and delete the files.
+This makes three release keys as 24 words each (`release-key-1.txt` to `-3.txt`), `release_keys.txt` (the public keys, which go into the app), and `lantern-genesis` (the Releases station with a deputy key for the Lantern). Write each word file down, keep the three in three places, and delete the files.
 
 **Each release:**
 
@@ -20,4 +20,4 @@ This makes three release keys as 24 words each (`release-key-1.txt` to `-3.txt`)
 
 A release with fewer than two good signatures is never published and never installed. Phones install only on the owner's tap, and Android asks again.
 
-**The refusal list:** one station id per line in the Lantern's `refusals.txt`, a space, then the reason. Removing a line lifts the refusal. Following the list is on by default and every listener can turn it off.
+**What a Lantern carries** is its operator's choice: one station id per line in its `maroon.txt` and it will not list, play or carry that station. The file stays on the box and is published nowhere.
