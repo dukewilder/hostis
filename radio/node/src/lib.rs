@@ -77,7 +77,7 @@ pub struct Config {
     /// Bytes donated to the fleet as ballast, filled only when the app says conditions allow.
     pub ballast: u64,
     /// The three release keys. The first is also the Releases station, the second the
-    /// HOSTIS refusal list. Empty means this build trusts no updates and follows no list.
+    /// Empty means this build trusts no updates and follows no list.
     pub release_keys: Vec<[u8; 32]>,
 }
 
@@ -581,11 +581,11 @@ impl Inner {
             .filter_map(|(id, l)| {
                 let a = l.announce.as_ref()?;
                 let aboard = l.aboard(now);
-                if refused.contains(id) || self.special(id) {
-                    return None;
-                }
                 let hex = id.to_hex();
                 let is_marooned = marooned.contains(&hex);
+                if (refused.contains(id) && !is_marooned) || self.special(id) {
+                    return None;
+                }
                 if is_marooned && !marooned_too {
                     return None;
                 }
@@ -1086,6 +1086,7 @@ impl Node {
                 let st = station()?;
                 let kind = if cmd == "keep" { "kept" } else { "marooned" };
                 inner.set_chart(&st.to_hex(), kind, req["value"].as_bool().unwrap_or(true))?;
+                inner.drop_refused();
                 Ok(json!({ "ok": true }))
             }
             "clear_hold" => {
@@ -1099,7 +1100,7 @@ impl Node {
             "tune" => {
                 let st = station()?;
                 if inner.refused().contains(&st) {
-                    anyhow::bail!("refused by a list you follow");
+                    anyhow::bail!("you marooned this station; take it back first");
                 }
                 say(&format!("tune {}", st.call_sign()));
                 *inner.tuned.lock().unwrap() = Some(Tuned { station: st, since: now_ms(), playhead: None });
@@ -1163,12 +1164,6 @@ impl Node {
                 Ok(v) => v,
                 Err(e) => json!({ "available": false, "why": e.to_string() }),
             }),
-            "lists" => {
-                if let Some(on) = req["follow"].as_bool() {
-                    inner.set_following(on)?;
-                }
-                Ok(json!({ "follow": inner.following(), "refused": inner.refused().len() }))
-            }
             "clear_job" => {
                 inner.jobs.lock().unwrap().remove(&req["job"].as_u64().unwrap_or(0));
                 Ok(json!({ "ok": true }))

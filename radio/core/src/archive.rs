@@ -73,9 +73,6 @@ pub enum Body {
     /// A new version of the app, carried like a recording. Phones trust it only when two of
     /// the three release keys have signed it, whoever wrote the entry.
     Release { version: String, code: u32, sha256: [u8; 32], size: u64, chunks: Vec<Chunk>, notes: String, sigs: Vec<(u8, Vec<u8>)> },
-    /// A refusal list's entry: nodes that follow the list will not list, play or carry the station.
-    Refuse { station: [u8; 32], reason: String },
-    Unrefuse { station: [u8; 32] },
 }
 
 /// What each release key signs.
