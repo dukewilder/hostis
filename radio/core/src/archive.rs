@@ -61,6 +61,8 @@ pub enum Body {
     Live { chunk: Chunk, channels: u8, bitrate: u32 },
     /// The end of the station. Honest nodes drop its archive.
     Strike,
+    /// The station's standing schedule. The latest one rules.
+    Rota(crate::clock::Rota),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -185,6 +187,14 @@ impl Archive {
     /// The colours currently flown, if any.
     pub fn colours(&self) -> Option<&Body> {
         self.entries.iter().rev().map(|e| &e.entry.body).find(|b| matches!(b, Body::Colours { .. }))
+    }
+
+    /// The rota in force, or the default: the whole library, shuffled, all day.
+    pub fn rota(&self) -> crate::clock::Rota {
+        self.entries.iter().rev().find_map(|e| match &e.entry.body {
+            Body::Rota(r) => Some(r.clone()),
+            _ => None,
+        }).unwrap_or_default()
     }
 
     /// Tracks in the library, oldest first, minus any withdrawn. Each with its entry hash.
