@@ -32,6 +32,11 @@ async fn bind() -> Result<Endpoint> {
     if std::env::var_os("PYRATE_SYSTEM_ROOTS").is_some() {
         b = b.ca_roots_config(CaTlsConfig::system());
     }
+    // A bare binary on Android has no JVM, so the system DNS settings cannot be read.
+    // The app will have one; the spike asks the public resolvers instead.
+    if cfg!(target_os = "android") || std::env::var_os("PYRATE_PUBLIC_DNS").is_some() {
+        b = b.dns_resolver(iroh::dns::DnsResolver::builder().with_nameserver("1.1.1.1:53".parse()?, iroh::dns::DnsProtocol::Udp).with_nameserver("8.8.8.8:53".parse()?, iroh::dns::DnsProtocol::Udp).build());
+    }
     if std::env::var_os("HTTPS_PROXY").is_some() || std::env::var_os("https_proxy").is_some() {
         b = b.proxy_from_env();
     }
