@@ -45,6 +45,12 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="https" android:host="hostis.black" android:pathPrefix="/radio"/>
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="pyrateradio.hostis.black"/>
+            </intent-filter>
         </activity>
         <!-- The launcher shows one of these: the skull, or the plain disguise. -->
         <activity-alias
