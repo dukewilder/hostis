@@ -37,7 +37,10 @@ class PlaybackService : Service() {
             .setContentIntent(open)
             .setOngoing(true)
             .build()
-        if (Build.VERSION.SDK_INT >= 29) {
+        val live = intent?.getBooleanExtra("live", false) == true
+        if (Build.VERSION.SDK_INT >= 30 && live) {
+            startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+        } else if (Build.VERSION.SDK_INT >= 29) {
             startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         } else {
             startForeground(1, n)

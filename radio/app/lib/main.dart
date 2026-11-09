@@ -562,6 +562,48 @@ class _ColoursPageState extends State<ColoursPage> {
     ]);
   }
 
+  List<Widget> _onAir(String id) {
+    final live = widget.radio.status['live'] as Map<String, dynamic>?;
+    final on = live != null && live['station'] == id;
+    return [
+      Text('ON AIR', style: carved(14, color: bloodBright)),
+      const SizedBox(height: 8),
+      Text('Go live from this phone. Listeners hear you ten to twenty seconds behind, and when you stop, the clock takes back the hour.',
+          style: serif(14, color: boneFaint, italic: true)),
+      const SizedBox(height: 12),
+      if (on)
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(border: Border.all(color: bloodBright, width: 0.8)),
+            child: Text('ON AIR  ${fmtTime((live['since_ms'] as num).toInt())}', style: mono(13, color: bloodBright, weight: FontWeight.w700)),
+          ),
+          const SizedBox(width: 12),
+          button('END BROADCAST', () {
+            Native.call({'cmd': 'end_live'});
+            _service.invokeMethod('live', {'on': false}).catchError((_) {});
+          }),
+        ])
+      else
+        Row(children: [
+          button('GO ON AIR', () async {
+            final ok = await _service.invokeMethod<bool>('mic').catchError((_) => false) ?? false;
+            if (!ok) {
+              setState(() => error = 'Allow the microphone, then press again.');
+              return;
+            }
+            final r = Native.call({'cmd': 'go_live', 'station': id});
+            if (r is Map && r['error'] != null) {
+              setState(() => error = r['error']);
+            } else {
+              _service.invokeMethod('live', {'on': true}).catchError((_) {});
+            }
+          }, color: bloodBright),
+        ]),
+      if (error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(error!, style: serif(14, color: bloodBright))),
+    ];
+  }
+
   List<Widget> _station(Map<String, dynamic> mine) {
     final id = mine['id'] as String;
     loadLibrary(id, (mine['tracks'] as num?)?.toInt() ?? 0);
@@ -579,6 +621,8 @@ class _ColoursPageState extends State<ColoursPage> {
           ]),
         ),
       ]),
+      const SizedBox(height: 26),
+      ..._onAir(id),
       const SizedBox(height: 26),
       Text('ADD RECORDINGS', style: carved(14)),
       const SizedBox(height: 8),
