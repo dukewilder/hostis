@@ -51,4 +51,5 @@ flutter {
 
 dependencies {
     implementation("androidx.core:core:1.13.1")
+    implementation("androidx.media:media:1.7.0")
 }

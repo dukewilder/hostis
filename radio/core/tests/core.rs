@@ -177,7 +177,7 @@ fn ingest_resamples_and_downmixes() {
     assert_eq!(got.chunks.len(), 2);
     let pcm = decode_chunk(&got.chunks[0].1, 1).unwrap();
     let r = rms(&pcm[9600..]);
-    assert!(r > 8000.0, "tone survives the trip, rms {r}");
+    assert!(r > 4000.0, "tone survives the trip at the house level, rms {r}");
 
     let music = ingest(&wav, Profile::Music).unwrap();
     assert_eq!(music.channels, 2);

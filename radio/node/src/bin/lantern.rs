@@ -4,7 +4,9 @@
 //!
 //! lantern --dir <data> [--quota-gb 20] [--bootstrap <id>,<id>] [--public-dns]
 //!         [--seed "Name|About|folder|music"]...
-//!         [--carry-all]   carry every station in the Log, not just this Lantern's own
+//!         [--carry-own]   carry only this Lantern's own stations (by default it carries the whole Log;
+//!                         maroon.txt, one station id per line, takes any station off this Lantern)
+//!         A seed folder's bell.mp3 (or .wav, .ogg) plays on the hour; replace it and the new one takes over.
 //!         A seed folder's station.jpg and banner.jpg become the station's art.
 
 use std::{collections::HashSet, path::PathBuf, time::Duration};
@@ -23,7 +25,7 @@ fn main() -> anyhow::Result<()> {
     let seeds: Vec<String> = args.windows(2).filter(|w| w[0] == "--seed").map(|w| w[1].clone()).collect();
     std::fs::create_dir_all(&dir)?;
 
-    let node = Node::start(Config { dir: dir.clone(), quota, lantern: true, carry_all: args.iter().any(|a| a == "--carry-all"), bootstrap, public_dns: args.iter().any(|a| a == "--public-dns"), private: false, ballast: 0, release_keys: get("--release-keys").map(|p| std::fs::read_to_string(p).unwrap_or_default().lines().filter_map(|l| pyrate_core::StationId::from_hex(l.trim()).ok().map(|i| i.0)).collect()).unwrap_or_default() })?;
+    let node = Node::start(Config { dir: dir.clone(), quota, lantern: true, carry_all: !args.iter().any(|a| a == "--carry-own"), bootstrap, public_dns: args.iter().any(|a| a == "--public-dns"), private: false, ballast: 0, release_keys: get("--release-keys").map(|p| std::fs::read_to_string(p).unwrap_or_default().lines().filter_map(|l| pyrate_core::StationId::from_hex(l.trim()).ok().map(|i| i.0)).collect()).unwrap_or_default() })?;
     println!("LANTERN LIT");
     // --http 127.0.0.1:8080 serves the web listener; --relay 127.0.0.1:3340 runs a relay. Both
     // bind to loopback by default: a tunnel puts them on the public internet, not this machine.
@@ -123,10 +125,12 @@ fn seed_all(node: &Node, seeds: &[String]) -> anyhow::Result<()> {
                 println!("  {kind} raised {r}");
             }
         }
+        ring_the_bell(node, id, folder, profile);
         let have: HashSet<String> = node.titles(&id).into_iter().collect();
         let mut files: Vec<PathBuf> = std::fs::read_dir(folder)?
             .filter_map(|f| f.ok().map(|f| f.path()))
             .filter(|p| p.extension().is_some_and(|e| ["mp3", "ogg", "flac", "wav", "m4a", "opus", "oga"].contains(&e.to_string_lossy().to_lowercase().as_str())))
+            .filter(|p| p.file_stem().is_none_or(|s| s != "bell"))
             .collect();
         files.sort();
         for f in files {
@@ -146,4 +150,53 @@ fn seed_all(node: &Node, seeds: &[String]) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+/// bell.* in a seed folder is the station's bell: it plays on the hour. When the file changes,
+/// the new one is set, the old one withdrawn, and the clock points the bell at it.
+fn ring_the_bell(node: &Node, id: pyrate_core::StationId, folder: &str, profile: Profile) {
+    let Some(path) = ["mp3", "wav", "ogg", "m4a", "flac", "opus"].iter().map(|e| PathBuf::from(folder).join(format!("bell.{e}"))).find(|p| p.exists()) else { return };
+    let Ok(bytes) = std::fs::read(&path) else { return };
+    // The bell's fingerprint rides in its source line, so a read-only folder works too.
+    let mark = format!("bell {}", &blake3::hash(&bytes).to_hex()[..16]);
+    let set = node.archive(&id).is_some_and(|a| a.entries().iter().any(|e| matches!(e.entry.body(), Body::Track { source, .. } if *source == mark)));
+    if set {
+        return;
+    }
+    let title = format!("The Bell, {}", chrono_day());
+    let Ok(track) = node.add_track(id, &path, &title, "", &mark, profile) else {
+        println!("  the bell would not set");
+        return;
+    };
+    let rota = node.call(&serde_json::json!({ "cmd": "rota", "station": id.to_hex() }));
+    if let Some(old) = rota["ident"].as_str() {
+        node.call(&serde_json::json!({ "cmd": "withdraw", "station": id.to_hex(), "track": old }));
+    }
+    let every = rota["ident_every_min"].as_u64().filter(|m| *m >= 5).unwrap_or(60);
+    let r = node.call(&serde_json::json!({
+        "cmd": "rota_set", "station": id.to_hex(), "blocks": rota["blocks"], "ident": pyrate_node::hex(&track), "ident_every_min": every,
+    }));
+    println!("  the bell is set: {title} {r}");
+}
+
+/// Today's date in words, from the clock alone.
+fn chrono_day() -> String {
+    let days = pyrate_node::now_ms() / 86_400_000;
+    let (y, m, d) = civil(days as i64);
+    const MONTHS: [&str; 12] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    format!("{d} {} {y}", MONTHS[(m - 1) as usize])
+}
+
+/// Days since 1970 to a calendar date (Howard Hinnant's algorithm).
+fn civil(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
 }

@@ -135,3 +135,52 @@ pub extern "system" fn Java_black_hostis_pyrate_MainActivity_setStartMuted(
 ) {
     START_MUTED.store(muted != 0, std::sync::atomic::Ordering::SeqCst);
 }
+
+/// The same door for Android's own side (the lock screen, Bluetooth, the car, the alarm),
+/// which may need the node while the app's screen is closed.
+#[cfg(target_os = "android")]
+mod android {
+    use jni::JNIEnv;
+    use jni::objects::{JClass, JString};
+    use jni::sys::{jbyteArray, jint, jstring};
+
+    fn s(env: &mut JNIEnv, j: &JString) -> String {
+        env.get_string(j).map(|v| v.into()).unwrap_or_default()
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_black_hostis_pyrate_Native_setReleaseKeys(mut env: JNIEnv, _c: JClass, keys: JString) {
+        let text = s(&mut env, &keys);
+        *super::RELEASE_KEYS.lock().unwrap() = text.lines().filter_map(|l| pyrate_node::store_hex32(l.trim())).collect();
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_black_hostis_pyrate_Native_start(mut env: JNIEnv, _c: JClass, dir: JString, boot: JString) -> jint {
+        let dir = std::ffi::CString::new(s(&mut env, &dir)).unwrap_or_default();
+        let boot = std::ffi::CString::new(s(&mut env, &boot)).unwrap_or_default();
+        super::pyrate_start(dir.as_ptr(), boot.as_ptr())
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_black_hostis_pyrate_Native_call(mut env: JNIEnv, _c: JClass, req: JString) -> jstring {
+        let req = s(&mut env, &req);
+        let answer = match (super::NODE.get(), serde_json::from_str::<serde_json::Value>(&req)) {
+            (Some(n), Ok(v)) => n.call(&v),
+            (None, _) => serde_json::json!({ "error": "node not started" }),
+            (_, Err(e)) => serde_json::json!({ "error": e.to_string() }),
+        };
+        env.new_string(answer.to_string()).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut())
+    }
+
+    /// Width and height (4 bytes each, big-endian) then RGBA, or null.
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_black_hostis_pyrate_Native_art(mut env: JNIEnv, _c: JClass, hash: JString) -> jbyteArray {
+        let h = s(&mut env, &hash);
+        let Some((w, ht, px)) = super::NODE.get().and_then(|n| n.art_pixels(&h)) else { return std::ptr::null_mut() };
+        let mut out = Vec::with_capacity(8 + px.len());
+        out.extend(w.to_be_bytes());
+        out.extend(ht.to_be_bytes());
+        out.extend(px);
+        env.byte_array_from_slice(&out).map(|a| a.into_raw()).unwrap_or(std::ptr::null_mut())
+    }
+}

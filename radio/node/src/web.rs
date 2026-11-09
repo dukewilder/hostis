@@ -56,6 +56,7 @@ pub async fn serve(inner: Arc<Inner>, addr: SocketAddr, every_station: bool) -> 
         .route("/now/{id}", get(now))
         .route("/listen/{id}", get(listen))
         .route("/art/{hash}", get(art))
+        .route("/brand/{name}", get(brand))
         .with_state(web);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     say(&format!("web listener on http://{addr}"));
@@ -113,6 +114,18 @@ async fn now(State(w): State<Web>, Path(id): Path<String>) -> Response {
         None => json!({ "live": false, "title": "", "by": "" }),
     };
     ([(header::CACHE_CONTROL, "no-store")], axum::Json(body)).into_response()
+}
+
+const WORDMARK: &[u8] = include_bytes!("web/wordmark.png");
+const MARK: &[u8] = include_bytes!("web/mark.png");
+
+async fn brand(Path(name): Path<String>) -> Response {
+    let body = match name.as_str() {
+        "wordmark.png" => WORDMARK,
+        "mark.png" => MARK,
+        _ => return StatusCode::NOT_FOUND.into_response(),
+    };
+    ([(header::CONTENT_TYPE, "image/png"), (header::CACHE_CONTROL, "public, max-age=86400")], body).into_response()
 }
 
 /// A picture, only when it belongs to a station this page may show.

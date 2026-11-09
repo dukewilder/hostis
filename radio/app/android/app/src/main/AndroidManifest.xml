@@ -9,6 +9,9 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32"/>
     <application
         android:label="Pyrate Radio"
         android:name="${applicationName}"
@@ -31,14 +34,63 @@
               android:resource="@style/NormalTheme"
               />
             <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="pyrate" android:host="station"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https" android:host="hostis.black" android:pathPrefix="/radio"/>
+            </intent-filter>
+        </activity>
+        <!-- The launcher shows one of these: the skull, or the plain disguise. -->
+        <activity-alias
+            android:name=".Skull"
+            android:targetActivity=".MainActivity"
+            android:label="Pyrate Radio"
+            android:icon="@mipmap/ic_launcher"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-        </activity>
+        </activity-alias>
+        <activity-alias
+            android:name=".Plain"
+            android:targetActivity=".MainActivity"
+            android:label="Radio"
+            android:icon="@mipmap/ic_plain"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
         <service
             android:name=".PlaybackService"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback|microphone"/>
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback|microphone">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService"/>
+            </intent-filter>
+        </service>
+        <receiver android:name="androidx.media.session.MediaButtonReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON"/>
+            </intent-filter>
+        </receiver>
+        <receiver android:name=".AlarmReceiver" android:exported="false"/>
+        <receiver android:name=".BootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+        </receiver>
+        <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/automotive_app_desc"/>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.updates"

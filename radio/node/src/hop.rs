@@ -38,7 +38,7 @@ pub enum Hop {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-enum Ask {
+pub(crate) enum Ask {
     Log { station: StationId, from: u64 },
     Chunk { station: StationId, hash: Hash },
     /// A listener's hourly token, merged into the station's aboard sketch by the exit.
@@ -114,7 +114,7 @@ impl Inner {
     }
 
     /// Two hops when the network allows, one when it has only one other node.
-    async fn ask_privately(&self, ask: &Ask) -> Result<Vec<u8>> {
+    pub(crate) async fn ask_privately(&self, ask: &Ask) -> Result<Vec<u8>> {
         let mut nodes = self.known_nodes();
         if nodes.is_empty() {
             return Err(anyhow!("no route"));

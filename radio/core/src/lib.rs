@@ -14,6 +14,7 @@ pub mod callsign;
 pub mod clock;
 pub mod ingest;
 pub mod keys;
+pub mod tape;
 
 pub use archive::{ArtRef, Archive, Body, Chunk, Entry, SignedEntry, release_message, release_trusted};
 pub use clock::{NowPlaying, Rota};

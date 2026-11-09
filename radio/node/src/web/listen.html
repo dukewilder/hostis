@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#030303">
 <title>Pyrate Radio</title>
+<link rel="icon" href="/brand/mark.png">
 <style>
 @font-face {
   font-family: 'Cinzel';
@@ -170,7 +171,7 @@ button:hover{border-color:var(--bone)}
 .row .cs{margin:0;font-size:.65rem;color:var(--bone-ghost)}.row .about{font-style:italic;color:var(--bone-faint);font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row .meta{flex:1;min-width:0}.count{font-family:var(--mono);font-weight:700;text-align:right}.count small{display:block;font-family:var(--carved);font-weight:400;font-size:.55rem;letter-spacing:.2em;color:var(--bone-ghost)}
 .mini{display:grid;grid-template-columns:repeat(9,1fr);font-family:var(--mono);font-size:.38rem;line-height:1.1;padding:.3rem .35rem;border:.5px solid var(--bone-ghost);flex:0 0 auto}.mini span{color:rgba(237,228,206,.12)}.mini b{color:var(--bone)}.mini.live{border-color:var(--blood-bright)}
-[hidden]{display:none!important}.dial{position:relative}.banner{position:absolute;inset:0 0 auto 0;height:260px;background-size:cover;background-position:center;-webkit-mask-image:linear-gradient(to bottom,rgba(0,0,0,.55),transparent);mask-image:linear-gradient(to bottom,rgba(0,0,0,.55),transparent);z-index:-1}
+[hidden]{display:none!important}.wordmark{display:block;width:min(320px,78vw);margin:0 auto .4rem;opacity:.92}.elsewhere{max-width:30rem;margin:1rem auto;padding:1rem;border:.5px solid var(--bone-ghost);font-style:italic;color:var(--bone-faint)}.elsewhere a{color:var(--bone);font-style:normal;font-family:var(--carved);letter-spacing:.2em;font-size:.75rem}.dial{position:relative}.banner{position:absolute;inset:0 0 auto 0;height:260px;background-size:cover;background-position:center;-webkit-mask-image:linear-gradient(to bottom,rgba(0,0,0,.55),transparent);mask-image:linear-gradient(to bottom,rgba(0,0,0,.55),transparent);z-index:-1}
 .cover{display:block;width:min(240px,62vw);aspect-ratio:1;object-fit:cover;margin:1.4rem auto 1.1rem;border:.5px solid var(--bone-ghost)}.mini.pic{display:block;padding:0}.mini img{width:52px;height:52px;object-fit:cover;display:block}
 footer{text-align:center;font-family:var(--carved);font-size:.65rem;letter-spacing:.3em;color:var(--bone-faint);padding:1.5rem}footer a{color:inherit}
 </style>
@@ -178,7 +179,9 @@ footer{text-align:center;font-family:var(--carved);font-size:.65rem;letter-spaci
 <body>
 <section class="dial">
 <div id="banner" class="banner"></div>
-<div class="eyebrow">PYRATE RADIO</div>
+<img class="wordmark" src="/brand/wordmark.png" alt="Pyrate Radio">
+<div class="eyebrow">UNDER HOSTIS COLOURS</div>
+<div id="elsewhere" class="elsewhere" hidden></div>
 <img id="cover" class="cover" alt="" hidden>
 <div id="flag" class="flag"></div>
 <div id="air"></div>
@@ -213,7 +216,10 @@ async function now(){if(!cur)return;try{const n=await (await fetch('/now/'+cur.i
 async function log(){try{stations=await (await fetch('/log.json')).json()}catch(e){return}
 const rows=$('rows');rows.innerHTML='';for(const s of stations){const r=document.createElement('div');r.className='row';r.dataset.id=s.id;r.innerHTML='<div class="mini"></div><div class="meta"><div class="name"></div><div class="cs"></div><div class="about"></div></div><div class="count"></div>';if(s.cover){r.querySelector('.mini').classList.add('pic');r.querySelector('.mini').innerHTML='<img alt="" src="/art/'+s.cover+'.jpg">'}else flag(r.querySelector('.mini'),s.id,s.live);r.querySelector('.name').textContent=s.name+(s.live?'  · ON AIR':'');r.querySelector('.cs').textContent=s.call_sign;r.querySelector('.about').textContent=s.about||'';r.querySelector('.count').innerHTML=s.aboard+'<small>ABOARD</small>';r.onclick=()=>tune(s);rows.appendChild(r)}
 if(!cur&&stations.length)show(stations[0]);else if(cur){const u=stations.find(x=>x.id===cur.id);if(u){cur=u;$('cs').textContent=u.call_sign+' · '+u.aboard+' aboard'}}}
-log();setInterval(log,15000);setInterval(now,5000);
+// A station link (#<id>) tunes here if this Lantern carries the station, and offers the app if not.
+function followLink(){const id=(location.hash||'').slice(1);if(!/^[0-9a-f]{64}$/.test(id))return;const s=stations.find(x=>x.id===id);const box=$('elsewhere');if(s){box.hidden=true;show(s);return}
+box.innerHTML='Someone passed you a station that plays in the app.<br><br><a href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url='+encodeURIComponent('https://hostis.black/radio/')+';end">OPEN IN PYRATE RADIO</a> &nbsp;·&nbsp; <a href="https://hostis.black/radio/">TAKE THE SET</a>';box.hidden=false}
+log().then(followLink);window.addEventListener('hashchange',followLink);setInterval(log,15000);setInterval(now,5000);
 </script>
 </body>
 </html>

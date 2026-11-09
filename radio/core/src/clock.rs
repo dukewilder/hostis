@@ -200,6 +200,24 @@ impl Clock {
     }
 
     /// What is on at `t`, in Unix milliseconds. None is dead air: an empty library.
+    /// What plays between two moments: each track's start, its entry hash and its length.
+    /// The watch bill, worked out on the device; no server is asked.
+    pub fn upcoming(&self, from: u64, until: u64) -> Vec<(u64, Hash, u64)> {
+        let mut out = Vec::new();
+        let mut t = from;
+        while t < until && out.len() < 2000 {
+            // A quiet minute (nothing yet added, or a gap between blocks): step past it.
+            let Some(np) = self.now(t) else {
+                t = (t / 60_000 + 1) * 60_000;
+                continue;
+            };
+            let start = t - np.offset_ms;
+            out.push((start, np.track, np.duration_ms));
+            t = start + np.duration_ms.max(1000) + 1;
+        }
+        out
+    }
+
     pub fn now(&self, t: u64) -> Option<NowPlaying> {
         if t < FIRST_MONDAY_MS {
             return None;

@@ -42,6 +42,23 @@ impl Inner {
     /// Stations this node will not list, play or carry: the owner's marooned stations, plus
     /// any ids a Lantern operator puts in maroon.txt (one per line). Kept on this device only.
     pub fn refused(&self) -> HashSet<StationId> {
+        {
+            let c = self.refused_cache.lock().unwrap();
+            if now_ms().saturating_sub(c.0) < 5_000 {
+                return c.1.clone();
+            }
+        }
+        let set = self.refused_fresh();
+        *self.refused_cache.lock().unwrap() = (now_ms(), set.clone());
+        set
+    }
+
+    /// Forgets the cached list, after the owner maroons or brings back a station.
+    pub(crate) fn refused_changed(&self) {
+        self.refused_cache.lock().unwrap().0 = 0;
+    }
+
+    fn refused_fresh(&self) -> HashSet<StationId> {
         let (_, marooned) = self.chart();
         let file = std::fs::read_to_string(self.cfg.dir.join("maroon.txt")).unwrap_or_default();
         marooned.iter().map(String::as_str).chain(file.lines().map(|l| l.split_whitespace().next().unwrap_or("")))
@@ -49,8 +66,8 @@ impl Inner {
     }
 
     /// Cheap check for the request path, which already holds the store lock.
-    pub(crate) fn refused_quick(&self, _id: &StationId) -> bool {
-        false
+    pub(crate) fn refused_quick(&self, id: &StationId) -> bool {
+        self.refused_cache.lock().unwrap().1.contains(id)
     }
 
     /// A marooned station's recordings leave the hold and the ballast.
@@ -64,10 +81,12 @@ impl Inner {
             if s.keys.contains_key(&id) {
                 continue;
             }
-            for h in s.chunks_of(&id) {
+            let pics = s.logs.get(&id).map(|a| a.art_hashes()).unwrap_or_default();
+            for h in s.chunks_of(&id).into_iter().chain(pics) {
                 s.remove_chunk(&h);
             }
             s.pinned.remove(&id);
+            s.forget_log(&id);
         }
     }
 

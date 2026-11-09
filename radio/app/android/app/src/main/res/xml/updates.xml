@@ -1,2 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<paths><files-path name="updates" path="node/updates/"/></paths>
+<paths>
+    <files-path name="updates" path="node/updates/"/>
+    <cache-path name="share" path="share/"/>
+</paths>

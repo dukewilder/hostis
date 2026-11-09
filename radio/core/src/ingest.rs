@@ -48,7 +48,86 @@ fn to_i16(s: f32) -> i16 {
 
 /// Streams the file through the decoder, the resampler and Opus, one block at a time,
 /// so an hour of audio never sits in memory as raw samples.
+/// Where a recording's sound begins and ends, and the gain that brings it to the house level.
+struct Level {
+    gain: f32,
+    start: u64,
+    end: u64,
+}
+
+/// Every station plays at one loudness: -16 LUFS, the level phones and earbuds are built
+/// around. Gain is capped so quiet hiss is not raised into noise, and so no peak passes -1 dBFS.
+const TARGET_LUFS: f64 = -16.0;
+const MAX_GAIN_DB: f64 = 18.0;
+const CEILING_DB: f64 = -1.0;
+/// Below -50 dBFS counts as dead air, trimmed from the head and tail.
+const SILENCE: f32 = 0.003_16;
+
+fn measure(path: &Path, out_ch: usize) -> Result<Level> {
+    let file = File::open(path)?;
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+    let mut hint = Hint::new();
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        hint.with_extension(ext);
+    }
+    let mut format = symphonia::default::get_probe()
+        .probe(&hint, mss, FormatOptions::default(), MetadataOptions::default())
+        .map_err(|e| Error::Decode(e.to_string()))?;
+    let track = format.default_track(TrackType::Audio).ok_or(Error::Decode("no audio track".into()))?;
+    let track_id = track.id;
+    let params = track.codec_params.as_ref().and_then(|p| p.audio()).ok_or(Error::Decode("no audio parameters".into()))?.clone();
+    let mut decoder = symphonia::default::get_codecs()
+        .make_audio_decoder(&params, &AudioDecoderOptions::default())
+        .map_err(|e| Error::Decode(e.to_string()))?;
+    let mut meter: Option<ebur128::EbuR128> = None;
+    let (mut decoded, mut mapped) = (Vec::new(), Vec::new());
+    let (mut at, mut first, mut last) = (0u64, None::<u64>, 0u64);
+    loop {
+        let packet = match format.next_packet() {
+            Ok(Some(p)) => p,
+            Ok(None) => break,
+            Err(SymErr::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(e) => return Err(Error::Decode(e.to_string())),
+        };
+        if packet.track_id != track_id {
+            continue;
+        }
+        let Ok(buf) = decoder.decode(&packet) else { continue };
+        let in_ch = buf.spec().channels().count();
+        let rate = buf.spec().rate();
+        decoded.clear();
+        decoded.resize(buf.samples_interleaved(), 0.0);
+        buf.copy_to_slice_interleaved(&mut decoded);
+        mapped.clear();
+        remap(&decoded, in_ch, out_ch, &mut mapped);
+        let m = match &mut meter {
+            Some(m) => m,
+            None => meter.insert(ebur128::EbuR128::new(out_ch as u32, rate, ebur128::Mode::I | ebur128::Mode::SAMPLE_PEAK).map_err(|e| Error::Decode(format!("{e:?}")))?),
+        };
+        let _ = m.add_frames_f32(&mapped);
+        for (i, f) in mapped.chunks_exact(out_ch).enumerate() {
+            if f.iter().any(|s| s.abs() > SILENCE) {
+                first.get_or_insert(at + i as u64);
+                last = at + i as u64 + 1;
+            }
+        }
+        at += (mapped.len() / out_ch) as u64;
+    }
+    let Some(m) = meter else { return Ok(Level { gain: 1.0, start: 0, end: u64::MAX }) };
+    let lufs = m.loudness_global().unwrap_or(f64::NEG_INFINITY);
+    let peak = (0..out_ch as u32).filter_map(|c| m.sample_peak(c).ok()).fold(0.0f64, f64::max);
+    let mut gain_db = if lufs.is_finite() { (TARGET_LUFS - lufs).min(MAX_GAIN_DB) } else { 0.0 };
+    if peak > 0.0 {
+        gain_db = gain_db.min(CEILING_DB - 20.0 * peak.log10());
+    }
+    let start = first.unwrap_or(0);
+    // A breath of tail is kept so endings are not clipped.
+    let end = if first.is_some() { last + 14_400 } else { at };
+    Ok(Level { gain: 10f32.powf(gain_db as f32 / 20.0), start, end })
+}
+
 pub fn ingest(path: &Path, profile: Profile) -> Result<Ingested> {
+    let level = measure(path, profile.channels() as usize)?;
     let file = File::open(path)?;
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
     let mut hint = Hint::new();
@@ -93,6 +172,7 @@ pub fn ingest(path: &Path, profile: Profile) -> Result<Ingested> {
     let mut resampled: Vec<f32> = Vec::new();
     let mut pcm: Vec<i16> = Vec::new();
     let mut total_frames: u64 = 0;
+    let mut src_at: u64 = 0;
 
     // Runs `mapped` through the resampler (or straight on at 48 kHz) and into Opus.
     let mut drain = |mapped: &mut Vec<f32>,
@@ -190,7 +270,19 @@ pub fn ingest(path: &Path, profile: Profile) -> Result<Ingested> {
         decoded.clear();
         decoded.resize(buf.samples_interleaved(), 0.0);
         buf.copy_to_slice_interleaved(&mut decoded);
-        remap(&decoded, in_ch, out_ch, &mut mapped);
+        // Dead air off the head and tail, and every recording brought to the house level.
+        let frames = (decoded.len() / in_ch) as u64;
+        let from = level.start.saturating_sub(src_at).min(frames) as usize;
+        let to = level.end.saturating_sub(src_at).min(frames) as usize;
+        src_at += frames;
+        if from >= to {
+            continue;
+        }
+        let kept = &mut decoded[from * in_ch..to * in_ch];
+        for s in kept.iter_mut() {
+            *s = (*s * level.gain).clamp(-1.0, 1.0);
+        }
+        remap(kept, in_ch, out_ch, &mut mapped);
         drain(&mut mapped, &mut resampler, &mut delay_left, false, &mut encoder, &mut chunks, &mut total_frames)?;
     }
     drain(&mut mapped, &mut resampler, &mut delay_left, true, &mut encoder, &mut chunks, &mut total_frames)?;
