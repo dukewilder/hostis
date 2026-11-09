@@ -170,12 +170,16 @@ button:hover{border-color:var(--bone)}
 .row .cs{margin:0;font-size:.65rem;color:var(--bone-ghost)}.row .about{font-style:italic;color:var(--bone-faint);font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row .meta{flex:1;min-width:0}.count{font-family:var(--mono);font-weight:700;text-align:right}.count small{display:block;font-family:var(--carved);font-weight:400;font-size:.55rem;letter-spacing:.2em;color:var(--bone-ghost)}
 .mini{display:grid;grid-template-columns:repeat(9,1fr);font-family:var(--mono);font-size:.38rem;line-height:1.1;padding:.3rem .35rem;border:.5px solid var(--bone-ghost);flex:0 0 auto}.mini span{color:rgba(237,228,206,.12)}.mini b{color:var(--bone)}.mini.live{border-color:var(--blood-bright)}
+[hidden]{display:none!important}.dial{position:relative}.banner{position:absolute;inset:0 0 auto 0;height:260px;background-size:cover;background-position:center;-webkit-mask-image:linear-gradient(to bottom,rgba(0,0,0,.55),transparent);mask-image:linear-gradient(to bottom,rgba(0,0,0,.55),transparent);z-index:-1}
+.cover{display:block;width:min(240px,62vw);aspect-ratio:1;object-fit:cover;margin:1.4rem auto 1.1rem;border:.5px solid var(--bone-ghost)}.mini.pic{display:block;padding:0}.mini img{width:52px;height:52px;object-fit:cover;display:block}
 footer{text-align:center;font-family:var(--carved);font-size:.65rem;letter-spacing:.3em;color:var(--bone-faint);padding:1.5rem}footer a{color:inherit}
 </style>
 </head>
 <body>
 <section class="dial">
+<div id="banner" class="banner"></div>
 <div class="eyebrow">PYRATE RADIO</div>
+<img id="cover" class="cover" alt="" hidden>
 <div id="flag" class="flag"></div>
 <div id="air"></div>
 <h1 id="name">Searching the Log</h1>
@@ -201,12 +205,13 @@ const $=id=>document.getElementById(id), a=$('a');
 let stations=[], cur=null, playing=false;
 function bits(id){const b=[];for(const c of id){const v=parseInt(c,16);for(let i=3;i>=0;i--)b.push((v>>i)&1)}return b}
 function flag(el,id,live){const b=bits(id);let h='';for(let r=0;r<6;r++)for(let c=0;c<9;c++){const half=c<5?c:8-c;const on=b[(r*5+half)%b.length];h+=on?'<b>1</b>':'<span>0</span>'}el.innerHTML=h;el.classList.toggle('live',!!live)}
-function show(s){cur=s;$('embed').textContent='<audio controls src="'+location.origin+'/listen/'+s.id+'.mp3"></audio>';flag($('flag'),s.id,s.live);$('name').textContent=s.name;$('cs').textContent=s.call_sign+' · '+s.aboard+' aboard';$('air').innerHTML=s.live?'<span class="air">ON AIR</span>':'';$('go').hidden=false;$('go').textContent=playing?'■ STOP':'▶ LISTEN';document.querySelectorAll('.row').forEach(r=>r.classList.toggle('on',r.dataset.id===s.id));now()}
+function show(s){cur=s;$('embed').textContent='<audio controls src="'+location.origin+'/listen/'+s.id+'.mp3"></audio>';flag($('flag'),s.id,s.live);art(s.cover);$('banner').style.backgroundImage=s.banner?'url(/art/'+s.banner+'.jpg)':'';$('name').textContent=s.name;$('cs').textContent=s.call_sign+' · '+s.aboard+' aboard';$('air').innerHTML=s.live?'<span class="air">ON AIR</span>':'';$('go').hidden=false;$('go').textContent=playing?'■ STOP':'▶ LISTEN';document.querySelectorAll('.row').forEach(r=>r.classList.toggle('on',r.dataset.id===s.id));now()}
+function art(h){const c=$('cover');if(h){if(c.dataset.h!==h){c.src='/art/'+h+'.jpg';c.dataset.h=h}c.hidden=false;$('flag').hidden=true}else{c.hidden=true;$('flag').hidden=false}}
 function tune(s){show(s);a.src='/listen/'+s.id+'.mp3';a.play().then(()=>{playing=true;$('go').textContent='■ STOP'}).catch(()=>{playing=false;$('go').textContent='▶ LISTEN'})}
 $('go').onclick=()=>{if(playing){a.pause();a.removeAttribute('src');a.load();playing=false;$('go').textContent='▶ LISTEN'}else if(cur)tune(cur)};
-async function now(){if(!cur)return;try{const n=await (await fetch('/now/'+cur.id)).json();$('np').textContent=n.live?'Live':(n.title||'');$('by').textContent=n.by||''}catch(e){}}
+async function now(){if(!cur)return;try{const n=await (await fetch('/now/'+cur.id)).json();$('np').textContent=n.live?'Live':(n.title||'');art(n.art||cur.cover);$('by').textContent=n.by||''}catch(e){}}
 async function log(){try{stations=await (await fetch('/log.json')).json()}catch(e){return}
-const rows=$('rows');rows.innerHTML='';for(const s of stations){const r=document.createElement('div');r.className='row';r.dataset.id=s.id;r.innerHTML='<div class="mini"></div><div class="meta"><div class="name"></div><div class="cs"></div><div class="about"></div></div><div class="count"></div>';flag(r.querySelector('.mini'),s.id,s.live);r.querySelector('.name').textContent=s.name+(s.live?'  · ON AIR':'');r.querySelector('.cs').textContent=s.call_sign;r.querySelector('.about').textContent=s.about||'';r.querySelector('.count').innerHTML=s.aboard+'<small>ABOARD</small>';r.onclick=()=>tune(s);rows.appendChild(r)}
+const rows=$('rows');rows.innerHTML='';for(const s of stations){const r=document.createElement('div');r.className='row';r.dataset.id=s.id;r.innerHTML='<div class="mini"></div><div class="meta"><div class="name"></div><div class="cs"></div><div class="about"></div></div><div class="count"></div>';if(s.cover){r.querySelector('.mini').classList.add('pic');r.querySelector('.mini').innerHTML='<img alt="" src="/art/'+s.cover+'.jpg">'}else flag(r.querySelector('.mini'),s.id,s.live);r.querySelector('.name').textContent=s.name+(s.live?'  · ON AIR':'');r.querySelector('.cs').textContent=s.call_sign;r.querySelector('.about').textContent=s.about||'';r.querySelector('.count').innerHTML=s.aboard+'<small>ABOARD</small>';r.onclick=()=>tune(s);rows.appendChild(r)}
 if(!cur&&stations.length)show(stations[0]);else if(cur){const u=stations.find(x=>x.id===cur.id);if(u){cur=u;$('cs').textContent=u.call_sign+' · '+u.aboard+' aboard'}}}
 log();setInterval(log,15000);setInterval(now,5000);
 </script>

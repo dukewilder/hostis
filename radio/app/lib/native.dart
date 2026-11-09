@@ -1,10 +1,13 @@
 // The door into the node. Three C functions, JSON across them.
 // No rights reserved.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:ffi/ffi.dart';
 
@@ -54,6 +57,30 @@ class Native {
       return jsonDecode(s);
     } finally {
       calloc.free(p);
+    }
+  }
+
+  /// A picture the node holds, decoded by the node in memory-safe code and handed over as
+  /// raw pixels, so the phone's own image decoder never sees a stranger's file.
+  static Future<ui.Image?> art(String hash) async {
+    final f = _lib.lookupFunction<Pointer<Uint8> Function(Pointer<Utf8>, Pointer<Size>), Pointer<Uint8> Function(Pointer<Utf8>, Pointer<Size>)>('pyrate_art');
+    final freeBytes = _lib.lookupFunction<Void Function(Pointer<Uint8>, Size), void Function(Pointer<Uint8>, int)>('pyrate_free_bytes');
+    final h = hash.toNativeUtf8();
+    final len = calloc<Size>();
+    try {
+      final p = f(h, len);
+      if (p == nullptr) return null;
+      final n = len.value;
+      final bytes = Uint8List.fromList(p.asTypedList(n));
+      freeBytes(p, n);
+      final hd = ByteData.sublistView(bytes, 0, 8);
+      final w = hd.getUint32(0, Endian.little), ht = hd.getUint32(4, Endian.little);
+      final c = Completer<ui.Image>();
+      ui.decodeImageFromPixels(Uint8List.sublistView(bytes, 8), w, ht, ui.PixelFormat.rgba8888, c.complete);
+      return await c.future;
+    } finally {
+      calloc.free(h);
+      calloc.free(len);
     }
   }
 

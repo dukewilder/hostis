@@ -4,6 +4,7 @@
 //!
 //! lantern --dir <data> [--quota-gb 20] [--bootstrap <id>,<id>] [--public-dns]
 //!         [--seed "Name|About|folder|music"]...
+//!         A seed folder's station.jpg and banner.jpg become the station's art.
 
 use std::{collections::HashSet, path::PathBuf, time::Duration};
 
@@ -107,6 +108,20 @@ fn seed_all(node: &Node, seeds: &[String]) -> anyhow::Result<()> {
             None => node.raise(name, about, None)?,
         };
 
+        // station.jpg and banner.jpg in the folder are the station's art.
+        let current = node.archive(&id).and_then(|a| a.art());
+        for (file, kind) in [("station", "cover"), ("banner", "banner")] {
+            let Some(path) = ["jpg", "jpeg", "png", "webp"].iter().map(|e| PathBuf::from(folder).join(format!("{file}.{e}"))).find(|p| p.exists()) else { continue };
+            let Ok(raw) = std::fs::read(&path) else { continue };
+            let k = if kind == "banner" { pyrate_core::art::Kind::Banner } else { pyrate_core::art::Kind::Cover };
+            let Ok(p) = pyrate_core::art::prepare(&raw, k) else { println!("  {} is not a picture we can read", path.display()); continue };
+            let new = *blake3::hash(&p.jpeg).as_bytes();
+            let old = current.and_then(|c| if kind == "banner" { c.1 } else { c.0 }).map(|r| r.hash);
+            if old != Some(new) {
+                let r = node.call(&serde_json::json!({ "cmd": "art_set", "station": id.to_hex(), "kind": kind, "path": path }));
+                println!("  {kind} raised {r}");
+            }
+        }
         let have: HashSet<String> = node.titles(&id).into_iter().collect();
         let mut files: Vec<PathBuf> = std::fs::read_dir(folder)?
             .filter_map(|f| f.ok().map(|f| f.path()))
