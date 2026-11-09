@@ -1,0 +1,1 @@
+The type of hostis.black, carried into the app. Cinzel (Natanael Gama), IM Fell English and IM Fell English SC (Igino Marini), and JetBrains Mono are under the SIL Open Font License 1.1, which allows them to be bundled and redistributed with software.

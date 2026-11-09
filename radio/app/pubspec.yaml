@@ -1,0 +1,38 @@
+name: pyrate
+description: "Pyrate Radio. Every install a station, a carrier and a relay. No rights reserved."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.9.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  ffi: ^2.1.0
+  path_provider: ^2.1.0
+  file_picker: ^10.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/bootstrap.txt
+  fonts:
+    - family: Cinzel
+      fonts:
+        - asset: assets/fonts/Cinzel-Regular.ttf
+        - asset: assets/fonts/Cinzel-Black.ttf
+          weight: 900
+    - family: Fell
+      fonts:
+        - asset: assets/fonts/IMFellEnglish-Regular.ttf
+        - asset: assets/fonts/IMFellEnglish-Italic.ttf
+          style: italic
+    - family: FellSC
+      fonts:
+        - asset: assets/fonts/IMFellEnglishSC-Regular.ttf
+    - family: Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+        - asset: assets/fonts/JetBrainsMono-Bold.ttf
+          weight: 700

@@ -32,6 +32,24 @@ use pyrate_core::{Archive, Body, Hash, Profile, SignedEntry, StationId, clock::C
 use serde_json::{Value, json};
 use store::Store;
 
+/// A line in the system log: logcat on Android, stderr elsewhere.
+pub fn say(msg: &str) {
+    #[cfg(target_os = "android")]
+    {
+        #[link(name = "log")]
+        unsafe extern "C" {
+            fn __android_log_write(prio: i32, tag: *const std::ffi::c_char, text: *const std::ffi::c_char) -> i32;
+        }
+        let tag = std::ffi::CString::new("pyrate").unwrap();
+        let text = std::ffi::CString::new(msg.replace('\0', "")).unwrap();
+        unsafe {
+            __android_log_write(4, tag.as_ptr(), text.as_ptr());
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    eprintln!("{msg}");
+}
+
 pub fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64
 }
@@ -100,8 +118,6 @@ pub struct Node {
     pub rt: tokio::runtime::Runtime,
     pub inner: Arc<Inner>,
     _router: Router,
-    #[cfg(feature = "playback")]
-    _out: Option<player::Output>,
 }
 
 #[derive(Debug, Clone)]
@@ -208,7 +224,10 @@ impl Inner {
                 continue;
             }
             match self.store.lock().unwrap().put_entries(station, entries) {
-                Ok(n) => added += n,
+                Ok(n) => {
+                    say(&format!("log {}: {n} new entries from {}", station.call_sign(), node.fmt_short()));
+                    added += n
+                }
                 Err(e) => tracing::warn!("log from {node}: {e}"),
             }
             break;
@@ -246,6 +265,9 @@ impl Inner {
                     return None;
                 }
                 let l = log.entry(a.station).or_default();
+                if l.announce.is_none() {
+                    say(&format!("in the Log: {} {}", a.station.call_sign(), a.name));
+                }
                 if l.announce.as_ref().is_none_or(|old| a.at_ms > old.at_ms) {
                     let s = a.station;
                     let head = a.head;
@@ -464,7 +486,14 @@ impl Node {
         let topic = TopicId::from_bytes(net::log_topic());
         let i2 = inner.clone();
         rt.spawn(async move {
-            let Ok(sub) = gossip.subscribe(topic, i2.cfg.bootstrap.clone()).await else { return };
+            say(&format!("node {} up, joining the Log through {} bootstrap peers", i2.endpoint.id(), i2.cfg.bootstrap.len()));
+            let sub = match gossip.subscribe(topic, i2.cfg.bootstrap.clone()).await {
+                Ok(s) => s,
+                Err(e) => {
+                    say(&format!("gossip subscribe failed: {e}"));
+                    return;
+                }
+            };
             let (tx, mut rx) = sub.split();
             *i2.gossip_tx.lock().unwrap() = Some(tx.clone());
             let boot = i2.cfg.bootstrap.clone();
@@ -483,7 +512,18 @@ impl Node {
                 }
             });
             while let Some(ev) = rx.next().await {
-                let Ok(Event::Received(msg)) = ev else { continue };
+                let msg = match ev {
+                    Ok(Event::Received(m)) => m,
+                    Ok(Event::NeighborUp(n)) => {
+                        say(&format!("neighbour up {}", n.fmt_short()));
+                        continue;
+                    }
+                    Ok(Event::NeighborDown(n)) => {
+                        say(&format!("neighbour down {}", n.fmt_short()));
+                        continue;
+                    }
+                    _ => continue,
+                };
                 let Ok(g) = postcard::from_bytes::<Gossip>(&msg.content) else { continue };
                 if let Some(st) = i2.on_gossip(g) {
                     if i2.wants(&st) {
@@ -514,25 +554,20 @@ impl Node {
         });
 
         #[cfg(feature = "playback")]
-        let out = {
+        {
             let i2 = inner.clone();
             rt.spawn(async move { playout::run(i2).await });
-            match player::open(queue) {
-                Ok(o) => Some(o),
-                Err(e) => {
-                    eprintln!("no audio output: {e}");
-                    None
-                }
-            }
-        };
+            // The output stream lives on its own thread for the life of the process.
+            std::thread::spawn(move || match player::open(queue) {
+                Ok(out) => loop {
+                    std::thread::park();
+                    let _ = &out;
+                },
+                Err(e) => say(&format!("no audio output: {e}")),
+            });
+        }
 
-        Ok(Self {
-            rt,
-            inner,
-            _router: router,
-            #[cfg(feature = "playback")]
-            _out: out,
-        })
+        Ok(Self { rt, inner, _router: router })
     }
 
     pub fn id(&self) -> EndpointId {
@@ -630,6 +665,7 @@ impl Node {
             }
             "tune" => {
                 let st = station()?;
+                say(&format!("tune {}", st.call_sign()));
                 *inner.tuned.lock().unwrap() = Some(Tuned { station: st, since: now_ms(), playhead: None });
                 #[cfg(feature = "playback")]
                 playout::reset(inner);
@@ -893,6 +929,7 @@ mod playout {
                 let Some(Body::Track { chunks, channels, .. }) = entry.map(|e| &e.entry.body) else { break };
                 let Some(chunk) = chunks.get(np.chunk).copied() else { break };
                 let Ok(bytes) = inner.chunk(&station, &chunk.hash).await else {
+                    say("no carrier answered for the chunk on now");
                     *inner.np.lock().unwrap() = json!({ "station": station.to_hex(), "state": "searching" });
                     break;
                 };
@@ -909,6 +946,9 @@ mod playout {
                     np.chunk_offset_ms
                 };
                 let skip = if st.playhead.is_none() { np.chunk_offset_ms.max(skip.min(chunk.duration_ms())) } else { skip };
+                if st.playhead.is_none() {
+                    say(&format!("sound: chunk {} of a track, {} ms in", np.chunk, skip));
+                }
                 push(&inner, &pcm, *channels, skip);
                 let chunk_start = at - np.chunk_offset_ms;
                 st.playhead = Some(chunk_start + chunk.duration_ms());
