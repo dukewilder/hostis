@@ -27,8 +27,9 @@ fn main() -> anyhow::Result<()> {
     // bind to loopback by default: a tunnel puts them on the public internet, not this machine.
     if let Some(addr) = get("--http").and_then(|a| a.parse().ok()) {
         let inner = node.inner.clone();
+        let web_all = args.iter().any(|a| a == "--web-all");
         node.rt.spawn(async move {
-            if let Err(e) = pyrate_node::web::serve(inner, addr).await {
+            if let Err(e) = pyrate_node::web::serve(inner, addr, web_all).await {
                 println!("web listener: {e}");
             }
         });

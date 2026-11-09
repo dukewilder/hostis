@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 pub const ALPN: &[u8] = b"pyrate/0";
 pub const MAX_FRAME: usize = 16 * 1024 * 1024;
 /// Leading zero bits a station's proof of work must show. About a second on a phone, once.
-pub const POW_BITS: u32 = 20;
+pub const POW_BITS: u32 = 24;
+/// Work behind each listener token: a second or two on a phone, once an hour.
+pub const TOKEN_BITS: u32 = 20;
 
 pub fn log_topic() -> [u8; 32] {
     *blake3::hash(b"pyrate/log/v1").as_bytes()
@@ -42,6 +44,8 @@ pub struct Announce {
     pub live: bool,
     pub at_ms: u64,
     pub pow: u64,
+    /// When the station first went on the air, from its first entry.
+    pub since: u64,
     /// When a deputy signs: the master-signed entry appointing it.
     pub proof: Option<Vec<u8>>,
     #[serde(with = "serde_bytes64")]
@@ -51,7 +55,7 @@ pub struct Announce {
 impl Announce {
     fn message(&self) -> Vec<u8> {
         let mut m = b"pyrate/announce/v1\0".to_vec();
-        let body = (&self.station, self.head, &self.name, &self.about, &self.port, self.live, self.at_ms, self.pow, &self.proof);
+        let body = (&self.station, self.head, &self.name, &self.about, &self.port, self.live, self.at_ms, self.pow, self.since, &self.proof);
         m.extend(postcard::to_stdvec(&body).unwrap_or_default());
         m
     }
@@ -98,13 +102,32 @@ pub fn pow_find(station: &StationId) -> u64 {
     (0u64..).find(|n| pow_ok(station, *n)).unwrap()
 }
 
+fn token_work(station: &StationId, hour: u64, token: &[u8; 32], nonce: u64) -> u32 {
+    let mut h = blake3::Hasher::new();
+    h.update(b"pyrate/token/v1");
+    h.update(&station.0);
+    h.update(&hour.to_le_bytes());
+    h.update(token);
+    h.update(&nonce.to_le_bytes());
+    u32::from_be_bytes(h.finalize().as_bytes()[..4].try_into().unwrap()).leading_zeros()
+}
+
+pub fn token_ok(station: &StationId, hour: u64, token: &[u8; 32], nonce: u64) -> bool {
+    token_work(station, hour, token, nonce) >= TOKEN_BITS
+}
+
+pub fn token_find(station: &StationId, hour: u64, token: &[u8; 32]) -> u64 {
+    (0u64..).find(|n| token_ok(station, hour, token, *n)).unwrap()
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Gossip {
     Station(Announce),
     /// A node saying it carries a station, and how far its copy of the log reaches.
     Carrier { station: StationId, node: [u8; 32], head: u64 },
-    /// Listener tokens for one station in one hour, folded into a sketch nobody can read names from.
-    Aboard { station: StationId, hour: u64, sketch: Vec<u8> },
+    /// Listener tokens for one station in one hour, each with its proof of work. Every node
+    /// checks them and counts for itself; nobody's sketch is taken on trust.
+    Aboard { station: StationId, hour: u64, tokens: Vec<([u8; 32], u64)> },
 }
 
 /// HyperLogLog with 256 registers. 256 bytes on the wire, about 6.5 percent error.
@@ -119,9 +142,10 @@ impl Default for Sketch {
 
 impl Sketch {
     pub fn add(&mut self, token: &[u8; 32]) {
-        let i = token[0] as usize;
-        let w = u64::from_le_bytes(token[1..9].try_into().unwrap());
-        let rank = (w.leading_zeros() + 1).min(64) as u8;
+        let t = blake3::derive_key("pyrate/sketch/v1", token);
+        let i = t[0] as usize;
+        let w = u64::from_le_bytes(t[1..9].try_into().unwrap());
+        let rank = (w.leading_zeros() + 1).min(32) as u8;
         self.0[i] = self.0[i].max(rank);
     }
 
@@ -192,7 +216,7 @@ mod tests {
         let k = StationKey::generate().unwrap();
         let a = Announce {
             station: k.id(), head: 3, name: "HOSTIS".into(), about: "".into(), port: None,
-            live: false, at_ms: 1, pow: pow_find(&k.id()), proof: None, sig: [0; 64],
+            live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, sig: [0; 64],
         }
         .sign(&k);
         assert!(a.verify());
