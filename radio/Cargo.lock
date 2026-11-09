@@ -2639,6 +2639,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pyrate-ffi"
+version = "0.1.0"
+dependencies = [
+ "jni 0.21.1",
+ "ndk-context",
+ "pyrate-node",
+ "serde_json",
+]
+
+[[package]]
 name = "pyrate-node"
 version = "0.1.0"
 dependencies = [

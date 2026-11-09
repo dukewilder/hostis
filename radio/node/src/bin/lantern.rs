@@ -25,6 +25,30 @@ fn main() -> anyhow::Result<()> {
     println!("LANTERN LIT");
     println!("node id: {}", node.id());
 
+    seed_all(&node, &seeds)?;
+    for line in node.call(&serde_json::json!({ "cmd": "status" }))["mine"].as_object().into_iter() {
+        let _ = line;
+    }
+    let mut n = 0u64;
+    loop {
+        std::thread::sleep(Duration::from_secs(60));
+        n += 1;
+        // New files in a seed folder go on the clock within ten minutes.
+        if n % 10 == 0 {
+            if let Err(e) = seed_all(&node, &seeds) {
+                println!("seeding: {e}");
+            }
+        }
+        let st = node.call(&serde_json::json!({ "cmd": "stations" }));
+        let n = st.as_array().map(|a| a.len()).unwrap_or(0);
+        let line: Vec<String> = st.as_array().into_iter().flatten().take(8)
+            .map(|s| format!("{} ({} aboard)", s["name"].as_str().unwrap_or("?"), s["aboard"])).collect();
+        println!("{} · {n} stations in the Log · {}", now_ms() / 1000, line.join(", "));
+        let _ = Body::Strike; // keep the import honest across features
+    }
+}
+
+fn seed_all(node: &Node, seeds: &[String]) -> anyhow::Result<()> {
     for seed in seeds {
         let parts: Vec<&str> = seed.split('|').collect();
         let [name, about, folder, kind] = parts[..] else {
@@ -40,7 +64,7 @@ fn main() -> anyhow::Result<()> {
             Some(id) => id,
             None => node.raise(name, about, None)?,
         };
-        println!("station {name}: {} ({})", id.call_sign(), id);
+
         let have: HashSet<String> = node.titles(&id).into_iter().collect();
         let mut files: Vec<PathBuf> = std::fs::read_dir(folder)?
             .filter_map(|f| f.ok().map(|f| f.path()))
@@ -63,14 +87,5 @@ fn main() -> anyhow::Result<()> {
             }
         }
     }
-
-    loop {
-        std::thread::sleep(Duration::from_secs(60));
-        let st = node.call(&serde_json::json!({ "cmd": "stations" }));
-        let n = st.as_array().map(|a| a.len()).unwrap_or(0);
-        let line: Vec<String> = st.as_array().into_iter().flatten().take(8)
-            .map(|s| format!("{} ({} aboard)", s["name"].as_str().unwrap_or("?"), s["aboard"])).collect();
-        println!("{} · {n} stations in the Log · {}", now_ms() / 1000, line.join(", "));
-        let _ = Body::Strike; // keep the import honest across features
-    }
+    Ok(())
 }

@@ -1,0 +1,670 @@
+// Pyrate Radio. No rights reserved.
+
+import 'dart:async';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+
+import 'native.dart';
+
+// The site's ink.
+const black = Color(0xFF030303);
+const panel = Color(0xFF0F0F0F);
+const bone = Color(0xFFEDE4CE);
+const boneDim = Color(0xD1EDE4CE);
+const boneFaint = Color(0x8CEDE4CE);
+const boneGhost = Color(0x38EDE4CE);
+const blood = Color(0xFFC52828);
+const bloodBright = Color(0xFFED5555);
+const brass = Color(0xFFC9A94D);
+
+TextStyle carved(double size, {Color color = bone, double spacing = 0.3}) =>
+    TextStyle(fontFamily: 'Cinzel', fontSize: size, color: color, letterSpacing: size * spacing, height: 1.2);
+TextStyle serif(double size, {Color color = bone, bool italic = false}) =>
+    TextStyle(fontFamily: 'Fell', fontSize: size, color: color, fontStyle: italic ? FontStyle.italic : FontStyle.normal, height: 1.35);
+TextStyle mono(double size, {Color color = boneFaint, FontWeight weight = FontWeight.w400}) =>
+    TextStyle(fontFamily: 'Mono', fontSize: size, color: color, letterSpacing: size * 0.05, fontWeight: weight);
+
+const _service = MethodChannel('pyrate/service');
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: black,
+    systemNavigationBarColor: black,
+    statusBarIconBrightness: Brightness.light,
+  ));
+  final dir = await getApplicationSupportDirectory();
+  final boot = (await rootBundle.loadString('assets/bootstrap.txt')).trim();
+  final started = Native.start('${dir.path}${Platform.pathSeparator}node', boot);
+  print('pyrate: node start $started');
+  runApp(const PyrateApp());
+}
+
+/// Everything the screens show, polled from the node.
+class Tuner extends ChangeNotifier {
+  List<Map<String, dynamic>> stations = [];
+  Map<String, dynamic> status = {};
+  String? tuned;
+  bool playing = false;
+  bool scanning = false;
+  bool firstTuneDone = false;
+  Timer? _poll;
+  Timer? _scan;
+  int _ticks = 0;
+  final pages = PageController();
+
+  Tuner() {
+    _poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _refresh());
+    _refresh();
+  }
+
+  Map<String, dynamic>? get mine => status['mine'] as Map<String, dynamic>?;
+  Map<String, dynamic>? get now => status['now'] as Map<String, dynamic>?;
+  List get jobs => (status['jobs'] as List?) ?? [];
+
+  Map<String, dynamic>? station(String? id) {
+    for (final s in stations) {
+      if (s['id'] == id) return s;
+    }
+    return null;
+  }
+
+  void _refresh() {
+    _ticks++;
+    final st = Native.call({'cmd': 'status'});
+    if (st is Map<String, dynamic> && st['error'] == null) status = st;
+    if (_ticks % 3 == 1 || stations.isEmpty) {
+      final list = Native.call({'cmd': 'stations'});
+      if (list is List) {
+        stations = list.cast<Map<String, dynamic>>();
+        if (tuned != null && station(tuned) == null && stations.isNotEmpty) {
+          // Keep the tuned station visible even if its card lapses for a moment.
+        }
+      }
+    }
+    // First open plays sound: the station with the most aboard.
+    if (!firstTuneDone && stations.isNotEmpty) {
+      firstTuneDone = true;
+      tune(stations.first['id'] as String);
+    }
+    notifyListeners();
+  }
+
+  void tune(String id) {
+    print('pyrate: tune $id');
+    tuned = id;
+    playing = true;
+    Native.call({'cmd': 'tune', 'station': id});
+    final name = station(id)?['name'] ?? 'Pyrate Radio';
+    _service.invokeMethod('start', {'title': name}).catchError((_) {});
+    final i = stations.indexWhere((s) => s['id'] == id);
+    if (i >= 0 && pages.hasClients && pages.page?.round() != i) {
+      pages.jumpToPage(i);
+    }
+    notifyListeners();
+  }
+
+  void stop() {
+    playing = false;
+    stopScan();
+    Native.call({'cmd': 'stop'});
+    _service.invokeMethod('stop').catchError((_) {});
+    notifyListeners();
+  }
+
+  void toggle() {
+    if (playing) {
+      stop();
+    } else if (tuned != null) {
+      tune(tuned!);
+    } else if (stations.isNotEmpty) {
+      tune(stations.first['id'] as String);
+    }
+  }
+
+  void startScan() {
+    if (stations.length < 2) return;
+    scanning = true;
+    _scan?.cancel();
+    _scan = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!pages.hasClients) return;
+      final next = ((pages.page ?? 0).round() + 1) % stations.length;
+      pages.animateToPage(next, duration: const Duration(milliseconds: 400), curve: Curves.easeOut);
+    });
+    notifyListeners();
+  }
+
+  void stopScan() {
+    scanning = false;
+    _scan?.cancel();
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    _scan?.cancel();
+    super.dispose();
+  }
+}
+
+class PyrateApp extends StatefulWidget {
+  const PyrateApp({super.key});
+  @override
+  State<PyrateApp> createState() => _PyrateAppState();
+}
+
+class _PyrateAppState extends State<PyrateApp> {
+  final radio = Tuner();
+  int tab = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Pyrate Radio',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: black,
+        colorScheme: const ColorScheme.dark(primary: bone, surface: black, onSurface: bone, secondary: bloodBright),
+        textSelectionTheme: const TextSelectionThemeData(cursorColor: bone, selectionColor: boneGhost),
+        splashFactory: NoSplash.splashFactory,
+        highlightColor: Colors.transparent,
+      ),
+      home: ListenableBuilder(
+        listenable: radio,
+        builder: (context, _) => Scaffold(
+          body: SafeArea(
+            child: IndexedStack(index: tab, children: [
+              Dial(radio: radio),
+              LogPage(radio: radio, onTune: () => setState(() => tab = 0)),
+              ColoursPage(radio: radio),
+            ]),
+          ),
+          bottomNavigationBar: SafeArea(
+            top: false,
+            child: Container(
+              decoration: const BoxDecoration(border: Border(top: BorderSide(color: boneGhost, width: 0.5))),
+              height: 58,
+              child: Row(children: [
+                for (final (i, label) in ['THE DIAL', 'THE LOG', 'COLOURS'].indexed)
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => setState(() => tab = i),
+                      child: Center(
+                        child: Text(label, style: carved(11, color: tab == i ? bone : boneFaint, spacing: 0.25)),
+                      ),
+                    ),
+                  ),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A station's flag, drawn from its key: binary digits, mirrored, bone on black.
+/// Two stations can never share one, and nobody can forge one.
+class Flag extends StatelessWidget {
+  final String id;
+  final double width;
+  final bool live;
+  const Flag({super.key, required this.id, required this.width, this.live = false});
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+        size: Size(width, width * 2 / 3),
+        painter: _FlagPainter(id, live),
+      );
+}
+
+class _FlagPainter extends CustomPainter {
+  final String id;
+  final bool live;
+  _FlagPainter(this.id, this.live);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    canvas.drawRect(rect, Paint()..color = black);
+    canvas.drawRect(rect.deflate(0.5), Paint()
+      ..color = live ? blood : boneGhost
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1);
+    const cols = 9, rows = 6;
+    final bits = <bool>[];
+    for (var i = 0; i < id.length && bits.length < 64; i++) {
+      final v = int.tryParse(id[i], radix: 16) ?? 0;
+      for (var b = 3; b >= 0; b--) {
+        bits.add((v >> b) & 1 == 1);
+      }
+    }
+    final cw = size.width / (cols + 2), ch = size.height / (rows + 2);
+    final fontSize = ch * 0.9;
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        final half = c < (cols + 1) ~/ 2 ? c : cols - 1 - c;
+        final on = bits.isEmpty ? false : bits[(r * ((cols + 1) ~/ 2) + half) % bits.length];
+        final tp = TextPainter(
+          text: TextSpan(text: on ? '1' : '0', style: TextStyle(fontFamily: 'Mono', fontSize: fontSize, color: on ? bone : const Color(0x1FEDE4CE), fontWeight: on ? FontWeight.w700 : FontWeight.w400)),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas, Offset(cw * (c + 1) + (cw - tp.width) / 2, ch * (r + 1) + (ch - tp.height) / 2));
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FlagPainter old) => old.id != id || old.live != live;
+}
+
+String fmtTime(int ms) {
+  final s = ms ~/ 1000;
+  return '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+}
+
+class Dial extends StatelessWidget {
+  final Tuner radio;
+  const Dial({super.key, required this.radio});
+
+  @override
+  Widget build(BuildContext context) {
+    final stations = radio.stations;
+    return Column(children: [
+      const SizedBox(height: 18),
+      Text('PYRATE RADIO', style: carved(12, color: boneFaint, spacing: 0.4)),
+      const SizedBox(height: 4),
+      Text(stations.isEmpty ? '' : '${stations.length} ${stations.length == 1 ? 'STATION' : 'STATIONS'} ON THE AIR',
+          style: mono(10, color: boneGhost)),
+      Expanded(
+        child: stations.isEmpty
+            ? Center(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text('Searching the Log', style: serif(22, color: boneDim, italic: true)),
+                  const SizedBox(height: 10),
+                  const SizedBox(width: 120, child: LinearProgressIndicator(minHeight: 1, color: boneFaint, backgroundColor: boneGhost)),
+                ]),
+              )
+            : GestureDetector(
+                onLongPress: radio.startScan,
+                onTap: radio.scanning ? radio.stopScan : null,
+                child: PageView.builder(
+                  controller: radio.pages,
+                  itemCount: stations.length,
+                  onPageChanged: (i) {
+                    final id = stations[i]['id'] as String;
+                    if (id != radio.tuned) radio.tune(id);
+                  },
+                  itemBuilder: (context, i) => _StationFace(radio: radio, s: stations[i]),
+                ),
+              ),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 18, top: 6),
+        child: radio.scanning
+            ? Text('SCANNING · TAP TO HOLD', style: carved(11, color: brass, spacing: 0.25))
+            : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                OutlinedButton(
+                  onPressed: stations.isEmpty ? null : radio.toggle,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: boneFaint, width: 0.8),
+                    shape: const RoundedRectangleBorder(),
+                    padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 14),
+                  ),
+                  child: Text(radio.playing ? '■  STOP' : '▶  LISTEN', style: carved(12, spacing: 0.25)),
+                ),
+              ]),
+      ),
+      Text('swipe to change station · hold to scan', style: serif(12, color: boneGhost, italic: true)),
+      const SizedBox(height: 10),
+    ]);
+  }
+}
+
+class _StationFace extends StatelessWidget {
+  final Tuner radio;
+  final Map<String, dynamic> s;
+  const _StationFace({required this.radio, required this.s});
+
+  @override
+  Widget build(BuildContext context) {
+    final id = s['id'] as String;
+    final live = s['live'] == true;
+    final isTuned = radio.tuned == id && radio.playing;
+    final now = isTuned ? radio.now : null;
+    final state = now?['state'] as String?;
+    final title = (now?['title'] as String?) ?? '';
+    final by = (now?['by'] as String?) ?? '';
+    final pos = (now?['position_ms'] as num?)?.toInt() ?? 0;
+    final dur = (now?['duration_ms'] as num?)?.toInt() ?? 0;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 28),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Flag(id: id, width: 200, live: live),
+        const SizedBox(height: 26),
+        if (live)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(border: Border.all(color: bloodBright, width: 0.8)),
+            child: Text('ON AIR', style: carved(11, color: bloodBright, spacing: 0.35)),
+          ),
+        Text(s['name'] ?? '', textAlign: TextAlign.center, style: serif(34)),
+        const SizedBox(height: 6),
+        Text(s['call_sign'] ?? '', style: mono(12, color: boneFaint)),
+        const SizedBox(height: 14),
+        if ((s['about'] ?? '').toString().isNotEmpty)
+          Text(s['about'], textAlign: TextAlign.center, maxLines: 3, overflow: TextOverflow.ellipsis,
+              style: serif(15, color: boneFaint, italic: true)),
+        const SizedBox(height: 28),
+        SizedBox(
+          height: 92,
+          child: !isTuned
+              ? const SizedBox()
+              : state == 'searching' && title.isEmpty
+                  ? Text('Finding a carrier', style: serif(16, color: boneFaint, italic: true))
+                  : state == 'dead air'
+                      ? Text('Dead air', style: serif(16, color: boneFaint, italic: true))
+                      : Column(children: [
+                          Text(state == 'live' ? 'Live' : title, textAlign: TextAlign.center, maxLines: 2,
+                              overflow: TextOverflow.ellipsis, style: serif(19, color: boneDim, italic: true)),
+                          if (by.isNotEmpty) Text(by, style: carved(11, color: boneFaint, spacing: 0.2)),
+                          const SizedBox(height: 12),
+                          if (dur > 0) ...[
+                            SizedBox(
+                              width: 220,
+                              child: LinearProgressIndicator(value: (pos / dur).clamp(0.0, 1.0), minHeight: 1, color: bone, backgroundColor: boneGhost),
+                            ),
+                            const SizedBox(height: 6),
+                            Text('${fmtTime(pos)} / ${fmtTime(dur)}', style: mono(10, color: boneGhost)),
+                          ],
+                        ]),
+        ),
+        Text('${s['aboard'] ?? 0} ABOARD', style: mono(12, color: boneFaint, weight: FontWeight.w700)),
+      ]),
+    );
+  }
+}
+
+class LogPage extends StatelessWidget {
+  final Tuner radio;
+  final VoidCallback onTune;
+  const LogPage({super.key, required this.radio, required this.onTune});
+
+  @override
+  Widget build(BuildContext context) {
+    final st = radio.stations;
+    return CustomScrollView(slivers: [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 26, 24, 6),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('THE LOG', style: carved(22, spacing: 0.3)),
+            const SizedBox(height: 8),
+            Text('Every station on the air, by how many are aboard. Kept by every node, owned by none.',
+                style: serif(15, color: boneFaint, italic: true)),
+            const SizedBox(height: 14),
+            const Divider(color: boneGhost, height: 1, thickness: 0.5),
+          ]),
+        ),
+      ),
+      if (st.isEmpty)
+        SliverToBoxAdapter(
+          child: Padding(padding: const EdgeInsets.all(24), child: Text('Searching the Log', style: serif(16, color: boneFaint, italic: true))),
+        ),
+      SliverList.separated(
+        itemCount: st.length,
+        separatorBuilder: (_, __) => const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 24),
+          child: Divider(color: boneGhost, height: 1, thickness: 0.5),
+        ),
+        itemBuilder: (context, i) {
+          final s = st[i];
+          final id = s['id'] as String;
+          final live = s['live'] == true;
+          final tuned = radio.tuned == id && radio.playing;
+          return InkWell(
+            onTap: () {
+              radio.tune(id);
+              onTune();
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              child: Row(children: [
+                Flag(id: id, width: 48, live: live),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Flexible(child: Text(s['name'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(19, color: tuned ? bone : boneDim))),
+                      if (live) ...[const SizedBox(width: 8), Text('ON AIR', style: carved(9, color: bloodBright, spacing: 0.3))],
+                    ]),
+                    const SizedBox(height: 2),
+                    Text(s['call_sign'] ?? '', style: mono(10, color: boneGhost)),
+                    if ((s['about'] ?? '').toString().isNotEmpty)
+                      Text(s['about'], maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(13, color: boneFaint, italic: true)),
+                  ]),
+                ),
+                const SizedBox(width: 12),
+                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text('${s['aboard'] ?? 0}', style: mono(16, color: tuned ? bone : boneDim, weight: FontWeight.w700)),
+                  Text('ABOARD', style: carved(8, color: boneGhost, spacing: 0.2)),
+                ]),
+              ]),
+            ),
+          );
+        },
+      ),
+      const SliverToBoxAdapter(child: SizedBox(height: 30)),
+    ]);
+  }
+}
+
+class ColoursPage extends StatefulWidget {
+  final Tuner radio;
+  const ColoursPage({super.key, required this.radio});
+  @override
+  State<ColoursPage> createState() => _ColoursPageState();
+}
+
+class _ColoursPageState extends State<ColoursPage> {
+  final name = TextEditingController();
+  final about = TextEditingController();
+  bool raising = false;
+  bool talk = false;
+  String? error;
+  List library = [];
+  String? phrase;
+  String? libraryFor;
+  int libraryCount = -1;
+
+  InputDecoration field(String label) => InputDecoration(
+        labelText: label,
+        labelStyle: serif(15, color: boneFaint, italic: true),
+        enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: boneGhost)),
+        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: bone)),
+      );
+
+  Widget button(String label, VoidCallback? onTap, {Color color = bone}) => OutlinedButton(
+        onPressed: onTap,
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: onTap == null ? boneGhost : color.withValues(alpha: 0.7), width: 0.8),
+          shape: const RoundedRectangleBorder(),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
+        ),
+        child: Text(label, style: carved(11, color: onTap == null ? boneGhost : color, spacing: 0.25)),
+      );
+
+  Future<void> raise() async {
+    setState(() {
+      raising = true;
+      error = null;
+    });
+    final r = await Native.callAway({'cmd': 'raise', 'name': name.text, 'about': about.text});
+    setState(() {
+      raising = false;
+      if (r is Map && r['error'] != null) error = r['error'];
+    });
+  }
+
+  Future<void> add(String station) async {
+    final picked = await FilePicker.platform.pickFiles(type: FileType.audio, allowMultiple: true);
+    if (picked == null) return;
+    for (final f in picked.files) {
+      if (f.path == null) continue;
+      final stem = f.name.replaceAll(RegExp(r'\.[^.]+$'), '');
+      final parts = stem.split(' - ');
+      Native.call({
+        'cmd': 'add_track',
+        'station': station,
+        'path': f.path,
+        'title': parts.length > 1 ? parts.sublist(1).join(' - ') : stem,
+        'by': parts.length > 1 ? parts.first : '',
+        'talk': talk,
+      });
+    }
+  }
+
+  void loadLibrary(String station, int count) {
+    if (libraryFor == station && libraryCount == count) return;
+    libraryFor = station;
+    libraryCount = count;
+    final l = Native.call({'cmd': 'library', 'station': station});
+    library = l is List ? l : [];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mine = widget.radio.mine;
+    return ListView(padding: const EdgeInsets.fromLTRB(24, 26, 24, 40), children: [
+      if (mine == null) ...[
+        Text('RAISE COLOURS', style: carved(22)),
+        const SizedBox(height: 10),
+        Text('A station is a key made on this phone. Name it, put recordings on its clock, and it plays all day and all night, carried by every listener.',
+            style: serif(16, color: boneFaint, italic: true)),
+        const SizedBox(height: 22),
+        TextField(controller: name, style: serif(20), decoration: field('Name'), maxLength: 40),
+        TextField(controller: about, style: serif(16), decoration: field('What it broadcasts'), maxLength: 140),
+        const SizedBox(height: 18),
+        Row(children: [button(raising ? 'RAISING' : 'RAISE COLOURS', raising ? null : raise)]),
+        if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: serif(14, color: bloodBright))),
+        const SizedBox(height: 28),
+        Text('While you broadcast, other nodes can see your network address, as on BitTorrent. The Practice on hostis.black covers what to do if that matters to you.',
+            style: serif(13, color: boneGhost, italic: true)),
+      ] else
+        ..._station(mine),
+    ]);
+  }
+
+  List<Widget> _station(Map<String, dynamic> mine) {
+    final id = mine['id'] as String;
+    loadLibrary(id, (mine['tracks'] as num?)?.toInt() ?? 0);
+    final jobs = widget.radio.jobs;
+    return [
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Flag(id: id, width: 96),
+        const SizedBox(width: 18),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(mine['name'] ?? '', style: serif(26)),
+            Text(mine['call_sign'] ?? '', style: mono(12)),
+            const SizedBox(height: 6),
+            Text('${mine['tracks']} ${mine['tracks'] == 1 ? 'recording' : 'recordings'} on the clock', style: serif(14, color: boneFaint, italic: true)),
+          ]),
+        ),
+      ]),
+      const SizedBox(height: 26),
+      Text('ADD RECORDINGS', style: carved(14)),
+      const SizedBox(height: 8),
+      Text('Everything you set plays in rounds, all day, every track once before any plays twice. Name files "Artist - Title" and the clock shows both.',
+          style: serif(14, color: boneFaint, italic: true)),
+      Row(children: [
+        Switch(value: talk, onChanged: (v) => setState(() => talk = v), activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel),
+        Text(talk ? 'Talk · mono · 24 kbit/s' : 'Music · stereo · 64 kbit/s', style: mono(11)),
+      ]),
+      Row(children: [button('CHOOSE FILES', () => add(id))]),
+      for (final j in jobs)
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Row(children: [
+            Expanded(child: Text(j['state'] ?? '', style: serif(14, color: boneDim, italic: true))),
+            if (!(j['state'] as String).startsWith('Setting'))
+              IconButton(icon: const Icon(Icons.close, size: 16, color: boneGhost), onPressed: () => Native.call({'cmd': 'clear_job', 'job': j['id']})),
+          ]),
+        ),
+      const SizedBox(height: 26),
+      if (library.isNotEmpty) ...[
+        Text('THE LIBRARY', style: carved(14)),
+        const SizedBox(height: 6),
+        for (final t in library)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(t['title'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(16, color: boneDim)),
+                  if ((t['by'] ?? '').toString().isNotEmpty) Text(t['by'], style: carved(9, color: boneFaint, spacing: 0.2)),
+                ]),
+              ),
+              Text(fmtTime((t['duration_ms'] as num).toInt()), style: mono(11, color: boneGhost)),
+              IconButton(
+                icon: const Icon(Icons.remove, size: 16, color: boneGhost),
+                tooltip: 'Withdraw',
+                onPressed: () {
+                  Native.call({'cmd': 'withdraw', 'station': id, 'track': t['hash']});
+                  libraryCount = -1;
+                },
+              ),
+            ]),
+          ),
+        const SizedBox(height: 26),
+      ],
+      Text('YOUR KEY', style: carved(14)),
+      const SizedBox(height: 8),
+      Text('Twenty-four words. Whoever holds them is the station. Nobody can recover them for you. Write them down and keep them off any screen but this one.',
+          style: serif(14, color: boneFaint, italic: true)),
+      const SizedBox(height: 10),
+      if (phrase != null)
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: panel, border: Border.all(color: boneGhost, width: 0.5)),
+          child: SelectableText(phrase!, style: mono(13, color: bone)),
+        ),
+      Row(children: [
+        button(phrase == null ? 'SHOW THE WORDS' : 'HIDE THE WORDS', () {
+          setState(() => phrase = phrase == null ? (Native.call({'cmd': 'phrase', 'station': id})['phrase'] as String?) : null);
+        }),
+      ]),
+      const SizedBox(height: 34),
+      Text('STRIKE COLOURS', style: carved(14, color: bloodBright)),
+      const SizedBox(height: 8),
+      Text('Ends the station. Every honest node drops its recordings. The mark stays as long as the hand that made it chooses to honour it.',
+          style: serif(14, color: boneFaint, italic: true)),
+      const SizedBox(height: 10),
+      Row(children: [
+        button('STRIKE COLOURS', () async {
+          final ok = await showDialog<bool>(
+            context: context,
+            builder: (c) => AlertDialog(
+              backgroundColor: panel,
+              shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+              title: Text('Strike colours?', style: serif(22)),
+              content: Text('The station ends for good. This cannot be undone.', style: serif(15, color: boneFaint)),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(c, false), child: Text('KEEP FLYING', style: carved(11))),
+                TextButton(onPressed: () => Navigator.pop(c, true), child: Text('STRIKE', style: carved(11, color: bloodBright))),
+              ],
+            ),
+          );
+          if (ok == true) Native.call({'cmd': 'strike', 'station': id});
+        }, color: bloodBright),
+      ]),
+    ];
+  }
+}
