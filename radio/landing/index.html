@@ -8,7 +8,7 @@
 <meta name="description" content="Radio that plays all day and all night, that anyone can raise, that every listener carries, and that answers to no server, no store and no account.">
 <meta property="og:title" content="Pyrate Radio">
 <meta property="og:description" content="Radio that every listener carries. Listen in the browser or take the set.">
-<meta property="og:image" content="https://pyrateradio.hostis.black/mark.png">
+<meta property="og:image" content="https://hostis.black/pyrateradio/mark.png">
 <link rel="icon" href="mark.png">
 <style>
 /*FONTS*/
@@ -59,7 +59,7 @@ footer a{color:inherit}
 <main>
 <div id="passed" class="passed" hidden></div>
 <script>
-// A station link: pyrateradio.hostis.black/#<station id>. It plays here in the browser, or in the app.
+// A station link: hostis.black/pyrateradio/#<station id>. It plays here in the browser, or in the app.
 (function(){var id=(location.hash||'').slice(1).toLowerCase();if(!/^[0-9a-f]{64}$/.test(id))return;var b=document.getElementById('passed');
 var app=/Android/.test(navigator.userAgent)?' <a href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url='+encodeURIComponent(location.origin+'/listen/#'+id)+';end">Open in the app</a>':'';
 b.innerHTML='Someone passed you a station.<br><a href="listen/#'+id+'">▶ Listen here</a>'+app;b.hidden=false})();

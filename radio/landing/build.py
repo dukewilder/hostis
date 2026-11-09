@@ -1,4 +1,4 @@
-# Builds the site for pyrateradio.hostis.black into landing/out: the landing page, the
+# Builds hostis.black/pyrateradio/ into landing/out: the landing page, the
 # browser radio at /listen/, and the app. Fonts come from the HOSTIS site, so one ship
 # keeps one type.
 import re, os, shutil, sys, hashlib, subprocess
@@ -16,6 +16,7 @@ if apk:
     data = open(apk, "rb").read()
     sha, size = hashlib.sha256(data).hexdigest(), f"{len(data)/1e6:.0f}"
     shutil.copy(apk, f"{out}/pyrate-radio-{version}.apk")
+    
 else:
     sha, size = "(build pending)", "?"
 page = page.replace("{{VERSION}}", version).replace("{{SHA}}", sha).replace("{{SIZE}}", size)
@@ -23,8 +24,4 @@ open(f"{out}/index.html", "w", encoding="utf-8").write(page)
 shutil.copytree(f"{R}/browser/www/dist", f"{out}/listen")
 for f in ["wordmark.png", "mark.png"]:
     shutil.copy(f"{R}/node/src/web/{f}", out)
-open(f"{out}/CNAME", "w").write("pyrateradio.hostis.black\n")
-open(f"{out}/.nojekyll", "w").write("")
-open(f"{out}/robots.txt", "w").write("User-agent: *\nAllow: /\n")
-open(f"{out}/404.html", "w", encoding="utf-8").write('<!DOCTYPE html><meta charset="utf-8"><title>Pyrate Radio</title><meta http-equiv="refresh" content="0; url=/"><a href="/">Pyrate Radio</a>\n')
 print("site at", out, "·", len(faces), "faces ·", sha[:16])
