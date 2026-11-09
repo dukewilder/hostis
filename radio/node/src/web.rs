@@ -55,6 +55,7 @@ pub async fn serve(inner: Arc<Inner>, addr: SocketAddr, every_station: bool) -> 
         .route("/log.json", get(log))
         .route("/now/{id}", get(now))
         .route("/listen/{id}", get(listen))
+        .route("/art/{hash}", get(art))
         .with_state(web);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     say(&format!("web listener on http://{addr}"));
@@ -106,11 +107,29 @@ async fn now(State(w): State<Web>, Path(id): Path<String>) -> Response {
     let body = match np {
         Some(np) => {
             let (title, by) = describe(&a, &np.track);
-            json!({ "live": false, "title": title, "by": by, "position_ms": np.offset_ms, "duration_ms": np.duration_ms })
+            let pic = a.track_art(&np.track).map(|r| crate::hex(&r.hash));
+            json!({ "live": false, "title": title, "by": by, "art": pic, "position_ms": np.offset_ms, "duration_ms": np.duration_ms })
         }
         None => json!({ "live": false, "title": "", "by": "" }),
     };
     ([(header::CACHE_CONTROL, "no-store")], axum::Json(body)).into_response()
+}
+
+/// A picture, only when it belongs to a station this page may show.
+async fn art(State(w): State<Web>, Path(hash): Path<String>) -> Response {
+    let Ok(h) = crate::unhex(hash.trim_end_matches(".jpg")) else { return StatusCode::NOT_FOUND.into_response() };
+    let owner = {
+        let s = w.inner.store.lock().unwrap();
+        s.logs.iter().find(|(_, a)| a.art_hashes().contains(&h)).map(|(id, _)| *id)
+    };
+    if !owner.is_some_and(|st| w.allowed(&st)) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let bytes = w.inner.store.lock().unwrap().get_chunk(&h).or_else(|| w.inner.art_mem.lock().unwrap().get(&h));
+    match bytes {
+        Some(b) => ([(header::CONTENT_TYPE, "image/jpeg"), (header::CACHE_CONTROL, "public, max-age=31536000, immutable")], b).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 async fn listen(State(w): State<Web>, Path(id): Path<String>) -> Response {

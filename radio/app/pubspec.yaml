@@ -1,7 +1,7 @@
 name: pyrate
 description: "Pyrate Radio. Every install a station, a carrier and a relay. No rights reserved."
 publish_to: 'none'
-version: 0.4.0+4
+version: 0.5.0+5
 
 environment:
   sdk: ^3.9.0
@@ -19,6 +19,7 @@ flutter:
     - assets/bootstrap.txt
     - assets/harbour.txt
     - assets/release_keys.txt
+    - assets/brand/
   fonts:
     - family: Cinzel
       fonts:

@@ -221,3 +221,13 @@ Only what cannot be done from here:
 - **Dylan holds all three release keys for now**, as word sheets kept in three places. A second and third holder can take one each later without changing a line of code.
 - **The Lantern publishes from a folder**: `releases/` for signed builds. The keys that sign never sit on it.
 - **No refusal list.** One was built and taken out. A shared list is a lever, and whoever holds a lever gets leaned on. Each node maroons for itself, privately; a Lantern operator adds ids to `maroon.txt` on his own box.
+
+## XV. Art (9 November 2026)
+
+- **Stations carry pictures.** A cover for the Log and the dial, a banner across the station's page, and the album cover inside each recording while it plays. The cover's strongest colour themes the station's page; a grey cover gets bone.
+- **Art is signed into the log, never linked.** A link would hand every browsing listener's address to whoever runs the image host, could be swapped silently, and goes dead. A picture named by its fingerprint can do none of that.
+- **Every picture is redrawn before it sails**: decoded, resized, and written fresh as a plain JPEG of a fixed size. Location data and anything hidden in the file are gone.
+- **Listeners never hand a stranger's file to the phone's decoder.** Pyrate decodes art in memory-safe code and gives the screen raw pixels. Anything but a plain JPEG of station size is refused.
+- **Art is never ballast, and browsing never writes it down.** Pictures seen in the Log live in memory and are gone when the app closes. Art lands on a phone's disk, sealed, only for stations the owner keeps, listens to or broadcasts. A phone at the end of a stem holds a broadcaster's art in memory until the Lanterns take it aboard; Lanterns carry art for the stations they carry. Exits pass chunks through without keeping them.
+- **A Lantern's seed folder takes `station.jpg` and `banner.jpg`** as the station's art; `cover.jpg` beside recordings is their track art.
+- **The mark is the skull; the wordmark is PYRATE ☠ RADIO**, traced from Dylan's choice, in HOSTIS bone. Files in `brand/`.

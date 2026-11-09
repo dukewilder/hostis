@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'art.dart';
 import 'native.dart';
 
 // The site's ink.
@@ -31,7 +32,7 @@ TextStyle mono(double size, {Color color = boneFaint, FontWeight weight = FontWe
 const _service = MethodChannel('pyrate/service');
 
 /// This build's version code. A release is offered only when its code is higher.
-const kBuildCode = 4;
+const kBuildCode = 5;
 
 /// The stations a first open lands on when no station has yet earned it: HOSTIS's own.
 List<String> harbour = [];
@@ -336,7 +337,7 @@ class Dial extends StatelessWidget {
           ),
         ),
       const SizedBox(height: 18),
-      Text('PYRATE RADIO', style: carved(12, color: boneFaint, spacing: 0.4)),
+      Image.asset('assets/brand/wordmark.png', width: 210, filterQuality: FilterQuality.medium, color: boneDim, colorBlendMode: BlendMode.modulate),
       const SizedBox(height: 4),
       Text(stations.isEmpty ? '' : '${stations.length} ${stations.length == 1 ? 'STATION' : 'STATIONS'} ON THE AIR',
           style: mono(10, color: boneGhost)),
@@ -401,10 +402,27 @@ class _StationFace extends StatelessWidget {
     final by = (now?['by'] as String?) ?? '';
     final pos = (now?['position_ms'] as num?)?.toInt() ?? 0;
     final dur = (now?['duration_ms'] as num?)?.toInt() ?? 0;
-    return Padding(
+    final accent = accentOf(s['accent']) ?? bone;
+    final pic = (isTuned && now?['art'] != null) ? now!['art'] as String : s['cover'] as String?;
+    return Stack(children: [
+      if (s['banner'] != null)
+        Positioned(
+          top: 0, left: 0, right: 0, height: 220,
+          child: ShaderMask(
+            blendMode: BlendMode.dstIn,
+            shaderCallback: (r) => const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0x88FFFFFF), Color(0x00FFFFFF)]).createShader(r),
+            child: StationArt(station: id, hash: s['banner'], width: double.infinity, height: 220, fallback: const SizedBox()),
+          ),
+        ),
+      Padding(
       padding: const EdgeInsets.symmetric(horizontal: 28),
       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Flag(id: id, width: 200, live: live),
+        pic == null
+            ? Flag(id: id, width: 200, live: live)
+            : Container(
+                decoration: BoxDecoration(border: Border.all(color: accent.withValues(alpha: 0.45), width: 0.6)),
+                child: StationArt(station: id, hash: pic, width: 220, height: 220, fallback: Flag(id: id, width: 180, live: live)),
+              ),
         const SizedBox(height: 26),
         if (live)
           Container(
@@ -437,7 +455,7 @@ class _StationFace extends StatelessWidget {
                           if (dur > 0) ...[
                             SizedBox(
                               width: 220,
-                              child: LinearProgressIndicator(value: (pos / dur).clamp(0.0, 1.0), minHeight: 1, color: bone, backgroundColor: boneGhost),
+                              child: LinearProgressIndicator(value: (pos / dur).clamp(0.0, 1.0), minHeight: 1, color: accent, backgroundColor: boneGhost),
                             ),
                             const SizedBox(height: 6),
                             Text('${fmtTime(pos)} / ${fmtTime(dur)}', style: mono(10, color: boneGhost)),
@@ -446,7 +464,8 @@ class _StationFace extends StatelessWidget {
         ),
         Text('${s['aboard'] ?? 0} ABOARD', style: mono(12, color: boneFaint, weight: FontWeight.w700)),
       ]),
-    );
+      ),
+    ]);
   }
 }
 
@@ -530,7 +549,7 @@ class LogPage extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               child: Row(children: [
-                Flag(id: id, width: 48, live: live),
+                StationArt(station: id, hash: s['cover'], width: 52, height: 52, fallback: Flag(id: id, width: 48, live: live)),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -629,6 +648,89 @@ class _ColoursPageState extends State<ColoursPage> {
     }
   }
 
+  String? artNote;
+
+  Future<void> _setArt(String station, String kind, String path) async {
+    setState(() => artNote = 'Redrawing the picture');
+    final r = await Native.callAway({'cmd': 'art_set', 'station': station, 'kind': kind, 'path': path});
+    setState(() => artNote = r is Map && r['error'] != null ? 'That picture would not take: ${r['error']}' : null);
+  }
+
+  Future<void> pickArt(String station, String kind) async {
+    final picked = await FilePicker.platform.pickFiles(type: FileType.image);
+    final path = picked?.files.single.path;
+    if (path != null) await _setArt(station, kind, path);
+  }
+
+  Future<void> linkArt(String station, String kind) async {
+    final link = TextEditingController();
+    final url = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: panel,
+        shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+        title: Text(kind == 'banner' ? 'BANNER FROM A LINK' : 'COVER FROM A LINK', style: carved(13)),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Your phone fetches the picture once and redraws it. The site you link sees this phone\'s address; listeners never touch it.',
+              style: serif(13, color: boneFaint, italic: true)),
+          TextField(controller: link, autofocus: true, style: mono(12, color: bone), decoration: field('https://')),
+        ]),
+        actions: [TextButton(onPressed: () => Navigator.pop(c, link.text.trim()), child: Text('FETCH', style: carved(11)))],
+      ),
+    );
+    if (url == null || !url.startsWith('http')) return;
+    setState(() => artNote = 'Fetching the picture');
+    try {
+      final req = await HttpClient().getUrl(Uri.parse(url));
+      final res = await req.close();
+      final bytes = <int>[];
+      await for (final part in res) {
+        bytes.addAll(part);
+        if (bytes.length > 30000000) throw 'too large';
+      }
+      final f = File('${Directory.systemTemp.path}/pyrate-art-${DateTime.now().millisecondsSinceEpoch}');
+      await f.writeAsBytes(bytes);
+      await _setArt(station, kind, f.path);
+      await f.delete();
+    } catch (e) {
+      setState(() => artNote = 'Could not fetch that link');
+    }
+  }
+
+  List<Widget> _art(String id, Map mine) => [
+        Text('THE ART', style: carved(14)),
+        const SizedBox(height: 8),
+        Text('A cover for the Log and the dial, a banner across the top of your page. Any picture works: it is redrawn on this phone before it sails, stripped of where and when it was taken. Album covers inside your recordings show while they play.',
+            style: serif(14, color: boneFaint, italic: true)),
+        const SizedBox(height: 14),
+        if (mine['banner'] != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: StationArt(station: id, hash: mine['banner'], width: double.infinity, height: 96, fallback: const SizedBox()),
+          ),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            decoration: BoxDecoration(border: Border.all(color: boneGhost, width: 0.5)),
+            child: StationArt(station: id, hash: mine['cover'], width: 96, height: 96,
+                fallback: Text('NO COVER', style: carved(9, color: boneGhost))),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Wrap(spacing: 10, runSpacing: 10, children: [
+              button('COVER', () => pickArt(id, 'cover')),
+              button('BANNER', () => pickArt(id, 'banner')),
+              button('COVER FROM A LINK', () => linkArt(id, 'cover')),
+              if (mine['cover'] != null || mine['banner'] != null)
+                button('TAKE IT DOWN', () {
+                  Native.call({'cmd': 'art_clear', 'station': id, 'kind': 'cover'});
+                  Native.call({'cmd': 'art_clear', 'station': id, 'kind': 'banner'});
+                }, color: bloodBright),
+            ]),
+          ),
+        ]),
+        if (artNote != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(artNote!, style: serif(13, color: boneFaint, italic: true))),
+      ];
+
   Future<void> add(String station) async {
     final picked = await FilePicker.platform.pickFiles(type: FileType.audio, allowMultiple: true);
     if (picked == null) return;
@@ -710,6 +812,19 @@ class _ColoursPageState extends State<ColoursPage> {
           ]),
         const SizedBox(height: 26),
       ],
+      Text('ART', style: carved(14)),
+      const SizedBox(height: 8),
+      Text('Pictures you see while browsing live in memory and are gone when the app closes. Only the art of stations you keep or listen to is kept, sealed like the recordings.',
+          style: serif(14, color: boneFaint, italic: true)),
+      Row(children: [
+        Switch(
+          value: (Native.call({'cmd': 'art_kept_only'}) as Map)['value'] == true,
+          onChanged: (v) => setState(() => Native.call({'cmd': 'art_kept_only', 'value': v})),
+          activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel,
+        ),
+        Flexible(child: Text('Show art only for stations I keep', style: mono(11))),
+      ]),
+      const SizedBox(height: 26),
       Text('THE HOLD', style: carved(14)),
       const SizedBox(height: 8),
       Text('What you listen to is kept here so your phone can play it without waiting. It is sealed: nothing on the phone says what any of it is. Clearing it leaves your own station and the ballast you carry for the fleet.',
@@ -783,6 +898,8 @@ class _ColoursPageState extends State<ColoursPage> {
           ]),
         ),
       ]),
+      const SizedBox(height: 26),
+      ..._art(id, mine),
       const SizedBox(height: 26),
       ..._onAir(id),
       const SizedBox(height: 26),
