@@ -21,7 +21,7 @@ On the phone the node starts, joins the Log and finds the PC Lantern. Sound out 
 **On the air**
 
 - The Public Domain (`GAHAGU·3695`): 1925-and-earlier recordings from Wikimedia Commons, public-domain only, source line on every track.
-- Readings (`DEVAKA·F42C`): LibriVox. Johnson's General History of the Pyrates, Treasure Island, and one children's book the search pulled in.
+- Readings (`DEVAKA·F42C`): LibriVox. Johnson's General History of the Pyrates (two readings), The Pirates Own Book, Treasure Island. A children's book the search pulled in was withdrawn with `lantern --withdraw`.
 
 **Open**
 
@@ -29,3 +29,10 @@ On the phone the node starts, joins the Log and finds the PC Lantern. Sound out 
 2. On Android the node asks 1.1.1.1 and 9.9.9.9 for DNS, because the system resolver needs a Java context the node does not yet pass to iroh's resolver.
 3. Release signing: the key stays with Dylan. Builds are signed with the debug key until then.
 4. Not yet built: web listener, Hail, Tape it, Local filter, Pass it on, F-Droid repository, reproducible builds, export notice, security review.
+
+**The PC Lantern**
+
+- Folder: `Documents\Pyrate Radio` on Dylan's PC. Data in `lantern-data`, audio in `stations\public-domain` and `stations\readings`.
+- Node id `72b966c645197137b553995ff690349153c4219cc08278ebdde15dcf7bd29d72`, the app's first peer (`app/assets/bootstrap.txt`).
+- Relight: `powershell -ExecutionPolicy Bypass -File light.ps1`. New files dropped in a station folder go on its clock within ten minutes.
+- The PC is set never to sleep on mains power. If it does, the HOSTIS stations stay up only on phones that carry them.
