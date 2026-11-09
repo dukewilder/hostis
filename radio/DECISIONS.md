@@ -61,7 +61,7 @@ The site's light imagery (the second candle lit from the first, the cathedral in
 
 **Interface.** Flutter, for Android, Linux, Windows and macOS from one codebase.
 
-**Transport.** iroh: QUIC connections, hole punching, `iroh-gossip` for the Log and live audio, `iroh-blobs` for content-addressed archive chunks. Veilid was weighed and set down. Its private routing is the stronger privacy story, but a radio that stutters loses its listener in ten seconds, and the colours say the product has to be better than what people already use before privacy counts for anything. A one-week spike on real phones confirms iroh holds a stream across carrier NAT. If it fails, Veilid is the fallback, and the decision is reopened in this file, not quietly.
+**Transport.** iroh: QUIC connections, hole punching, `iroh-gossip` for the Log and live audio, `iroh-blobs` for content-addressed archive chunks. Veilid was weighed and set down. Its private routing is the stronger privacy story, but a radio that stutters loses its listener in ten seconds, and the colours say the product has to be better than what people already use before privacy counts for anything. The spike ran on 8 November 2026 on a phone on T-Mobile and a PC on home broadband: sound in 0.72 seconds, a direct hole-punched path inside five seconds, and no gaps across relay and direct runs alike. iroh is confirmed. The results are in `spike/RESULTS.md`.
 
 **Relays.** iroh's relays forward traffic when two peers cannot reach each other directly. Pyrate Radio never depends on anyone else's relays. Every Lantern can run as a relay, the app ships with a list of HOSTIS-run and crew-run relays, and the list is itself gossiped and grows.
 
