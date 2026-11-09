@@ -232,8 +232,39 @@ Only what cannot be done from here:
 - **A Lantern's seed folder takes `station.jpg` and `banner.jpg`** as the station's art; `cover.jpg` beside recordings is their track art.
 - **The mark is the skull; the wordmark is PYRATE ☠ RADIO**, traced from Dylan's choice, in HOSTIS bone. Files in `brand/`.
 
-## XVI. What a Lantern answers for (9 November 2026)
+## XVI. What a Lantern carries (9 November 2026)
 
-- **A Lantern carries its own stations, and nothing else, unless its keeper says otherwise.** It serves, relays and passes traffic through, but only `--carry-all` makes it mirror the Log, take strangers' stems aboard or keep their art. The HOSTIS Lantern runs without it. A keeper answers for what sits on his disk, so the choice is his.
-- **A Lantern that carries its own never ends a stranger's stem.** It hands the cargo on to the next ship.
-- **A station nobody can hear is worse than one heard from a known address.** If three stems in a row find no taker, the broadcaster's phone goes on the air directly and its Colours page says so in one line. As the fleet grows, stems land and the stem's cover returns.
+- **A Lantern carries the whole Log by default**, Dylan's ruling: the network has to be substantial, and a station nobody carries is a station nobody hears. A keeper takes any station off his own Lantern with `maroon.txt`, and `--carry-own` limits a Lantern to its own stations.
+- **Crew lists, never a HOSTIS list.** Anyone can share the stations they have marooned as a plain list; anyone can take a list aboard. It is a copy, made once: nobody can change a list after someone else takes it, so no list is a lever.
+- **A station nobody can hear is worse than one heard from a known address.** If three stems in a row find no taker, the broadcaster's phone goes on the air directly and its Colours page says so in one line. As the fleet grows, stems land and the cover returns. Strict mode turns this off.
+
+## XVII. The second voyage (9 November 2026)
+
+Each item was weighed before building. What was built:
+
+- **A format that can grow.** Log entries carry their bodies in a length prefix, and a body this version does not know is kept and passed on exactly as it came. A variant, once released, never changes; new information goes in a new variant. Station cards are signed over their raw bytes and only ever grow at the end, so an old app reads what it knows. Without this, every change after launch would split the network and could strand phones from their updates. Old logs are carried over once: a station whose master key is present starts a fresh log with its colours and art, and its seed folder refills it.
+- **One loudness.** Every recording is measured and brought to -16 LUFS as it is added, with dead air trimmed from the head and tail and no peak above -1 dBFS. 1925 shellac and a modern podcast play at the same level.
+- **The watch bill.** The clock is worked out on the phone, so the app shows what plays today and this week and rings a bell when a show starts, with no server and no connection needed.
+- **Radio basics.** Lock-screen and headphone controls, Bluetooth and the car (Android Auto, for drivers who allow apps from outside the Play Store), pausing for calls and ducking for voice prompts, stopping when headphones come out.
+- **Wake to the radio**, rising from quiet. If no sound comes within 45 seconds, the phone's own alarm rings, so nobody oversleeps on a dead network.
+- **Lights out**, heard tonight (memory only), search, sort (most aboard, longest on air, newest, most carried), kinds, Local by port, and what is on now beside each station.
+- **Provisions.** On Wi-Fi, the next six hours of up to three kept stations come aboard ahead of time, sealed.
+- **For broadcasters:** record a segment in the app; the station's papers (kinds, mature, port, tips); the clock's blocks and bell; hands (co-hosts) appointed with the 24 words; an hourly chart of the aboard count. Taking a station back now fetches its log first and then shuts the old phone out, as the screen always said. Two phones writing one station at once no longer fork it: the network's copy stands and the later phone's entries are written again after it.
+- **Tape it.** The last two minutes as a plain Ogg Opus file, shared from the phone.
+- **Pass it on**, by QR over local Wi-Fi or a hotspot, or by Quick Share, with no internet.
+- **Station links** (`hostis.black/radio/#<id>`, `pyrate://station/<id>`) open the app.
+- **False colours.** HOSTIS's harbour stations carry the skull seal, which no other key can show, and a station flying a harbour station's name is marked.
+- **Discretion.** A plain icon named Radio, a plain lock screen, a PIN on Colours, and strict mode for those who would rather stutter than ever ask a carrier directly.
+- **The bell.** A seed folder's `bell.wav` plays on the hour. `tools/bell.py` writes one a day from the Annals, in order, and the day's broadside when given one, spoken by a voice running on the Lantern's own machine.
+- **`tools/feed2folder.py`** brings a broadcaster's own podcast feed into a seed folder.
+- **Signing on Dylan's machine.** `release android-init` makes the Android key as 24 words; `release sign-apk` signs a build offline. Verified with Google's own apksigner.
+- **Holes found and closed on the way:** the app never read its harbour list or its release keys; a station's own phone never synced its own log; time arithmetic could overflow when a carrier's clock ran ahead; marooning left a station's art and log on disk; a Lantern's maroon list did not stop it serving the station's log.
+
+What was weighed and set down, for now:
+
+- **Memory-hard tokens for the aboard count.** Every node checks every token, so a heavier puzzle would cost every phone battery to slow one spammer. Sorting, maroon lists and rounded counts answer it better.
+- **Hail.** Sealed voice notes would sit on Lanterns that cannot see inside them. Not while Lanterns carry everything by default.
+- **The BitTorrent DHT door.** This version of iroh has no DHT discovery; crew Lanterns in the bootstrap list do the same work for now.
+- **The browser node.** The whole network in a web page, so iPhones hear every station. A project of its own, and the hard part (playing on a locked iPhone) needs a real iPhone to prove.
+- **Tape it as a video clip** for X and TikTok, and a podcast feed of HOSTIS's stations. Both wait until the core is on the air.
+- **The deputy key in the phone's secure hardware.** The PIN covers a casual look; the hardware vault is next.

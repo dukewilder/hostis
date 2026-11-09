@@ -91,7 +91,7 @@ pub struct Config {
 pub const CREW_RELAYS: &[&str] = &["https://relay.hostis.black"];
 
 /// Points a rewritten entry's references at the entries' new hashes.
-fn remap(body: Body, moved: &HashMap<Hash, Hash>) -> Body {
+pub(crate) fn remap(body: Body, moved: &HashMap<Hash, Hash>) -> Body {
     let m = |h: Hash| *moved.get(&h).unwrap_or(&h);
     match body {
         Body::Withdraw { track } => Body::Withdraw { track: m(track) },

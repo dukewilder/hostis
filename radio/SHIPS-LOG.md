@@ -49,3 +49,9 @@ On the phone the node starts, joins the Log and finds the PC Lantern. Confirmed 
 - Node id `72b966c645197137b553995ff690349153c4219cc08278ebdde15dcf7bd29d72`, the app's first peer (`app/assets/bootstrap.txt`).
 - Relight: `powershell -ExecutionPolicy Bypass -File light.ps1`. New files dropped in a station folder go on its clock within ten minutes.
 - The PC is set never to sleep on mains power. If it does, the HOSTIS stations stay up only on phones that carry them.
+
+**9 November: the second voyage**
+
+- Built and tested end to end on one machine (`voyage_test`, 16 checks): cards carrying kinds, mature, port and tips; a listener working out the watch bill; a co-host appointed with the 24 words and writing as a deputy; a Lantern carrying the whole Log, and its maroon list taking a station off it, art included; maroon lists shared and taken aboard; an old-format log carried into the new format.
+- The Lantern's hourly bell set from a seed folder. Google's apksigner verifies the offline signing.
+- Every decision and what was set down is in the Ship's Articles, sections XVI and XVII.
