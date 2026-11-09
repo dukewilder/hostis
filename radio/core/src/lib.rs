@@ -10,10 +10,12 @@
 pub mod archive;
 pub mod audio;
 pub mod callsign;
+pub mod clock;
 pub mod ingest;
 pub mod keys;
 
 pub use archive::{Archive, Body, Chunk, Entry, SignedEntry};
+pub use clock::{NowPlaying, Rota};
 pub use audio::{ChunkEncoder, Profile, decode_chunk};
 pub use keys::{StationId, StationKey};
 
