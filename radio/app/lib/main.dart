@@ -91,6 +91,9 @@ class Tuner extends ChangeNotifier {
   }
 
   Future<void> _checkUpdate() async {
+    // Releases come down only on Wi-Fi or another unmetered network.
+    final c = await _service.invokeMethod<Map>('conditions').catchError((_) => <dynamic, dynamic>{}) ?? {};
+    if (c['unmetered'] != true) return;
     final r = await Native.callAway({'cmd': 'update', 'code': kBuildCode});
     if (r is Map && r['available'] == true) {
       update = r.cast<String, dynamic>();
