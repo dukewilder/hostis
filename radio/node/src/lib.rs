@@ -545,7 +545,10 @@ impl Inner {
         }
         // Never touch the store lock here: callers may hold it.
         let p = self.cfg.dir.join("keys").join(format!("{}.pow", station.to_hex()));
-        let n = std::fs::read_to_string(&p).ok().and_then(|s| s.trim().parse().ok()).unwrap_or_else(|| {
+        // A cached answer is checked before it is trusted: a stale one would keep the
+        // station out of every Log without a word.
+        let cached = std::fs::read_to_string(&p).ok().and_then(|s| s.trim().parse().ok()).filter(|n| net::pow_ok(station, *n));
+        let n = cached.unwrap_or_else(|| {
             let n = net::pow_find(station);
             let _ = std::fs::write(&p, n.to_string());
             n
