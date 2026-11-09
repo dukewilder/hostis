@@ -68,8 +68,12 @@ pub fn now_ms() -> u64 {
 pub struct Config {
     pub dir: PathBuf,
     pub quota: u64,
-    /// Lanterns carry every station they hear of, whole.
+    /// An always-on node: serves, relays and keeps its own stations whole.
     pub lantern: bool,
+    /// A Lantern that also carries every station in the Log, and takes strangers' stems
+    /// aboard. Off by default: a Lantern answers for what sits on its disk, so it carries
+    /// its own stations unless its keeper chooses the whole fleet.
+    pub carry_all: bool,
     pub bootstrap: Vec<EndpointId>,
     /// Ask public resolvers instead of the system's. For processes with no Android context.
     pub public_dns: bool,
@@ -144,6 +148,10 @@ pub struct Inner {
     handle: tokio::runtime::Handle,
     ballast_ok: std::sync::atomic::AtomicBool,
     tokens_sent: Mutex<HashMap<StationId, u64>>,
+    /// Our stations no stem would take, now on the air straight from this device, and how
+    /// many stems in a row have found no taker.
+    pub(crate) direct: Mutex<std::collections::HashSet<StationId>>,
+    stem_misses: Mutex<HashMap<StationId, u32>>,
     /// On mobile data a phone listens and broadcasts, and carries nobody else's traffic.
     relay_ok: std::sync::atomic::AtomicBool,
 }
@@ -460,10 +468,26 @@ impl Inner {
                     .pipe_pow(pow)
                     .sign(key)
             };
-            if self.cfg.private {
+            if self.cfg.private && !self.direct.lock().unwrap().contains(&id) {
                 // Never show the network our own station first: send it down the stem.
-                self.stem_push(id, Some(a)).await;
-                continue;
+                if self.stem_push(id, Some(a.clone())).await {
+                    self.stem_misses.lock().unwrap().remove(&id);
+                    continue;
+                }
+                // A station nobody can hear is worse than one heard from a known address.
+                // After three stems with no taker it goes on the air from here, and the
+                // owner is told.
+                let misses = {
+                    let mut m = self.stem_misses.lock().unwrap();
+                    let e = m.entry(id).or_insert(0);
+                    *e += 1;
+                    *e
+                };
+                if misses < 3 {
+                    continue;
+                }
+                self.direct.lock().unwrap().insert(id);
+                say("no node took the stem: the station is on the air directly from this device");
             }
             self.on_gossip(Gossip::Station(a.clone()));
             self.broadcast(&Gossip::Station(a)).await;
@@ -472,7 +496,8 @@ impl Inner {
         for (station, head) in carried {
             // A phone never says what it listened to: it announces only its ballast,
             // which the hash chose for it.
-            if self.cfg.private && (own_set.contains(&station) || !self.store.lock().unwrap().pinned.contains(&station)) {
+            let direct = self.direct.lock().unwrap().contains(&station);
+            if self.cfg.private && !direct && (own_set.contains(&station) || !self.store.lock().unwrap().pinned.contains(&station)) {
                 continue;
             }
             let g = Gossip::Carrier { station, node: me, head };
@@ -518,7 +543,11 @@ impl Inner {
 
     /// Lanterns keep a whole copy of every station they carry.
     async fn mirror(self: &Arc<Self>) {
-        let mut stations: Vec<StationId> = self.log.lock().unwrap().keys().copied().collect();
+        let mut stations: Vec<StationId> = if self.cfg.carry_all {
+            self.log.lock().unwrap().keys().copied().collect()
+        } else {
+            self.store.lock().unwrap().own()
+        };
         stations.extend(self.special_ids());
         let refused = self.refused();
         for st in stations {
@@ -895,6 +924,8 @@ impl Node {
             handle: rt.handle().clone(),
             ballast_ok: std::sync::atomic::AtomicBool::new(false),
             tokens_sent: Mutex::new(HashMap::new()),
+            direct: Mutex::new(std::collections::HashSet::new()),
+            stem_misses: Mutex::new(HashMap::new()),
             relay_ok: std::sync::atomic::AtomicBool::new(!cfg.private),
         });
         *proto.0.lock().unwrap() = Some(inner.clone());
@@ -1123,6 +1154,7 @@ impl Node {
                     let tracks = a.map(|a| a.library().map(|l| l.len()).unwrap_or(0)).unwrap_or(0);
                     let art = a.and_then(|a| a.art());
                     json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": name, "tracks": tracks,
+                        "direct": inner.direct.lock().unwrap().contains(&id),
                         "cover": art.and_then(|x| x.0).map(|r| hex(&r.hash)),
                         "banner": art.and_then(|x| x.1).map(|r| hex(&r.hash)),
                         "accent": art.map(|x| format!("#{:02x}{:02x}{:02x}", x.2[0], x.2[1], x.2[2])) })

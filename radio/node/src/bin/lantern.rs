@@ -4,6 +4,7 @@
 //!
 //! lantern --dir <data> [--quota-gb 20] [--bootstrap <id>,<id>] [--public-dns]
 //!         [--seed "Name|About|folder|music"]...
+//!         [--carry-all]   carry every station in the Log, not just this Lantern's own
 //!         A seed folder's station.jpg and banner.jpg become the station's art.
 
 use std::{collections::HashSet, path::PathBuf, time::Duration};
@@ -22,7 +23,7 @@ fn main() -> anyhow::Result<()> {
     let seeds: Vec<String> = args.windows(2).filter(|w| w[0] == "--seed").map(|w| w[1].clone()).collect();
     std::fs::create_dir_all(&dir)?;
 
-    let node = Node::start(Config { dir: dir.clone(), quota, lantern: true, bootstrap, public_dns: args.iter().any(|a| a == "--public-dns"), private: false, ballast: 0, release_keys: get("--release-keys").map(|p| std::fs::read_to_string(p).unwrap_or_default().lines().filter_map(|l| pyrate_core::StationId::from_hex(l.trim()).ok().map(|i| i.0)).collect()).unwrap_or_default() })?;
+    let node = Node::start(Config { dir: dir.clone(), quota, lantern: true, carry_all: args.iter().any(|a| a == "--carry-all"), bootstrap, public_dns: args.iter().any(|a| a == "--public-dns"), private: false, ballast: 0, release_keys: get("--release-keys").map(|p| std::fs::read_to_string(p).unwrap_or_default().lines().filter_map(|l| pyrate_core::StationId::from_hex(l.trim()).ok().map(|i| i.0)).collect()).unwrap_or_default() })?;
     println!("LANTERN LIT");
     // --http 127.0.0.1:8080 serves the web listener; --relay 127.0.0.1:3340 runs a relay. Both
     // bind to loopback by default: a tunnel puts them on the public internet, not this machine.

@@ -199,16 +199,23 @@ impl Inner {
                 c.encrypt(Nonce::from_slice(&ANSWER_NONCE), out.as_slice()).unwrap_or_default()
             }
             Hop::Stem { station, entries, chunks, announce, hops } => {
-                let pass = hops < MAX_STEM && rand::random::<f64>() > FLUFF;
+                // A Lantern that carries only its own stations never ends a stranger's stem: it
+                // hands the cargo on, so nothing of anyone else's lands on its disk.
+                let declines = self.cfg.lantern && !self.cfg.carry_all && !self.is_own(&station);
+                let pass = declines || (hops < MAX_STEM && rand::random::<f64>() > FLUFF);
                 if pass {
                     let mut nodes = self.known_nodes();
                     nodes.shuffle(&mut rand::thread_rng());
                     let next = Hop::Stem { station, entries: entries.clone(), chunks: chunks.clone(), announce: announce.clone(), hops: hops + 1 };
-                    for n in nodes.into_iter().take(2) {
-                        if self.hop(n, &next).await.is_ok() {
+                    for n in nodes.into_iter().take(3) {
+                        // An empty answer is a node that declined the cargo.
+                        if self.hop(n, &next).await.is_ok_and(|b| !b.is_empty()) {
                             return vec![1];
                         }
                     }
+                }
+                if declines {
+                    return vec![];
                 }
                 self.fluff(station, entries, chunks, announce).await;
                 vec![1]
@@ -270,7 +277,8 @@ impl Inner {
     }
 
     /// Sends what other nodes have not yet landed of one of our stations, along the stem.
-    pub(crate) async fn stem_push(self: &Arc<Self>, station: StationId, announce: Option<Announce>) {
+    /// Returns whether a node took the cargo (or there was nothing to send).
+    pub(crate) async fn stem_push(self: &Arc<Self>, station: StationId, announce: Option<Announce>) -> bool {
         let landed = {
             let me = *self.endpoint.id().as_bytes();
             let log = self.log.lock().unwrap();
@@ -278,7 +286,7 @@ impl Inner {
         };
         let (entries, chunks) = {
             let s = self.store.lock().unwrap();
-            let Some(a) = s.logs.get(&station) else { return };
+            let Some(a) = s.logs.get(&station) else { return true };
             let fresh: Vec<&SignedEntry> = a.entries().iter().skip(landed as usize).take(32).collect();
             let mut chunks = Vec::new();
             for e in &fresh {
@@ -301,23 +309,24 @@ impl Inner {
             (fresh.iter().filter_map(|e| e.to_bytes().ok()).collect::<Vec<_>>(), chunks)
         };
         if entries.is_empty() && announce.is_none() {
-            return;
+            return true;
         }
         let hop = Hop::Stem { station, entries, chunks, announce, hops: 0 };
         let mut tried = Vec::new();
         if let Some(g) = self.guard() {
-            if tokio::time::timeout(Duration::from_secs(20), self.hop(g, &hop)).await.is_ok_and(|r| r.is_ok()) {
-                return;
+            if tokio::time::timeout(Duration::from_secs(20), self.hop(g, &hop)).await.is_ok_and(|r| r.is_ok_and(|b| !b.is_empty())) {
+                return true;
             }
             tried.push(g);
         }
         // The guard is down: try another, never spread it ourselves.
         for n in self.known_nodes().into_iter().filter(|n| !tried.contains(n)).take(3) {
-            if self.hop(n, &hop).await.is_ok() {
+            if self.hop(n, &hop).await.is_ok_and(|b| !b.is_empty()) {
                 let _ = std::fs::write(self.cfg.dir.join("guard"), n.to_string());
-                return;
+                return true;
             }
         }
         say("stem: no node took the cargo; it waits for the next tick");
+        false
     }
 }
