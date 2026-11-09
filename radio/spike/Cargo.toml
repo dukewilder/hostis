@@ -1,0 +1,11 @@
+[package]
+name = "pyrate-spike"
+version = "0.1.0"
+edition = "2024"
+license = "CC0-1.0"
+publish = false
+
+[dependencies]
+iroh = { version = "1.4", features = ["platform-verifier"] }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
