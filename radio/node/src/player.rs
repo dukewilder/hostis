@@ -79,3 +79,38 @@ pub fn open(queue: SharedQueue) -> Result<Output> {
     stream.play()?;
     Ok(Output { _stream: stream })
 }
+
+/// The microphone, as 48 kHz mono i16 pushed into a shared buffer.
+pub struct Input {
+    _stream: cpal::Stream,
+}
+
+pub fn open_input(buf: Arc<Mutex<Vec<i16>>>) -> Result<Input> {
+    let host = cpal::default_host();
+    let device = host.default_input_device().ok_or_else(|| anyhow!("no microphone"))?;
+    let supported = device.default_input_config()?;
+    let rate = supported.sample_rate().0 as f64;
+    let channels = supported.channels() as usize;
+    let config: cpal::StreamConfig = supported.config();
+    let step = rate / 48_000.0;
+    let mut phase = 0.0f64;
+    let stream = device.build_input_stream(
+        &config,
+        move |data: &[f32], _| {
+            let mut out = buf.lock().unwrap();
+            let frames = data.len() / channels;
+            // Average the channels, then step through at 48 kHz.
+            while (phase as usize) < frames {
+                let i = phase as usize * channels;
+                let s: f32 = data[i..i + channels].iter().sum::<f32>() / channels as f32;
+                out.push((s.clamp(-1.0, 1.0) * 32767.0) as i16);
+                phase += step;
+            }
+            phase -= frames as f64;
+        },
+        |e| eprintln!("mic: {e}"),
+        None,
+    )?;
+    stream.play()?;
+    Ok(Input { _stream: stream })
+}

@@ -112,6 +112,8 @@ pub struct Inner {
     queue: player::SharedQueue,
     #[cfg(feature = "playback")]
     np: Mutex<Value>,
+    /// The live broadcast in progress: station and when it began.
+    live: Mutex<Option<(StationId, u64)>>,
 }
 
 pub struct Node {
@@ -313,7 +315,8 @@ impl Inner {
         if let Some(n) = self.pow.lock().unwrap().get(station) {
             return *n;
         }
-        let p = self.store.lock().unwrap().dir().join("keys").join(format!("{}.pow", station.to_hex()));
+        // Never touch the store lock here: callers may hold it.
+        let p = self.cfg.dir.join("keys").join(format!("{}.pow", station.to_hex()));
         let n = std::fs::read_to_string(&p).ok().and_then(|s| s.trim().parse().ok()).unwrap_or_else(|| {
             let n = net::pow_find(station);
             let _ = std::fs::write(&p, n.to_string());
@@ -334,6 +337,7 @@ impl Inner {
             (s.own(), s.logs.iter().filter(|(_, a)| !a.is_struck()).map(|(id, a)| (*id, a.len())).collect())
         };
         for id in own {
+            let pow = self.pow_for(&id);
             let a = {
                 let s = self.store.lock().unwrap();
                 let Some(log) = s.logs.get(&id) else { continue };
@@ -341,10 +345,10 @@ impl Inner {
                 if log.is_struck() {
                     continue;
                 }
-                let live = log.entries().last().is_some_and(|e| matches!(e.entry.body, Body::Live { .. }) && now - e.entry.at_ms < 15_000);
+                let live = log.entries().last().is_some_and(|e| matches!(e.entry.body, Body::Live { .. }) && now - e.entry.at_ms < 25_000);
                 let key = s.keys.get(&id).unwrap();
                 Announce { station: id, head: log.len(), name, about, port, live, at_ms: now, pow: 0, sig: [0; 64] }
-                    .pipe_pow(self.pow_for(&id))
+                    .pipe_pow(pow)
                     .sign(key)
             };
             self.on_gossip(Gossip::Station(a.clone()));
@@ -364,11 +368,12 @@ impl Inner {
             let token = self.token(&station, hour);
             self.log.lock().unwrap().entry(station).or_default().sketches.entry(hour).or_default().add(&token);
         }
+        let held: std::collections::HashSet<StationId> = self.store.lock().unwrap().logs.keys().copied().collect();
         let sketches: Vec<Gossip> = {
             let log = self.log.lock().unwrap();
             log.iter()
                 .filter_map(|(st, l)| l.sketches.get(&hour).map(|s| Gossip::Aboard { station: *st, hour, sketch: s.0.to_vec() }))
-                .filter(|g| matches!(g, Gossip::Aboard { station, .. } if self.cfg.lantern || Some(*station) == tuned || self.store.lock().unwrap().logs.contains_key(station)))
+                .filter(|g| matches!(g, Gossip::Aboard { station, .. } if self.cfg.lantern || Some(*station) == tuned || held.contains(station)))
                 .collect()
         };
         for g in sketches {
@@ -413,6 +418,74 @@ impl Inner {
         Ok(e.hash()?)
     }
 
+}
+
+impl Inner {
+    /// ON AIR. Samples from `source` become six-second Talk chunks and Live entries
+    /// until the broadcast is ended. `source` is the microphone, or a file played in real time.
+    pub fn go_live(self: &Arc<Self>, station: StationId, file: Option<PathBuf>) -> Result<()> {
+        if self.live.lock().unwrap().is_some() {
+            anyhow::bail!("already on air");
+        }
+        if !self.store.lock().unwrap().keys.contains_key(&station) {
+            anyhow::bail!("not our station");
+        }
+        let started = now_ms();
+        *self.live.lock().unwrap() = Some((station, started));
+        let buf: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
+        let me = self.clone();
+        let b2 = buf.clone();
+        std::thread::spawn(move || {
+            // Hold the source open for as long as the broadcast lasts.
+            #[cfg(feature = "playback")]
+            let _mic = if file.is_none() {
+                match player::open_input(b2.clone()) {
+                    Ok(i) => Some(i),
+                    Err(e) => {
+                        say(&format!("no microphone: {e}"));
+                        *me.live.lock().unwrap() = None;
+                        return;
+                    }
+                }
+            } else {
+                None
+            };
+            let file_pcm: Option<Vec<i16>> = file.and_then(|p| {
+                let got = pyrate_core::ingest::ingest(&p, Profile::Talk).ok()?;
+                let mut d = pyrate_core::audio::ChunkDecoder::new(1).ok()?;
+                Some(got.chunks.iter().flat_map(|(_, b)| d.decode(b).unwrap_or_default()).collect())
+            });
+            let Ok(mut enc) = pyrate_core::ChunkEncoder::new(Profile::Talk) else { return };
+            let mut fed = 0usize;
+            say(&format!("ON AIR {}", station.call_sign()));
+            while me.live.lock().unwrap().is_some_and(|(s, t)| s == station && t == started) {
+                std::thread::sleep(Duration::from_millis(200));
+                let pcm: Vec<i16> = match &file_pcm {
+                    Some(f) => {
+                        let due = ((now_ms() - started) * 48) as usize;
+                        let end = due.min(f.len());
+                        let out = f[fed.min(end)..end].to_vec();
+                        fed = end;
+                        if fed >= f.len() {
+                            *me.live.lock().unwrap() = None;
+                        }
+                        out
+                    }
+                    None => std::mem::take(&mut *b2.lock().unwrap()),
+                };
+                let Ok(chunks) = enc.push(&pcm) else { break };
+                for (c, bytes) in chunks {
+                    let mut s = me.store.lock().unwrap();
+                    if s.put_chunk(&c.hash, &bytes).is_ok() {
+                        let _ = s.write(station, now_ms(), Body::Live { chunk: c, channels: 1, bitrate: 24_000 });
+                    }
+                }
+            }
+            say(&format!("off the air {}", station.call_sign()));
+            let _ = buf;
+        });
+        Ok(())
+    }
 }
 
 trait PipePow {
@@ -479,6 +552,7 @@ impl Node {
             queue: queue.clone(),
             #[cfg(feature = "playback")]
             np: Mutex::new(Value::Null),
+            live: Mutex::new(None),
         });
         *proto.0.lock().unwrap() = Some(inner.clone());
 
@@ -549,7 +623,7 @@ impl Node {
                     let _ = s.enforce_quota();
                 }
                 n += 1;
-                tokio::time::sleep(Duration::from_secs(20)).await;
+                tokio::time::sleep(Duration::from_secs(10)).await;
             }
         });
 
@@ -626,8 +700,9 @@ impl Node {
         let inner = &self.inner;
         match cmd {
             "status" => {
+                let mine = {
                 let s = inner.store.lock().unwrap();
-                let mine = s.own().into_iter().find(|id| !s.logs.get(id).is_some_and(|a| a.is_struck())).map(|id| {
+                let mine_v = s.own().into_iter().find(|id| !s.logs.get(id).is_some_and(|a| a.is_struck())).map(|id| {
                     let a = s.logs.get(&id);
                     let name = a.and_then(|a| a.colours()).map(|c| match c {
                         Body::Colours { name, .. } => name.clone(),
@@ -636,13 +711,16 @@ impl Node {
                     let tracks = a.map(|a| a.library().map(|l| l.len()).unwrap_or(0)).unwrap_or(0);
                     json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": name, "tracks": tracks })
                 });
+                mine_v
+                };
                 let jobs: Vec<Value> = inner.jobs.lock().unwrap().iter().map(|(k, v)| json!({ "id": k, "state": v })).collect();
                 let tuned = inner.tuned.lock().unwrap().as_ref().map(|t| t.station.to_hex());
                 #[cfg(feature = "playback")]
                 let np = inner.np.lock().unwrap().clone();
                 #[cfg(not(feature = "playback"))]
                 let np = Value::Null;
-                Ok(json!({ "node": self.id().to_string(), "mine": mine, "jobs": jobs, "tuned": tuned, "now": np }))
+                let live = inner.live.lock().unwrap().map(|(s, t)| json!({ "station": s.to_hex(), "since_ms": now_ms() - t }));
+                Ok(json!({ "node": self.id().to_string(), "mine": mine, "jobs": jobs, "tuned": tuned, "now": np, "live": live }))
             }
             "stations" => {
                 let now = now_ms();
@@ -755,6 +833,15 @@ impl Node {
                 });
                 Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign() }))
             }
+            "go_live" => {
+                let st = station()?;
+                inner.go_live(st, req["file"].as_str().map(PathBuf::from))?;
+                Ok(json!({ "ok": true }))
+            }
+            "end_live" => {
+                *inner.live.lock().unwrap() = None;
+                Ok(json!({ "ok": true }))
+            }
             "strike" => {
                 let st = station()?;
                 inner.store.lock().unwrap().write(st, now_ms(), Body::Strike)?;
@@ -831,7 +918,7 @@ mod playout {
 
     fn live_tail(a: &Archive, now: u64) -> Option<Vec<(u64, pyrate_core::Chunk, u8)>> {
         let last = a.entries().last()?;
-        if !matches!(last.entry.body, Body::Live { .. }) || now.saturating_sub(last.entry.at_ms) > 15_000 {
+        if !matches!(last.entry.body, Body::Live { .. }) || now.saturating_sub(last.entry.at_ms) > 25_000 {
             return None;
         }
         Some(a.entries().iter().filter_map(|e| match &e.entry.body {
@@ -865,7 +952,7 @@ mod playout {
                 st = State { station: Some(station), playhead: None, track: None, decoder: None, live_seq: None };
             }
             let now = now_ms();
-            if now - last_sync > 8_000 {
+            if now - last_sync > if st.live_seq.is_some() { 2_500 } else { 8_000 } {
                 last_sync = now;
                 let _ = inner.sync_log(station).await;
             }
@@ -909,6 +996,9 @@ mod playout {
                     let Some((_, dec)) = st.decoder.as_mut() else { break };
                     if let Ok(pcm) = dec.decode(&bytes) {
                         push(&inner, &pcm, ch, 0);
+                    }
+                    if st.live_seq.is_none() {
+                        say(&format!("sound: live, entry {seq}"));
                     }
                     st.live_seq = Some(seq);
                     st.track = None;

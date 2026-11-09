@@ -44,6 +44,25 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                 }
+                "mic" -> {
+                    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                        result.success(true)
+                    } else {
+                        requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2)
+                        result.success(false)
+                    }
+                }
+                "live" -> {
+                    val i = Intent(this, PlaybackService::class.java)
+                        .putExtra("title", "ON AIR")
+                        .putExtra("live", call.argument<Boolean>("on") == true)
+                    try {
+                        if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
+                    } catch (e: Exception) {
+                        android.util.Log.w("pyrate", "service not started: $e")
+                    }
+                    result.success(null)
+                }
                 "stop" -> {
                     stopService(Intent(this, PlaybackService::class.java))
                     result.success(null)
