@@ -30,7 +30,13 @@ On the phone the node starts, joins the Log and finds the PC Lantern. Confirmed 
 3. Release signing: the key stays with Dylan. Builds are signed with the debug key until then.
 4. Not yet built: web listener, Hail, Tape it, Local filter, Pass it on, F-Droid repository, reproducible builds, export notice, security review.
 
-**The PC Lantern**
+**9 November: the Lantern moves to dukewilder**
+
+- The HOSTIS Lantern now runs on dukewilder, inside the gluetun tunnel with the arr stack, with no ports open. Node id `a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442`, now the app's first peer.
+- The station keys, logs and recordings were copied over the LAN and adopted. A fresh node that knew only dukewilder found both stations in 12 seconds and played from them.
+- Public relays throttle bulk transfer (12 MB in 15 minutes) but carry a stream at radio speed. A HOSTIS relay on a public server lifts the throttle for listeners behind VPNs.
+
+**The PC Lantern (stopped)**
 
 - Folder: `Documents\Pyrate Radio` on Dylan's PC. Data in `lantern-data`, audio in `stations\public-domain` and `stations\readings`.
 - Node id `72b966c645197137b553995ff690349153c4219cc08278ebdde15dcf7bd29d72`, the app's first peer (`app/assets/bootstrap.txt`).
