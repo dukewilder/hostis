@@ -179,3 +179,13 @@ Only what cannot be done from here:
 ---
 
 *Set down for the crew, in this present year, and for every year after.*
+
+## XI. Ballast, the stem and the clock's foreknowledge (9 November 2026)
+
+**Strike stays immediate.** A delayed strike was weighed and refused. Ending a station is the key holder's act, and protecting the key is the holder's charge.
+
+**Hold and ballast.** Every node keeps two stores. The hold is what its owner listens to, kept warm and evicted when full. The ballast is a fixed donation (1 GB on phones, filled and served on Wi-Fi while charging; as much as a Lantern can spare) of erasure-coded shards of every station's recordings and logs, assigned to nodes by hash. Ten shards of thirty rebuild a group, so a station survives the loss of two thirds of the nodes holding it, whether or not anyone listens. Each station's ballast allowance is capped in hours of clock, so no station can sink the fleet. Lanterns repair groups that run thin.
+
+**The stem.** New entries and chunks leave the broadcaster along a stem of relaying nodes before they spread, after Dandelion++ in Bitcoin. Every node relays stems, so the first hop cannot tell an origin from a relay. Broadcasters keep long-lived guard nodes for the first hop, as Tor does. The cost is well under a second on a six-second chunk.
+
+**The clock's foreknowledge.** The schedule is computed, so every node knows which chunks it will need hours before it needs them. Everything predictable is fetched ahead through anonymous routes, where latency costs nothing. Only tune-in and live chunks need the fast path, and those take one proxy hop. Dark running (everything over Tor) is a switch for those who face an adversary on their own line.
