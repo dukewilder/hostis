@@ -30,6 +30,9 @@ TextStyle mono(double size, {Color color = boneFaint, FontWeight weight = FontWe
 
 const _service = MethodChannel('pyrate/service');
 
+/// This build's version code. A release is offered only when its code is higher.
+const kBuildCode = 4;
+
 /// The stations a first open lands on when no station has yet earned it: HOSTIS's own.
 List<String> harbour = [];
 
@@ -62,12 +65,17 @@ class Tuner extends ChangeNotifier {
 
   int carrying = 0;
   Timer? _ballast;
+  Timer? _update;
+  Map<String, dynamic>? update;
 
   Tuner() {
     _poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _refresh());
     // Ballast fills only on Wi-Fi while charging, so the fleet never costs the owner.
     _ballast = Timer.periodic(const Duration(seconds: 60), (_) => _checkBallast());
     _checkBallast();
+    // New versions arrive over the network itself, signed by two of three release keys.
+    Future.delayed(const Duration(seconds: 60), _checkUpdate);
+    _update = Timer.periodic(const Duration(minutes: 30), (_) => _checkUpdate());
     _refresh();
   }
 
@@ -80,6 +88,14 @@ class Tuner extends ChangeNotifier {
       if (s['id'] == id) return s;
     }
     return null;
+  }
+
+  Future<void> _checkUpdate() async {
+    final r = await Native.callAway({'cmd': 'update', 'code': kBuildCode});
+    if (r is Map && r['available'] == true) {
+      update = r.cast<String, dynamic>();
+      notifyListeners();
+    }
   }
 
   Future<void> _checkBallast() async {
@@ -175,6 +191,7 @@ class Tuner extends ChangeNotifier {
     _poll?.cancel();
     _scan?.cancel();
     _ballast?.cancel();
+    _update?.cancel();
     super.dispose();
   }
 }
@@ -303,7 +320,18 @@ class Dial extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final stations = radio.stations;
+    final up = radio.update;
     return Column(children: [
+      if (up != null)
+        InkWell(
+          onTap: () => _service.invokeMethod('install', {'path': up['path']}).catchError((_) {}),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: brass, width: 0.5))),
+            child: Text('A NEW VERSION IS ABOARD · ${up['version']} · TAP TO INSTALL', textAlign: TextAlign.center, style: carved(10, color: brass, spacing: 0.2)),
+          ),
+        ),
       const SizedBox(height: 18),
       Text('PYRATE RADIO', style: carved(12, color: boneFaint, spacing: 0.4)),
       const SizedBox(height: 4),
@@ -679,6 +707,19 @@ class _ColoursPageState extends State<ColoursPage> {
           ]),
         const SizedBox(height: 26),
       ],
+      Text('REFUSAL LIST', style: carved(14)),
+      const SizedBox(height: 8),
+      Text('HOSTIS keeps a list of stations it will not list, play or carry: material that is illegal everywhere. Following it is on by default and is your choice. It hides stations from you; it removes nothing from anyone else.',
+          style: serif(14, color: boneFaint, italic: true)),
+      Row(children: [
+        Switch(
+          value: (Native.call({'cmd': 'lists'}) as Map)['follow'] == true,
+          onChanged: (v) => setState(() => Native.call({'cmd': 'lists', 'follow': v})),
+          activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel,
+        ),
+        Text('Follow the HOSTIS list', style: mono(11)),
+      ]),
+      const SizedBox(height: 26),
       Text('THE HOLD', style: carved(14)),
       const SizedBox(height: 8),
       Text('What you listen to is kept here so your phone can play it without waiting. It is sealed: nothing on the phone says what any of it is. Clearing it leaves your own station and the ballast you carry for the fleet.',

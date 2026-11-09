@@ -144,6 +144,7 @@ impl Store {
             match e.entry.body() {
                 Body::Track { chunks, .. } => out.extend(chunks.iter().map(|c| c.hash)),
                 Body::Live { chunk, .. } => out.push(chunk.hash),
+                Body::Release { chunks, .. } => out.extend(chunks.iter().map(|c| c.hash)),
                 _ => {}
             }
         }
@@ -211,6 +212,11 @@ impl Store {
             let _ = fs::remove_file(legacy);
         }
         Some(bytes)
+    }
+
+    pub fn remove_chunk(&self, h: &Hash) {
+        let _ = fs::remove_file(self.chunk_path(h));
+        let _ = fs::remove_file(self.legacy_path(h));
     }
 
     /// Empties the hold: every carried chunk and log that is neither ours nor ballast.

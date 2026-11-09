@@ -70,6 +70,33 @@ pub enum Body {
     Revoke { key: [u8; 32] },
     /// An entry written by a deputy. The signature on it is the deputy's.
     Deputed { by: [u8; 32], body: Box<Body> },
+    /// A new version of the app, carried like a recording. Phones trust it only when two of
+    /// the three release keys have signed it, whoever wrote the entry.
+    Release { version: String, code: u32, sha256: [u8; 32], size: u64, chunks: Vec<Chunk>, notes: String, sigs: Vec<(u8, Vec<u8>)> },
+    /// A refusal list's entry: nodes that follow the list will not list, play or carry the station.
+    Refuse { station: [u8; 32], reason: String },
+    Unrefuse { station: [u8; 32] },
+}
+
+/// What each release key signs.
+pub fn release_message(code: u32, sha256: &[u8; 32]) -> Vec<u8> {
+    let mut m = b"pyrate/release/v1\0".to_vec();
+    m.extend_from_slice(&code.to_le_bytes());
+    m.extend_from_slice(sha256);
+    m
+}
+
+/// True when at least two different keys of `keys` have signed this release.
+pub fn release_trusted(keys: &[[u8; 32]], code: u32, sha256: &[u8; 32], sigs: &[(u8, Vec<u8>)]) -> bool {
+    let msg = release_message(code, sha256);
+    let mut good = std::collections::HashSet::new();
+    for (i, sig) in sigs {
+        let (Some(k), Ok(sig)) = (keys.get(*i as usize), <[u8; 64]>::try_from(sig.as_slice())) else { continue };
+        if StationId(*k).verify(&msg, &sig).is_ok() {
+            good.insert(*i);
+        }
+    }
+    good.len() >= 2
 }
 
 impl Body {

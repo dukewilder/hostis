@@ -1,0 +1,62 @@
+//! The release keys, kept offline. Run on the keyholder's own machine, never on a server.
+//!
+//! release init <folder>
+//!     Makes the three release keys. Writes each as 24 words to its own file, the public keys to
+//!     release_keys.txt (these go into the app), and a lantern-genesis folder holding the
+//!     Releases station and the HOSTIS refusal list, each with a deputy key for the Lantern.
+//!     The deputies can publish; only signed releases are ever installed.
+//!
+//! release sign <words file> <key number 1-3> <apk> <version code>
+//!     Prints one signature line for the .sigs file beside the APK.
+
+use std::path::PathBuf;
+
+use pyrate_core::{Archive, Body, StationKey, release_message};
+use pyrate_node::store::Store;
+use sha2::{Digest, Sha256};
+
+fn hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+fn main() -> anyhow::Result<()> {
+    let a: Vec<String> = std::env::args().collect();
+    match a.get(1).map(String::as_str) {
+        Some("init") => {
+            let out = PathBuf::from(a.get(2).cloned().unwrap_or_else(|| "release-keys".into()));
+            std::fs::create_dir_all(&out)?;
+            let keys: Vec<StationKey> = (0..3).map(|_| StationKey::generate()).collect::<Result<_, _>>()?;
+            for (i, k) in keys.iter().enumerate() {
+                std::fs::write(out.join(format!("release-key-{}.txt", i + 1)), format!("{}\n", k.phrase()))?;
+            }
+            std::fs::write(out.join("release_keys.txt"), keys.iter().map(|k| k.id().to_hex()).collect::<Vec<_>>().join("\n") + "\n")?;
+            let mut store = Store::open(&out.join("lantern-genesis"), 1 << 30)?;
+            for (k, name, about) in [
+                (&keys[0], "Pyrate Radio Releases", "New versions of the app, signed by two of three release keys."),
+                (&keys[1], "HOSTIS Refusals", "Stations HOSTIS will not list, play or carry. Following it is a choice."),
+            ] {
+                let deputy = StationKey::generate()?;
+                let mut log = Archive::new(k.id());
+                let now = pyrate_node::now_ms();
+                log.write(k, now, Body::Colours { name: name.into(), about: about.into(), port: None, tip: None })?;
+                log.write(k, now, Body::Deputy { key: deputy.id().0, label: "lantern".into() })?;
+                store.put_entries(k.id(), log.entries().to_vec())?;
+                store.add_key_for(k.id(), deputy)?;
+            }
+            println!("Three release keys made in {}.", out.display());
+            println!("Move each release-key-N.txt to its own place offline, then delete them here.");
+            println!("release_keys.txt goes into the app. lantern-genesis goes into the Lantern's data folder.");
+        }
+        Some("sign") => {
+            let words = std::fs::read_to_string(a.get(2).ok_or_else(|| anyhow::anyhow!("words file"))?)?;
+            let n: u8 = a.get(3).and_then(|s| s.parse().ok()).filter(|n| (1..=3).contains(n)).ok_or_else(|| anyhow::anyhow!("key number 1-3"))?;
+            let apk = std::fs::read(a.get(4).ok_or_else(|| anyhow::anyhow!("apk"))?)?;
+            let code: u32 = a.get(5).and_then(|s| s.parse().ok()).ok_or_else(|| anyhow::anyhow!("version code"))?;
+            let key = StationKey::from_phrase(&words)?;
+            let sha: [u8; 32] = Sha256::digest(&apk).into();
+            println!("{} {}", n - 1, hex(&key.sign(&release_message(code, &sha))));
+        }
+        _ => eprintln!("release init <folder> | release sign <words file> <1-3> <apk> <version code>"),
+    }
+    Ok(())
+}

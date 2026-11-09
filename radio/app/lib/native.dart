@@ -27,6 +27,13 @@ class Native {
   static final _CallD _call = _lib.lookupFunction<_CallC, _CallD>('pyrate_call');
   static final _FreeD _free = _lib.lookupFunction<_FreeC, _FreeD>('pyrate_free');
 
+  static void setReleaseKeys(String keys) {
+    final f = _lib.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('pyrate_set_release_keys');
+    final p = keys.toNativeUtf8();
+    f(p);
+    calloc.free(p);
+  }
+
   static int start(String dir, String bootstrap) {
     final d = dir.toNativeUtf8();
     final b = bootstrap.toNativeUtf8();
