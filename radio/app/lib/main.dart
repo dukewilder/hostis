@@ -57,8 +57,14 @@ class Tuner extends ChangeNotifier {
   int _ticks = 0;
   final pages = PageController();
 
+  int carrying = 0;
+  Timer? _ballast;
+
   Tuner() {
     _poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _refresh());
+    // Ballast fills only on Wi-Fi while charging, so the fleet never costs the owner.
+    _ballast = Timer.periodic(const Duration(seconds: 60), (_) => _checkBallast());
+    _checkBallast();
     _refresh();
   }
 
@@ -71,6 +77,12 @@ class Tuner extends ChangeNotifier {
       if (s['id'] == id) return s;
     }
     return null;
+  }
+
+  Future<void> _checkBallast() async {
+    final ok = await _service.invokeMethod<bool>('conditions').catchError((_) => false) ?? false;
+    final r = Native.call({'cmd': 'ballast_ok', 'value': ok});
+    if (r is Map && r['carrying'] is int) carrying = r['carrying'];
   }
 
   void _refresh() {
@@ -148,6 +160,7 @@ class Tuner extends ChangeNotifier {
   void dispose() {
     _poll?.cancel();
     _scan?.cancel();
+    _ballast?.cancel();
     super.dispose();
   }
 }
@@ -409,6 +422,12 @@ class LogPage extends StatelessWidget {
             const SizedBox(height: 8),
             Text('Every station on the air, by how many are aboard. Kept by every node, owned by none.',
                 style: serif(15, color: boneFaint, italic: true)),
+            if (radio.carrying > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('Your ballast keeps ${radio.carrying} ${radio.carrying == 1 ? 'station' : 'stations'} afloat for the fleet.',
+                    style: mono(11, color: boneFaint)),
+              ),
             const SizedBox(height: 14),
             const Divider(color: boneGhost, height: 1, thickness: 0.5),
           ]),
@@ -476,11 +495,11 @@ class ColoursPage extends StatefulWidget {
 class _ColoursPageState extends State<ColoursPage> {
   final name = TextEditingController();
   final about = TextEditingController();
+  final restoreWords = TextEditingController();
   bool raising = false;
   bool talk = false;
   String? error;
   List library = [];
-  String? phrase;
   String? libraryFor;
   int libraryCount = -1;
 
@@ -511,6 +530,28 @@ class _ColoursPageState extends State<ColoursPage> {
       raising = false;
       if (r is Map && r['error'] != null) error = r['error'];
     });
+    if (r is Map && r['words'] is String && mounted) {
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => AlertDialog(
+          backgroundColor: panel,
+          shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+          title: Text('Write these down', style: serif(24)),
+          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('These 24 words are the station. This phone keeps only a deputy key, which can broadcast but cannot strike. If the phone is lost or taken, the words take the station back and shut the deputy out. They are shown once and kept nowhere.',
+                style: serif(15, color: boneFaint, italic: true)),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: black, border: Border.all(color: boneGhost, width: 0.5)),
+              child: SelectableText(r['words'], style: mono(13, color: bone)),
+            ),
+          ]),
+          actions: [TextButton(onPressed: () => Navigator.pop(c), child: Text('THEY ARE WRITTEN DOWN', style: carved(11)))],
+        ),
+      );
+    }
   }
 
   Future<void> add(String station) async {
@@ -555,8 +596,21 @@ class _ColoursPageState extends State<ColoursPage> {
         Row(children: [button(raising ? 'RAISING' : 'RAISE COLOURS', raising ? null : raise)]),
         if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: serif(14, color: bloodBright))),
         const SizedBox(height: 28),
-        Text('While you broadcast, other nodes can see your network address, as on BitTorrent. The Practice on hostis.black covers what to do if that matters to you.',
+        Text('Your phone hands its broadcasts to the network along a chain of other nodes, so the first node to show them is never yours. Listening goes through two hops: one sees who, the other sees what, neither sees both.',
             style: serif(13, color: boneGhost, italic: true)),
+        const SizedBox(height: 34),
+        Text('TAKE BACK A STATION', style: carved(14)),
+        const SizedBox(height: 8),
+        Text('Lost the phone, or had it taken? The 24 words bring the station to this phone and shut the old one out.',
+            style: serif(14, color: boneFaint, italic: true)),
+        TextField(controller: restoreWords, style: mono(12, color: bone), maxLines: 3, decoration: field('The 24 words')),
+        const SizedBox(height: 12),
+        Row(children: [
+          button('TAKE IT BACK', () async {
+            final r = await Native.callAway({'cmd': 'restore', 'phrase': restoreWords.text});
+            setState(() => error = (r is Map && r['error'] != null) ? r['error'] : null);
+          }),
+        ]),
       ] else
         ..._station(mine),
     ]);
@@ -669,44 +723,39 @@ class _ColoursPageState extends State<ColoursPage> {
           ),
         const SizedBox(height: 26),
       ],
-      Text('YOUR KEY', style: carved(14)),
+      Text('THE KEY', style: carved(14)),
       const SizedBox(height: 8),
-      Text('Twenty-four words. Whoever holds them is the station. Nobody can recover them for you. Write them down and keep them off any screen but this one.',
+      Text('This phone holds a deputy key: it broadcasts, and that is all it can do. The 24 words you wrote down are the station. With them, any phone can take the station back and shut this one out, or strike its colours.',
           style: serif(14, color: boneFaint, italic: true)),
-      const SizedBox(height: 10),
-      if (phrase != null)
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: panel, border: Border.all(color: boneGhost, width: 0.5)),
-          child: SelectableText(phrase!, style: mono(13, color: bone)),
-        ),
-      Row(children: [
-        button(phrase == null ? 'SHOW THE WORDS' : 'HIDE THE WORDS', () {
-          setState(() => phrase = phrase == null ? (Native.call({'cmd': 'phrase', 'station': id})['phrase'] as String?) : null);
-        }),
-      ]),
       const SizedBox(height: 34),
       Text('STRIKE COLOURS', style: carved(14, color: bloodBright)),
       const SizedBox(height: 8),
-      Text('Ends the station. Every honest node drops its recordings. The mark stays as long as the hand that made it chooses to honour it.',
+      Text('Ends the station. Every honest node drops its recordings. It takes the 24 words.',
           style: serif(14, color: boneFaint, italic: true)),
       const SizedBox(height: 10),
       Row(children: [
         button('STRIKE COLOURS', () async {
+          final words = TextEditingController();
           final ok = await showDialog<bool>(
             context: context,
             builder: (c) => AlertDialog(
               backgroundColor: panel,
               shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
               title: Text('Strike colours?', style: serif(22)),
-              content: Text('The station ends for good. This cannot be undone.', style: serif(15, color: boneFaint)),
+              content: Column(mainAxisSize: MainAxisSize.min, children: [
+                Text('The station ends for good. This cannot be undone.', style: serif(15, color: boneFaint)),
+                TextField(controller: words, style: mono(12, color: bone), maxLines: 3, decoration: field('The 24 words')),
+              ]),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(c, false), child: Text('KEEP FLYING', style: carved(11))),
                 TextButton(onPressed: () => Navigator.pop(c, true), child: Text('STRIKE', style: carved(11, color: bloodBright))),
               ],
             ),
           );
-          if (ok == true) Native.call({'cmd': 'strike', 'station': id});
+          if (ok == true) {
+            final r = Native.call({'cmd': 'strike', 'station': id, 'phrase': words.text});
+            if (r is Map && r['error'] != null) setState(() => error = r['error']);
+          }
         }, color: bloodBright),
       ]),
     ];

@@ -130,7 +130,7 @@ impl Clock {
     pub fn new(archive: &Archive) -> Result<Self> {
         let mut tracks: Vec<Track> = Vec::new();
         for e in archive.entries() {
-            match &e.entry.body {
+            match e.entry.body() {
                 Body::Track { chunks, .. } => {
                     let chunk_ms: Vec<u64> = chunks.iter().map(|c| c.duration_ms()).collect();
                     tracks.push(Track {

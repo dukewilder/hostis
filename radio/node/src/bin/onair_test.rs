@@ -7,7 +7,7 @@ use serde_json::json;
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let boot = vec![args[1].parse()?];
-    let cfg = |d: &str| Config { dir: PathBuf::from(d), quota: 1 << 30, lantern: false, bootstrap: boot.clone(), public_dns: false };
+    let cfg = |d: &str| Config { dir: PathBuf::from(d), quota: 1 << 30, lantern: false, bootstrap: boot.clone(), public_dns: false, private: true, ballast: 0 };
     let s = Node::start(cfg("/tmp/oa-station"))?;
     let l = Node::start(cfg("/tmp/oa-listener"))?;
     let r = s.call(&json!({ "cmd": "raise", "name": "Night Watch Live", "about": "test" }));
@@ -18,7 +18,7 @@ fn main() -> anyhow::Result<()> {
     println!("listener tunes: {}", l.call(&json!({ "cmd": "tune", "station": id })));
     for _ in 0..8 {
         std::thread::sleep(Duration::from_secs(5));
-        println!("listener now: {}  station live: {}", l.call(&json!({ "cmd": "status" }))["now"], s.call(&json!({ "cmd": "status" }))["live"]);
+        println!("listener now: {}  station live: {}  listener sees: {}", l.call(&json!({ "cmd": "status" }))["now"], s.call(&json!({ "cmd": "status" }))["live"], l.call(&json!({ "cmd": "stations" })).as_array().map(|a| a.iter().map(|x| format!("{} carriers {}", x["name"], x["carriers"])).collect::<Vec<_>>().join("; ")).unwrap_or_default());
     }
     Ok(())
 }

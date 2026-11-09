@@ -183,3 +183,28 @@ fn ingest_resamples_and_downmixes() {
     assert_eq!(music.channels, 2);
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn deputies_broadcast_but_cannot_strike() {
+    let master = StationKey::generate().unwrap();
+    let phone = StationKey::generate().unwrap();
+    let mut a = Archive::new(master.id());
+    a.write(&master, 1, colours()).unwrap();
+    a.write(&master, 2, Body::Deputy { key: phone.id().0, label: "phone".into() }).unwrap();
+    let deputed = |seq: u64, prev, body: Body| SignedEntry::sign(&phone, pyrate_core::Entry {
+        station: master.id(), seq, prev, at_ms: 3 + seq, body: Body::Deputed { by: phone.id().0, body: Box::new(body) },
+    }).unwrap();
+    a.append(deputed(2, a.head(), Body::Live { chunk: pyrate_core::Chunk::of(b"x", 1), channels: 1, bitrate: 24_000 })).unwrap();
+    assert!(matches!(a.entries()[2].entry.body(), Body::Live { .. }));
+    // A deputy cannot strike, appoint or revoke.
+    assert!(a.append(deputed(3, a.head(), Body::Strike)).is_err());
+    // The master revokes the seized phone; its next entry is refused.
+    a.write(&master, 10, Body::Revoke { key: phone.id().0 }).unwrap();
+    assert!(a.append(deputed(4, a.head(), colours())).is_err());
+    // An unknown key claiming to be a deputy is refused.
+    let thief = StationKey::generate().unwrap();
+    let forged = SignedEntry::sign(&thief, pyrate_core::Entry {
+        station: master.id(), seq: 4, prev: a.head(), at_ms: 20, body: Body::Deputed { by: thief.id().0, body: Box::new(colours()) },
+    }).unwrap();
+    assert!(a.append(forged).is_err());
+}

@@ -59,7 +59,7 @@ async fn log(State(w): State<Web>) -> impl IntoResponse {
 
 fn describe(a: &Archive, track: &[u8; 32]) -> (String, String) {
     for e in a.entries() {
-        if let Entry::Track { title, by, .. } = &e.entry.body {
+        if let Entry::Track { title, by, .. } = e.entry.body() {
             if e.hash().ok().as_ref() == Some(track) {
                 return (title.clone(), by.clone());
             }
@@ -70,10 +70,10 @@ fn describe(a: &Archive, track: &[u8; 32]) -> (String, String) {
 
 fn live_tail(a: &Archive, now: u64) -> Option<Vec<(u64, pyrate_core::Chunk, u8)>> {
     let last = a.entries().last()?;
-    if !matches!(last.entry.body, Entry::Live { .. }) || now.saturating_sub(last.entry.at_ms) > 25_000 {
+    if !matches!(last.entry.body(), Entry::Live { .. }) || now.saturating_sub(last.entry.at_ms) > 25_000 {
         return None;
     }
-    Some(a.entries().iter().filter_map(|e| match &e.entry.body {
+    Some(a.entries().iter().filter_map(|e| match e.entry.body() {
         Entry::Live { chunk, channels, .. } => Some((e.entry.seq, *chunk, *channels)),
         _ => None,
     }).collect())
@@ -224,7 +224,7 @@ async fn tower(inner: Arc<Inner>, towers: Towers, st: StationId, tx: broadcast::
                 continue;
             };
             let entry = a.entries().iter().find(|e| e.hash().ok() == Some(np.track));
-            let Some(Entry::Track { chunks, channels, .. }) = entry.map(|e| &e.entry.body) else { break };
+            let Some(Entry::Track { chunks, channels, .. }) = entry.map(|e| e.entry.body()) else { break };
             let Some(chunk) = chunks.get(np.chunk).copied() else { continue };
             let Ok(bytes) = inner.chunk(&st, &chunk.hash).await else {
                 tokio::time::sleep(Duration::from_secs(1)).await;

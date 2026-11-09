@@ -3,6 +3,7 @@
 //!
 //! No rights reserved.
 
+pub mod hop;
 pub mod net;
 #[cfg(feature = "playback")]
 pub mod player;
@@ -64,6 +65,10 @@ pub struct Config {
     pub bootstrap: Vec<EndpointId>,
     /// Ask public resolvers instead of the system's. For processes with no Android context.
     pub public_dns: bool,
+    /// Phones: fetch through two hops and publish along the stem. Lanterns: direct.
+    pub private: bool,
+    /// Bytes donated to the fleet as ballast, filled only when the app says conditions allow.
+    pub ballast: u64,
 }
 
 /// Relays run by HOSTIS and the crew, used alongside number0's. Any iroh relay will do;
@@ -119,6 +124,9 @@ pub struct Inner {
     np: Mutex<Value>,
     /// The live broadcast in progress: station and when it began.
     live: Mutex<Option<(StationId, u64)>>,
+    handle: tokio::runtime::Handle,
+    ballast_ok: std::sync::atomic::AtomicBool,
+    tokens_sent: Mutex<HashMap<StationId, u64>>,
 }
 
 pub struct Node {
@@ -137,9 +145,12 @@ impl ProtocolHandler for Proto {
         while let Ok((mut send, mut recv)) = conn.accept_bi().await {
             let inner = inner.clone();
             tokio::spawn(async move {
-                let Ok(bytes) = recv.read_to_end(64 * 1024).await else { return };
+                let Ok(bytes) = recv.read_to_end(MAX_FRAME).await else { return };
                 let Ok(req) = postcard::from_bytes::<Request>(&bytes) else { return };
-                let resp = inner.serve(req);
+                let resp = match req {
+                    Request::Hop(b) => Response::Hop(inner.on_hop(&b).await),
+                    other => inner.serve(other),
+                };
                 if let Ok(out) = postcard::to_stdvec(&resp) {
                     let _ = send.write_all(&out).await;
                     let _ = send.finish();
@@ -171,6 +182,7 @@ impl Inner {
                 Response::Entries(out)
             }
             Request::Chunk { hash } => Response::Chunk(store.get_chunk(&hash)),
+            Request::Hop(_) => Response::Hop(vec![]),
         }
     }
 
@@ -221,7 +233,7 @@ impl Inner {
         v.into_iter().filter_map(|(n, _, _)| EndpointId::from_bytes(&n).ok()).collect()
     }
 
-    pub async fn sync_log(&self, station: StationId) -> Result<usize> {
+    pub async fn sync_log_direct(&self, station: StationId) -> Result<usize> {
         let mut added = 0;
         for node in self.carriers(&station) {
             let from = self.store.lock().unwrap().logs.get(&station).map(|a| a.len()).unwrap_or(0);
@@ -242,7 +254,39 @@ impl Inner {
         Ok(added)
     }
 
+    fn is_own(&self, station: &StationId) -> bool {
+        self.store.lock().unwrap().keys.contains_key(station)
+    }
+
+    /// Brings a station's log up to date: privately on phones, directly on Lanterns.
+    pub async fn sync_log(&self, station: StationId) -> Result<usize> {
+        if self.is_own(&station) {
+            return Ok(0);
+        }
+        if self.cfg.private {
+            if let Ok(n) = self.private_log(station).await {
+                return Ok(n);
+            }
+            say("private route failed for a log; asking a carrier directly");
+        }
+        self.sync_log_direct(station).await
+    }
+
+    /// A chunk from the hold, or from the network: privately on phones, directly on Lanterns.
     pub async fn chunk(&self, station: &StationId, hash: &Hash) -> Result<Vec<u8>> {
+        if let Some(b) = self.store.lock().unwrap().get_chunk(hash) {
+            return Ok(b);
+        }
+        if self.cfg.private {
+            if let Ok(b) = self.private_chunk(*station, *hash).await {
+                return Ok(b);
+            }
+            say("private route failed for a chunk; asking a carrier directly");
+        }
+        self.chunk_direct(station, hash).await
+    }
+
+    pub async fn chunk_direct(&self, station: &StationId, hash: &Hash) -> Result<Vec<u8>> {
         if let Some(b) = self.store.lock().unwrap().get_chunk(hash) {
             return Ok(b);
         }
@@ -350,16 +394,28 @@ impl Inner {
                 if log.is_struck() {
                     continue;
                 }
-                let live = log.entries().last().is_some_and(|e| matches!(e.entry.body, Body::Live { .. }) && now - e.entry.at_ms < 25_000);
+                let live = log.entries().last().is_some_and(|e| matches!(e.entry.body(), Body::Live { .. }) && now - e.entry.at_ms < 25_000);
                 let key = s.keys.get(&id).unwrap();
-                Announce { station: id, head: log.len(), name, about, port, live, at_ms: now, pow: 0, sig: [0; 64] }
+                let proof = (key.id() != id).then(|| {
+                    log.entries().iter().find(|e| matches!(&e.entry.body, Body::Deputy { key: k, .. } if *k == key.id().0)).and_then(|e| e.to_bytes().ok())
+                }).flatten();
+                Announce { station: id, head: log.len(), name, about, port, live, at_ms: now, pow: 0, proof, sig: [0; 64] }
                     .pipe_pow(pow)
                     .sign(key)
             };
+            if self.cfg.private {
+                // Never show the network our own station first: send it down the stem.
+                self.stem_push(id, Some(a)).await;
+                continue;
+            }
             self.on_gossip(Gossip::Station(a.clone()));
             self.broadcast(&Gossip::Station(a)).await;
         }
+        let own_set: std::collections::HashSet<StationId> = self.store.lock().unwrap().own().into_iter().collect();
         for (station, head) in carried {
+            if self.cfg.private && own_set.contains(&station) {
+                continue;
+            }
             let g = Gossip::Carrier { station, node: me, head };
             self.on_gossip(g.clone());
             self.broadcast(&g).await;
@@ -371,14 +427,23 @@ impl Inner {
         let tuned = self.tuned.lock().unwrap().as_ref().map(|t| t.station);
         if let Some(station) = tuned {
             let token = self.token(&station, hour);
-            self.log.lock().unwrap().entry(station).or_default().sketches.entry(hour).or_default().add(&token);
+            if self.cfg.private {
+                // Counted by a stranger two hops away, once an hour, so neighbours never see what we hear.
+                let due = self.tokens_sent.lock().unwrap().get(&station) != Some(&hour);
+                if due {
+                    self.private_token(station, token).await;
+                    self.tokens_sent.lock().unwrap().insert(station, hour);
+                }
+            } else {
+                self.log.lock().unwrap().entry(station).or_default().sketches.entry(hour).or_default().add(&token);
+            }
         }
         let held: std::collections::HashSet<StationId> = self.store.lock().unwrap().logs.keys().copied().collect();
         let sketches: Vec<Gossip> = {
             let log = self.log.lock().unwrap();
             log.iter()
                 .filter_map(|(st, l)| l.sketches.get(&hour).map(|s| Gossip::Aboard { station: *st, hour, sketch: s.0.to_vec() }))
-                .filter(|g| matches!(g, Gossip::Aboard { station, .. } if self.cfg.lantern || Some(*station) == tuned || held.contains(station)))
+                .filter(|g| matches!(g, Gossip::Aboard { station, .. } if self.cfg.lantern || held.contains(station) || self.cfg.private))
                 .collect()
         };
         for g in sketches {
@@ -518,12 +583,72 @@ impl Inner {
                     if s.put_chunk(&c.hash, &bytes).is_ok() {
                         let _ = s.write(station, now_ms(), Body::Live { chunk: c, channels: 1, bitrate: 24_000 });
                     }
+                    drop(s);
+                    if me.cfg.private {
+                        let m2 = me.clone();
+                        me.handle.spawn(async move { m2.stem_push(station, None).await });
+                    }
                 }
             }
             say(&format!("off the air {}", station.call_sign()));
             let _ = buf;
         });
         Ok(())
+    }
+}
+
+impl Inner {
+    /// Ballast: every node carries the stations nearest its own id by hash, up to what it
+    /// donated, whether or not anyone listens to them. No coordination: each node ranks the
+    /// Log for itself, and the spread falls out of the hashing.
+    async fn ballast(self: &Arc<Self>) {
+        const PER_STATION: u64 = 300_000_000;
+        let me = *self.endpoint.id().as_bytes();
+        let mut stations: Vec<StationId> = self.log.lock().unwrap().iter().filter(|(_, l)| l.announce.is_some()).map(|(s, _)| *s).collect();
+        stations.sort_by_key(|s| {
+            let mut h = blake3::Hasher::new();
+            h.update(b"pyrate/ballast/v1");
+            h.update(&me);
+            h.update(&s.0);
+            *h.finalize().as_bytes()
+        });
+        let mut budget = self.cfg.ballast;
+        let mut pinned = std::collections::HashSet::new();
+        for st in stations {
+            if budget < 10_000_000 || self.is_own(&st) {
+                continue;
+            }
+            let _ = self.sync_log_direct(st).await;
+            let wanted: Vec<(Hash, u64)> = {
+                let s = self.store.lock().unwrap();
+                let Some(a) = s.logs.get(&st) else { continue };
+                let mut v = Vec::new();
+                let mut size = 0;
+                for (_, e) in a.library().unwrap_or_default() {
+                    if let Body::Track { chunks, .. } = e.entry.body() {
+                        for c in chunks {
+                            if size + c.len as u64 > PER_STATION.min(budget) {
+                                break;
+                            }
+                            size += c.len as u64;
+                            v.push((c.hash, c.len as u64));
+                        }
+                    }
+                }
+                v
+            };
+            for (h, len) in &wanted {
+                budget = budget.saturating_sub(*len);
+                if self.store.lock().unwrap().has_chunk(h) {
+                    continue;
+                }
+                if self.chunk_direct(&st, h).await.is_err() || !self.ballast_ok.load(std::sync::atomic::Ordering::Relaxed) {
+                    break;
+                }
+            }
+            pinned.insert(st);
+        }
+        self.store.lock().unwrap().pinned = pinned;
     }
 }
 
@@ -541,7 +666,7 @@ impl PipePow for Announce {
 impl Node {
     pub fn start(cfg: Config) -> Result<Self> {
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build()?;
-        let store = Store::open(&cfg.dir, cfg.quota)?;
+        let store = Store::open(&cfg.dir, cfg.quota + cfg.ballast)?;
         let key_path = cfg.dir.join("node.key");
         let secret = match std::fs::read(&key_path).ok().and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok()) {
             Some(b) => SecretKey::from_bytes(&b),
@@ -598,6 +723,9 @@ impl Node {
             #[cfg(feature = "playback")]
             np: Mutex::new(Value::Null),
             live: Mutex::new(None),
+            handle: rt.handle().clone(),
+            ballast_ok: std::sync::atomic::AtomicBool::new(false),
+            tokens_sent: Mutex::new(HashMap::new()),
         });
         *proto.0.lock().unwrap() = Some(inner.clone());
 
@@ -662,6 +790,8 @@ impl Node {
                 i2.tick().await;
                 if i2.cfg.lantern && n % 3 == 1 {
                     i2.mirror().await;
+                } else if !i2.cfg.lantern && n % 6 == 3 && i2.ballast_ok.load(std::sync::atomic::Ordering::Relaxed) {
+                    i2.ballast().await;
                 }
                 if n % 30 == 0 {
                     let s = i2.store.lock().unwrap();
@@ -693,17 +823,61 @@ impl Node {
         self.inner.endpoint.id()
     }
 
-    /// Raises colours: a new station key, its proof of work, its first entry.
-    pub fn raise(&self, name: &str, about: &str, port: Option<String>) -> Result<StationId> {
-        let key = pyrate_core::StationKey::generate()?;
-        let id = {
+    /// Raises colours with the master key in hand: it flies them, appoints this
+    /// device's deputy, and is then forgotten. Returns the station and the master's
+    /// 24 words, shown once. A Lantern (`keep_master`) keeps the master itself.
+    pub fn raise_with(&self, name: &str, about: &str, port: Option<String>, keep_master: bool) -> Result<(StationId, String)> {
+        let master = pyrate_core::StationKey::generate()?;
+        let id = master.id();
+        let words = master.phrase();
+        {
             let mut s = self.inner.store.lock().unwrap();
-            let id = s.add_key(key)?;
-            s.write(id, now_ms(), Body::Colours { name: name.into(), about: about.into(), port, tip: None })?;
-            id
-        };
+            let mut a = s.logs.remove(&id).unwrap_or_else(|| Archive::new(id));
+            let now = now_ms();
+            a.write(&master, now, Body::Colours { name: name.into(), about: about.into(), port, tip: None })?;
+            if keep_master {
+                s.put_entries(id, a.entries().to_vec())?;
+                s.add_key_for(id, master)?;
+            } else {
+                let deputy = pyrate_core::StationKey::generate()?;
+                a.write(&master, now, Body::Deputy { key: deputy.id().0, label: "phone".into() })?;
+                s.put_entries(id, a.entries().to_vec())?;
+                s.add_key_for(id, deputy)?;
+            }
+        }
         self.inner.pow_for(&id);
-        Ok(id)
+        Ok((id, words))
+    }
+
+    pub fn raise(&self, name: &str, about: &str, port: Option<String>) -> Result<StationId> {
+        Ok(self.raise_with(name, about, port, true)?.0)
+    }
+
+    /// Master acts from the 24 words: strike, or revoke every deputy and appoint this device.
+    fn with_master(&self, station: StationId, words: &str, act: &str) -> Result<()> {
+        let master = pyrate_core::StationKey::from_phrase(words)?;
+        if master.id() != station {
+            anyhow::bail!("those words are not this station's key");
+        }
+        let mut s = self.inner.store.lock().unwrap();
+        let mut a = s.logs.get(&station).cloned().unwrap_or_else(|| Archive::new(station));
+        let before = a.len();
+        let now = now_ms().max(a.entries().last().map(|e| e.entry.at_ms).unwrap_or(0));
+        match act {
+            "strike" => {
+                a.write(&master, now, Body::Strike)?;
+            }
+            _ => {
+                for d in a.deputies() {
+                    a.write(&master, now, Body::Revoke { key: d })?;
+                }
+                let deputy = pyrate_core::StationKey::generate()?;
+                a.write(&master, now, Body::Deputy { key: deputy.id().0, label: "phone".into() })?;
+                s.add_key_for(station, deputy)?;
+            }
+        }
+        s.put_entries(station, a.entries()[before as usize..].to_vec())?;
+        Ok(())
     }
 
     /// Ingests a file and adds it to one of our stations' libraries.
@@ -725,7 +899,7 @@ impl Node {
 
     pub fn titles(&self, station: &StationId) -> Vec<String> {
         let s = self.inner.store.lock().unwrap();
-        s.logs.get(station).map(|a| a.entries().iter().filter_map(|e| match &e.entry.body {
+        s.logs.get(station).map(|a| a.entries().iter().filter_map(|e| match e.entry.body() {
             Body::Track { title, .. } => Some(title.clone()),
             _ => None,
         }).collect()).unwrap_or_default()
@@ -798,8 +972,8 @@ impl Node {
                 if name.is_empty() {
                     anyhow::bail!("a station needs a name");
                 }
-                let id = self.raise(name, req["about"].as_str().unwrap_or(""), req["port"].as_str().map(String::from))?;
-                Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign() }))
+                let (id, words) = self.raise_with(name, req["about"].as_str().unwrap_or(""), req["port"].as_str().map(String::from), false)?;
+                Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "words": words }))
             }
             "add_track" => {
                 let st = station()?;
@@ -823,6 +997,10 @@ impl Node {
                 });
                 Ok(json!({ "job": job }))
             }
+            "ballast_ok" => {
+                inner.ballast_ok.store(req["value"].as_bool().unwrap_or(false), std::sync::atomic::Ordering::Relaxed);
+                Ok(json!({ "ok": true, "carrying": inner.store.lock().unwrap().pinned.len() }))
+            }
             "clear_job" => {
                 inner.jobs.lock().unwrap().remove(&req["job"].as_u64().unwrap_or(0));
                 Ok(json!({ "ok": true }))
@@ -831,7 +1009,7 @@ impl Node {
                 let st = station()?;
                 let s = inner.store.lock().unwrap();
                 let a = s.logs.get(&st).context("unknown station")?;
-                let v: Vec<Value> = a.library()?.into_iter().filter_map(|(h, e)| match &e.entry.body {
+                let v: Vec<Value> = a.library()?.into_iter().filter_map(|(h, e)| match e.entry.body() {
                     Body::Track { title, by, chunks, .. } => Some(json!({
                         "hash": hex(&h), "title": title, "by": by,
                         "duration_ms": chunks.iter().map(|c| c.duration_ms()).sum::<u64>(),
@@ -945,10 +1123,10 @@ mod playout {
 
     fn live_tail(a: &Archive, now: u64) -> Option<Vec<(u64, pyrate_core::Chunk, u8)>> {
         let last = a.entries().last()?;
-        if !matches!(last.entry.body, Body::Live { .. }) || now.saturating_sub(last.entry.at_ms) > 25_000 {
+        if !matches!(last.entry.body(), Body::Live { .. }) || now.saturating_sub(last.entry.at_ms) > 25_000 {
             return None;
         }
-        Some(a.entries().iter().filter_map(|e| match &e.entry.body {
+        Some(a.entries().iter().filter_map(|e| match e.entry.body() {
             Body::Live { chunk, channels, .. } => Some((e.entry.seq, *chunk, *channels)),
             _ => None,
         }).collect())
@@ -956,7 +1134,7 @@ mod playout {
 
     fn describe(a: &Archive, track: &Hash) -> (String, String) {
         for e in a.entries() {
-            if let Body::Track { title, by, .. } = &e.entry.body {
+            if let Body::Track { title, by, .. } = e.entry.body() {
                 if e.hash().ok().as_ref() == Some(track) {
                     return (title.clone(), by.clone());
                 }
@@ -1043,7 +1221,7 @@ mod playout {
                     break;
                 };
                 let entry = archive.entries().iter().find(|e| e.hash().ok() == Some(np.track));
-                let Some(Body::Track { chunks, channels, .. }) = entry.map(|e| &e.entry.body) else { break };
+                let Some(Body::Track { chunks, channels, .. }) = entry.map(|e| e.entry.body()) else { break };
                 let Some(chunk) = chunks.get(np.chunk).copied() else { break };
                 let Ok(bytes) = inner.chunk(&station, &chunk.hash).await else {
                     say("no carrier answered for the chunk on now");

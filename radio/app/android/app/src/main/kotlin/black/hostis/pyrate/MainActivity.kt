@@ -63,6 +63,13 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(null)
                 }
+                "conditions" -> {
+                    val bm = getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
+                    val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+                    val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+                    val unmetered = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
+                    result.success(bm.isCharging && unmetered)
+                }
                 "stop" -> {
                     stopService(Intent(this, PlaybackService::class.java))
                     result.success(null)

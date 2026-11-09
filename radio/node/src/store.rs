@@ -22,6 +22,8 @@ pub struct Store {
     pub quota: u64,
     pub logs: HashMap<StationId, Archive>,
     pub keys: HashMap<StationId, StationKey>,
+    /// Stations carried as ballast for the fleet: kept through quota sweeps.
+    pub pinned: HashSet<StationId>,
 }
 
 impl Store {
@@ -29,13 +31,14 @@ impl Store {
         for d in ["logs", "chunks", "keys"] {
             fs::create_dir_all(dir.join(d))?;
         }
-        let mut s = Self { dir: dir.to_path_buf(), quota, logs: HashMap::new(), keys: HashMap::new() };
+        let mut s = Self { dir: dir.to_path_buf(), quota, logs: HashMap::new(), keys: HashMap::new(), pinned: HashSet::new() };
+        // keys/<station hex> holds the station's master seed, or a deputy's.
         for f in fs::read_dir(dir.join("keys"))? {
             let f = f?;
+            let Ok(station) = StationId::from_hex(&f.file_name().to_string_lossy()) else { continue };
             let seed = fs::read(f.path())?;
             if let Ok(seed) = <[u8; 32]>::try_from(seed.as_slice()) {
-                let k = StationKey::from_seed(seed);
-                s.keys.insert(k.id(), k);
+                s.keys.insert(station, StationKey::from_seed(seed));
             }
         }
         for f in fs::read_dir(dir.join("logs"))? {
@@ -72,6 +75,11 @@ impl Store {
 
     pub fn add_key(&mut self, key: StationKey) -> Result<StationId> {
         let id = key.id();
+        self.add_key_for(id, key)
+    }
+
+    /// Keeps a key (master or deputy) for a station.
+    pub fn add_key_for(&mut self, id: StationId, key: StationKey) -> Result<StationId> {
         let p = self.dir.join("keys").join(id.to_hex());
         fs::write(&p, key.seed())?;
         self.keys.insert(id, key);
@@ -110,6 +118,8 @@ impl Store {
     pub fn write(&mut self, id: StationId, at_ms: u64, body: Body) -> Result<SignedEntry> {
         let key = self.keys.get(&id).ok_or_else(|| anyhow::anyhow!("not our station"))?;
         let a = self.logs.entry(id).or_insert_with(|| Archive::new(id));
+        // A deputy wraps what it writes, so carriers can check the deputy's signature.
+        let body = if key.id() == id { body } else { Body::Deputed { by: key.id().0, body: Box::new(body) } };
         let e = pyrate_core::Entry { station: id, seq: a.len(), prev: a.head(), at_ms, body };
         let signed = SignedEntry::sign(key, e)?;
         self.put_entries(id, vec![signed.clone()])?;
@@ -130,7 +140,7 @@ impl Store {
         let Some(a) = self.logs.get(id) else { return vec![] };
         let mut out = Vec::new();
         for e in a.entries() {
-            match &e.entry.body {
+            match e.entry.body() {
                 Body::Track { chunks, .. } => out.extend(chunks.iter().map(|c| c.hash)),
                 Body::Live { chunk, .. } => out.push(chunk.hash),
                 _ => {}
@@ -172,7 +182,7 @@ impl Store {
 
     /// Evicts carried chunks, oldest-touched first, until under quota.
     pub fn enforce_quota(&self) -> Result<u64> {
-        let keep: HashSet<String> = self.own().iter().flat_map(|id| self.chunks_of(id)).map(|h| hex(&h)).collect();
+        let keep: HashSet<String> = self.own().iter().chain(self.pinned.iter()).flat_map(|id| self.chunks_of(id)).map(|h| hex(&h)).collect();
         let mut files = Vec::new();
         let mut total = 0u64;
         for sub in fs::read_dir(self.dir.join("chunks"))? {
