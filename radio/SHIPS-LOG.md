@@ -104,3 +104,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - One strict hex parser everywhere, the app's door catches panics, and the Android context is set once a process: a malformed link or a second start no longer kills the app.
 - A plain chunk from before sealing can no longer be fetched in the clear; struck stations leave no pictures; chatter memory stays bounded.
 - The Lantern's player mirror serves its own folder and nothing else: a doubled slash could have reached any file on the machine.
+- The network clock takes one vote a station and needs five to agree, so no single station can set every listener's clock wrong.

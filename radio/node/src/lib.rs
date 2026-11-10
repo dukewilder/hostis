@@ -563,7 +563,7 @@ impl Inner {
                 self.store.lock().unwrap().open_log(&a.station);
                 let fresh = log.get(&a.station).and_then(|l| l.announce.as_ref()).is_none_or(|old| a.at_ms > old.at_ms);
                 if fresh && now.saturating_sub(a.at_ms) < 60_000 {
-                    clockfix::sample(a.at_ms, raw_now_ms());
+                    clockfix::sample(a.station.0, a.at_ms, raw_now_ms());
                 }
                 // The Log keeps at most 5,000 cards: past that, a new station must outdo the weakest.
                 if log.len() >= 5_000 && !log.contains_key(&a.station) {

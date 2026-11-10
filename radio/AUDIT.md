@@ -22,7 +22,6 @@ Each entry gives the threat, whether the wall held, and the fix.
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
 
-- **A1** (high) One hostile station can move every listener's clock by up to five minutes. `node/src/clockfix.rs:10-27`
 - **A2** (high) `t - cursor` underflow in `walk` when a run's computed start is after `t` (panic in debug, garbage in release). `core/src/clock.rs:351`
 - **A3** (high) Rota walk has no step cap: a track of a few milliseconds hangs the lookup. `core/src/clock.rs:555-604`
 - **A4** (medium) `walk` gives up after 400,000 steps, so short tracks mean dead air late in the week. `core/src/clock.rs:22`
@@ -31,7 +30,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 - **A7** (medium) `at_ms + show_len` overflows for a signed Show with a huge `at_ms`. `core/src/clock.rs:319`
 - **A8** (medium) A show premiering before its track was added never airs, and the listing still promises it. `core/src/clock.rs:313-315`
 - **A9** (medium) Call signs carry ~35 bits, so a lookalike can be ground out for a target. `core/src/callsign.rs:9-23`
-- **A10** (low) Clock correction jumps from 0 to 2 s instead of easing in. `node/src/clockfix.rs:26`
 - **A11** (low) `ChunkDecoder::decode` trusts the chunk's packet count and sizes. `core/src/audio.rs:166-174; archive.rs `Chunk::check``
 - **A12** (low) Ogg writer can overflow the lacing byte and drops bad chunks silently. `core/src/tape.rs:26-45`
 - **A14** (low) `span_from` truncates `days` and accepts a span that never runs. `core/src/page.rs:56`
@@ -61,7 +59,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 - **C11** (medium) Per-request cost amplification on unauthenticated routes. `node/src/web.rs:72-78`
 - **C12** (low) Lantern page and tower have no recovery when the stream ends. `node/src/web.rs:442-449`
 - **C13** (low) /player/ mirror: broken home links, no redirect, no hardening headers. `node/src/web.rs:62-63`
-- **C14** (high) One station can set every tab's clock wrong. `browser/src/lib.rs:175-186`
 - **C15** (high) Unsigned Carrier gossip: fake carriers jump the queue, grow memory and eclipse peers. `browser/src/lib.rs:328-345`
 - **C16** (medium) Chunk fetch is serial, has no failure memory, and retries dead peers every time. `browser/src/lib.rs:296-322`
 - **C17** (medium) Aboard token broadcasts what the tab is tuned to, whether or not it plays. `browser/src/lib.rs:519-543`
@@ -174,4 +171,10 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **B15. Small faults.** The flock's round trip can underflow if the network clock steps between pings. Fixed: the round trip is taken with a saturating subtraction. (0b3d89c)
 
-**C1. /player/ serves any file on disk via an absolute path.** (high) Fixed: the mirror builds the file's path from plain segments only (no empty, dotted, backslashed or colon segments) and serves it only if, links followed, it still lies inside the player folder. It also sends nosniff, no-referrer and frame-ancestors 'self', and knows the svg, ico, woff2 and txt types. A unit test tries absolute, doubled-slash, dotted and linked paths, and a live Lantern answers 404 to /player//etc/passwd. (pending)
+**C1. /player/ serves any file on disk via an absolute path.** (high) Fixed: the mirror builds the file's path from plain segments only (no empty, dotted, backslashed or colon segments) and serves it only if, links followed, it still lies inside the player folder. It also sends nosniff, no-referrer and frame-ancestors 'self', and knows the svg, ico, woff2 and txt types. A unit test tries absolute, doubled-slash, dotted and linked paths, and a live Lantern answers 404 to /player//etc/passwd. (ac1a5e3)
+
+**A1. One hostile station can move every listener's clock by up to five minutes.** (high) Fixed: the network clock now lives in the core (drift.rs), shared by phones, Lanterns and tabs: each station gets one vote (its latest gap), nothing moves until five stations agree, the median is applied only past 2.5 seconds and eases off below one, and anything past five minutes is not trusted. Unit tests show a hundred cards from one station moving nothing. (pending)
+
+**C14. One station can set every tab's clock wrong.** (high) Fixed: the tab uses the same core drift as the app (see A1). (pending)
+
+**A10. Clock correction jumps from 0 to 2 s instead of easing in.** (low) Fixed: the correction turns on past 2.5 seconds and off below one (see A1). (pending)

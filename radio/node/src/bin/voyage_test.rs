@@ -148,7 +148,7 @@ fn main() -> anyhow::Result<()> {
     let mut heard = false;
     for _ in 0..40 {
         std::thread::sleep(Duration::from_secs(3));
-        if third.call(&json!({ "cmd": "stations", "marooned": true })).as_array().is_some_and(|v| v.is_empty()) && third.heard_of(&sid) && !third.will_carry(&sid) {
+        if third.call(&json!({ "cmd": "stations", "marooned": true })).as_array().is_some_and(|v| !v.iter().any(|x| x["id"] == id.as_str())) && third.heard_of(&sid) && !third.will_carry(&sid) {
             heard = true;
             break;
         }
