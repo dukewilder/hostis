@@ -152,7 +152,7 @@ struct Ship {
     tuned: Mutex<Option<StationId>>,
     tokens_sent: Mutex<HashMap<StationId, u64>>,
     syncing: Mutex<HashSet<StationId>>,
-    skew: Mutex<Vec<i64>>,
+    drift: Mutex<pyrate_core::drift::Drift>,
 }
 
 fn raw_now() -> u64 {
@@ -168,16 +168,7 @@ impl Ship {
     }
 
     fn base_now(&self) -> u64 {
-        let s = self.skew.lock().unwrap();
-        let off = if s.len() < 7 {
-            0
-        } else {
-            let mut v = s.clone();
-            v.sort();
-            let m = v[v.len() / 2];
-            if m.abs() < 2_000 || m.abs() > 300_000 { 0 } else { m }
-        };
-        (raw_now() as i64 + off) as u64
+        (raw_now() as i64 + self.drift.lock().unwrap().offset()) as u64
     }
 
     fn serve(&self, req: Request) -> Response {
@@ -522,11 +513,7 @@ impl Ship {
                     return None;
                 }
                 if raw_now().abs_diff(a.at_ms) < 300_000 + 60_000 {
-                    let mut s = self.skew.lock().unwrap();
-                    s.push(a.at_ms as i64 - raw_now() as i64);
-                    if s.len() > 101 {
-                        s.remove(0);
-                    }
+                    self.drift.lock().unwrap().sample(a.station.0, a.at_ms, raw_now());
                 }
                 let (s, head) = (a.station, a.head);
                 l.announce = Some(a);
@@ -781,7 +768,7 @@ impl Radio {
             tuned: Mutex::new(None),
             tokens_sent: Mutex::new(HashMap::new()),
             syncing: Mutex::new(HashSet::new()),
-            skew: Mutex::new(Vec::new()),
+            drift: Mutex::new(pyrate_core::drift::Drift::new()),
         });
         *proto.0.lock().unwrap() = Some(ship.clone());
 
