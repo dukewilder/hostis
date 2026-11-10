@@ -137,3 +137,5 @@ html.embed .set{margin:0}
 .say input,.sayrow input,#askbox input,#askbox select{flex:1;min-width:0;height:44px;background:var(--black);color:var(--bone);border:1px solid var(--bone-faint);padding:0 .9rem;font-family:var(--serif);font-size:1rem}
 .sayrow,#askbox{display:flex;gap:.6rem;flex-wrap:wrap;margin:0 0 .6rem}
 .sayrow input{flex:1 1 10rem}
+#clipbox video{flex:0 0 auto;width:min(200px,46vw);aspect-ratio:9/16;background:var(--black);border:1px solid var(--bone-ghost)}
+a.plain{text-decoration:none}
