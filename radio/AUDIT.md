@@ -74,10 +74,7 @@ Reported by a reader of the code; each is checked against the code before it is 
 - **P8** (medium) Feed "keep the newest N" downloads the whole back catalogue, and the feed list can be overwritten. `station.dart:889-926`
 - **P9** (medium) Podcast feeds are never refreshed on their own. `station.dart:804`
 - **P10** (medium) Drawer Lantern: the service restarts with no node, and the charging and Wi-Fi gate lives only in the Dart UI. `LanternService.kt:27-52`
-- **P11** (medium) The "plain" disguise leaks the station name and the app name. `PlaybackService.kt:239-244`
 - **P14** (medium) Temporary audio, pictures and APK copies are left on disk. `Ship.kt:22-42`
-- **P15** (medium) After END BROADCAST the "ON AIR" notification, foreground state and both locks stay. `PlaybackService.kt:239-245`
-- **P16** (medium) Every tune stacks a new audio-focus request. `PlaybackService.kt:102-107 and 123-140`
 - **P17** (medium) Blocking native calls on the UI thread, in Dart and in the service. `PlaybackService.kt:53-58`
 - **P18** (medium) The dial's PageView follows list position, not the station. `main.dart:203-214`
 - **P19** (medium) Links join pockets, flocks and stations without asking. `main.dart:178-197; MainActivity.kt:28-39`
@@ -203,4 +200,10 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **C19. Peers can probe a tab for what it has just played.** (medium) Fixed: a tab now answers nobody about what it holds: requests for logs, sealed chunks and plain chunks get nothing. It takes from the network and gives back its count and its chatter. (99cbb2f)
 
-**B9. The PIN falls to a fast hash.** The Colours PIN is stored as a salted BLAKE3 hash, so a seized disk gives up a four-digit PIN at once, and with it any lock-screen PIN that matches. Holds only against a casual look. Fixed: the PIN is kept under Argon2id (32 MiB, three passes), so each guess against a copy of the file costs real time, and a PIN from before is moved to it the first time it is entered right. The app checks and sets it off the screen's thread, and asking only whether one is set costs nothing. Unit tested. (pending)
+**B9. The PIN falls to a fast hash.** The Colours PIN is stored as a salted BLAKE3 hash, so a seized disk gives up a four-digit PIN at once, and with it any lock-screen PIN that matches. Holds only against a casual look. Fixed: the PIN is kept under Argon2id (32 MiB, three passes), so each guess against a copy of the file costs real time, and a PIN from before is moved to it the first time it is entered right. The app checks and sets it off the screen's thread, and asking only whether one is set costs nothing. Unit tested. (1245195)
+
+**P15. After END BROADCAST the "ON AIR" notification, foreground state and both locks stay.** (medium) Fixed: ending a broadcast now leaves the foreground (and its locks) when nothing is tuned, or puts the station back on the notification when something is; ON AIR shows only while live. (pending)
+
+**P16. Every tune stacks a new audio-focus request.** (medium) Fixed: the service keeps one request for the speaker for its whole life and asks with it again, so no stale listener answers later focus changes. (pending)
+
+**P11. The "plain" disguise leaks the station name and the app name.** (medium) Fixed: in the plain disguise the playback notification is private with a public face that says only Radio, the app's station title no longer overrides it, ON AIR is not shown, and bells and the Lantern notification say only Radio. What remains: the system still names the app in the notification header, which no app can change. (pending)

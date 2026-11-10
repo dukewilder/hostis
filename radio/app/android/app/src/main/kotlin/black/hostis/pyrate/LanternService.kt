@@ -26,13 +26,14 @@ class LanternService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val gb = intent?.getIntExtra("gb", 1) ?: 1
+        val plain = getSharedPreferences("pyrate", Context.MODE_PRIVATE).getBoolean("plain_lock", false)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("lantern", "Lantern", NotificationManager.IMPORTANCE_MIN))
         val open = PendingIntent.getActivity(this, 0, packageManager.getLaunchIntentForPackage(packageName), PendingIntent.FLAG_IMMUTABLE)
         val n = NotificationCompat.Builder(this, "lantern")
             .setSmallIcon(R.drawable.ic_flag)
-            .setContentTitle("Keeping a Lantern")
-            .setContentText("Carrying up to $gb GB for the fleet while it charges")
+            .setContentTitle(if (plain) "Radio" else "Keeping a Lantern")
+            .setContentText(if (plain) "" else "Carrying up to $gb GB for the fleet while it charges")
             .setContentIntent(open)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)

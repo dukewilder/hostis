@@ -109,10 +109,13 @@ object Bells {
         val open = PendingIntent.getActivity(c, id,
             Intent(c, MainActivity::class.java).setAction("tune").putExtra("station", station).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        // In the plain disguise a bell says only that something is on.
+        val plain = c.getSharedPreferences("pyrate", Context.MODE_PRIVATE).getBoolean("plain_lock", false)
         nm.notify(id, NotificationCompat.Builder(c, "bells")
             .setSmallIcon(R.drawable.ic_flag)
-            .setContentTitle(title)
-            .setContentText("On $name now. Tap to tune in.")
+            .setContentTitle(if (plain) "Radio" else title)
+            .setContentText(if (plain) "Something you asked for is on." else "On $name now. Tap to tune in.")
+            .setVisibility(if (plain) NotificationCompat.VISIBILITY_PRIVATE else NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(open)
             .setAutoCancel(true)
             .build())
