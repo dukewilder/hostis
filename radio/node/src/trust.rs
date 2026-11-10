@@ -125,6 +125,7 @@ impl Inner {
     /// What a Lantern holding the Releases deputy does on its own: publish what the operator
     /// drops in its releases folder.
     pub(crate) async fn lantern_duties(self: &Arc<Self>) {
+        self.keep_rooms().await;
         if let Some(st) = self.release_station().filter(|s| self.store.lock().unwrap().keys.contains_key(s)) {
             if let Err(e) = self.publish_releases(st) {
                 say(&format!("releases: {e}"));

@@ -11,6 +11,7 @@ pub mod archive;
 pub mod art;
 pub mod audio;
 pub mod callsign;
+pub mod chat;
 pub mod clock;
 #[cfg(feature = "codec")]
 pub mod ingest;

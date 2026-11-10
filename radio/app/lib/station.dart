@@ -264,6 +264,12 @@ class _StationPageState extends State<StationPage> {
                   ]),
                 ),
             ],
+            section('CHATTER'),
+            ChatterPanel(
+              station: id,
+              own: own,
+              nextAt: ((p['next'] as List?) ?? []).map((n) => (n['start_ms'] as num).toInt()).where((t) => t > now).fold<int?>(null, (a, b) => a ?? b),
+            ),
             section('THE SCHEDULE'),
             note(programmeSummary(p['programme'] as Map?)),
             if (((p['listings'] as List?) ?? []).isEmpty)
@@ -1103,5 +1109,178 @@ class _PosterSheetState extends State<PosterSheet> {
         ]),
       ),
     );
+  }
+}
+
+// ---------------------------------------------------------------------------------------
+// Chatter: talk in the station's room, cheer what is on, ask for a recording. Lines pass
+// between the people in the room and are kept by nobody.
+
+class ChatterPanel extends StatefulWidget {
+  final String station;
+  final bool own;
+  /// When the recording now playing ends: where a request the keeper takes goes on.
+  final int? nextAt;
+  const ChatterPanel({super.key, required this.station, required this.own, this.nextAt});
+  @override
+  State<ChatterPanel> createState() => _ChatterPanelState();
+}
+
+class _ChatterPanelState extends State<ChatterPanel> {
+  Map? room;
+  Timer? tick;
+  bool joining = false;
+  String? err;
+  final say = TextEditingController();
+  late final name = TextEditingController(text: (pref('chat_name') ?? '').toString());
+
+  @override
+  void initState() {
+    super.initState();
+    read();
+    tick = Timer.periodic(const Duration(seconds: 2), (_) => read());
+  }
+
+  @override
+  void dispose() {
+    tick?.cancel();
+    super.dispose();
+  }
+
+  Future<void> read() async {
+    final r = await Native.callAway({'cmd': 'chat_read', 'station': widget.station});
+    if (mounted && r is Map) setState(() => room = r);
+  }
+
+  Set<String> get mutes => ((pref('chat_mutes') as List?) ?? []).cast<String>().toSet();
+
+  Future<void> send(String kind, {String text = '', String? track}) async {
+    final r = await Native.callAway({'cmd': 'chat_send', 'station': widget.station, 'kind': kind, 'text': text, if (track != null) 'track': track, 'name': name.text.trim()});
+    if (r is Map && r['error'] != null) setState(() => err = r['error']);
+    read();
+  }
+
+  Future<void> ask() async {
+    final lib = await Native.callAway({'cmd': 'library', 'station': widget.station});
+    if (!mounted || lib is! List || lib.isEmpty) return;
+    final note2 = TextEditingController();
+    final track = await pyrateSheet<String>(
+      context,
+      Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          heading('ASK FOR A RECORDING'),
+          TextField(controller: note2, maxLength: 140, style: serif(15), decoration: pyrateField('A word with it, if you like')),
+          Flexible(
+            child: ListView(shrinkWrap: true, children: [
+              for (final t in lib)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(t['title'] ?? '', style: serif(16)),
+                  subtitle: (t['by'] ?? '').toString().isEmpty ? null : Text(t['by'], style: carved(9, color: boneFaint)),
+                  onTap: () => Navigator.pop(context, t['hash'] as String),
+                ),
+            ]),
+          ),
+        ]),
+      ),
+    );
+    if (track != null) send('request', text: note2.text.trim(), track: track);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = room;
+    if (r == null || r['joined'] != true) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        note('Talk with whoever else is listening, cheer what is on, or ask the station for a recording. Lines are kept by nobody: they pass between the people in the room and are gone. Joining tells the others in the room that this phone is there, which listening alone never does.'),
+        const SizedBox(height: 10),
+        pyrateButton(joining ? 'JOINING' : 'JOIN THE CHATTER', joining
+            ? null
+            : () async {
+                setState(() => joining = true);
+                await Native.callAway({'cmd': 'chat_join', 'station': widget.station});
+                if (mounted) setState(() => joining = false);
+                read();
+              }),
+      ]);
+    }
+    final m = mutes;
+    final lines = ((r['lines'] as List?) ?? []).where((l) => !m.contains(l['voice'])).toList();
+    final shown = lines.length > 60 ? lines.sublist(lines.length - 60) : lines;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      note('You speak here as ${name.text.trim().isEmpty ? r['voice'] : name.text.trim()}. ${(r['neighbours'] ?? 0) > 0 ? 'Linked to ${r['neighbours']} in the room.' : 'Looking for others in the room.'}'),
+      const SizedBox(height: 8),
+      if (shown.isEmpty) note('Nobody has said anything yet.'),
+      for (final l in shown)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              GestureDetector(
+                onLongPress: l['mine'] == true
+                    ? null
+                    : () async {
+                        final ok = await showDialog<bool>(
+                          context: context,
+                          builder: (c) => AlertDialog(
+                            backgroundColor: panel,
+                            title: Text('Mute ${l['name'] == '' ? l['voice'] : l['name']}?', style: serif(20)),
+                            content: Text('Only you stop hearing them, on this phone.', style: serif(14, color: boneFaint, italic: true)),
+                            actions: [TextButton(onPressed: () => Navigator.pop(c, true), child: Text('MUTE', style: carved(11)))],
+                          ),
+                        );
+                        if (ok == true) {
+                          pref('chat_mutes', [...m, l['voice']]);
+                          read();
+                        }
+                      },
+                child: Text('${(l['name'] ?? '').toString().isEmpty ? l['voice'] : l['name']}${l['keeper'] == true ? ' (the station)' : ''}'.toUpperCase(),
+                    style: carved(9, color: l['keeper'] == true ? bloodBright : (l['mine'] == true ? bone : boneFaint), spacing: 0.25)),
+              ),
+              const SizedBox(width: 8),
+              Text(clockTime((l['at_ms'] as num).toInt()), style: mono(9, color: boneGhost)),
+            ]),
+            if (l['kind'] == 'cheer') Text('Cheers to what is on', style: serif(15, color: bone, italic: true)),
+            if (l['kind'] == 'request')
+              Row(children: [
+                Expanded(child: Text('Asks for ${l['title'] ?? 'a recording'}${(l['text'] ?? '').toString().isNotEmpty ? ', "${l['text']}"' : ''}', style: serif(15, color: bone, italic: true))),
+                if (widget.own && l['track'] != null)
+                  TextButton(
+                    onPressed: () async {
+                      await Native.callAway({
+                        'cmd': 'show_add', 'station': widget.station, 'title': 'By request', 'about': 'Asked for by ${(l['name'] ?? '').toString().isEmpty ? l['voice'] : l['name']}',
+                        'at_ms': widget.nextAt ?? DateTime.now().millisecondsSinceEpoch + 60000, 'tracks': [l['track']], 'live_min': 0,
+                      });
+                      if (context.mounted) toast(context, 'It plays next.');
+                    },
+                    child: Text('PLAY IT NEXT', style: carved(9, color: bloodBright)),
+                  ),
+              ]),
+            if (l['kind'] == 'text') Text(l['text'] ?? '', style: serif(15, color: boneDim)),
+          ]),
+        ),
+      const SizedBox(height: 8),
+      Row(children: [
+        Expanded(child: TextField(controller: say, maxLength: 280, style: serif(16), decoration: pyrateField('Say something'), onSubmitted: (t) {
+          if (t.trim().isEmpty) return;
+          say.clear();
+          send('text', text: t.trim());
+        })),
+        const SizedBox(width: 8),
+        pyrateButton('SAY', () {
+          final t = say.text.trim();
+          if (t.isEmpty) return;
+          say.clear();
+          send('text', text: t);
+        }),
+      ]),
+      Wrap(spacing: 6, runSpacing: 6, children: [
+        pyrateButton('CHEERS', () => send('cheer')),
+        pyrateButton('ASK FOR ONE', ask),
+      ]),
+      TextField(controller: name, maxLength: 32, style: serif(15), decoration: pyrateField('Your name in the room'), onChanged: (v) => pref('chat_name', v.trim())),
+      if (err != null) note(err!),
+    ]);
   }
 }

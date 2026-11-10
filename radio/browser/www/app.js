@@ -318,7 +318,7 @@ async function show(s) {
   document.querySelectorAll('.row').forEach(r => r.classList.toggle('on', r.dataset.id === s.id));
   if (location.hash.slice(1) !== s.id) history.replaceState(null, '', '#' + s.id);
   radio.tune(s.id);
-  nowPlaying(); page(true);
+  nowPlaying(); page(true); chatter();
 }
 
 function listen(s) {
@@ -373,6 +373,35 @@ $('spin').onclick = () => {
   const m = marooned(), pool = stations.filter(s => !m.has(s.id) && allowed(s) && s.id !== cur?.id);
   if (pool.length) { listen(pool[Math.floor(Math.random() * pool.length)]); scrollTo({ top: 0, behavior: 'smooth' }) }
 };
+// ---- Chatter: talk in the station's room, kept by nobody --------------------------------
+const myName = () => store('pyrate.name') || '';
+function chatter() {
+  if (!cur || !radio) return;
+  const c = JSON.parse(radio.chat_read(cur.id));
+  $('chatjoin').hidden = c.joined; $('chatroom').hidden = !c.joined;
+  if (!c.joined) return;
+  let mutes; try { mutes = new Set(JSON.parse(store('pyrate.mutes') || '[]')) } catch (e) { mutes = new Set() }
+  $('chatwho').textContent = 'You speak here as ' + (myName() || c.voice) + '. ' + (c.neighbours ? 'Linked to ' + c.neighbours + ' in the room.' : 'Looking for others in the room.');
+  const box = $('lines'), atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
+  const shown = c.lines.filter(l => !mutes.has(l.voice));
+  box.innerHTML = shown.map(l => '<div class="line' + (l.keeper ? ' keeper' : '') + (l.mine ? ' mine' : '') + '"><button class="who" data-v="' + esc(l.voice) + '" title="' + esc(l.voice) + '">' + esc(l.name || l.voice) + (l.keeper ? ' (the station)' : '') + '</button><small>' + hm(l.at_ms) + '</small><div class="said">' +
+    (l.kind === 'cheer' ? '<span class="cheer">Cheers to what is on</span>' : l.kind === 'request' ? '<span class="req">Asks for ' + esc(l.title || 'a recording') + '</span>' + (l.text ? ', <em>' + esc(l.text) + '</em>' : '') : esc(l.text)) + '</div></div>').join('') || '<p class="fine">Nobody has said anything yet.</p>';
+  if (atEnd) box.scrollTop = box.scrollHeight;
+  box.querySelectorAll('.who').forEach(w => w.onclick = () => { if (!w.closest('.mine') && confirm('Mute ' + w.textContent + '? Only you stop hearing them, in this browser.')) { mutes.add(w.dataset.v); store('pyrate.mutes', JSON.stringify([...mutes])); chatter() } });
+}
+const speak = (kind, text, track) => radio.chat_send(cur.id, kind, text || '', track || '', myName()).then(chatter, e => { $('chatwho').textContent = String(e) });
+$('chatgo').onclick = async () => { $('chatgo').textContent = 'Joining'; try { await radio.chat_join(cur.id) } catch (e) { $('chatgo').textContent = 'Join the chatter'; return } chatter() };
+$('say').onsubmit = e => { e.preventDefault(); const t = $('sayt').value.trim(); if (!t) return; $('sayt').value = ''; speak('text', t) };
+$('cheer').onclick = () => speak('cheer');
+$('myname').value = myName(); $('myname').onchange = () => { store('pyrate.name', $('myname').value.trim()); chatter() };
+$('askfor').onclick = () => {
+  const lib = JSON.parse(radio.library(cur.id));
+  $('asktrack').innerHTML = lib.map(t => '<option value="' + t.track + '">' + esc(t.title) + (t.by ? ', ' + esc(t.by) : '') + '</option>').join('');
+  $('askbox').hidden = !$('askbox').hidden || !lib.length;
+};
+$('asksend').onclick = () => { speak('request', $('asknote').value.trim(), $('asktrack').value); $('asknote').value = ''; $('askbox').hidden = true };
+setInterval(() => { if (!$('chatroom').hidden || !$('chatjoin').hidden) chatter() }, 2000);
+
 // Pass it on: the station's code to scan, its link to copy or share.
 $('pass').onclick = () => {
   const url = 'https://hostis.black/pyrateradio/listen/#' + cur.id, q = JSON.parse(radio.qr(url)), n = q.size;

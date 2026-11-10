@@ -126,3 +126,14 @@ footer{display:flex;gap:1.6rem;justify-content:center;flex-wrap:wrap;font-family
 html.embed,html.embed body{background:var(--black);min-height:0}
 html.embed .top,html.embed .below,html.embed footer,html.embed #maroon,html.embed .grain{display:none}
 html.embed .set{margin:0}
+.lines{max-height:340px;overflow-y:auto;border:1px solid var(--bone-ghost);padding:.4rem .9rem;margin:0 0 .8rem;background:var(--black)}
+.line{padding:.45rem 0;border-bottom:1px solid rgba(237,228,206,.06)}
+.line .who{background:none;border:0;padding:0;margin:0;font-family:var(--carved);font-weight:600;font-size:.6rem;letter-spacing:.25em;text-transform:uppercase;color:var(--bone-faint);cursor:pointer}
+.line.keeper .who{color:var(--blood-bright)}.line.mine .who{color:var(--bone);cursor:default}
+.line small{font-family:var(--mono);font-size:.58rem;color:var(--bone-ghost);margin-left:.6rem}
+.line .said{color:var(--bone-dim);font-size:1.02rem;line-height:1.45;overflow-wrap:anywhere}
+.line .cheer,.line .req{font-style:italic;color:var(--bone)}
+.say{display:flex;gap:.6rem;margin:0 0 .6rem}
+.say input,.sayrow input,#askbox input,#askbox select{flex:1;min-width:0;height:44px;background:var(--black);color:var(--bone);border:1px solid var(--bone-faint);padding:0 .9rem;font-family:var(--serif);font-size:1rem}
+.sayrow,#askbox{display:flex;gap:.6rem;flex-wrap:wrap;margin:0 0 .6rem}
+.sayrow input{flex:1 1 10rem}

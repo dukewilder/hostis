@@ -4,6 +4,7 @@
 //! No rights reserved.
 
 pub mod art;
+mod chat;
 pub mod hop;
 pub mod trust;
 pub mod clockfix;
@@ -182,6 +183,9 @@ pub struct Inner {
     log: Mutex<HashMap<StationId, Listing>>,
     conns: Mutex<HashMap<EndpointId, Connection>>,
     gossip_tx: Mutex<Option<GossipSender>>,
+    gossip: GossipNet,
+    /// Station chatter this node has joined, held in memory only.
+    chats: Mutex<HashMap<StationId, chat::Room>>,
     tuned: Mutex<Option<Tuned>>,
     jobs: Mutex<HashMap<u64, String>>,
     pow: Mutex<HashMap<StationId, u64>>,
@@ -265,6 +269,7 @@ impl Inner {
             Request::Log { .. } => Response::Entries(vec![]),
             Request::Chunk { hash } => Response::Chunk(store.get_chunk(&hash).or_else(|| self.art_mem.lock().unwrap().get(&hash))),
             Request::Hop(_) => Response::Hop(vec![]),
+            Request::Chatter { station } => Response::Chatter(self.chatter_for(&station)),
         }
     }
 
@@ -1098,6 +1103,8 @@ impl Node {
             log: Mutex::new(HashMap::new()),
             conns: Mutex::new(HashMap::new()),
             gossip_tx: Mutex::new(None),
+            gossip: gossip.clone(),
+            chats: Mutex::new(HashMap::new()),
             tuned: Mutex::new(None),
             jobs: Mutex::new(HashMap::new()),
             pow: Mutex::new(HashMap::new()),
@@ -1352,6 +1359,10 @@ impl Node {
         let station = || -> Result<StationId> { Ok(StationId::from_hex(req["station"].as_str().context("station")?)?) };
         let inner = &self.inner;
         match cmd {
+            "chat_join" | "chat_leave" | "chat_read" | "chat_send" => {
+                let st = station()?;
+                inner.chat_call(cmd, st, req)
+            }
             "page" | "programme" | "programme_set" | "show_add" | "show_cancel" | "notice_post" | "notice_remove" => {
                 let st = station()?;
                 if cmd == "page" && inner.store.lock().unwrap().logs.get(&st).is_none_or(|a| a.len() == 0) {

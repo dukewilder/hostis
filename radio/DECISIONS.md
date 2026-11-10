@@ -290,3 +290,13 @@ Dylan's ruling: moderation belongs to each listener. No votes, no reputation sco
 - **The listener's own switches.** Explicit stations stay out of the Log and off the dial until the listener turns them on. Mature stations show unless the listener hides them. Art from stations the listener has never kept can be hidden. All of it in the app and in the browser, and none of it leaves the device.
 - **Maroon and pass the list.** A station that lies about itself is the listener's to maroon. Lists of marooned stations pass hand to hand as copies, taken aboard by choice.
 - The explicit label rides at the end of the station card, so older apps read the card as before and an older card reads as not explicit.
+
+## XX. Chatter, the programme and the page (9 November 2026)
+
+**Chatter.** Every station has a room: a gossip topic of its own where listeners talk, cheer what is on and ask for a recording from the library. A listener speaks with a voice drawn from their own secret and the station, the same each visit and tied to nothing under any other station. Each line carries about 65,000 hashes of work, so a flood costs the flooder time. Lines are signed, checked by everyone, held in memory and written nowhere. A Lantern sits in the rooms of its own stations and the busiest in the Log, so a newcomer finds someone there and the last lines to read. The keeper speaks with the station's key or a deputy's and shows as the station. There is no moderator: each listener mutes whoever they choose. Joining is the listener's choice, because it tells the room this node is there, which listening never does. Hail, a voice note sealed to the keeper, waits for the room to prove itself.
+
+**Requests.** A keeper sees requests in the room and can play one next: the app writes a one-off show of that recording at the end of what is playing.
+
+**The programme.** A station keeps a programme in its keeper's own time, daylight saving written into the log as a table of offsets: shuffled, in order, newest first, a daily tape or a weekly one; on-air hours; regular shows filled with chosen recordings, the newest, a hand's watch or a live hour; premieres; notices. Whichever of rota and programme is later rules, so old stations are untouched.
+
+**The page and the dial.** Every station has a page worked out from its own log by the same code on phones and in browsers. Every station has a frequency drawn from its key, the same on every dial. Posters carry it with a code to scan.
