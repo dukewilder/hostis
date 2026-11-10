@@ -328,7 +328,7 @@ function listen(s) {
 }
 
 function stop() { gen++; stopAll(); playing = false; power(); lamps(false); ctx?.suspend() }
-function power() { const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■' : '▶'; g.setAttribute('aria-label', playing ? 'Stop' : 'Listen') }
+function power() { const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■' : '▶'; g.querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen' }
 
 function rows() {
   const m = marooned();
