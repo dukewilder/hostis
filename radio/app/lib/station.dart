@@ -156,7 +156,7 @@ class _StationPageState extends State<StationPage> {
     return all.where((l) => (days..add(dayLabel((l['start_ms'] as num).toInt()))).length <= 2).toList();
   }
 
-  Widget section(String title) => Padding(padding: const EdgeInsets.only(top: 26, bottom: 8), child: Text(title, style: carved(11, color: bloodBright, spacing: 0.45)));
+  Widget section(String title) => Padding(padding: const EdgeInsets.only(top: 26, bottom: 8), child: Text(title, style: carved(11, color: boneFaint, spacing: 0.45)));
 
   @override
   Widget build(BuildContext context) {
@@ -248,7 +248,7 @@ class _StationPageState extends State<StationPage> {
             ],
             section('ON NOW'),
             if (p['now'] != null) ...[
-              if ((p['now']['slot'] ?? '').toString().isNotEmpty) Text((p['now']['slot']).toString().toUpperCase(), style: carved(10, color: bloodBright, spacing: 0.3)),
+              if ((p['now']['slot'] ?? '').toString().isNotEmpty) Text((p['now']['slot']).toString().toUpperCase(), style: carved(10, color: boneDim, spacing: 0.3)),
               Text(p['now']['title'] ?? '', style: serif(18, color: boneDim, italic: true)),
               if ((p['now']['by'] ?? '').toString().isNotEmpty) Text(p['now']['by'], style: carved(10, color: boneFaint, spacing: 0.2)),
             ] else
@@ -317,7 +317,7 @@ class _StationPageState extends State<StationPage> {
                       IconButton(
                         visualDensity: VisualDensity.compact,
                         tooltip: ringing ? 'Silence the bell' : 'Ring a bell when it starts',
-                        icon: Icon(ringing ? Icons.notifications_active : Icons.notifications_none, size: 18, color: ringing ? brass : boneGhost),
+                        icon: Icon(ringing ? Icons.notifications_active : Icons.notifications_none, size: 18, color: ringing ? bone : boneGhost),
                         onPressed: () async {
                           if (ringing) {
                             await ship.invokeMethod('bell_cancel', {'id': id2, 'station': id, 'at': start});
@@ -378,7 +378,7 @@ class _NoticeEditorState extends State<NoticeEditor> {
               Navigator.pop(context);
             }
           }),
-          if (err != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(err!, style: serif(14, color: bloodBright))),
+          if (err != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(err!, style: serif(14, color: bone, italic: true))),
         ]),
       );
 }
@@ -405,7 +405,7 @@ class TrackPicker extends StatelessWidget {
               child: Row(children: [
                 SizedBox(
                   width: 28,
-                  child: picked.contains(t['track']) ? Text('${picked.indexOf(t['track']) + 1}', style: mono(12, color: bloodBright, weight: FontWeight.w700)) : const Text('·', style: TextStyle(color: boneGhost)),
+                  child: picked.contains(t['track']) ? Text('${picked.indexOf(t['track']) + 1}', style: mono(12, color: bone, weight: FontWeight.w700)) : const Text('·', style: TextStyle(color: boneGhost)),
                 ),
                 Expanded(child: Text(t['title'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(15, color: picked.contains(t['track']) ? bone : boneFaint))),
               ]),
@@ -477,7 +477,7 @@ class _ShowEditorState extends State<ShowEditor> {
               Navigator.pop(context);
             }
           }),
-          if (err != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(err!, style: serif(14, color: bloodBright))),
+          if (err != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(err!, style: serif(14, color: bone, italic: true))),
         ]),
       );
 }
@@ -1252,7 +1252,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
                     pref('chat_mutes', m.where((x) => x != v).toList());
                     set(() {});
                   },
-                  child: Text('HEAR AGAIN', style: carved(9, color: bloodBright)),
+                  child: Text('HEAR AGAIN', style: carved(9, color: bone)),
                 ),
               ),
           ]),
@@ -1344,7 +1344,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
                         }
                       },
                 child: Text('${(l['name'] ?? '').toString().isEmpty ? l['voice'] : l['name']}${l['keeper'] == true ? ' (the station)' : ''}'.toUpperCase(),
-                    style: carved(9, color: l['keeper'] == true ? bloodBright : (l['mine'] == true ? bone : boneFaint), spacing: 0.25)),
+                    style: carved(9, color: l['keeper'] == true ? bone : (l['mine'] == true ? boneDim : boneFaint), spacing: 0.25)),
               ),
               const SizedBox(width: 8),
               Text(clockTime((l['at_ms'] as num).toInt()), style: mono(9, color: boneGhost)),
@@ -1362,7 +1362,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
                       });
                       if (context.mounted) toast(context, 'It plays next.');
                     },
-                    child: Text('PLAY IT NEXT', style: carved(9, color: bloodBright)),
+                    child: Text('PLAY IT NEXT', style: carved(9, color: bone)),
                   ),
               ]),
             if (l['kind'] == 'text') Text(l['text'] ?? '', style: serif(15, color: boneDim)),
@@ -1378,7 +1378,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
                       toast(context, (r is Map ? r['error'] : null) ?? 'That hail would not open.');
                     }
                   },
-                  child: Text('PLAY IT', style: carved(9, color: bloodBright)),
+                  child: Text('PLAY IT', style: carved(9, color: bone)),
                 ),
               ]),
           ]),

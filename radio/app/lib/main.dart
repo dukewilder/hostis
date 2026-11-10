@@ -20,9 +20,7 @@ const bone = Color(0xFFEDE4CE);
 const boneDim = Color(0xD1EDE4CE);
 const boneFaint = Color(0x8CEDE4CE);
 const boneGhost = Color(0x38EDE4CE);
-const blood = Color(0xFFC52828);
 const bloodBright = Color(0xFFED5555);
-const brass = Color(0xFFC9A94D);
 
 TextStyle carved(double size, {Color color = bone, double spacing = 0.3}) =>
     TextStyle(fontFamily: 'Cinzel', fontSize: size, color: color, letterSpacing: size * spacing, height: 1.2);
@@ -382,8 +380,31 @@ class _PyrateAppState extends State<PyrateApp> {
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: black,
-        colorScheme: const ColorScheme.dark(primary: bone, surface: black, onSurface: bone, secondary: bloodBright),
-        textSelectionTheme: const TextSelectionThemeData(cursorColor: bone, selectionColor: boneGhost),
+        colorScheme: const ColorScheme.dark(primary: bone, surface: black, onSurface: bone, secondary: bone, surfaceContainerHigh: panel, outline: boneGhost),
+        textSelectionTheme: const TextSelectionThemeData(cursorColor: bone, selectionColor: boneGhost, selectionHandleColor: bone),
+        // The site's own sheet throughout: Fell for any text the app does not style itself,
+        // square edges, hairline borders, nothing tinted or rounded by the toolkit's defaults.
+        fontFamily: 'Fell',
+        dialogTheme: const DialogThemeData(backgroundColor: panel, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5))),
+        bottomSheetTheme: const BottomSheetThemeData(backgroundColor: panel, modalBackgroundColor: panel, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder()),
+        popupMenuTheme: const PopupMenuThemeData(color: panel, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5))),
+        snackBarTheme: const SnackBarThemeData(backgroundColor: panel, behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5))),
+        timePickerTheme: const TimePickerThemeData(
+          backgroundColor: panel,
+          shape: RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+          hourMinuteShape: RoundedRectangleBorder(),
+          dayPeriodShape: RoundedRectangleBorder(),
+          dayPeriodBorderSide: BorderSide(color: boneGhost, width: 0.5),
+        ),
+        sliderTheme: const SliderThemeData(activeTrackColor: bone, inactiveTrackColor: boneGhost, thumbColor: bone, overlayColor: Colors.transparent, trackHeight: 1),
+        progressIndicatorTheme: const ProgressIndicatorThemeData(color: boneFaint, linearTrackColor: boneGhost),
+        checkboxTheme: CheckboxThemeData(
+          shape: const RoundedRectangleBorder(),
+          side: const BorderSide(color: boneFaint, width: 0.8),
+          fillColor: WidgetStateProperty.resolveWith((st) => st.contains(WidgetState.selected) ? bone : Colors.transparent),
+          checkColor: const WidgetStatePropertyAll(black),
+        ),
+        textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: bone, shape: const RoundedRectangleBorder())),
         splashFactory: NoSplash.splashFactory,
         highlightColor: Colors.transparent,
       ),
@@ -446,7 +467,7 @@ class _FlagPainter extends CustomPainter {
     final rect = Offset.zero & size;
     canvas.drawRect(rect, Paint()..color = black);
     canvas.drawRect(rect.deflate(0.5), Paint()
-      ..color = live ? blood : boneGhost
+      ..color = live ? bloodBright : boneGhost
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1);
     const cols = 9, rows = 6;
@@ -495,7 +516,7 @@ class Dial extends StatelessWidget {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(20, 10, 12, 6),
-          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: bloodBright, width: 0.5))),
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: boneFaint, width: 0.5))),
           child: Row(children: [
             Expanded(
               child: Text(
@@ -506,7 +527,7 @@ class Dial extends StatelessWidget {
                           : 'A LINK TO ${((radio.station(inv)?['name'] ?? '').toString().trim().isEmpty ? 'A STATION' : radio.station(inv)!['name'].toString().trim()).toUpperCase()}',
                   style: carved(10, color: bone, spacing: 0.2)),
             ),
-            TextButton(onPressed: radio.acceptInvite, child: Text(inv.contains('=') ? 'JOIN' : 'LISTEN', style: carved(10, color: bloodBright))),
+            TextButton(onPressed: radio.acceptInvite, child: Text(inv.contains('=') ? 'JOIN' : 'LISTEN', style: carved(10, color: bone))),
             TextButton(onPressed: radio.declineInvite, child: Text('NO', style: carved(10, color: boneFaint))),
           ]),
         ),
@@ -516,8 +537,8 @@ class Dial extends StatelessWidget {
           child: Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: brass, width: 0.5))),
-            child: Text('A NEW VERSION IS ABOARD · ${up['version']} · TAP TO INSTALL', textAlign: TextAlign.center, style: carved(10, color: brass, spacing: 0.2)),
+            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: boneFaint, width: 0.5))),
+            child: Text('A NEW VERSION IS ABOARD · ${up['version']} · TAP TO INSTALL', textAlign: TextAlign.center, style: carved(10, color: bone, spacing: 0.2)),
           ),
         ),
       const SizedBox(height: 18),
@@ -564,7 +585,7 @@ class Dial extends StatelessWidget {
       Padding(
         padding: const EdgeInsets.only(bottom: 18, top: 6),
         child: radio.scanning
-            ? Text('SCANNING · TAP TO HOLD', style: carved(11, color: brass, spacing: 0.25))
+            ? Text('SCANNING · TAP TO HOLD', style: carved(11, color: bone, spacing: 0.25))
             : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 OutlinedButton(
                   onPressed: stations.isEmpty ? null : radio.toggle,
@@ -655,7 +676,7 @@ class _StationFace extends StatelessWidget {
           IconButton(
             tooltip: 'Lights out',
             visualDensity: VisualDensity.compact,
-            icon: Icon(radio.sleepAt == null ? Icons.bedtime_outlined : Icons.bedtime, size: 16, color: radio.sleepAt == null ? boneGhost : brass),
+            icon: Icon(radio.sleepAt == null ? Icons.bedtime_outlined : Icons.bedtime, size: 16, color: radio.sleepAt == null ? boneGhost : bone),
             onPressed: () => sleepSheet(context, radio),
           ),
           IconButton(
@@ -882,7 +903,7 @@ class _ColoursPageState extends State<ColoursPage> {
                 button('TAKE IT DOWN', () {
                   Native.call({'cmd': 'art_clear', 'station': id, 'kind': 'cover'});
                   Native.call({'cmd': 'art_clear', 'station': id, 'kind': 'banner'});
-                }, color: bloodBright),
+                }, color: boneFaint),
             ]),
           ),
         ]),
@@ -941,7 +962,7 @@ class _ColoursPageState extends State<ColoursPage> {
             style: serif(13, color: boneGhost, italic: true)),
         const SizedBox(height: 18),
         Row(children: [button(raising ? 'RAISING' : 'RAISE COLOURS', raising ? null : raise)]),
-        if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: serif(14, color: bloodBright))),
+        if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: serif(14, color: bone, italic: true))),
         const SizedBox(height: 28),
         Text('Your phone hands its broadcasts to the network along a chain of other nodes, so the first node to show them is never yours. Listening goes through two hops: one sees who, the other sees what, neither sees both.',
             style: serif(13, color: boneGhost, italic: true)),
@@ -1076,7 +1097,7 @@ class _ColoursPageState extends State<ColoursPage> {
             }
           }, color: bloodBright),
         ]),
-      if (error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(error!, style: serif(14, color: bloodBright))),
+      if (error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(error!, style: serif(14, color: bone, italic: true))),
     ];
   }
 
@@ -1128,7 +1149,7 @@ class _ColoursPageState extends State<ColoursPage> {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text('No ship would take your station along the stem, so it is on the air straight from this phone. Listeners\' nodes can see this phone\'s address until the fleet grows.',
-                    style: serif(13, color: brass, italic: true)),
+                    style: serif(13, color: boneDim, italic: true)),
               ),
           ]),
         ),
@@ -1200,7 +1221,7 @@ class _ColoursPageState extends State<ColoursPage> {
       Text('This phone holds a deputy key: it broadcasts, and that is all it can do. The 24 words you wrote down are the station. With them, any phone can take the station back and shut this one out, or strike its colours.',
           style: serif(14, color: boneFaint, italic: true)),
       const SizedBox(height: 34),
-      Text('STRIKE COLOURS', style: carved(14, color: bloodBright)),
+      Text('STRIKE COLOURS', style: carved(14)),
       const SizedBox(height: 8),
       Text('Ends the station. Every honest node drops its recordings. It takes the 24 words.',
           style: serif(14, color: boneFaint, italic: true)),
@@ -1223,7 +1244,7 @@ class _ColoursPageState extends State<ColoursPage> {
               ]),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(c, false), child: Text('KEEP FLYING', style: carved(11))),
-                TextButton(onPressed: () => Navigator.pop(c, true), child: Text('STRIKE', style: carved(11, color: bloodBright))),
+                TextButton(onPressed: () => Navigator.pop(c, true), child: Text('STRIKE', style: carved(11))),
               ],
             ),
           );
@@ -1236,7 +1257,7 @@ class _ColoursPageState extends State<ColoursPage> {
             if (!context.mounted) return;
             toast(context, r is Map && r['error'] != null ? 'Not struck: ${r['error']}' : 'Colours struck. The station has ended.');
           }
-        }, color: bloodBright),
+        }),
       ]),
     ];
   }

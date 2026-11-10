@@ -103,11 +103,11 @@ List<Widget> seals(Map s, {double size = 9}) => [
       ],
       if (falseColours(s)) ...[
         const SizedBox(width: 8),
-        Text('FALSE COLOURS?', style: carved(size, color: bloodBright, spacing: 0.25)),
+        Text('FALSE COLOURS?', style: carved(size, color: bone, spacing: 0.25)),
       ],
       if (s['explicit'] == true) ...[
         const SizedBox(width: 8),
-        Text('EXPLICIT', style: carved(size, color: bloodBright, spacing: 0.25)),
+        Text('EXPLICIT', style: carved(size, color: bone, spacing: 0.25)),
       ] else if (s['mature'] == true) ...[
         const SizedBox(width: 8),
         Text('MATURE', style: carved(size, color: boneFaint, spacing: 0.25)),
@@ -228,7 +228,7 @@ class _LogPageState extends State<LogPage> {
           ),
           if (s['pocket'] == true && id != widget.radio.mine?['id'])
             ListTile(
-              title: Text('LEAVE THIS POCKET', style: carved(12, color: bloodBright)),
+              title: Text('LEAVE THIS POCKET', style: carved(12)),
               subtitle: Text('Its key, its log and its sound go from this phone. Only a fresh invitation brings it back.', style: serif(13, color: boneFaint, italic: true)),
               onTap: () {
                 Native.callAway({'cmd': 'pocket_leave', 'station': id});
@@ -237,7 +237,7 @@ class _LogPageState extends State<LogPage> {
               },
             ),
           ListTile(
-            title: Text('MAROON', style: carved(12, color: bloodBright)),
+            title: Text('MAROON', style: carved(12)),
             subtitle: Text('Gone from your Log and your dial, and dropped from your hold. Undo it under Colours.', style: serif(13, color: boneFaint, italic: true)),
             onTap: () {
               Native.call({'cmd': 'maroon', 'station': id, 'value': true});
@@ -347,14 +347,14 @@ class _LogPageState extends State<LogPage> {
                     Row(children: [
                       Flexible(child: Text(s['name'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(19, color: tuned ? bone : boneDim))),
                       if (live) ...[const SizedBox(width: 8), Text('ON AIR', style: carved(9, color: bloodBright, spacing: 0.3))],
-                      if (s['kept'] == true) ...[const SizedBox(width: 8), Text('KEPT', style: carved(9, color: brass, spacing: 0.3))],
+                      if (s['kept'] == true) ...[const SizedBox(width: 8), Text('KEPT', style: carved(9, color: boneDim, spacing: 0.3))],
                       if (s['pocket'] == true) ...[const SizedBox(width: 8), Text('PRIVATE', style: carved(9, color: boneFaint, spacing: 0.3))],
                       ...seals(s),
                     ]),
                     const SizedBox(height: 2),
                     Text(s['call_sign'] ?? '', style: mono(10, color: boneGhost)),
                     if (on != null && (on['slot'] ?? '').toString().isNotEmpty)
-                      Text((on['slot'] as String).toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: carved(9, color: bloodBright, spacing: 0.25)),
+                      Text((on['slot'] as String).toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: carved(9, color: boneDim, spacing: 0.25)),
                     if (on != null && (on['title'] ?? '').toString().isNotEmpty)
                       Text('Now: ${on['title']}${(on['by'] ?? '').toString().isNotEmpty ? ' · ${on['by']}' : ''}',
                           maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(13, color: boneDim, italic: true))
@@ -473,7 +473,7 @@ class _WatchBillState extends State<WatchBill> {
             if (dayLabel((item['start_ms'] as num).toInt()) != lastDay)
               Builder(builder: (_) {
                 lastDay = dayLabel((item['start_ms'] as num).toInt());
-                return Padding(padding: const EdgeInsets.only(top: 14, bottom: 4), child: Text(lastDay!, style: carved(10, color: brass, spacing: 0.3)));
+                return Padding(padding: const EdgeInsets.only(top: 14, bottom: 4), child: Text(lastDay!, style: carved(10, color: boneFaint, spacing: 0.3)));
               }),
             Builder(builder: (_) {
               final start = (item['start_ms'] as num).toInt();
@@ -491,7 +491,7 @@ class _WatchBillState extends State<WatchBill> {
                 if (!past)
                   IconButton(
                     tooltip: ringing ? 'Silence the bell' : 'Ring a bell when it starts',
-                    icon: Icon(ringing ? Icons.notifications_active : Icons.notifications_none, size: 18, color: ringing ? brass : boneGhost),
+                    icon: Icon(ringing ? Icons.notifications_active : Icons.notifications_none, size: 18, color: ringing ? bone : boneGhost),
                     onPressed: () async {
                       if (ringing) {
                         await ship.invokeMethod('bell_cancel', {'id': id, 'station': s['id'], 'at': start});
@@ -503,7 +503,7 @@ class _WatchBillState extends State<WatchBill> {
                     },
                   )
                 else
-                  const SizedBox(width: 48, child: Center(child: Text('NOW', style: TextStyle(fontFamily: 'Cinzel', fontSize: 9, color: bloodBright, letterSpacing: 2)))),
+                  const SizedBox(width: 48, child: Center(child: Text('NOW', style: TextStyle(fontFamily: 'Cinzel', fontSize: 9, color: bone, letterSpacing: 2)))),
               ]);
             }),
           ],
@@ -811,7 +811,7 @@ Future<void> sleepSheet(BuildContext context, Tuner radio) => pyrateSheet(
               pyrateButton('CANCEL', () {
                 radio.sleepIn(null);
                 Navigator.pop(context);
-              }, color: bloodBright),
+              }, color: boneFaint),
           ]),
         ]),
       ),
@@ -1352,7 +1352,7 @@ class _ShipPapersState extends State<ShipPapers> {
             },
             child: Text('FROM A FILE', style: carved(11, color: boneFaint)),
           ),
-          TextButton(onPressed: () => Navigator.pop(c, true), child: Text('MAROON THEM', style: carved(11, color: bloodBright))),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: Text('MAROON THEM', style: carved(11))),
         ],
       ),
     );
@@ -1481,7 +1481,7 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
             decoration: pyrateField('PIN'),
             onSubmitted: (_) => check(),
           ),
-          if (wrong != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(wrong!, style: serif(14, color: bloodBright))),
+          if (wrong != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(wrong!, style: serif(14, color: bone, italic: true))),
           const SizedBox(height: 14),
           pyrateButton('OPEN', check),
         ]),
