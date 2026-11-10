@@ -92,3 +92,9 @@ On the phone the node starts, joins the Log and finds the PC Lantern. Confirmed 
 - Pocket stations: private, off the Log, found only by the key that is their invitation, in the app and the browser. Flock: phones in a room on one clock. Hail: a sealed voice note to the keeper. The drawer phone: an old handset left as a Lantern. Tips carry a note.
 - Built and checked on the test network: sealed carrying and playback, sealed logs surviving a restart, chatter with a backlog, a hail reaching a keeper's Lantern, a dark Lantern carrying and mirroring the player, pocket stations seen by a member and invisible to an outsider, a flock within about a millisecond.
 - App at 0.8.0. The browser player rides on any Lantern at `/player/`, and the APK seeds over BitTorrent with a web seed.
+
+## 10 November 2026: the audit
+
+A full read of every line, findings kept in `AUDIT.md` as they are found and fixed. Each fix is its own commit.
+
+- The stem no longer names its broadcaster: every node sends the hop count as zero, and a stem that comes round again spreads.

@@ -224,6 +224,8 @@ pub struct Inner {
     /// Never fall back to asking a carrier directly; stutter rather than show this address.
     pub(crate) strict: std::sync::atomic::AtomicBool,
     stem_misses: Mutex<HashMap<StationId, u32>>,
+    /// Stem cargo relayed lately, by fingerprint: a stem that comes round again spreads.
+    pub(crate) stem_seen: Mutex<std::collections::VecDeque<Hash>>,
     /// On mobile data a phone listens and broadcasts, and carries nobody else's traffic.
     relay_ok: std::sync::atomic::AtomicBool,
 }
@@ -1264,6 +1266,7 @@ impl Node {
             heard: Mutex::new(std::collections::VecDeque::new()),
             strict: std::sync::atomic::AtomicBool::new(cfg.dir.join("strict").exists()),
             stem_misses: Mutex::new(HashMap::new()),
+            stem_seen: Mutex::new(std::collections::VecDeque::new()),
             relay_ok: std::sync::atomic::AtomicBool::new(!cfg.private),
         });
         *proto.0.lock().unwrap() = Some(inner.clone());
