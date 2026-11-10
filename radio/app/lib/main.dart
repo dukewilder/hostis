@@ -945,7 +945,8 @@ class _ColoursPageState extends State<ColoursPage> {
             final phrase = restoreWords.text;
             restoreWords.clear();
             final r = await Native.callAway({'cmd': 'restore', 'phrase': phrase});
-            setState(() => error = (r is Map && r['error'] != null) ? r['error'] : null);
+            if (!context.mounted) return;
+            toast(context, r is Map && r['error'] != null ? 'Not taken back: ${r['error']}' : 'The station is back on this phone, and the old one is shut out.');
           }),
         ]),
         const SizedBox(height: 34),
@@ -1018,9 +1019,11 @@ class _ColoursPageState extends State<ColoursPage> {
           style: serif(14, color: boneFaint, italic: true)),
       const SizedBox(height: 10),
       Row(children: [
-        button('CLEAR THE HOLD', () {
-          final r = Native.call({'cmd': 'clear_hold'});
-          setState(() => error = (r is Map && r['error'] != null) ? r['error'] : null);
+        button('CLEAR THE HOLD', () async {
+          final r = await Native.callAway({'cmd': 'clear_hold'});
+          if (!context.mounted) return;
+          final n = r is Map ? (r['cleared'] as num?)?.toInt() : null;
+          toast(context, r is Map && r['error'] != null ? 'Not cleared: ${r['error']}' : (n == null || n == 0 ? 'The hold was already clear.' : 'The hold is clear.'));
         }),
       ]),
     ];
