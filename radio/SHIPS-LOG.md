@@ -103,3 +103,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - A phone carries for the fleet only on Wi-Fi while charging, and never a station its owner marooned or keeps hidden.
 - One strict hex parser everywhere, the app's door catches panics, and the Android context is set once a process: a malformed link or a second start no longer kills the app.
 - A plain chunk from before sealing can no longer be fetched in the clear; struck stations leave no pictures; chatter memory stays bounded.
+- The Lantern's player mirror serves its own folder and nothing else: a doubled slash could have reached any file on the machine.

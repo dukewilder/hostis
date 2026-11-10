@@ -271,21 +271,71 @@ async fn episode(State(w): State<Web>, Path((id, track)): Path<(String, String)>
 /// network that no one can close by closing a domain.
 async fn player(path: String) -> Response {
     let Some(dir) = std::env::var_os("PYRATE_PLAYER") else { return StatusCode::NOT_FOUND.into_response() };
-    let path = if path.is_empty() || path.ends_with('/') { format!("{path}index.html") } else { path };
-    if path.split('/').any(|p| p == ".." || p.starts_with('.')) {
-        return StatusCode::NOT_FOUND.into_response();
-    }
-    let Ok(bytes) = tokio::fs::read(std::path::Path::new(&dir).join(&path)).await else { return StatusCode::NOT_FOUND.into_response() };
-    let kind = match path.rsplit('.').next().unwrap_or("") {
+    let Some(file) = player_path(std::path::Path::new(&dir), &path) else { return StatusCode::NOT_FOUND.into_response() };
+    let Ok(bytes) = tokio::fs::read(&file).await else { return StatusCode::NOT_FOUND.into_response() };
+    let kind = match file.extension().and_then(|e| e.to_str()).unwrap_or("") {
         "html" => "text/html; charset=utf-8",
         "js" => "text/javascript; charset=utf-8",
         "wasm" => "application/wasm",
         "json" => "application/json",
         "png" => "image/png",
         "css" => "text/css",
+        "svg" => "image/svg+xml",
+        "ico" => "image/x-icon",
+        "woff2" => "font/woff2",
+        "txt" => "text/plain; charset=utf-8",
         _ => "application/octet-stream",
     };
-    ([(header::CONTENT_TYPE, kind), (header::CACHE_CONTROL, "max-age=600")], bytes).into_response()
+    (
+        [
+            (header::CONTENT_TYPE, kind),
+            (header::CACHE_CONTROL, "max-age=600"),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            (header::REFERRER_POLICY, "no-referrer"),
+            (header::CONTENT_SECURITY_POLICY, "frame-ancestors 'self'"),
+        ],
+        bytes,
+    )
+        .into_response()
+}
+
+/// The file a player path names, inside the player folder and nowhere else. Every segment must
+/// be a plain name: none empty (a doubled slash would make the rest absolute), none starting
+/// with a dot, none holding a backslash, a colon or a NUL. Whatever is found must still lie in
+/// the folder once links are followed.
+fn player_path(dir: &std::path::Path, path: &str) -> Option<std::path::PathBuf> {
+    let path = if path.is_empty() || path.ends_with('/') { format!("{path}index.html") } else { path.to_string() };
+    let mut out = dir.to_path_buf();
+    for seg in path.split('/') {
+        if seg.is_empty() || seg.starts_with('.') || seg.contains(['\\', ':', '\0']) {
+            return None;
+        }
+        out.push(seg);
+    }
+    let real = out.canonicalize().ok()?;
+    real.starts_with(dir.canonicalize().ok()?).then_some(real)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_player_serves_its_own_folder_and_nothing_else() {
+        let dir = std::env::temp_dir().join(format!("pyrate-player-test-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("pkg")).unwrap();
+        std::fs::write(dir.join("index.html"), "x").unwrap();
+        std::fs::write(dir.join("pkg").join("a.js"), "x").unwrap();
+        assert!(super::player_path(&dir, "").is_some());
+        assert!(super::player_path(&dir, "pkg/a.js").is_some());
+        for bad in ["/etc/passwd", "//etc/passwd", "../index.html", "pkg/../../x", ".git/config", "pkg\\a.js", "C:/x", "pkg//a.js"] {
+            assert!(super::player_path(&dir, bad).is_none(), "{bad}");
+        }
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink("/etc", dir.join("etc")).unwrap();
+            assert!(super::player_path(&dir, "etc/passwd").is_none(), "a link out of the folder");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 const WORDMARK: &[u8] = include_bytes!("web/wordmark.png");

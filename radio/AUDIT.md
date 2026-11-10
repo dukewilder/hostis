@@ -50,7 +50,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
 
-- **C1** (high) /player/ serves any file on disk via an absolute path. `node/src/web.rs:271-277`
 - **C3** (high) count_guest spawns one OS thread per request, with no cap. `node/src/web.rs:325-328`
 - **C4** (high) Episode generation holds the whole recording in memory. `node/src/web.rs:205-232`
 - **C5** (medium) Concurrent first requests for one episode race on the same temp file. `node/src/web.rs:198-247`
@@ -167,10 +166,12 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **A13. `unhex` accepts a leading `+`.** (low) Fixed: the strict parser takes no sign. (7bd378e)
 
-**B7. Old plain chunks answer to a sealed request.** A chunk kept from before sealing lies on disk under its plain hash, and a `SealedChunk` request naming that hash is served the plain bytes. Does not hold for those files. Fixed: a sealed request that finds a plain file under its name seals it in place, removes the plain copy and answers nothing. A unit test plants an old plain chunk and asks for it by its hash. (pending)
+**B7. Old plain chunks answer to a sealed request.** A chunk kept from before sealing lies on disk under its plain hash, and a `SealedChunk` request naming that hash is served the plain bytes. Does not hold for those files. Fixed: a sealed request that finds a plain file under its name seals it in place, removes the plain copy and answers nothing. A unit test plants an old plain chunk and asks for it by its hash. (0b3d89c)
 
-**B11. A struck station's art stays on disk.** Strike drops a station's recordings but not its pictures. Fixed: a strike drops the station's pictures with its recordings. (pending)
+**B11. A struck station's art stays on disk.** Strike drops a station's recordings but not its pictures. Fixed: a strike drops the station's pictures with its recordings. (0b3d89c)
 
-**B12. A Lantern's chatter memory never empties.** Each room keeps every line id it has seen for the life of the process. Fixed: each room, on a node and in a tab, forgets a line's id once a line that old would be refused anyway (twenty minutes), so memory holds only the last few minutes. Unit tested. (pending)
+**B12. A Lantern's chatter memory never empties.** Each room keeps every line id it has seen for the life of the process. Fixed: each room, on a node and in a tab, forgets a line's id once a line that old would be refused anyway (twenty minutes), so memory holds only the last few minutes. Unit tested. (0b3d89c)
 
-**B15. Small faults.** The flock's round trip can underflow if the network clock steps between pings. Fixed: the round trip is taken with a saturating subtraction. (pending)
+**B15. Small faults.** The flock's round trip can underflow if the network clock steps between pings. Fixed: the round trip is taken with a saturating subtraction. (0b3d89c)
+
+**C1. /player/ serves any file on disk via an absolute path.** (high) Fixed: the mirror builds the file's path from plain segments only (no empty, dotted, backslashed or colon segments) and serves it only if, links followed, it still lies inside the player folder. It also sends nosniff, no-referrer and frame-ancestors 'self', and knows the svg, ico, woff2 and txt types. A unit test tries absolute, doubled-slash, dotted and linked paths, and a live Lantern answers 404 to /player//etc/passwd. (pending)
