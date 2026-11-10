@@ -342,10 +342,11 @@ async function show(s) {
 function listen(s) {
   audio(); ctx.resume();
   const g = ++gen; stopAll(); playing = true; show(s); power();
+  radio.listening(true);
   play(s.id, g);
 }
 
-function stop() { gen++; stopAll(); playing = false; power(); lamps(false); ctx?.suspend() }
+function stop() { gen++; stopAll(); playing = false; power(); lamps(false); ctx?.suspend(); radio?.listening(false) }
 function power() { $('clip').hidden = !(playing && clipType()) || isPocket(cur); const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■' : '▶'; g.querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen' }
 
 function rows() {

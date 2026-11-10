@@ -13,8 +13,8 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::{Result, anyhow};
-use chacha20poly1305::{ChaCha20Poly1305, KeyInit, Nonce, aead::Aead};
-use curve25519_dalek::edwards::CompressedEdwardsY;
+use chacha20poly1305::{ChaCha20Poly1305, Nonce, aead::Aead};
+
 use iroh::EndpointId;
 use pyrate_core::{Body, Hash, SignedEntry, StationId};
 use rand::seq::SliceRandom;
@@ -72,32 +72,11 @@ fn x_secret(seed: &[u8; 32]) -> x25519_dalek::StaticSecret {
     x25519_dalek::StaticSecret::from(b)
 }
 
-fn x_public(node: &[u8; 32]) -> Option<x25519_dalek::PublicKey> {
-    let ed = CompressedEdwardsY(*node).decompress()?;
-    Some(x25519_dalek::PublicKey::from(ed.to_montgomery().to_bytes()))
-}
-
-fn cipher(shared: &[u8; 32], eph: &[u8; 32], to: &[u8; 32]) -> ChaCha20Poly1305 {
-    let mut m = Vec::with_capacity(96);
-    m.extend_from_slice(shared);
-    m.extend_from_slice(eph);
-    m.extend_from_slice(to);
-    ChaCha20Poly1305::new(&blake3::derive_key("pyrate/hop/v1", &m).into())
-}
-
-const ASK_NONCE: [u8; 12] = [0; 12];
-const ANSWER_NONCE: [u8; 12] = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+use pyrate_core::route::{ANSWER_NONCE, ASK_NONCE, cipher};
 
 fn seal(to: &[u8; 32], ask: &Ask) -> Result<(Hop, ChaCha20Poly1305)> {
-    let to_x = x_public(to).ok_or_else(|| anyhow!("bad node key"))?;
-    let mut seed = [0u8; 32];
-    rand::Rng::fill(&mut rand::thread_rng(), &mut seed);
-    let eph = x25519_dalek::StaticSecret::from(seed);
-    let eph_pub = *x25519_dalek::PublicKey::from(&eph).as_bytes();
-    let shared = eph.diffie_hellman(&to_x).to_bytes();
-    let c = cipher(&shared, &eph_pub, to);
-    let ct = c.encrypt(Nonce::from_slice(&ASK_NONCE), postcard::to_stdvec(ask)?.as_slice()).map_err(|_| anyhow!("seal"))?;
-    Ok((Hop::Sealed { eph: eph_pub, ct }, c))
+    let (eph, ct, c) = pyrate_core::route::seal_to(to, &postcard::to_stdvec(ask)?).ok_or_else(|| anyhow!("bad node key"))?;
+    Ok((Hop::Sealed { eph, ct }, c))
 }
 
 impl Inner {

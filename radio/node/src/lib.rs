@@ -38,7 +38,7 @@ use iroh_gossip::{
     proto::TopicId,
 };
 use net::{ALPN, Announce, Gossip, MAX_FRAME, Request, Response, Sketch};
-use pyrate_core::{Archive, Body, Hash, Profile, SignedEntry, StationId, clock::Clock};
+use pyrate_core::{Archive, Body, Hash, Profile, SignedEntry, StationId};
 use serde_json::{Value, json};
 use store::Store;
 
@@ -2259,7 +2259,7 @@ mod playout {
                 *inner.np.lock().unwrap() = json!({ "station": station.to_hex(), "state": "searching" });
                 continue;
             };
-            let clock = match Clock::new(&archive) {
+            let clock = match pyrate_core::clock::Clock::new(&archive) {
                 Ok(c) => c,
                 Err(_) => continue,
             };
