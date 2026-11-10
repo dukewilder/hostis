@@ -112,6 +112,31 @@ pub struct Config {
 /// a relay only forwards traffic it cannot read.
 pub const CREW_RELAYS: &[&str] = &["https://relay.hostis.black"];
 
+/// First doors' relays, named beside their ids where the app was handed them ("id@relay"),
+/// so a new node reaches its first doors without asking anyone's directory.
+/// The node id type, for callers that parse doors.
+pub type EndpointIdOf = EndpointId;
+
+pub static DOOR_RELAYS: Mutex<Vec<(EndpointId, String)>> = Mutex::new(Vec::new());
+
+/// number0's address lookup, asked only about the first doors and peers met before. A phone
+/// that asked it about every carrier would tell number0 which stations it was after, from its
+/// own address. Every other peer is found in the network's own book of signed notes.
+#[derive(Debug)]
+struct DoorsOnly(Arc<std::collections::HashSet<EndpointId>>);
+#[derive(Debug)]
+struct DoorsLookup<T>(T, Arc<std::collections::HashSet<EndpointId>>);
+impl<T: iroh::address_lookup::AddressLookup> iroh::address_lookup::AddressLookup for DoorsLookup<T> {
+    fn resolve(&self, id: EndpointId) -> Option<n0_future::boxed::BoxStream<Result<iroh::address_lookup::Item, iroh::address_lookup::Error>>> {
+        if self.1.contains(&id) { self.0.resolve(id) } else { None }
+    }
+}
+impl iroh::address_lookup::AddressLookupBuilder for DoorsOnly {
+    fn into_address_lookup(self, ep: &Endpoint) -> std::result::Result<impl iroh::address_lookup::AddressLookup, iroh::address_lookup::AddressLookupBuilderError> {
+        Ok(DoorsLookup(iroh::address_lookup::AddressLookupBuilder::into_address_lookup(iroh::address_lookup::PkarrResolver::n0_dns(), ep)?, self.0))
+    }
+}
+
 /// Points a rewritten entry's references at the entries' new hashes.
 pub(crate) fn remap(body: Body, moved: &HashMap<Hash, Hash>) -> Body {
     let m = |h: Hash| *moved.get(&h).unwrap_or(&h);
@@ -224,6 +249,16 @@ pub struct Inner {
     pow: Mutex<HashMap<StationId, u64>>,
     /// Where each own station's search for more work picks up.
     pow_cursor: Mutex<HashMap<StationId, u64>>,
+    /// Each own station's last signed card: what it said, when it is due again, the card.
+    cards: Mutex<HashMap<StationId, (u64, u64, Announce)>>,
+    /// What each own station last sent down the stem: from which entry, how many, when, and the card's time.
+    pub(crate) stem_sent: Mutex<HashMap<StationId, (u64, usize, u64, u64)>>,
+    /// The first doors this node was handed, before any peer met since.
+    pub(crate) doors: Vec<EndpointId>,
+    /// The relay each peer's signed note named.
+    met: Mutex<HashMap<EndpointId, String>>,
+    /// Relays the first doors named: home relays before number0's.
+    our_relays: Mutex<Vec<String>>,
     #[cfg(feature = "playback")]
     queue: player::SharedQueue,
     #[cfg(feature = "playback")]
@@ -678,7 +713,16 @@ impl Inner {
                 let Some((node, relay)) = g.harbour_checked(now) else { return None };
                 let known = log.values().any(|l| l.carriers.contains_key(&node)) || self.cfg.bootstrap.iter().any(|b| *b.as_bytes() == node);
                 if let (true, Ok(id), Ok(url)) = (known, EndpointId::from_bytes(&node), relay.parse::<iroh::RelayUrl>()) {
-                    self.book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+                    self.book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url.clone())].into_iter().collect() });
+                    self.met.lock().unwrap().insert(id, relay.clone());
+                    // A first door's relay that is not number0's becomes one of ours, for next time.
+                    if self.doors.contains(&id) && !iroh::defaults::prod::default_relay_map().contains(&url) {
+                        let mut r = self.our_relays.lock().unwrap();
+                        if !r.contains(&relay) && r.len() < 8 {
+                            r.push(relay.clone());
+                            let _ = self.hold.write_note(&self.cfg.dir, "relays", r.join("\n").as_bytes());
+                        }
+                    }
                 }
                 return None;
             }
@@ -776,8 +820,25 @@ impl Inner {
                     _ => None,
                 };
                 let explicit = log.explicit();
-                net::Card { station: id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof, cover, accent, kinds, mature, tip, explicit }
-                    .sign(key)
+                let card = net::Card { station: id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof, cover, accent, kinds, mature, tip, explicit };
+                // A card is signed afresh only when something on it changes, or every eight to
+                // twelve minutes: a card stamped every twenty seconds would tell the network, to
+                // the second, when its keeper's device is awake.
+                let fp = {
+                    let mut c = card.clone();
+                    c.at_ms = 0;
+                    blake3::hash(&postcard::to_stdvec(&c).unwrap_or_default()).as_bytes()[..8].try_into().map(u64::from_le_bytes).unwrap_or(0)
+                };
+                let mut last = self.cards.lock().unwrap();
+                match last.get(&id) {
+                    Some((f, due, a)) if *f == fp && now < *due => a.clone(),
+                    _ => {
+                        let a = card.sign(key);
+                        let due = now + 8 * 60_000 + rand::random::<u64>() % (4 * 60_000);
+                        last.insert(id, (fp, due, a.clone()));
+                        a
+                    }
+                }
             };
             // A pocket station's card goes only to its members, sealed, on its own topic.
             if self.is_pocket(&id) {
@@ -1357,7 +1418,14 @@ impl Node {
         };
         // A phone's address on the network is new every day, so no one can follow one phone
         // from day to day by its id. Lanterns keep theirs: others start from them.
+        // A phone that keeps no station and no pocket has nothing anyone needs to reach it by,
+        // so it is new at every start, not only every day.
         if !cfg.lantern {
+            let keeps = std::fs::read_dir(cfg.dir.join("keys")).map(|d| d.flatten().any(|e| e.path().extension().is_some_and(|x| x == "k2"))).unwrap_or(false)
+                || hold.read_note(&cfg.dir, "pockets", Some(&cfg.dir.join("keys").join("pockets"))).is_some_and(|b| !b.is_empty());
+            if !keeps {
+                let _ = std::fs::remove_file(&key_path);
+            }
             let stale = std::fs::metadata(&key_path).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age > Duration::from_secs(24 * 3600));
             if stale {
                 let _ = std::fs::remove_file(&key_path);
@@ -1374,14 +1442,26 @@ impl Node {
         };
         let secret_bytes = secret.to_bytes();
         // Every peer met before is a starting point next time, so no single Lantern is the door.
+        // They are kept sealed, each with the relay its own signed note named, so the next start
+        // reaches them without a lookup.
         let mut cfg = cfg;
-        if let Ok(t) = std::fs::read_to_string(cfg.dir.join("peers")) {
-            for p in t.lines().filter_map(|l| l.trim().parse::<EndpointId>().ok()).take(24) {
-                if !cfg.bootstrap.contains(&p) {
-                    cfg.bootstrap.push(p);
-                }
+        let doors: Vec<EndpointId> = cfg.bootstrap.clone();
+        let mut met: Vec<(EndpointId, String)> = DOOR_RELAYS.lock().unwrap().clone();
+        let peers_text = hold.read_note(&cfg.dir, "peers", Some(&cfg.dir.join("peers"))).and_then(|b| String::from_utf8(b).ok()).unwrap_or_default();
+        let _ = std::fs::remove_file(cfg.dir.join("peers"));
+        for l in peers_text.lines().take(24) {
+            let mut w = l.split_whitespace();
+            let Some(p) = w.next().and_then(|p| p.parse::<EndpointId>().ok()) else { continue };
+            if let Some(r) = w.next() {
+                met.push((p, r.to_string()));
+            }
+            if !cfg.bootstrap.contains(&p) {
+                cfg.bootstrap.push(p);
             }
         }
+        // Relays the first doors' own notes named, kept from earlier runs: this node's first
+        // choice for a home relay, ahead of number0's.
+        let ours: Vec<iroh::RelayUrl> = hold.read_note(&cfg.dir, "relays", None).and_then(|b| String::from_utf8(b).ok()).unwrap_or_default().lines().filter_map(|l| l.trim().parse().ok()).take(8).collect();
         let proto = Proto(Arc::new(Mutex::new(None)));
         let public_dns = cfg.public_dns;
         // PYRATE_OPEN_PLAYER: where this node's invitations and flock links point.
@@ -1389,14 +1469,34 @@ impl Node {
         let dark = std::env::var_os("PYRATE_DARK").is_some_and(|v| v != "0");
         // The network's own address book, filled from carriers' signed harbour notes.
         let book = iroh::address_lookup::MemoryLookup::new();
-        let book2 = book.clone();
-        let (endpoint, router, gossip) = rt.block_on(async {
-            let relays = iroh::defaults::prod::default_relay_map();
-            for r in CREW_RELAYS {
-                if let Ok(url) = r.parse::<iroh::RelayUrl>() {
-                    relays.insert(url.clone(), Arc::new(iroh::RelayConfig::from(url)));
-                }
+        for (id, r) in &met {
+            if let Ok(url) = r.parse::<iroh::RelayUrl>() {
+                book.add_endpoint_info(iroh::EndpointAddr { id: *id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
             }
+        }
+        let book2 = book.clone();
+        let asked: Arc<std::collections::HashSet<EndpointId>> = Arc::new(cfg.bootstrap.iter().copied().collect());
+        let lantern = cfg.lantern;
+        let (endpoint, router, gossip) = rt.block_on(async {
+            // Home relays: a Lantern's own (PYRATE_RELAY_URL, its public address), the crew's, and
+            // those the first doors named, before number0's. With any of ours to try, number0's
+            // relays stand by and come in only if none of ours answers within fifteen seconds.
+            let n0 = iroh::defaults::prod::default_relay_map();
+            let mine = iroh::RelayMap::empty();
+            let own_relay: Option<iroh::RelayUrl> = std::env::var("PYRATE_RELAY_URL").ok().and_then(|u| u.parse().ok());
+            for url in CREW_RELAYS.iter().filter_map(|r| r.parse::<iroh::RelayUrl>().ok()).chain(ours.iter().cloned()).chain(own_relay.clone()) {
+                mine.insert(url.clone(), Arc::new(iroh::RelayConfig::from(url)));
+            }
+            let prefer_ours = !ours.is_empty() || own_relay.is_some();
+            let standby: Vec<iroh::RelayUrl> = if prefer_ours { n0.urls() } else { Vec::new() };
+            let relays = if prefer_ours {
+                mine
+            } else {
+                for url in mine.urls::<Vec<iroh::RelayUrl>>() {
+                    n0.insert(url.clone(), Arc::new(iroh::RelayConfig::from(url)));
+                }
+                n0
+            };
             // PYRATE_RELAYS, a list of relay URLs, replaces these: for a private network.
             let custom: Vec<iroh::RelayUrl> = std::env::var("PYRATE_RELAYS").unwrap_or_default().split(',').filter_map(|r| r.trim().parse().ok()).collect();
             let private_net = !custom.is_empty();
@@ -1405,12 +1505,19 @@ impl Node {
             // server over HTTPS. No node id is ever looked up in plain DNS, where the line's
             // provider would read who this node dials. A dark node resolves others but never
             // publishes its own address: no record anywhere ties its id to a relay or an IP.
+            // A Lantern is a public door: it publishes its relay and looks anyone up. A phone
+            // publishes nothing (its signed notes in gossip say where it can be reached, when it
+            // carries anything) and asks number0 only about its doors.
             let mut b = Endpoint::builder(presets::Minimal)
                 .secret_key(secret)
                 .address_lookup(book2)
-                .address_lookup(iroh::address_lookup::PkarrResolver::n0_dns())
                 .relay_mode(iroh::RelayMode::Custom(relays));
-            if !dark {
+            if lantern {
+                b = b.address_lookup(iroh::address_lookup::PkarrResolver::n0_dns());
+            } else {
+                b = b.address_lookup(DoorsOnly(asked));
+            }
+            if lantern && !dark {
                 b = b.address_lookup(iroh::address_lookup::PkarrPublisher::n0_dns());
             }
             if public_dns {
@@ -1434,6 +1541,17 @@ impl Node {
                 b = b.proxy_from_env().ca_tls_config(iroh::tls::CaTlsConfig::system());
             }
             let ep = b.bind().await.map_err(|e| anyhow!("bind: {e}"))?;
+            if !standby.is_empty() && !private_net {
+                let ep2 = ep.clone();
+                tokio::spawn(async move {
+                    if tokio::time::timeout(Duration::from_secs(15), ep2.online()).await.is_err() {
+                        for url in standby {
+                            let _ = ep2.insert_relay(url.clone(), Arc::new(iroh::RelayConfig::from(url))).await;
+                        }
+                        say("none of our own relays answered: number0's stand in");
+                    }
+                });
+            }
             // Room for a hail: twenty seconds of a voice, sealed.
             let gossip = GossipNet::builder().max_message_size(128 * 1024).spawn(ep.clone());
             let router = Router::builder(ep.clone()).accept(ALPN, proto.clone()).accept(GOSSIP_ALPN, gossip.clone()).spawn();
@@ -1463,6 +1581,11 @@ impl Node {
             jobs: Mutex::new(HashMap::new()),
             pow: Mutex::new(HashMap::new()),
             pow_cursor: Mutex::new(HashMap::new()),
+            cards: Mutex::new(HashMap::new()),
+            stem_sent: Mutex::new(HashMap::new()),
+            doors: doors.clone(),
+            met: Mutex::new(met.iter().cloned().collect()),
+            our_relays: Mutex::new(ours.iter().map(|u| u.to_string()).collect()),
             #[cfg(feature = "playback")]
             queue: queue.clone(),
             #[cfg(feature = "playback")]
@@ -1585,8 +1708,9 @@ impl Node {
                         let s = i2.store.lock().unwrap();
                         let _ = s.enforce_quota();
                     }
-                    let peers: Vec<String> = i2.known_nodes_pub().into_iter().take(24).map(|p| p.to_string()).collect();
-                    let _ = std::fs::write(i2.cfg.dir.join("peers"), peers.join("\n"));
+                    let met = i2.met.lock().unwrap().clone();
+                    let peers: Vec<String> = i2.known_nodes_pub().into_iter().take(24).map(|p| match met.get(&p) { Some(r) => format!("{p} {r}"), None => p.to_string() }).collect();
+                    let _ = i2.hold.write_note(&i2.cfg.dir, "peers", peers.join("\n").as_bytes());
                 }
                 n += 1;
                 tokio::time::sleep(Duration::from_secs(10)).await;

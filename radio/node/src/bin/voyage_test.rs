@@ -122,7 +122,8 @@ fn main() -> anyhow::Result<()> {
     check(bad["error"].is_string(), "wrong words appoint nobody");
     check(l.call(&json!({ "cmd": "hand_join", "station": id }))["ok"] == true, "the hand joins");
     let mut hand_ok = false;
-    for _ in 0..20 {
+    // The appointment reaches the hand by the stem, whose end waits up to a minute and a half.
+    for _ in 0..50 {
         std::thread::sleep(Duration::from_secs(3));
         let w = l.call(&json!({ "cmd": "details_set", "station": id, "kinds": ["talk"], "mature": true }));
         if w["ok"] == true {

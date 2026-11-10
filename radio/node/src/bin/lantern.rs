@@ -67,7 +67,16 @@ fn main() -> anyhow::Result<()> {
     if let Some(addr) = get("--relay").and_then(|a| a.parse::<std::net::SocketAddr>().ok()) {
         node.rt.spawn(async move {
             let mut cfg = iroh_relay::server::ServerConfig::default();
-            cfg.relay = Some(iroh_relay::server::RelayConfig::new(addr));
+            let mut relay = iroh_relay::server::RelayConfig::new(addr);
+            // No one client can take the relay for itself: a megabyte a second each (sixteen
+            // times what a stereo station needs), bursts of eight for a stem's cargo, and new
+            // connections at fifty a second.
+            let mut rx = iroh_relay::server::ClientRateLimit::new(std::num::NonZeroU32::new(1_000_000).unwrap());
+            rx.max_burst_bytes = std::num::NonZeroU32::new(8_000_000);
+            relay.limits.client_rx = Some(rx);
+            relay.limits.accept_conn_limit = Some(50.0);
+            relay.limits.accept_conn_burst = Some(200);
+            cfg.relay = Some(relay);
             match iroh_relay::server::Server::spawn(cfg).await {
                 Ok(server) => {
                     println!("relay on http://{addr}");

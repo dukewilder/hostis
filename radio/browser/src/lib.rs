@@ -43,6 +43,24 @@ use net::{ALPN, Announce, Gossip, MAX_FRAME, Request, Response, Sketch};
 
 /// The same relays the app uses: number0's, and the crew's own.
 const CREW_RELAYS: &[&str] = &["https://relay.hostis.black"];
+
+/// number0's address lookup, asked only about the harbours this tab was built with. A tab that
+/// asked it about every carrier would tell number0 which stations it was after. Every other
+/// peer is found in the network's own book of signed notes.
+#[derive(Debug)]
+struct DoorsOnly(Arc<HashSet<EndpointId>>);
+#[derive(Debug)]
+struct DoorsLookup<T>(T, Arc<HashSet<EndpointId>>);
+impl<T: iroh::address_lookup::AddressLookup> iroh::address_lookup::AddressLookup for DoorsLookup<T> {
+    fn resolve(&self, id: EndpointId) -> Option<n0_future::boxed::BoxStream<Result<iroh::address_lookup::Item, iroh::address_lookup::Error>>> {
+        if self.1.contains(&id) { self.0.resolve(id) } else { None }
+    }
+}
+impl iroh::address_lookup::AddressLookupBuilder for DoorsOnly {
+    fn into_address_lookup(self, ep: &Endpoint) -> std::result::Result<impl iroh::address_lookup::AddressLookup, iroh::address_lookup::AddressLookupBuilderError> {
+        Ok(DoorsLookup(iroh::address_lookup::AddressLookupBuilder::into_address_lookup(iroh::address_lookup::PkarrResolver::n0_dns(), ep)?, self.0))
+    }
+}
 /// Chunks kept in memory: about forty minutes of music.
 const HOLD_BYTES: usize = 24 * 1024 * 1024;
 
@@ -895,7 +913,10 @@ impl Ship {
         }
         let me = self.clone();
         spawn(async move {
+            // A card is due every eight to twelve minutes while nothing is sailing, so the
+            // network does not learn to the second when this tab is open.
             let mut last_card: HashMap<StationId, u64> = HashMap::new();
+            let mut gap: HashMap<StationId, u64> = HashMap::new();
             loop {
                 let ids: Vec<StationId> = me.mine.lock().unwrap().keys().copied().collect();
                 let mut busy = false;
@@ -908,9 +929,11 @@ impl Ship {
                             m.passed = now;
                         }
                     }
-                    if pending || now.saturating_sub(*last_card.get(&id).unwrap_or(&0)) > 20_000 {
+                    let due = *gap.entry(id).or_insert_with(|| 8 * 60_000 + (js_sys::Math::random() * 240_000.0) as u64);
+                    if pending || now.saturating_sub(*last_card.get(&id).unwrap_or(&0)) > due {
                         if me.sail(id).await {
                             last_card.insert(id, now);
+                            gap.insert(id, 8 * 60_000 + (js_sys::Math::random() * 240_000.0) as u64);
                         }
                         busy |= pending;
                     }
@@ -1079,11 +1102,15 @@ impl Radio {
         let book = iroh::address_lookup::MemoryLookup::new();
         let book2 = book.clone();
         let mut ids = Vec::new();
+        let mut unplaced = HashSet::new();
         for item in harbour.split(|c: char| c == ',' || c.is_whitespace()).filter(|s| !s.is_empty()) {
             let (id, relay) = item.split_once('@').map(|(a, b)| (a, Some(b))).unwrap_or((item, None));
             let Ok(id) = id.parse::<EndpointId>() else { continue };
-            if let Some(url) = relay.and_then(|r| r.parse::<iroh::RelayUrl>().ok()) {
-                book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+            match relay.and_then(|r| r.parse::<iroh::RelayUrl>().ok()) {
+                Some(url) => book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() }),
+                None => {
+                    unplaced.insert(id);
+                }
             }
             ids.push(id);
         }
@@ -1106,12 +1133,15 @@ impl Radio {
         getrandom::fill(&mut seed).map_err(|e| JsValue::from_str(&e.to_string()))?;
         // The tab publishes its address nowhere: it reaches out through relays, and peers answer
         // on the same connection or learn of it through gossip. It looks peers up first in its
-        // own book (harbours and carriers' signed notes), then through number0's pkarr server.
+        // own book (harbours and carriers' signed notes). number0's server is asked only about
+        // the harbours.
+        // Only a harbour named without its relay is looked up at all.
+        let doors: Arc<HashSet<EndpointId>> = Arc::new(unplaced);
         let ep = Endpoint::builder(presets::Minimal)
             .secret_key(SecretKey::from_bytes(&seed))
             .relay_mode(iroh::RelayMode::Custom(relays))
             .address_lookup(book.clone())
-            .address_lookup(iroh::address_lookup::PkarrResolver::n0_dns())
+            .address_lookup(DoorsOnly(doors))
             .bind()
             .await
             .map_err(|e| JsValue::from_str(&format!("bind: {e}")))?;
