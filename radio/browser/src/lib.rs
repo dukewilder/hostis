@@ -1264,7 +1264,9 @@ impl Radio {
         let kinds: Vec<String> = kinds.split(',').map(|k| k.trim().to_lowercase()).filter(|k| !k.is_empty()).take(3).collect();
         let w = |a: &mut Archive, at: u64, b: Body| a.write(&master, at, b).map(|_| ()).map_err(|e| js(anyhow!("{e}")));
         w(&mut a, now, Body::Colours { name: name.into(), about: about.trim().chars().take(140).collect(), port: None, tip: None })?;
-        w(&mut a, now + 1, Body::Deputy { key: deputy.id().0, label: "browser".into() })?;
+        // A plain label: what the deputy is written into a public log, so it says nothing of
+        // where the station was raised.
+        w(&mut a, now + 1, Body::Deputy { key: deputy.id().0, label: "deputy".into() })?;
         if !kinds.is_empty() || mature {
             w(&mut a, now + 2, Body::Details { kinds, mature })?;
         }
@@ -1308,7 +1310,7 @@ impl Radio {
                     return Err(js(anyhow!("the station's log could not be found yet; try again in a minute")));
                 };
                 let at = raw_now().max(a.entries().last().map(|e| e.entry.at_ms + 1).unwrap_or(0));
-                a.write(&master, at, Body::Deputy { key: deputy.id().0, label: "browser".into() }).map_err(|e| js(anyhow!("{e}")))?;
+                a.write(&master, at, Body::Deputy { key: deputy.id().0, label: "deputy".into() }).map_err(|e| js(anyhow!("{e}")))?;
             }
             let seed = hex(&deputy.seed());
             s.mine.lock().unwrap().insert(id, Mine { key: deputy, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0 });
