@@ -366,6 +366,15 @@ function refresh() {
   else { const id = location.hash.slice(1); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations.find(x => allowed(x) && inSet(x) && !marooned().has(x.id))); if (s) show(s) }
 }
 
+// A flock link (#flock=...): this tab plays in step with the phone that showed it.
+function flockFollow() {
+  const h = location.hash; if (!radio || !h.includes('flock=')) return false;
+  try { radio.flock_join(h) } catch (e) { return false }
+  $('signal').textContent = 'In a flock: playing in step with its host';
+  setInterval(() => { const id = radio.flock_station(); if (id && cur?.id !== id) { const s = stations.find(x => x.id === id) || { id, call_sign: '', name: 'The flock\'s station' }; playing ? listen(s) : show(s) } }, 3000);
+  return true;
+}
+
 // A station link (#<id>) works before the station's card arrives: the harbour carries it.
 function followLink() {
   const id = location.hash.slice(1);
@@ -571,7 +580,7 @@ async function boot() {
   let key = store('pyrate.token');
   if (!/^[0-9a-f]{64}$/.test(key || '')) { const b = new Uint8Array(32); crypto.getRandomValues(b); key = [...b].map(x => x.toString(16).padStart(2, '0')).join(''); store('pyrate.token', key) }
   try { radio = await Radio.start(HARBOUR, key, RELAYS) } catch (e) { console.warn(e); $('name').textContent = 'Could not reach a relay'; $('signal').textContent = String(e); return }
-  followLink(); refresh();
+  if (!flockFollow()) followLink(); refresh();
   setInterval(refresh, 4000); setInterval(nowPlaying, 1000); setInterval(() => page(false), 5000);
   window.addEventListener('hashchange', followLink);
   if ('mediaSession' in navigator) { navigator.mediaSession.setActionHandler('play', () => cur && listen(cur)); navigator.mediaSession.setActionHandler('pause', stop); navigator.mediaSession.setActionHandler('stop', stop) }

@@ -34,6 +34,8 @@ class MainActivity : FlutterActivity() {
             else -> u.fragment ?: u.getQueryParameter("s")
         }
         if (id != null && id.matches(Regex("[0-9a-f]{64}"))) pendingLink = id
+        // A flock's link: this phone joins the flock and plays in step with its host.
+        u.fragment?.takeIf { it.startsWith("flock=") }?.let { pendingLink = it }
     }
 
     override fun onNewIntent(intent: Intent) {

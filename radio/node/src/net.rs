@@ -29,6 +29,8 @@ pub enum Request {
     /// A chunk, sealed, by the name it is filed under. The carrier never learns its address
     /// and never opens it. See pyrate_core::seal.
     SealedChunk { name: Hash },
+    /// A flock's host's clock and station, for a phone holding the flock's code.
+    Flock { code: [u8; 8] },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -38,6 +40,7 @@ pub enum Response {
     Hop(Vec<u8>),
     Chatter(Vec<Vec<u8>>),
     Sealed(Option<Vec<u8>>),
+    Flock { now_ms: u64, station: Option<StationId> },
 }
 
 /// The signed face of a station's card. Fields are only ever added at the end: an older

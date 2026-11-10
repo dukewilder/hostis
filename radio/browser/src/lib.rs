@@ -136,6 +136,12 @@ struct Room {
 struct Ship {
     ep: Endpoint,
     gossip: GossipNet,
+    /// Addresses learnt from links: harbours, and a flock's host.
+    book: iroh::address_lookup::MemoryLookup,
+    /// Flock: the host this tab follows, the clock it keeps, the station it plays.
+    flock: Mutex<Option<(EndpointId, [u8; 8])>>,
+    flock_off: std::sync::atomic::AtomicI64,
+    flock_station: Mutex<Option<StationId>>,
     rooms: Mutex<HashMap<StationId, Room>>,
     harbour: Vec<EndpointId>,
     tx: Mutex<Option<GossipSender>>,
@@ -159,7 +165,12 @@ fn raw_now() -> u64 {
 impl Ship {
     /// The tab's clock, corrected by the median gap to the stations' own signed times,
     /// as the app does.
+    /// The hour as this tab plays it: the network's clock, set to a flock's host if it follows one.
     fn now(&self) -> u64 {
+        (self.base_now() as i64 + self.flock_off.load(std::sync::atomic::Ordering::Relaxed)) as u64
+    }
+
+    fn base_now(&self) -> u64 {
         let s = self.skew.lock().unwrap();
         let off = if s.len() < 7 {
             0
@@ -185,6 +196,7 @@ impl Ship {
             // A tab hands on what it holds sealed, by name, as every node does.
             Request::Chunk { .. } => Response::Chunk(None),
             Request::SealedChunk { name } => Response::Sealed(self.hold.lock().unwrap().sealed(&name)),
+            Request::Flock { .. } => Response::Flock { now_ms: 0, station: None },
             Request::Hop(_) => Response::Hop(vec![]),
             Request::Chatter { station } => Response::Chatter(
                 self.rooms.lock().unwrap().get(&station).map(|r| r.lines.iter().rev().take(60).rev().filter_map(|l| postcard::to_allocvec(l).ok()).collect()).unwrap_or_default(),
@@ -630,6 +642,7 @@ impl Radio {
     /// lookup. `relays`, when not empty, replaces the usual relays: for a private network.
     pub async fn start(harbour: String, token_key: String, relays: String) -> Result<Radio, JsValue> {
         let book = iroh::address_lookup::MemoryLookup::new();
+        let book2 = book.clone();
         let mut ids = Vec::new();
         for item in harbour.split(|c: char| c == ',' || c.is_whitespace()).filter(|s| !s.is_empty()) {
             let (id, relay) = item.split_once('@').map(|(a, b)| (a, Some(b))).unwrap_or((item, None));
@@ -659,7 +672,7 @@ impl Radio {
         let ep = Endpoint::builder(presets::N0)
             .secret_key(SecretKey::from_bytes(&seed))
             .relay_mode(iroh::RelayMode::Custom(relays))
-            .address_lookup(book)
+            .address_lookup(book.clone())
             .bind()
             .await
             .map_err(|e| JsValue::from_str(&format!("bind: {e}")))?;
@@ -669,6 +682,10 @@ impl Radio {
         let ship = Arc::new(Ship {
             ep,
             gossip: gossip.clone(),
+            book: book2,
+            flock: Mutex::new(None),
+            flock_off: std::sync::atomic::AtomicI64::new(0),
+            flock_station: Mutex::new(None),
             rooms: Mutex::new(HashMap::new()),
             harbour: harbour.clone(),
             tx: Mutex::new(None),
@@ -885,6 +902,56 @@ impl Radio {
             tx.broadcast(bytes.into()).await.map_err(|e| js(anyhow!("{e}")))?;
             Ok(JsValue::TRUE)
         }))
+    }
+
+    /// Follows a flock's host from its link (#flock=<id>@<relay>~<code>): this tab's clock
+    /// is set to the host's over pings, and it plays what the host plays.
+    pub fn flock_join(&self, link: &str) -> Result<(), JsValue> {
+        let tail = link.split("flock=").nth(1).ok_or_else(|| JsValue::from_str("not a flock link"))?;
+        let (who, code) = tail.split_once('~').ok_or_else(|| JsValue::from_str("not a flock link"))?;
+        let (id, relay) = who.split_once('@').unwrap_or((who, ""));
+        let host: EndpointId = id.parse().map_err(|_| JsValue::from_str("not a flock link"))?;
+        let code: [u8; 8] = (0..8).map(|i| code.get(i * 2..i * 2 + 2).and_then(|b| u8::from_str_radix(b, 16).ok())).collect::<Option<Vec<u8>>>().and_then(|v| v.try_into().ok()).ok_or_else(|| JsValue::from_str("bad code"))?;
+        if let Ok(url) = relay.parse() {
+            self.ship.book.add_endpoint_info(iroh::EndpointAddr { id: host, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+        }
+        *self.ship.flock.lock().unwrap() = Some((host, code));
+        let s = self.ship.clone();
+        spawn(async move {
+            while *s.flock.lock().unwrap() == Some((host, code)) {
+                let mut best: Option<(u64, i64, Option<StationId>)> = None;
+                for _ in 0..8 {
+                    let t0 = s.base_now();
+                    let Ok(Response::Flock { now_ms: h, station }) = s.ask(host, &Request::Flock { code }).await else { continue };
+                    let t1 = s.base_now();
+                    if h == 0 {
+                        break;
+                    }
+                    let rtt = t1.saturating_sub(t0);
+                    let off = h as i64 + rtt as i64 / 2 - t1 as i64;
+                    if best.as_ref().is_none_or(|b| rtt < b.0) {
+                        best = Some((rtt, off, station));
+                    }
+                }
+                if let Some((_, off, station)) = best {
+                    let old = s.flock_off.load(std::sync::atomic::Ordering::Relaxed);
+                    s.flock_off.store(if old == 0 { off } else { old + (off - old) / 4 }, std::sync::atomic::Ordering::Relaxed);
+                    *s.flock_station.lock().unwrap() = station;
+                }
+                sleep(Duration::from_secs(20)).await;
+            }
+        });
+        Ok(())
+    }
+
+    /// The flock host's station, as hex, or empty.
+    pub fn flock_station(&self) -> String {
+        self.ship.flock_station.lock().unwrap().map(|s| s.to_hex()).unwrap_or_default()
+    }
+
+    pub fn flock_leave(&self) {
+        *self.ship.flock.lock().unwrap() = None;
+        self.ship.flock_off.store(0, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// The station's whole log as JSON lines of what aired: for the station page.
