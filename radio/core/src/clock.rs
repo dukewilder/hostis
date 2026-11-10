@@ -19,7 +19,7 @@ const WEEK_MS: u64 = 7 * 24 * 3600 * 1000;
 const FIRST_MONDAY_MS: u64 = 4 * 24 * 3600 * 1000;
 const DAY_MIN: u16 = 24 * 60;
 /// A walk never takes more steps than this, however short the tracks.
-const MAX_STEPS: usize = 400_000;
+const MAX_STEPS: usize = 1_300_000;
 /// Steps the watch bill may spend in all, so a long window of short tracks stays quick.
 const BILL_STEPS: usize = 4_000_000;
 /// A recording shorter than this is not played: a second is the shortest thing worth airing,
@@ -230,6 +230,9 @@ pub struct Clock {
     shows: Vec<Show>,
     /// Steps walked since the counter was last set, for the watch bill's budget.
     steps: std::cell::Cell<usize>,
+    /// Whether whole rounds are skipped by arithmetic (always, but for the tests that check
+    /// skipping changes nothing).
+    skip: std::cell::Cell<bool>,
 }
 
 impl Clock {
@@ -296,7 +299,43 @@ impl Clock {
             }
             p
         });
-        Ok(Self { station, rota: archive.rota(), programme, tracks, index, shows, steps: std::cell::Cell::new(0) })
+        Ok(Self { station, rota: archive.rota(), programme, tracks, index, shows, steps: std::cell::Cell::new(0), skip: std::cell::Cell::new(true) })
+    }
+
+    /// The same clock walking every track, for tests that compare.
+    #[doc(hidden)]
+    pub fn stepping(self) -> Self {
+        self.skip.set(false);
+        self
+    }
+
+    /// Whole rounds of `members` that fit between `cursor` and `t` before any of them comes
+    /// on or goes off the air: how many, and how long one lasts. A round's length is the same
+    /// whatever its order, so a week of short tracks is crossed in a few steps, not hundreds
+    /// of thousands.
+    fn whole_rounds(&self, members: &[usize], cursor: u64, t: u64) -> Option<(u64, u64)> {
+        if !self.skip.get() || members.is_empty() {
+            return None;
+        }
+        let mut change = u64::MAX;
+        let mut d = 0u64;
+        for &i in members {
+            let tr = &self.tracks[i];
+            if tr.added_ms > cursor {
+                change = change.min(tr.added_ms);
+            }
+            if let Some(w) = tr.withdrawn_ms.filter(|w| *w > cursor) {
+                change = change.min(w);
+            }
+            if tr.on_air(cursor) {
+                d = d.saturating_add(tr.duration_ms);
+            }
+        }
+        let limit = t.min(change);
+        if d == 0 || cursor.saturating_add(d) > limit {
+            return None;
+        }
+        Some(((limit - cursor) / d, d))
     }
 
     /// What plays between two moments: each track's start, its entry hash and its length.
@@ -363,6 +402,24 @@ impl Clock {
         let mut last_ident: Option<u64> = None;
         for _ in 0..MAX_STEPS {
             self.steps.set(self.steps.get() + 1);
+            // At the start of a round, with no bell to keep, whole rounds are passed over at once.
+            if ident.is_none() {
+                match src {
+                    Source::Cycle { order, at } if *at == 0 || *at >= order.len() => {
+                        if let Some((k, d)) = self.whole_rounds(order, cursor, t) {
+                            cursor += k * d;
+                            *at = 0;
+                        }
+                    }
+                    Source::Rounds { pool, round, order, at, .. } if *at >= order.len() => {
+                        if let Some((k, d)) = self.whole_rounds(pool, cursor, t) {
+                            cursor += k * d;
+                            *round += k;
+                        }
+                    }
+                    _ => {}
+                }
+            }
             let pick = match ident {
                 Some((i, bell)) if self.tracks[i].on_air(cursor) && last_ident.is_none_or(|l| cursor - l >= bell) => {
                     last_ident = Some(cursor);
@@ -602,8 +659,19 @@ impl Clock {
         let ident = self.ident_index(self.rota.ident);
         let bell = self.rota.ident_every_min.max(1) as u64 * 60_000;
 
+        let everything: Vec<usize> = (0..self.tracks.len()).collect();
         for _ in 0..MAX_STEPS {
             self.steps.set(self.steps.get() + 1);
+            // The whole library shuffled, no blocks and no bell: whole rounds at once.
+            if ident.is_none() && self.rota.blocks.is_empty() {
+                let deck = decks[0].get_or_insert_with(|| Deck { round: 0, order: Vec::new(), at: 0 });
+                if deck.at >= deck.order.len() {
+                    if let Some((k, d)) = self.whole_rounds(&everything, cursor, t) {
+                        cursor += k * d;
+                        deck.round += k;
+                    }
+                }
+            }
             // An empty stretch: skip ahead a minute and look again.
             let pick = if let Some(i) = ident.filter(|&i| {
                 self.tracks[i].on_air(cursor) && last_ident.is_none_or(|l| cursor - l >= bell)

@@ -283,3 +283,50 @@ fn a_show_dated_at_the_end_of_time_breaks_nothing() {
     assert!(c.now(NEAR).is_some());
     let _ = c.listings(NEAR, NEAR + 7 * 86_400_000);
 }
+
+/// A recording of so many seconds, in one chunk.
+fn short(title: &str, ms: u64, seed: u8) -> Body {
+    let chunk = Chunk { hash: [seed; 32], len: 10, frames: (ms / 20) as u16 };
+    Body::Track { title: title.into(), by: "".into(), source: "".into(), channels: 1, bitrate: 24_000, chunks: vec![chunk] }
+}
+
+#[test]
+fn a_station_of_short_jingles_plays_to_the_end_of_the_week() {
+    let k = StationKey::from_seed([41; 32]);
+    let mut a = Archive::new(k.id());
+    let t0 = 1_790_000_000_000u64;
+    a.write(&k, t0, short("jingle", 1_500, 1)).unwrap();
+    let sunday_late = at(&Zone::utc(), NEAR, 6, 23 * 60);
+    assert!(Clock::new(&a).unwrap().now(sunday_late).is_some(), "with no programme");
+    a.write(&k, t0 + 5, Body::Programme(Programme::default())).unwrap();
+    assert!(Clock::new(&a).unwrap().now(sunday_late).is_some(), "under the default programme");
+}
+
+#[test]
+fn skipping_whole_rounds_changes_nothing() {
+    let k = StationKey::from_seed([42; 32]);
+    let (mut a, hashes, t0) = station(&k);
+    for i in 0..9u8 {
+        a.write(&k, t0 + 20 + i as u64, track(&format!("s{i}"), 3 + (i as u64 % 4), 10 + i)).unwrap();
+    }
+    // Something comes on the air mid-week and something leaves.
+    let mid = at(&Zone::utc(), NEAR, 3, 600);
+    let mut later = a.clone();
+    later.write(&k, mid, track("late", 7, 60)).unwrap();
+    later.write(&k, mid + 3 * 3_600_000, Body::Withdraw { track: hashes[1] }).unwrap();
+    let modes = [None, Some(Mode::Shuffle), Some(Mode::InOrder), Some(Mode::NewestFirst), Some(Mode::Daily { start_min: 90 }), Some(Mode::Weekly { day: 2, start_min: 300 })];
+    for mode in modes {
+        let mut arch = later.clone();
+        if let Some(m) = mode.clone() {
+            arch.write(&k, mid + 4 * 3_600_000, Body::Programme(Programme { zone: chicago(), mode: m, ..Programme::default() })).unwrap();
+        }
+        let fast = Clock::new(&arch).unwrap();
+        let slow = Clock::new(&arch).unwrap().stepping();
+        let from = at(&Zone::utc(), NEAR, 0, 0);
+        let mut t = from;
+        while t < from + 8 * 86_400_000 {
+            assert_eq!(fast.now(t), slow.now(t), "{mode:?} at {t}");
+            t += 7 * MIN + 13_000;
+        }
+    }
+}
