@@ -19,3 +19,4 @@ serve it (`python3 -m http.server <port>`), then rebuild the public page with pl
 - `lantern_page.py`: a Lantern started with `--http 127.0.0.1:8383` serves a page whose script runs under its policy.
 - `lantern_stream.py`: plays a station from that Lantern page, breaks the stream, and checks the page reconnects.
 - `browser_trap.py`: a simulated wasm trap; the set comes back aboard once on the same station, then asks for a reload.
+- `browser_hidden.py <port>`: a hidden tab keeps more than a minute queued.
