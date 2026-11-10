@@ -88,6 +88,12 @@ class Tuner extends ChangeNotifier {
     _poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _refresh());
     // Ballast fills only on Wi-Fi while charging, so the fleet never costs the owner.
     _ballast = Timer.periodic(const Duration(seconds: 60), (_) => _checkBallast());
+    // A drawer Lantern picks up where it was left.
+    final gb = (pref('lantern_gb') as num?)?.toInt() ?? 4;
+    if (pref('lantern') == true) {
+      Native.call({'cmd': 'ballast_size', 'gb': gb});
+      _service.invokeMethod('lantern', {'on': true, 'gb': gb}).catchError((_) {});
+    }
     _checkBallast();
     // New versions arrive over the network itself, signed by two of three release keys.
     Future.delayed(const Duration(seconds: 60), _checkUpdate);
@@ -527,7 +533,7 @@ class _StationFace extends StatelessWidget {
             ('WATCH BILL', () => pyrateSheet(context, WatchBill(station: s))),
             if (isTuned) ('TAPE IT', () => tapeIt(context)),
             ('PASS IT ON', () => shareStation(s)),
-            if ((s['tip'] ?? '').toString().isNotEmpty) ('TIP', () => tipStation(context, s['tip'])),
+            if ((s['tip'] ?? '').toString().isNotEmpty) ('TIP', () => tipStation(context, s['tip'], name: (s['name'] ?? 'the station').toString())),
           ])
             TextButton(
               onPressed: act,
@@ -864,6 +870,8 @@ class _ColoursPageState extends State<ColoursPage> {
         Flexible(child: Text('Show explicit stations', style: mono(11))),
       ]),
       const SizedBox(height: 26),
+      const DrawerLantern(),
+      const SizedBox(height: 26),
       ShipPapers(radio: widget.radio),
       const SizedBox(height: 26),
       Text('THE HOLD', style: carved(14)),
@@ -1071,4 +1079,61 @@ class _ColoursPageState extends State<ColoursPage> {
       ]),
     ];
   }
+}
+
+
+/// An old phone in a drawer, on a charger and Wi-Fi, keeping a share of the fleet afloat
+/// all day. It gives what its owner chooses, fills only while it charges on Wi-Fi, and goes
+/// quiet when switched off.
+class DrawerLantern extends StatefulWidget {
+  const DrawerLantern({super.key});
+  @override
+  State<DrawerLantern> createState() => _DrawerLanternState();
+}
+
+class _DrawerLanternState extends State<DrawerLantern> {
+  bool on = pref('lantern') == true;
+  int gb = (pref('lantern_gb') as num?)?.toInt() ?? 4;
+
+  void apply() {
+    pref('lantern', on);
+    pref('lantern_gb', gb);
+    Native.call({'cmd': 'ballast_size', 'gb': on ? gb : 1});
+    _service.invokeMethod('lantern', {'on': on, 'gb': gb}).catchError((_) {});
+  }
+
+  Widget sizeChip(int n) => Padding(
+        padding: const EdgeInsets.only(right: 8, bottom: 8),
+        child: InkWell(
+          onTap: () => setState(() {
+            gb = n;
+            apply();
+          }),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(border: Border.all(color: gb == n ? bone : boneGhost, width: gb == n ? 0.9 : 0.5)),
+            child: Text('$n GB', style: carved(9.5, color: gb == n ? bone : boneFaint, spacing: 0.2)),
+          ),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('THE DRAWER LANTERN', style: carved(14)),
+        const SizedBox(height: 8),
+        Text('An old phone in a drawer can keep a share of the fleet afloat all day. Leave it on a charger and Wi-Fi, and it carries sealed sound for whoever asks, with the screen off. It never learns what any of it is. Point its microphone out of a window and go on air, and it is a window station too.',
+            style: serif(14, color: boneFaint, italic: true)),
+        Row(children: [
+          Switch(
+            value: on,
+            onChanged: (v) => setState(() {
+              on = v;
+              apply();
+            }),
+            activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel,
+          ),
+          Flexible(child: Text('Keep a Lantern on this phone', style: mono(11))),
+        ]),
+        if (on) Wrap(children: [for (final n in [4, 16, 64, 128]) sizeChip(n)]),
+      ]);
 }

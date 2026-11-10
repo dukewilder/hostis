@@ -47,13 +47,30 @@ impl Inner {
         if let Some(k) = self.store.lock().unwrap().keys.get(st) {
             return (StationKey::from_seed(k.seed()), true);
         }
-        (chat::voice(&self.secret, st), false)
+        (chat::voice(&self.seed, st), false)
     }
 
     /// Takes a line into a room if it is good and new. True if it was.
     fn hear(&self, st: StationId, s: Signed) -> bool {
         if !chat::check(&s, &st, now_ms()) {
             return false;
+        }
+        // A hail is held only by the keeper it is sealed to; everyone else lets it pass.
+        if matches!(s.line.say, Say::Hail { .. }) {
+            let mine: Vec<[u8; 32]> = self.store.lock().unwrap().keys.get(&st).map(|k| vec![k.id().0]).unwrap_or_default();
+            if !chat::hail_for(&s.line.say, &mine) {
+                return false;
+            }
+            // A Lantern's keeper may ask for hails to wait in a folder of their own
+            // (PYRATE_HAILS); otherwise a hail lives only in memory, as everything here does.
+            if let (Some(dir), Some(k)) = (std::env::var_os("PYRATE_HAILS"), self.store.lock().unwrap().keys.get(&st).map(|k| k.seed())) {
+                if let Some((audio, mime)) = chat::open_hail(&s.line.say, &k) {
+                    let ext = if mime.contains("webm") { "webm" } else if mime.contains("ogg") { "ogg" } else { "m4a" };
+                    let _ = std::fs::create_dir_all(&dir);
+                    let name = format!("{} {} {}.{ext}", st.call_sign(), s.line.at_ms / 1000, if s.line.name.is_empty() { StationId(s.line.from).call_sign() } else { s.line.name.replace(['/', '\\'], " ") });
+                    let _ = std::fs::write(std::path::Path::new(&dir).join(name), audio);
+                }
+            }
         }
         let mut rooms = self.chats.lock().unwrap();
         let Some(r) = rooms.get_mut(&st) else { return false };
@@ -135,7 +152,8 @@ impl Inner {
     pub(crate) fn chatter_for(&self, st: &StationId) -> Vec<Vec<u8>> {
         let rooms = self.chats.lock().unwrap();
         let Some(r) = rooms.get(st) else { return vec![] };
-        r.lines.iter().rev().take(60).rev().filter_map(|s| postcard::to_allocvec(s).ok()).collect()
+        let open: Vec<&Signed> = r.lines.iter().filter(|s| !matches!(s.line.say, Say::Hail { .. })).collect();
+        open[open.len().saturating_sub(60)..].iter().filter_map(|s| postcard::to_allocvec(s).ok()).collect()
     }
 
     fn line_json(&self, st: &StationId, s: &Signed, me: &[u8; 32]) -> Value {
@@ -147,6 +165,7 @@ impl Inner {
                 let title = self.store.lock().unwrap().logs.get(st).map(|a| describe_track(a, track).0).filter(|t| !t.is_empty());
                 ("request", note.clone(), Some(hex(track)), title)
             }
+            Say::Hail { .. } => ("hail", String::new(), None, None),
         };
         json!({
             "id": hex(&chat::id(s)), "from": hex(&s.line.from), "voice": StationId(s.line.from).call_sign(),
@@ -180,9 +199,28 @@ impl Inner {
                     "lines": lines.iter().map(|s| self.line_json(&st, s, &me)).collect::<Vec<_>>(),
                 }))
             }
+            // Plays a hail sealed to this keeper: unsealed into a file the app plays and removes.
+            "chat_hail_open" => {
+                let id = unhex(req["id"].as_str().context("id")?)?;
+                let line = self.chats.lock().unwrap().get(&st).and_then(|r| r.lines.iter().find(|s| chat::id(s) == id).cloned()).context("that hail has gone")?;
+                let seed = self.store.lock().unwrap().keys.get(&st).map(|k| k.seed()).context("only the keeper opens a hail")?;
+                let (audio, mime) = chat::open_hail(&line.line.say, &seed).context("this hail is not for this phone")?;
+                let ext = if mime.contains("webm") { "webm" } else if mime.contains("ogg") { "ogg" } else { "m4a" };
+                let path = self.cfg.dir.join(format!("hail.{ext}"));
+                std::fs::write(&path, audio)?;
+                Ok(json!({ "path": path, "mime": mime }))
+            }
             "chat_send" => {
                 let say = match req["kind"].as_str().unwrap_or("text") {
                     "cheer" => Say::Cheer,
+                    "hail" => {
+                        let audio = std::fs::read(req["path"].as_str().context("path")?)?;
+                        let mut to = vec![st.0];
+                        if let Some(a) = self.store.lock().unwrap().logs.get(&st) {
+                            to.extend(a.deputies());
+                        }
+                        chat::hail(&to, &audio, req["mime"].as_str().unwrap_or("audio/mp4")).context("a hail is twenty seconds at most")?
+                    }
                     "request" => Say::Request { track: unhex(req["track"].as_str().context("track")?)?, note: req["text"].as_str().unwrap_or("").into() },
                     _ => {
                         let t = req["text"].as_str().unwrap_or("").trim().to_string();

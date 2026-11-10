@@ -3402,6 +3402,7 @@ dependencies = [
  "bip39",
  "blake3",
  "chacha20poly1305",
+ "curve25519-dalek 4.1.3",
  "ebur128",
  "ed25519-dalek",
  "getrandom 0.3.4",
@@ -3411,8 +3412,10 @@ dependencies = [
  "rubato",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "symphonia",
  "thiserror 2.0.21",
+ "x25519-dalek",
 ]
 
 [[package]]

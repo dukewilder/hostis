@@ -179,6 +179,8 @@ pub struct Inner {
     cfg: Config,
     endpoint: Endpoint,
     secret: [u8; 32],
+    /// Steady across address changes: ballast by lot, chatter voices, listener tokens.
+    seed: [u8; 32],
     store: Mutex<Store>,
     log: Mutex<HashMap<StationId, Listing>>,
     conns: Mutex<HashMap<EndpointId, Connection>>,
@@ -199,6 +201,8 @@ pub struct Inner {
     live: Mutex<Option<(StationId, u64)>>,
     handle: tokio::runtime::Handle,
     ballast_ok: std::sync::atomic::AtomicBool,
+    /// What this phone gives the fleet, in bytes: 1 GB, or more as a drawer Lantern.
+    ballast_bytes: std::sync::atomic::AtomicU64,
     tokens_sent: Mutex<HashMap<StationId, u64>>,
     /// Our stations no stem would take, now on the air straight from this device, and how
     /// many stems in a row have found no taker.
@@ -573,7 +577,7 @@ impl Inner {
     }
 
     fn token(&self, station: &StationId, hour: u64) -> [u8; 32] {
-        let mut h = blake3::Hasher::new_keyed(&self.secret);
+        let mut h = blake3::Hasher::new_keyed(&self.seed);
         h.update(&station.0);
         h.update(&hour.to_le_bytes());
         *h.finalize().as_bytes()
@@ -927,7 +931,7 @@ impl Inner {
     /// Counts a listener who has no node of their own, such as a browser tab.
     pub fn count_guest(self: &Arc<Self>, station: &StationId, guest: &[u8; 32]) {
         let hour = now_ms() / 3_600_000;
-        let mut h = blake3::Hasher::new_keyed(&self.secret);
+        let mut h = blake3::Hasher::new_keyed(&self.seed);
         h.update(guest);
         h.update(&hour.to_le_bytes());
         let token = *h.finalize().as_bytes();
@@ -1023,7 +1027,7 @@ impl Inner {
     /// Log for itself, and the spread falls out of the hashing.
     async fn ballast(self: &Arc<Self>) {
         const PER_STATION: u64 = 300_000_000;
-        let me = *self.endpoint.id().as_bytes();
+        let me = blake3::derive_key("pyrate/ballast-seat/v1", &self.seed);
         let mut stations: Vec<StationId> = self.log.lock().unwrap().iter().filter(|(_, l)| l.announce.is_some()).map(|(s, _)| *s).collect();
         stations.sort_by_key(|s| {
             let mut h = blake3::Hasher::new();
@@ -1032,7 +1036,7 @@ impl Inner {
             h.update(&s.0);
             *h.finalize().as_bytes()
         });
-        let mut budget = self.cfg.ballast;
+        let mut budget = self.ballast_bytes.load(std::sync::atomic::Ordering::Relaxed);
         let mut pinned = std::collections::HashSet::new();
         for st in stations {
             if budget < 10_000_000 || self.is_own(&st) || self.refused().contains(&st) {
@@ -1077,6 +1081,31 @@ impl Node {
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build()?;
         let store = Store::open(&cfg.dir, cfg.quota + cfg.ballast)?;
         let key_path = cfg.dir.join("node.key");
+        // A seed of its own, kept: what this node carries by lot, its voices in chatter and its
+        // listener tokens come from here, so they hold steady while its address changes.
+        let seed_path = cfg.dir.join("seed.key");
+        let seed: [u8; 32] = match std::fs::read(&seed_path).ok().and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok()) {
+            Some(s) => s,
+            None => {
+                // Drawn from the old node key where there is one, so an upgrade changes nothing.
+                let base = std::fs::read(&key_path).ok().filter(|b| b.len() == 32).unwrap_or_else(|| {
+                    let mut b = vec![0u8; 32];
+                    let _ = getrandom(&mut b);
+                    b
+                });
+                let s = blake3::derive_key("pyrate/seed/v1", &base);
+                std::fs::write(&seed_path, s)?;
+                s
+            }
+        };
+        // A phone's address on the network is new every day, so no one can follow one phone
+        // from day to day by its id. Lanterns keep theirs: others start from them.
+        if !cfg.lantern {
+            let stale = std::fs::metadata(&key_path).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age > Duration::from_secs(24 * 3600));
+            if stale {
+                let _ = std::fs::remove_file(&key_path);
+            }
+        }
         let secret = match std::fs::read(&key_path).ok().and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok()) {
             Some(b) => SecretKey::from_bytes(&b),
             None => {
@@ -1122,7 +1151,8 @@ impl Node {
                 b = b.proxy_from_env().ca_tls_config(iroh::tls::CaTlsConfig::system());
             }
             let ep = b.bind().await.map_err(|e| anyhow!("bind: {e}"))?;
-            let gossip = GossipNet::builder().spawn(ep.clone());
+            // Room for a hail: twenty seconds of a voice, sealed.
+            let gossip = GossipNet::builder().max_message_size(128 * 1024).spawn(ep.clone());
             let router = Router::builder(ep.clone()).accept(ALPN, proto.clone()).accept(GOSSIP_ALPN, gossip.clone()).spawn();
             anyhow::Ok((ep, router, gossip))
         })?;
@@ -1133,6 +1163,7 @@ impl Node {
             cfg: cfg.clone(),
             endpoint: endpoint.clone(),
             secret: secret_bytes,
+            seed,
             store: Mutex::new(store),
             log: Mutex::new(HashMap::new()),
             conns: Mutex::new(HashMap::new()),
@@ -1150,6 +1181,7 @@ impl Node {
             live: Mutex::new(None),
             handle: rt.handle().clone(),
             ballast_ok: std::sync::atomic::AtomicBool::new(false),
+            ballast_bytes: std::sync::atomic::AtomicU64::new(cfg.ballast),
             tokens_sent: Mutex::new(HashMap::new()),
             direct: Mutex::new(std::collections::HashSet::new()),
             refused_cache: Mutex::new((0, std::collections::HashSet::new())),
@@ -1393,7 +1425,7 @@ impl Node {
         let station = || -> Result<StationId> { Ok(StationId::from_hex(req["station"].as_str().context("station")?)?) };
         let inner = &self.inner;
         match cmd {
-            "chat_join" | "chat_leave" | "chat_read" | "chat_send" => {
+            "chat_join" | "chat_leave" | "chat_read" | "chat_send" | "chat_hail_open" => {
                 let st = station()?;
                 inner.chat_call(cmd, st, req)
             }
@@ -1758,6 +1790,13 @@ impl Node {
                     i2.jobs.lock().unwrap().insert(job, msg);
                 });
                 Ok(json!({ "job": job }))
+            }
+            // A drawer Lantern gives more: 1 to 256 GB, carried on Wi-Fi while it charges.
+            "ballast_size" => {
+                let gb = req["gb"].as_u64().unwrap_or(1).clamp(1, 256);
+                inner.ballast_bytes.store(gb * 1_000_000_000, std::sync::atomic::Ordering::Relaxed);
+                inner.store.lock().unwrap().quota = inner.cfg.quota + gb * 1_000_000_000;
+                Ok(json!({ "gb": gb }))
             }
             "ballast_ok" => {
                 inner.ballast_ok.store(req["value"].as_bool().unwrap_or(false), std::sync::atomic::Ordering::Relaxed);

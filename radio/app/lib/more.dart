@@ -492,23 +492,63 @@ void shareStation(Map s) {
 }
 
 /// Tips go from the listener's own wallet to the station. The app moves no money.
-Future<void> tipStation(BuildContext context, String addr) async {
+/// The wallet link for a tip address, with a note where the kind of address carries one:
+/// a Bitcoin payment's message, a Monero payment's description. A Lightning address takes
+/// its note in the wallet's own comment box.
+String tipUri(String addr, String note) {
   final a = addr.trim();
-  String uri;
-  if (a.startsWith('lightning:') || a.startsWith('bitcoin:') || a.startsWith('monero:')) {
-    uri = a;
-  } else if (a.contains('@') || a.toLowerCase().startsWith('lnurl') || a.toLowerCase().startsWith('lno')) {
-    uri = 'lightning:$a';
-  } else if ((a.startsWith('4') || a.startsWith('8')) && (a.length == 95 || a.length == 106)) {
-    uri = 'monero:$a';
-  } else {
-    uri = 'bitcoin:$a';
-  }
-  final ok = await ship.invokeMethod<bool>('open_uri', {'uri': uri}).catchError((_) => false) ?? false;
-  if (!ok) {
-    await Clipboard.setData(ClipboardData(text: a));
-    if (context.mounted) toast(context, 'No wallet on this phone answered. The address is copied.');
-  }
+  final n = Uri.encodeComponent(note.trim());
+  if (a.startsWith('lightning:') || a.startsWith('bitcoin:') || a.startsWith('monero:')) return a;
+  if (a.contains('@') || a.toLowerCase().startsWith('lnurl') || a.toLowerCase().startsWith('lno')) return 'lightning:$a';
+  if ((a.startsWith('4') || a.startsWith('8')) && (a.length == 95 || a.length == 106)) return 'monero:$a${n.isEmpty ? '' : '?tx_description=$n'}';
+  return 'bitcoin:$a${n.isEmpty ? '' : '?message=$n'}';
+}
+
+/// Tips go from the listener's own wallet to the station, with a note if they like. The app
+/// moves no money and sees none of it.
+Future<void> tipStation(BuildContext context, String addr, {String name = 'the station'}) => pyrateSheet(context, TipSheet(addr: addr, name: name));
+
+class TipSheet extends StatefulWidget {
+  final String addr;
+  final String name;
+  const TipSheet({super.key, required this.addr, required this.name});
+  @override
+  State<TipSheet> createState() => _TipSheetState();
+}
+
+class _TipSheetState extends State<TipSheet> {
+  final memo = TextEditingController();
+
+  bool get lightning => tipUri(widget.addr, '').startsWith('lightning:');
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(24, 20, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          heading('A TIP FOR ${widget.name.toUpperCase()}'),
+          note('It goes from your own wallet straight to the station. Pyrate Radio moves no money and sees none of it.'),
+          const SizedBox(height: 10),
+          SelectableText(widget.addr, style: mono(11, color: boneDim)),
+          TextField(controller: memo, maxLength: 140, style: serif(16), decoration: pyrateField(lightning ? 'A note for the keeper (paste it in your wallet\'s comment)' : 'A note for the keeper')),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            pyrateButton('OPEN MY WALLET', () async {
+              if (lightning && memo.text.trim().isNotEmpty) await Clipboard.setData(ClipboardData(text: memo.text.trim()));
+              final ok = await ship.invokeMethod<bool>('open_uri', {'uri': tipUri(widget.addr, memo.text)}).catchError((_) => false) ?? false;
+              if (!context.mounted) return;
+              if (!ok) {
+                await Clipboard.setData(ClipboardData(text: widget.addr));
+                if (context.mounted) toast(context, 'No wallet on this phone answered. The address is copied.');
+              } else if (lightning && memo.text.trim().isNotEmpty) {
+                toast(context, 'Your note is copied: paste it in the wallet\'s comment.');
+              }
+            }),
+            pyrateButton('COPY THE ADDRESS', () async {
+              await Clipboard.setData(ClipboardData(text: widget.addr));
+              if (context.mounted) toast(context, 'The address is copied.');
+            }),
+          ]),
+        ]),
+      );
 }
 
 class PassItOn extends StatefulWidget {
