@@ -598,6 +598,19 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
       Text('THE PROGRAMME', style: carved(20)),
       note('How your station fills the day, in your own time (${zoneLabel()}). It keeps doing this for as long as anyone carries it, whether or not you ever open the app again.'),
       if (!loaded && loadError == null) Padding(padding: const EdgeInsets.only(top: 16), child: note('Reading the log')),
+      // The time-zone table a programme carries runs out some day; past it the local time
+      // keeps its last offset. Setting the programme again writes a fresh forty years.
+      if (loaded)
+        Builder(builder: (_) {
+          final z = p['zone'];
+          final last = z is List && z.isNotEmpty && z.last is List ? ((z.last as List).first as num?)?.toInt() ?? 0 : 0;
+          final soon = DateTime.now().add(const Duration(days: 730)).millisecondsSinceEpoch;
+          if (last == 0 || last > soon) return const SizedBox();
+          return Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: note('Your station knows your time zone\'s changes only until ${DateTime.fromMillisecondsSinceEpoch(last).year}. Set the programme again before then and its local time carries on.'),
+          );
+        }),
       if (loadError != null)
         Padding(
           padding: const EdgeInsets.only(top: 16),

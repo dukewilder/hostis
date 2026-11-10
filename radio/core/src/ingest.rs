@@ -29,15 +29,53 @@ pub struct Ingested {
     pub picture: Option<Vec<u8>>,
 }
 
-/// Folds any channel layout into the profile's: mono averages, stereo keeps the first two.
-fn remap(input: &[f32], in_ch: usize, out_ch: usize, out: &mut Vec<f32>) {
+/// How much of each channel goes left and right when more than two are folded to stereo,
+/// by the channels' places (the usual downmix: centre and surrounds at -3 dB, the LFE left
+/// out, so a film's dialogue stays). Channels with no stated place: the first two as left
+/// and right, as before.
+fn fold_weights(ch: &symphonia::core::audio::Channels, n: usize) -> Vec<(f32, f32)> {
+    const H: f32 = std::f32::consts::FRAC_1_SQRT_2;
+    let mut w: Vec<(f32, f32)> = match ch {
+        symphonia::core::audio::Channels::Positioned(p) => (0..64u32)
+            .filter(|b| p.bits() & (1u64 << b) != 0)
+            .map(|b| match b {
+                0 => (1.0, 0.0),
+                1 => (0.0, 1.0),
+                2 | 13 => (H, H),
+                3 => (0.0, 0.0),
+                4 | 6 | 9 | 12 | 15 => (H, 0.0),
+                5 | 7 | 10 | 14 | 17 => (0.0, H),
+                _ => (0.5, 0.5),
+            })
+            .collect(),
+        _ => (0..n).map(|i| match i {
+            0 => (1.0, 0.0),
+            1 => (0.0, 1.0),
+            _ => (0.0, 0.0),
+        }).collect(),
+    };
+    w.resize(n, (0.0, 0.0));
+    // Scaled so the fold cannot pass full scale; the loudness pass brings it back up.
+    let most = w.iter().map(|x| x.0).sum::<f32>().max(w.iter().map(|x| x.1).sum::<f32>()).max(1.0);
+    w.iter().map(|(l, r)| (l / most, r / most)).collect()
+}
+
+/// Folds any channel layout into the profile's: one or two channels as they are, more by
+/// their places, and mono as the middle of the stereo fold.
+fn remap(input: &[f32], in_ch: usize, weights: &[(f32, f32)], out_ch: usize, out: &mut Vec<f32>) {
+    if in_ch == 0 {
+        return;
+    }
     for frame in input.chunks_exact(in_ch) {
+        let (l, r) = match in_ch {
+            1 => (frame[0], frame[0]),
+            2 => (frame[0], frame[1]),
+            _ => frame.iter().zip(weights).fold((0.0, 0.0), |(l, r), (x, (a, b))| (l + x * a, r + x * b)),
+        };
         match (in_ch, out_ch) {
             (a, b) if a == b => out.extend_from_slice(frame),
-            (_, 1) => out.push(frame.iter().sum::<f32>() / in_ch as f32),
-            (1, 2) => out.extend_from_slice(&[frame[0], frame[0]]),
-            (_, 2) => out.extend_from_slice(&frame[..2]),
-            _ => unreachable!("profiles are mono or stereo"),
+            (_, 1) => out.push((l + r) * 0.5),
+            _ => out.extend_from_slice(&[l, r]),
         }
     }
 }
@@ -94,12 +132,16 @@ fn measure(path: &Path, out_ch: usize) -> Result<Level> {
         }
         let Ok(buf) = decoder.decode(&packet) else { continue };
         let in_ch = buf.spec().channels().count();
+        if in_ch == 0 {
+            continue;
+        }
+        let weights = fold_weights(buf.spec().channels(), in_ch);
         let rate = buf.spec().rate();
         decoded.clear();
         decoded.resize(buf.samples_interleaved(), 0.0);
         buf.copy_to_slice_interleaved(&mut decoded);
         mapped.clear();
-        remap(&decoded, in_ch, out_ch, &mut mapped);
+        remap(&decoded, in_ch, &weights, out_ch, &mut mapped);
         let m = match &mut meter {
             Some(m) => m,
             None => meter.insert(ebur128::EbuR128::new(out_ch as u32, rate, ebur128::Mode::I | ebur128::Mode::SAMPLE_PEAK).map_err(|e| Error::Decode(format!("{e:?}")))?),
@@ -114,6 +156,10 @@ fn measure(path: &Path, out_ch: usize) -> Result<Level> {
         at += (mapped.len() / out_ch) as u64;
     }
     let Some(m) = meter else { return Ok(Level { gain: 1.0, start: 0, end: u64::MAX }) };
+    // A file of nothing but silence is not a recording.
+    if first.is_none() && at > 0 {
+        return Err(Error::Decode("the recording is silent".into()));
+    }
     let lufs = m.loudness_global().unwrap_or(f64::NEG_INFINITY);
     let peak = (0..out_ch as u32).filter_map(|c| m.sample_peak(c).ok()).fold(0.0f64, f64::max);
     let mut gain_db = if lufs.is_finite() { (TARGET_LUFS - lufs).min(MAX_GAIN_DB) } else { 0.0 };
@@ -247,6 +293,10 @@ pub fn ingest(path: &Path, profile: Profile) -> Result<Ingested> {
         };
         let spec = buf.spec().clone();
         let in_ch = spec.channels().count();
+        if in_ch == 0 {
+            continue;
+        }
+        let weights = fold_weights(spec.channels(), in_ch);
         let rate = spec.rate();
         if in_rate == 0 {
             in_rate = rate;
@@ -282,7 +332,7 @@ pub fn ingest(path: &Path, profile: Profile) -> Result<Ingested> {
         for s in kept.iter_mut() {
             *s = (*s * level.gain).clamp(-1.0, 1.0);
         }
-        remap(kept, in_ch, out_ch, &mut mapped);
+        remap(kept, in_ch, &weights, out_ch, &mut mapped);
         drain(&mut mapped, &mut resampler, &mut delay_left, false, &mut encoder, &mut chunks, &mut total_frames)?;
     }
     drain(&mut mapped, &mut resampler, &mut delay_left, true, &mut encoder, &mut chunks, &mut total_frames)?;

@@ -32,16 +32,29 @@ pub fn open(queue: SharedQueue) -> Result<Output> {
     let rate = supported.sample_rate().0 as f64;
     let channels = supported.channels() as usize;
     let config: cpal::StreamConfig = supported.config();
+    // Whatever samples the device wants, it gets: some speakers take only integers.
+    let stream = match supported.sample_format() {
+        cpal::SampleFormat::I16 => out_stream::<i16>(&device, &config, queue, channels, rate)?,
+        cpal::SampleFormat::U16 => out_stream::<u16>(&device, &config, queue, channels, rate)?,
+        cpal::SampleFormat::I32 => out_stream::<i32>(&device, &config, queue, channels, rate)?,
+        _ => out_stream::<f32>(&device, &config, queue, channels, rate)?,
+    };
+    stream.play()?;
+    Ok(Output { _stream: stream })
+}
+
+fn out_stream<T: cpal::SizedSample + cpal::FromSample<f32>>(device: &cpal::Device, config: &cpal::StreamConfig, queue: SharedQueue, channels: usize, rate: f64) -> Result<cpal::Stream> {
     let step = 48_000.0 / rate;
     let mut phase = 0.0f64;
     let mut prev = [0f32; 2];
     let mut cur = [0f32; 2];
-
     let err = |e| eprintln!("audio: {e}");
-    let stream = device.build_output_stream(
-        &config,
-        move |out: &mut [f32], _| {
-            let mut q = queue.lock().unwrap();
+    Ok(device.build_output_stream(
+        config,
+        move |out: &mut [T], _| {
+            // A queue left poisoned by a panic elsewhere still plays; the sound thread never
+            // panics on it.
+            let mut q = queue.lock().unwrap_or_else(|e| e.into_inner());
             let vol = q.volume;
             for frame in out.chunks_mut(channels) {
                 // Linear interpolation between 48 kHz frames.
@@ -49,7 +62,7 @@ pub fn open(queue: SharedQueue) -> Result<Output> {
                     phase -= 1.0;
                     prev = cur;
                     if q.samples.len() >= 2 {
-                        cur = [q.samples.pop_front().unwrap(), q.samples.pop_front().unwrap()];
+                        cur = [q.samples.pop_front().unwrap_or(0.0), q.samples.pop_front().unwrap_or(0.0)];
                         q.played += 1;
                         q.starved = false;
                     } else {
@@ -61,12 +74,12 @@ pub fn open(queue: SharedQueue) -> Result<Output> {
                 let l = (prev[0] + (cur[0] - prev[0]) * t) * vol;
                 let r = (prev[1] + (cur[1] - prev[1]) * t) * vol;
                 match channels {
-                    1 => frame[0] = (l + r) * 0.5,
+                    1 => frame[0] = T::from_sample((l + r) * 0.5),
                     _ => {
-                        frame[0] = l;
-                        frame[1] = r;
+                        frame[0] = T::from_sample(l);
+                        frame[1] = T::from_sample(r);
                         for c in frame.iter_mut().skip(2) {
-                            *c = 0.0;
+                            *c = T::EQUILIBRIUM;
                         }
                     }
                 }
@@ -75,9 +88,7 @@ pub fn open(queue: SharedQueue) -> Result<Output> {
         },
         err,
         None,
-    )?;
-    stream.play()?;
-    Ok(Output { _stream: stream })
+    )?)
 }
 
 /// The microphone, as 48 kHz mono i16 pushed into a shared buffer.
@@ -92,17 +103,34 @@ pub fn open_input(buf: Arc<Mutex<Vec<i16>>>) -> Result<Input> {
     let rate = supported.sample_rate().0 as f64;
     let channels = supported.channels() as usize;
     let config: cpal::StreamConfig = supported.config();
+    if channels == 0 {
+        return Err(anyhow!("the microphone reports no channels"));
+    }
+    let stream = match supported.sample_format() {
+        cpal::SampleFormat::I16 => in_stream::<i16>(&device, &config, buf, channels, rate)?,
+        cpal::SampleFormat::U16 => in_stream::<u16>(&device, &config, buf, channels, rate)?,
+        cpal::SampleFormat::I32 => in_stream::<i32>(&device, &config, buf, channels, rate)?,
+        _ => in_stream::<f32>(&device, &config, buf, channels, rate)?,
+    };
+    stream.play()?;
+    Ok(Input { _stream: stream })
+}
+
+fn in_stream<T: cpal::SizedSample>(device: &cpal::Device, config: &cpal::StreamConfig, buf: Arc<Mutex<Vec<i16>>>, channels: usize, rate: f64) -> Result<cpal::Stream>
+where
+    f32: cpal::FromSample<T>,
+{
     let step = rate / 48_000.0;
     let mut phase = 0.0f64;
-    let stream = device.build_input_stream(
-        &config,
-        move |data: &[f32], _| {
-            let mut out = buf.lock().unwrap();
+    Ok(device.build_input_stream(
+        config,
+        move |data: &[T], _| {
+            let mut out = buf.lock().unwrap_or_else(|e| e.into_inner());
             let frames = data.len() / channels;
             // Average the channels, then step through at 48 kHz.
             while (phase as usize) < frames {
                 let i = phase as usize * channels;
-                let s: f32 = data[i..i + channels].iter().sum::<f32>() / channels as f32;
+                let s: f32 = data[i..i + channels].iter().map(|x| <f32 as cpal::FromSample<T>>::from_sample_(*x)).sum::<f32>() / channels as f32;
                 out.push((s.clamp(-1.0, 1.0) * 32767.0) as i16);
                 phase += step;
             }
@@ -110,7 +138,5 @@ pub fn open_input(buf: Arc<Mutex<Vec<i16>>>) -> Result<Input> {
         },
         |e| eprintln!("mic: {e}"),
         None,
-    )?;
-    stream.play()?;
-    Ok(Input { _stream: stream })
+    )?)
 }

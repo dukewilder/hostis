@@ -12,14 +12,6 @@ Each entry gives the threat, whether the wall held, and the fix.
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down. The reader's full notes, with each failure worked through, are in `audit-notes/clock.md`.
 
-- **A17** (low) `art::accent` depends on HashMap iteration order for ties. `core/src/art.rs:81`
-- **A18** (low) `art::prepare` ignores EXIF orientation. `core/src/art.rs:49-54`
-- **A19** (low) Ingest folds multichannel files badly. `core/src/ingest.rs:33-43`
-- **A20** (low) Hard seams at the week boundary (and at every anchor). `core/src/clock.rs:425-453`
-- **A21** (low) Offset table ends: time zone freezes after the last entry. `core/src/programme.rs:32-42; page.rs:88-95`
-- **A23** (low) Output and input streams ignore the device's sample format. `node/src/player.rs:41-43`
-- **A24** (low) `page_of` days overflow and repeated full-log hashing. `core/src/page.rs:39-47`
-
 ### Track A and B: the browser, the Lantern's web listener and the landing
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
@@ -268,12 +260,26 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **A8. A show premiering before its track was added never airs, and the listing still promises it.** (medium) Fixed: A show's recordings are judged on the air as of its start or the moment it was put on the bill, whichever is later, the same in its length and in its walk; a premiere set for this minute of a recording added seconds ago airs it, and a show with nothing it can play and no live part is not listed. Tested (the test fails on the old clock). (8060919)
 
-**A9. Call signs carry ~35 bits, so a lookalike can be ground out for a target.** (medium) Fixed: Call signs stay as drawn, since changing the draw would rename every station on the air, but they are no longer claimed as proof: the code and the Articles say a forger can grind out a lookalike, and each station's page, in the app and the tab, now shows its key in groups of four, selectable, beside the call sign. (pending)
+**A9. Call signs carry ~35 bits, so a lookalike can be ground out for a target.** (medium) Fixed: Call signs stay as drawn, since changing the draw would rename every station on the air, but they are no longer claimed as proof: the code and the Articles say a forger can grind out a lookalike, and each station's page, in the app and the tab, now shows its key in groups of four, selectable, beside the call sign. (c327e39)
 
-**A11. `ChunkDecoder::decode` trusts the chunk's packet count and sizes. `core/src/audio.rs:166-174; archive.rs `Chunk::check** (low) Fixed: Each packet is played as one 20 ms frame: one that is empty, or holds more or less than a frame, stands as 20 ms of concealment, in the node and in the tab; and where a chunk's frame count is known (the phone's player, the Lantern's tower and episodes) a chunk whose packets do not number its frames is concealed for its length. A chunk always plays exactly as long as its station's clock says. (pending)
+**A11. `ChunkDecoder::decode` trusts the chunk's packet count and sizes. `core/src/audio.rs:166-174; archive.rs `Chunk::check** (low) Fixed: Each packet is played as one 20 ms frame: one that is empty, or holds more or less than a frame, stands as 20 ms of concealment, in the node and in the tab; and where a chunk's frame count is known (the phone's player, the Lantern's tower and episodes) a chunk whose packets do not number its frames is concealed for its length. A chunk always plays exactly as long as its station's clock says. (c327e39)
 
-**A12. Ogg writer can overflow the lacing byte and drops bad chunks silently.** (low) Fixed: The tape writer fills each Ogg page by lacing segments, never past 255; it refuses, with a plain reason, a channel count other than one or two, a chunk that will not read, a packet that is not one 20 ms frame, and an empty tape, instead of writing a file that will not play. Tested, with ffprobe reading the file when it is installed. (pending)
+**A12. Ogg writer can overflow the lacing byte and drops bad chunks silently.** (low) Fixed: The tape writer fills each Ogg page by lacing segments, never past 255; it refuses, with a plain reason, a channel count other than one or two, a chunk that will not read, a packet that is not one 20 ms frame, and an empty tape, instead of writing a file that will not play. Tested, with ffprobe reading the file when it is installed. (c327e39)
 
-**A14. `span_from` truncates `days` and accepts a span that never runs.** (low) Fixed: A span's days are masked before they are narrowed, and a span that names no day is refused with a word, so a station cannot be left dark by an hours list that never runs. Tested. (pending)
+**A14. `span_from` truncates `days` and accepts a span that never runs.** (low) Fixed: A span's days are masked before they are narrowed, and a span that names no day is refused with a word, so a station cannot be left dark by an hours list that never runs. Tested. (c327e39)
 
-**A15. Hours plus a continuous mode silently skips what plays off the air.** (low) Fixed: With set hours, Shuffle, In order and Newest first now keep their clock running only while the station is on the air, so a library in order is heard in order across the days and nothing plays unheard while the station is off. Tested: twenty minutes a day of three twenty-minute recordings plays one a day, in order (the test fails on the old clock). (pending)
+**A15. Hours plus a continuous mode silently skips what plays off the air.** (low) Fixed: With set hours, Shuffle, In order and Newest first now keep their clock running only while the station is on the air, so a library in order is heard in order across the days and nothing plays unheard while the station is off. Tested: twenty minutes a day of three twenty-minute recordings plays one a day, in order (the test fails on the old clock). (c327e39)
+
+**A17. `art::accent` depends on HashMap iteration order for ties.** (low) Fixed: Ties between colours of equal weight go to the larger bucket key, so the same picture gives the same accent every time. Tested. (pending)
+
+**A18. `art::prepare` ignores EXIF orientation.** (low) Fixed: A picture is turned the way its EXIF note says before it is redrawn, so a portrait phone photo comes out upright. Tested with a sideways JPEG (the test fails without the turn). (pending)
+
+**A19. Ingest folds multichannel files badly.** (low) Fixed: More than two channels are folded by their places (centre and surrounds at -3 dB, the LFE left out), scaled so the fold cannot clip, with the loudness pass bringing it back to the house level; mono is the middle of that fold. A decoder reporting no channels is passed over rather than crashing, and a file of nothing but silence is refused. Tested with a 5.1 WAV whose only sound is its centre channel, and a silent one. (pending)
+
+**A20. Hard seams at the week boundary (and at every anchor).** (low) Fixed: Holds by design, now ruled in the Articles: each week, slot and tape starts clean on its minute, so any node can work out any moment from that week alone. Letting the recording at the turn finish would make every week start where the one before it happened to end, and so depend on all the weeks before; the cut once a week is the price of a schedule nobody has to agree on. (pending)
+
+**A21. Offset table ends: time zone freezes after the last entry.** (low) Fixed: The page now says where the station's time-zone table ends (zone_until), and the programme editor warns the keeper when it ends within two years. The app writes forty years of changes each time the programme is set, so a station set from a phone holds for decades; one set some other way is told. (pending)
+
+**A23. Output and input streams ignore the device's sample format.** (low) Fixed: The speaker and microphone streams are built in whatever sample format the device asks for (float, 16-bit, unsigned 16-bit or 32-bit), converted at the edge, and a queue left poisoned elsewhere still plays rather than panicking the sound thread; a microphone reporting no channels is refused plainly. (pending)
+
+**A24. `page_of` days overflow and repeated full-log hashing.** (low) Fixed: A page's window is at most sixty days and cannot overflow, and each track's words and each show's list are found once per page instead of by hashing the whole log again for every line. (pending)
