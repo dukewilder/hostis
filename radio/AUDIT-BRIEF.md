@@ -65,7 +65,7 @@ Rust workspace (`radio/Cargo.toml`, members core, node, ffi, spike, browser; edi
 - `ffi/src/lib.rs` the C FFI the app calls.
 - `browser/src/lib.rs` the wasm node. Built by `browser/build.sh` into `browser/www/pkg`, pages assembled by `browser/build.py` into `browser/www/dist`.
 
-App (Flutter, `app/`): `lib/main.dart` (shell, tuner, drawer Lantern), `lib/station.dart` (station page, programme and show editors, creation, posters, chart, chatter, flock, invite sheet, voice kit), `lib/more.dart` (the Log, tips), `lib/art.dart`, `lib/native.dart` (FFI bridge). Android Kotlin in `app/android/.../`: `MainActivity.kt`, `Native.kt`, `Ship.kt`, `PlaybackService.kt`, `LanternService.kt` (drawer Lantern), `Bells.kt`, `Voice.kt` (TTS idents). Version in `app/pubspec.yaml` and `kBuildCode` in `main.dart`, now 0.8.0+13.
+App (Flutter, `app/`): `lib/main.dart` (shell, tuner, drawer Lantern), `lib/station.dart` (station page, programme and show editors, creation, posters, chart, chatter, flock, invite sheet, voice kit), `lib/more.dart` (the Log, tips), `lib/art.dart`, `lib/native.dart` (FFI bridge). Android Kotlin in `app/android/.../`: `MainActivity.kt`, `Native.kt`, `Ship.kt`, `PlaybackService.kt`, `LanternService.kt` (drawer Lantern), `Bells.kt`, `Voice.kt` (TTS idents). Version in `app/pubspec.yaml` only (the app reads its build code from the installed package), now 0.8.1+14.
 
 Browser player JS/CSS: `browser/www/app.js` (the radio set, station page, chatter, hail, tips, flock, pockets, harbour memory), `browser/body.html`, `browser/player.css`, `browser/harbour.json` (HOSTIS's own stations for the landing set).
 
@@ -115,6 +115,7 @@ Known now:
 - Run the two-identity dukewilder rebuild in `tools/dukewilder-rebuild.md` (harbour plus dark hold plus Tor, all inside gluetun), and send back the logs.
 - Send DNS screenshots, and `station.jpg` / `banner.jpg` if still wanted.
 - Approve any change to the hostis.black front page, including a link to the radio.
+- Sign each APK with the Android key on his PC (`release sign-apk android-key.txt android-cert.der <apk> "Pyrate Radio.apk"`). The debug key that signed 0.8.0 went with an earlier container, so no build from here can install over it: the first build he signs needs one uninstall of 0.8.0. Before that, write down each station's 24 words and copy any pocket invitations, since uninstalling clears the phone's deputy key and pockets. Every build after installs as an update. 0.8.1 (build 14) is the first to sign.
 
 ## 9. Standing constraints (hard rules)
 

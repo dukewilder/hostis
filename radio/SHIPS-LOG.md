@@ -112,3 +112,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - Private fetches keep a long-lived first hop, as Tor's guards do, and a broadcaster's phone never asks carriers for its own station from its own address.
 - Strike colours works from the app: it takes the 24 words, as the screen always said.
 - The app keeps its secrets on the phone: no backup or transfer, a media browser only for the system and the car, a quiet log, and the 24 words guarded from loss, screenshots and keyboard learning.
+- App 0.8.1 (build 14) built with everything above. It waits on Dylan's Android key: the debug key that signed 0.8.0 is gone, so this build cannot install over it unsigned.
