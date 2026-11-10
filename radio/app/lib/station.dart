@@ -322,7 +322,7 @@ class _StationPageState extends State<StationPage> {
                         onPressed: () async {
                           if (ringing) {
                             await ship.invokeMethod('bell_cancel', {'id': id2, 'station': id, 'at': start});
-                            setState(() => bells.remove(id2));
+                            if (mounted) setState(() => bells.remove(id2));
                           } else {
                             await ringAt(context, id: id2, at: start, title: (l['title'] ?? 'A show').toString(), station: id, name: (s['name'] ?? '').toString());
                             if (mounted) setState(() => bells.add(id2));
@@ -358,6 +358,11 @@ class _NoticeEditorState extends State<NoticeEditor> {
   final text = TextEditingController();
   int days = 0;
   String? err;
+  @override
+  void dispose() {
+    text.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -374,7 +379,7 @@ class _NoticeEditorState extends State<NoticeEditor> {
             final until = days == 0 ? 0 : DateTime.now().millisecondsSinceEpoch + days * 86400000;
             final r = await Native.callAway({'cmd': 'notice_post', 'station': widget.station, 'text': text.text, 'until_ms': until});
             if (r is Map && r['error'] != null) {
-              setState(() => err = r['error']);
+              if (mounted) setState(() => err = r['error']);
             } else if (context.mounted) {
               Navigator.pop(context);
             }
@@ -431,6 +436,12 @@ class _ShowEditorState extends State<ShowEditor> {
   bool live = false;
   int liveMin = 60;
   String? err;
+  @override
+  void dispose() {
+    title.dispose();
+    about.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -456,7 +467,7 @@ class _ShowEditorState extends State<ShowEditor> {
               if (d == null || !context.mounted) return;
               final t = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(when));
               if (t == null) return;
-              setState(() => when = DateTime(d.year, d.month, d.day, t.hour, t.minute));
+              if (mounted) setState(() => when = DateTime(d.year, d.month, d.day, t.hour, t.minute));
             }),
           ]),
           const SizedBox(height: 14),
@@ -473,7 +484,7 @@ class _ShowEditorState extends State<ShowEditor> {
               'at_ms': when.millisecondsSinceEpoch, 'tracks': picked, 'live_min': live ? liveMin : 0,
             });
             if (r is Map && r['error'] != null) {
-              setState(() => err = r['error']);
+              if (mounted) setState(() => err = r['error']);
             } else if (context.mounted) {
               Navigator.pop(context);
             }
@@ -615,7 +626,7 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
           const SizedBox(width: 12),
           pyrateButton('FROM ${hhmm(start)}', () async {
             final m = await pickTime(context, start);
-            if (m != null) setState(() => mode['start_min'] = m);
+            if (m != null && mounted) setState(() => mode['start_min'] = m);
           }),
         ]),
       const SizedBox(height: 22),
@@ -629,7 +640,7 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
         Row(children: [
           pyrateButton('FROM ${hhmm((h['start_min'] as num).toInt())}', () async {
             final m = await pickTime(context, (h['start_min'] as num).toInt());
-            if (m != null) setState(() => h['start_min'] = m);
+            if (m != null && mounted) setState(() => h['start_min'] = m);
           }),
           const SizedBox(width: 10),
           Expanded(
@@ -659,13 +670,13 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
           trailing: IconButton(icon: const Icon(Icons.close, size: 16, color: boneGhost), onPressed: () => setState(() => slots.removeAt(i))),
           onTap: () async {
             final r = await pyrateSheet<Map<String, dynamic>>(context, SlotEditor(slot: Map<String, dynamic>.from(sl), library: library, hands: hands));
-            if (r != null) setState(() => slots[i] = r);
+            if (r != null && mounted) setState(() => slots[i] = r);
           },
         ),
       TextButton(
         onPressed: () async {
           final r = await pyrateSheet<Map<String, dynamic>>(context, SlotEditor(library: library, hands: hands));
-          if (r != null) setState(() => slots.add(r));
+          if (r != null && mounted) setState(() => slots.add(r));
         },
         child: Text('ADD A REGULAR SHOW', style: carved(10, color: bone)),
       ),
@@ -689,10 +700,10 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
       pyrateButton(speaking ?? 'SPEAK AN IDENT', speaking != null ? null : () async {
         final text = await askText(context, 'A SPOKEN IDENT', 'What the voice says', 'You\'re listening to ${widget.name.isEmpty ? 'Pyrate Radio' : widget.name}, ${frequency(widget.station).toStringAsFixed(1)} on the dial.');
         if (text == null || text.trim().isEmpty) return;
-        setState(() => speaking = 'SPEAKING');
+        if (mounted) setState(() => speaking = 'SPEAKING');
         final path = await speakToFile(text.trim());
         if (path == null) {
-          setState(() => speaking = null);
+          if (mounted) setState(() => speaking = null);
           if (context.mounted) toast(context, 'This phone has no voice to speak with. Install a text-to-speech voice in the phone\'s settings.');
           return;
         }
@@ -739,6 +750,12 @@ class _SlotEditorState extends State<SlotEditor> {
   late bool shuffle = widget.slot?['fill']?['shuffle'] == true;
   late String? hand = widget.slot?['fill']?['key'] as String?;
   late int newest = (widget.slot?['fill']?['count'] as num?)?.toInt() ?? 3;
+  @override
+  void dispose() {
+    title.dispose();
+    about.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -751,7 +768,7 @@ class _SlotEditorState extends State<SlotEditor> {
           Row(children: [
             pyrateButton('AT ${hhmm(start)}', () async {
               final m = await pickTime(context, start);
-              if (m != null) setState(() => start = m);
+              if (m != null && mounted) setState(() => start = m);
             }),
           ]),
           const SizedBox(height: 8),
@@ -840,6 +857,11 @@ class StartShapePicker extends StatefulWidget {
 
 class _StartShapePickerState extends State<StartShapePicker> {
   final feed = TextEditingController();
+  @override
+  void dispose() {
+    feed.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -865,7 +887,7 @@ class _StartShapePickerState extends State<StartShapePicker> {
         Row(children: [
           pyrateButton('FROM ${hhmm(s.start)}', () async {
             final m = await pickTime(context, s.start);
-            if (m != null) setState(() => s.start = m);
+            if (m != null && mounted) setState(() => s.start = m);
           }),
         ]),
         if (s.kind == 'daily') ...[
@@ -881,7 +903,7 @@ class _StartShapePickerState extends State<StartShapePicker> {
         Row(children: [
           pyrateButton('LIVE AT ${hhmm(s.liveAt)}', () async {
             final m = await pickTime(context, s.liveAt);
-            if (m != null) setState(() => s.liveAt = m);
+            if (m != null && mounted) setState(() => s.liveAt = m);
           }),
         ]),
         Wrap(children: [for (final m in [30, 60, 120]) chip(lengthLabel(m), s.liveLen == m, () => setState(() => s.liveLen = m))]),
@@ -1007,6 +1029,11 @@ class FeedsPanel extends StatefulWidget {
 class _FeedsPanelState extends State<FeedsPanel> {
   final url = TextEditingController();
   String? msg;
+  @override
+  void dispose() {
+    url.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1019,7 +1046,7 @@ class _FeedsPanelState extends State<FeedsPanel> {
           Expanded(child: Text(f['url'], maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(11, color: boneFaint))),
           IconButton(icon: const Icon(Icons.close, size: 16, color: boneGhost), onPressed: () async {
             await Feeds.remove(f['url']);
-            setState(() {});
+            if (mounted) setState(() {});
           }),
         ]),
       TextField(controller: url, style: mono(12, color: bone), decoration: pyrateField('A podcast feed URL')),
@@ -1029,7 +1056,7 @@ class _FeedsPanelState extends State<FeedsPanel> {
           if (url.text.trim().isEmpty) return;
           await Feeds.add(widget.station, url.text.trim(), 5);
           url.clear();
-          setState(() => msg = 'Reading it now');
+          if (mounted) setState(() => msg = 'Reading it now');
           final r = await Feeds.refresh();
           if (mounted) setState(() => msg = r);
         }),
@@ -1223,6 +1250,8 @@ class _ChatterPanelState extends State<ChatterPanel> {
     tick?.cancel();
     hailStop?.cancel();
     if (hailing) ship.invokeMethod<Map>('record_stop').then((r) => dropCopy(r?['path'] as String?)).catchError((_) {});
+    say.dispose();
+    name.dispose();
     super.dispose();
   }
 
@@ -1265,7 +1294,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
 
   Future<void> send(String kind, {String text = '', String? track, String? path}) async {
     final r = await Native.callAway({'cmd': 'chat_send', 'station': widget.station, 'kind': kind, 'text': text, if (track != null) 'track': track, if (path != null) 'path': path, 'mime': 'audio/mp4', 'name': name.text.trim()});
-    if (r is Map && r['error'] != null) setState(() => err = r['error']);
+    if (r is Map && r['error'] != null && mounted) setState(() => err = r['error']);
     read();
   }
 
@@ -1733,7 +1762,7 @@ class _NumbersKitState extends State<NumbersKit> {
           'Again. ${gs.map((g) => g.map((d) => _digits[d]).join(', ')).join('. ')}. End of message.';
       final spoken = await speakToFile(text, rate: 0.8, pitch: 0.9);
       if (spoken == null) {
-        setState(() => busy = null);
+        if (mounted) setState(() => busy = null);
         if (mounted) toast(context, 'This phone has no voice to speak with. Install a text-to-speech voice in the phone\'s settings.');
         return;
       }
@@ -1796,6 +1825,7 @@ class _FlockSheetState extends State<FlockSheet> {
   @override
   void dispose() {
     tick?.cancel();
+    paste.dispose();
     super.dispose();
   }
 
