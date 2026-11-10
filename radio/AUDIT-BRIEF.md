@@ -87,7 +87,7 @@ Docs: `DECISIONS.md` (the Ship's Articles, sections I to XXII), `SHIPS-LOG.md`, 
 
 - **Rust checks and tests:** `cargo check`, `cargo test` from `radio/`. End-to-end harnesses: `cargo run -p pyrate-node --bin voyage_test` (22 checks), and `flock_test`, `pocket_test`, `onair_test`, `art_test`.
 - **A private test network:** set `PYRATE_RELAYS` to a local relay and run several lanterns/nodes; browser tabs tested two at a time against a local build. Do not point the public build at test relays.
-- **Lantern:** `cargo run -p pyrate-node --bin lantern -- --seed <folder> --http --relay [--carry-own] --quota-gb <N>`. Env knobs: `PYRATE_DARK`, `PYRATE_PROXY`, `PYRATE_RELAYS`, `PYRATE_PLAYER`, `PYRATE_HAILS`.
+- **Lantern:** `cargo run -p pyrate-node --bin lantern -- --seed <folder> --http --relay [--carry-own] --quota-gb <N>`. Env knobs: `PYRATE_DARK`, `PYRATE_PROXY`, `PYRATE_RELAYS`, `PYRATE_PLAYER`, `PYRATE_HAILS` (keep hails sealed for the keeper; `--open-hails <folder>` opens them).
 - **Browser (public):** `bash browser/build.sh` with no `PYRATE_HARBOUR`/`PYRATE_RELAYS` set (harbour then comes from `app/assets/bootstrap.txt`).
 - **App:** `flutter` is at `/opt/flutter/bin/flutter`, not on PATH. `app/build_native.sh` builds the Android FFI and copies the `.so`, then calls bare `flutter` and fails; after it runs, do `cd app && /opt/flutter/bin/flutter build apk --release --target-platform android-arm64`. Analyze with `/opt/flutter/bin/flutter analyze`. APK is debug-signed in this workspace (consistent with the deployed ones); the real Android release key stays on Dylan's PC.
 - **Landing:** `python3 landing/build.py <apk path> <version>` into `landing/out`, then deploy as in section 4.

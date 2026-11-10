@@ -317,7 +317,7 @@ Every node already carried the whole Log. This voyage asks what a carrier can be
 
 - **Pocket stations.** A station that never shows on the Log. Its key is the invitation: whoever holds it finds the station on its own sealed topic, hears it, carries it and passes it on, and no one else can tell it exists. Its log is asked for by a tag drawn from the key, never by its id, and is never served to a stranger. Raised in the app with a switch, shared by a link or a scanned code, joined in the app or any browser.
 - **Flock.** Several phones in one room play as one. One phone hosts, the others sample its clock over the local relay, keep the closest reading and fall in with it, a hand's trim either way for the slow speaker in the corner. It cannot be faked without real phones in the room.
-- **Hail.** A listener sends the keeper a short voice note, sealed to the station's key and its deputies, that only the keeper can open. A Lantern may hold hails for a keeper who is away, still sealed, in a folder it cannot read.
+- **Hail.** A listener sends the keeper a short voice note, sealed to the station's key and its deputies, that only the keeper can open. A keeper's own Lantern may keep hails for a keeper who is away (`PYRATE_HAILS`), each still sealed to the station and sealed again under the Lantern's hold key, so its disk shows neither a voice nor a sender; `lantern --open-hails <folder>` opens them for the keeper and forgets them.
 - **The drawer phone.** An old phone kept as a Lantern by itself: a foreground service with wake and Wi-Fi locks, a ballast size from one to 256 GB, carrying the Log in the back of a drawer.
 - **Tips with a note.** A listener leaves the keeper a tip with a line of thanks.
 
