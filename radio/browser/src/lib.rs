@@ -142,6 +142,8 @@ struct Ship {
     flock: Mutex<Option<(EndpointId, [u8; 8])>>,
     flock_off: std::sync::atomic::AtomicI64,
     flock_station: Mutex<Option<StationId>>,
+    /// Pocket stations this tab was invited to: their keys and the hosts to start from.
+    pockets: Mutex<HashMap<StationId, ([u8; 32], Vec<EndpointId>)>>,
     rooms: Mutex<HashMap<StationId, Room>>,
     harbour: Vec<EndpointId>,
     tx: Mutex<Option<GossipSender>>,
@@ -185,6 +187,7 @@ impl Ship {
 
     fn serve(&self, req: Request) -> Response {
         match req {
+            Request::Log { station, .. } if self.pockets.lock().unwrap().contains_key(&station) => Response::Entries(vec![]),
             Request::Log { station, from } => Response::Entries(
                 self.archives
                     .lock()
@@ -342,6 +345,10 @@ impl Ship {
     }
 
     async fn sync(&self, station: StationId) -> Result<usize> {
+        let pocket = self.pockets.lock().unwrap().get(&station).cloned();
+        if let Some((key, hosts)) = pocket {
+            return self.pocket_sync(station, key, hosts).await;
+        }
         let mut added = 0;
         for node in self.carriers(&station) {
             loop {
@@ -382,6 +389,32 @@ impl Ship {
         }
         if added > 0 {
             say(&format!("log {}: {added} entries", station.call_sign()));
+        }
+        Ok(added)
+    }
+
+    /// A pocket station's log from its hosts and members, sealed, asked for by its tag.
+    async fn pocket_sync(&self, station: StationId, key: [u8; 32], hosts: Vec<EndpointId>) -> Result<usize> {
+        let tag = pyrate_core::pocket::tag(&key);
+        let mut asked = hosts;
+        asked.extend(self.carriers(&station));
+        asked.dedup();
+        let mut added = 0;
+        for node in asked.into_iter().take(6) {
+            let from = self.archives.lock().unwrap().get(&station).map(|a| a.len()).unwrap_or(0);
+            let Ok(Response::Entries(raw)) = self.ask(node, &Request::PocketLog { tag, from }).await else { continue };
+            let mut archives = self.archives.lock().unwrap();
+            let a = archives.entry(station).or_insert_with(|| Archive::new(station));
+            for b in raw.iter().filter_map(|b| pyrate_core::pocket::open(&key, b)) {
+                let Ok(e) = SignedEntry::from_bytes(&b) else { break };
+                if e.entry.station != station || e.entry.seq < a.len() {
+                    continue;
+                }
+                if a.append(e).is_err() {
+                    break;
+                }
+                added += 1;
+            }
         }
         Ok(added)
     }
@@ -578,6 +611,7 @@ impl Ship {
             .iter()
             .filter_map(|(id, a)| Some((*id, hex(&a.art()?.1?.hash))))
             .collect();
+        let pockets: HashSet<StationId> = self.pockets.lock().unwrap().keys().copied().collect();
         let log = self.log.lock().unwrap();
         let mut v: Vec<(u64, Value)> = log
             .iter()
@@ -592,6 +626,7 @@ impl Ship {
                     "kinds": a.kinds, "mature": a.mature, "explicit": a.explicit, "tip": a.tip,
                     "cover": a.cover.map(|h| hex(&h)), "banner": banners.get(id), "accent": accent,
                     "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),
+                    "pocket": pockets.contains(id),
                 })))
             })
             .collect();
@@ -687,6 +722,7 @@ impl Radio {
             flock: Mutex::new(None),
             flock_off: std::sync::atomic::AtomicI64::new(0),
             flock_station: Mutex::new(None),
+            pockets: Mutex::new(HashMap::new()),
             rooms: Mutex::new(HashMap::new()),
             harbour: harbour.clone(),
             tx: Mutex::new(None),
@@ -943,6 +979,42 @@ impl Radio {
             }
         });
         Ok(())
+    }
+
+    /// Joins a pocket station from its invitation (#pocket=...). Resolves to the station's id.
+    pub fn pocket_join(&self, link: &str) -> Result<js_sys::Promise, JsValue> {
+        let (st, key, host) = pyrate_core::pocket::read_invitation(link).ok_or_else(|| JsValue::from_str("not an invitation"))?;
+        let st = StationId(st);
+        let (id, relay) = host.split_once('@').unwrap_or((host.as_str(), ""));
+        let hosts: Vec<EndpointId> = id.parse().ok().into_iter().collect();
+        if let (Some(h), Ok(url)) = (hosts.first(), relay.parse()) {
+            self.ship.book.add_endpoint_info(iroh::EndpointAddr { id: *h, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+        }
+        self.ship.pockets.lock().unwrap().insert(st, (key, hosts.clone()));
+        let s = self.ship.clone();
+        Ok(wasm_bindgen_futures::future_to_promise(async move {
+            let sub = s.gossip.subscribe(TopicId::from_bytes(pyrate_core::pocket::topic(&key)), hosts.clone()).await.map_err(|e| js(anyhow!("{e}")))?;
+            let (_tx, mut rx) = sub.split();
+            let s2 = s.clone();
+            spawn(async move {
+                let _keep = _tx;
+                while let Some(ev) = rx.next().await {
+                    let Ok(Event::Received(m)) = ev else { continue };
+                    let Some(plain) = pyrate_core::pocket::open(&key, &m.content) else { continue };
+                    let Ok(g) = postcard::from_bytes::<Gossip>(&plain) else { continue };
+                    let ok = match &g {
+                        Gossip::Station(a) => a.station == st,
+                        Gossip::Carrier { station, .. } => *station == st,
+                        _ => false,
+                    };
+                    if ok {
+                        s2.on_gossip(g);
+                    }
+                }
+            });
+            let _ = s.pocket_sync(st, key, hosts).await;
+            Ok(JsValue::from_str(&st.to_hex()))
+        }))
     }
 
     /// The flock host's station, as hex, or empty.

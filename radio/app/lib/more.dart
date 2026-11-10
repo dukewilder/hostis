@@ -338,6 +338,7 @@ class _LogPageState extends State<LogPage> {
                       Flexible(child: Text(s['name'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(19, color: tuned ? bone : boneDim))),
                       if (live) ...[const SizedBox(width: 8), Text('ON AIR', style: carved(9, color: bloodBright, spacing: 0.3))],
                       if (s['kept'] == true) ...[const SizedBox(width: 8), Text('KEPT', style: carved(9, color: brass, spacing: 0.3))],
+                      if (s['pocket'] == true) ...[const SizedBox(width: 8), Text('PRIVATE', style: carved(9, color: boneFaint, spacing: 0.3))],
                       ...seals(s),
                     ]),
                     const SizedBox(height: 2),
