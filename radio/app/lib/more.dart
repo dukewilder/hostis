@@ -678,7 +678,7 @@ Future<void> sweepTemp() async {
 void shareStation(Map s) {
   if (s['pocket'] == true) return;
   ship.invokeMethod('share_text', {
-    'text': 'Tune in to ${s['name']} on Pyrate Radio: https://hostis.black/pyrateradio/listen/#${s['id']}',
+    'text': 'Tune in to ${s['name']} on Pyrate Radio: ${stationLink(s['id'] as String)}',
   });
 }
 

@@ -51,11 +51,11 @@ pub fn open(key: &[u8; 32], sealed: &[u8]) -> Option<Vec<u8>> {
 
 use crate::unhex32;
 
-/// An invitation: hostis.black/pyrateradio/listen/#pocket=<station>.<key>.<host>@<relay>.
+/// An invitation: <open player>#pocket=<station>.<key>.<host>@<relay>.
 /// The part after # never leaves the browser or the phone it is opened on.
 pub fn invitation(station: &[u8; 32], key: &[u8; 32], host: &str) -> String {
     let h = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
-    format!("https://hostis.black/pyrateradio/listen/#pocket={}.{}.{}", h(station), h(key), host)
+    format!("{}#pocket={}.{}.{}", crate::open_player(), h(station), h(key), host)
 }
 
 /// The station, its key, and the host to start from, out of an invitation.

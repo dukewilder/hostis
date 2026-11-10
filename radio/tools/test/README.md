@@ -20,3 +20,5 @@ serve it (`python3 -m http.server <port>`), then rebuild the public page with pl
 - `lantern_stream.py`: plays a station from that Lantern page, breaks the stream, and checks the page reconnects.
 - `browser_trap.py`: a simulated wasm trap; the set comes back aboard once on the same station, then asks for a reload.
 - `browser_hidden.py <port>`: a hidden tab keeps more than a minute queued.
+- `serve_test.sh <relay id> <station id>`: builds both copies against the test network: the open player on 8099, hostis.black's copy on 8097 (with the given station standing in for HOSTIS's), then rebuilds the public copies.
+- `browser_scope.py <station id>`: hostis.black's copy plays only HOSTIS's stations, hands a stranger's station, an invitation or a flock straight to the open player, and shows no chatter.

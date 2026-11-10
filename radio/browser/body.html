@@ -2,10 +2,12 @@
 <nav class="flagbar" aria-label="HOSTIS"><a class="fb-mark" href="https://hostis.black/"><span class="sk" aria-hidden="true">&#9760;&#xFE0E;</span>HOSTIS</a></nav>
 <header class="masthead top">
 <p class="mh-title"><a href="../">Pyrate Radio</a></p>
-<p class="mh-sub">every station on the Log &#183; played in this tab, from whoever carries it</p>
+<p class="mh-sub harbour-only">HOSTIS&#8217;s own stations &#183; every other plays in the <a class="openlink" href="#">open player</a></p>
+<p class="mh-sub open-only">the open player &#183; every station on the Log, from whoever carries it</p>
 <p class="signalrow"><span id="signal" class="signal" role="status"></span><button id="flockleave" class="btn quiet" hidden>Leave the flock</button></p>
 </header>
 
+<p class="leavingnote" role="status">This station is not one of HOSTIS&#8217;s. Taking you to the open player.</p>
 <section class="set" id="set" aria-label="The radio" tabindex="-1">
 <div id="banner" class="banner"></div>
 <div class="plate" aria-hidden="true"><span>Receiver</span><span class="band">88 to 108</span><span>Under HOSTIS colours</span></div>
@@ -34,7 +36,7 @@
 <button id="pass" class="btn" hidden>Pass it on</button>
 <button id="clip" class="btn" hidden>Clip it</button>
 <button id="tip" class="btn" hidden>Tip</button>
-<button id="maroon" class="btn quiet" hidden>Maroon</button>
+<button id="maroon" class="btn quiet open-only" hidden>Maroon</button>
 </div>
 <svg class="vu" viewBox="0 0 120 70" aria-hidden="true"><path class="arc" d="M14 62 A50 50 0 0 1 106 62"/><path class="hot" d="M88 27 A50 50 0 0 1 106 62"/><g class="ticks" id="ticks"></g><line id="vun" class="vun" x1="60" y1="64" x2="60" y2="18"/><circle cx="60" cy="64" r="3.5" class="hub"/><text x="60" y="58" class="vulabel">VU</text></svg>
 </div>
@@ -44,12 +46,16 @@
 <audio id="a" playsinline></audio>
 </section>
 
+<p id="appnote" class="appnote" hidden>Pyrate Radio on this phone? <a id="appopen" href="#">Open this station in the app</a></p>
+<p class="takeset open-only"><a href="../#set"><span class="ts-lead">Take the set</span><span class="ts-sub">the app for android &#183; plays with the screen off &#183; raise your own station</span></a></p>
 <div class="divider"><span class="divider-glyph"></span></div>
 
 <div class="below">
 <section class="page" id="page" hidden>
 <div id="notices"></div>
 <div class="sechead"><h2>Chatter</h2><span class="cap">kept by nobody</span></div>
+<p class="fine harbour-only">This station&#8217;s chatter, its cheers and its hails are in the <a id="chatopen" class="openlink" href="#">open player</a>, one tap away.</p>
+<div class="open-only">
 <div id="chatjoin"><p class="fine">Talk with whoever else is listening, cheer what is on, or ask the station for a recording. Lines pass between the people in the room and are gone. Joining tells the others in the room that you are here, which listening alone never does.</p><p class="centre"><button id="chatgo" class="btn">Join the chatter</button></p></div>
 <div id="chatroom" class="chat" hidden>
 <p id="chatwho" class="fine"></p>
@@ -57,6 +63,7 @@
 <form id="say" class="say"><input id="sayt" maxlength="280" autocomplete="off" placeholder="Say something" aria-label="Say something"><button class="btn" type="submit">Say</button></form>
 <div class="sayrow"><button id="cheer" class="btn">Cheers</button><button id="askfor" class="btn">Ask for a recording</button><button id="hail" class="btn">Hail the keeper</button><button id="chatleave" class="btn quiet">Leave</button><input id="myname" maxlength="32" placeholder="Your name in the room" aria-label="Your name in the room"></div>
 <div id="askbox" hidden><select id="asktrack" aria-label="A recording"></select><input id="asknote" maxlength="140" placeholder="A word with it, if you like" aria-label="A word with it"><button id="asksend" class="btn">Ask</button></div>
+</div>
 </div>
 <div class="sechead gap"><h2 id="nexth">Up Next</h2><span class="cap">from the station's own log</span></div>
 <div id="next"></div>
@@ -67,14 +74,20 @@
 </section>
 
 <section class="log">
-<div class="sechead"><h2>On the Air</h2><span class="cap">most aboard first &#183; ranked by nobody</span></div>
-<p class="fine">Every station this tab has heard of. The tab checks each station's signature and plays from whoever carries it.</p>
+<div class="sechead harbour-only"><h2>HOSTIS on the Air</h2><span class="cap">the stations HOSTIS raises</span></div>
+<div class="sechead open-only"><h2>On the Air</h2><span class="cap">most aboard first &#183; ranked by nobody</span></div>
+<p class="fine open-only">Every station this tab has heard of. The tab checks each station's signature and plays from whoever carries it.</p>
 <div class="views" role="group" aria-label="How to show the Log"><button id="vlist" class="btn on" aria-pressed="true">The list</button><button id="vchart" class="btn" aria-pressed="false">The chart</button></div>
 <div id="chart" class="chart" hidden></div>
 <div id="rows"></div>
+<div class="harbour-only everyone">
+<p class="fine">Every other station on the Log plays in the open player: the same set, served from IPFS and from Lanterns, owned by nobody.</p>
+<p class="centre"><a class="lead-btn openlink" href="#"><span class="fc-lead">Every station</span><span class="fc-sub">the open player &#183; the whole Log</span></a></p>
+</div>
 <div class="sechead gap"><h2>Take the Set</h2><span class="cap">android &#183; no store, no account</span></div>
 <p class="fine">The app plays with the screen off, keeps the stations you love on your phone and raises stations of your own.</p>
 <p class="centre"><a class="lead-btn" href="../#set"><span class="fc-lead">Take the set</span><span class="fc-sub">the app for android</span></a></p>
+<div class="open-only">
 <div class="sechead gap"><h2>Your Colours</h2><span class="cap">kept in this browser</span></div>
 <p class="fine">What reaches you is your own choice. A marooned station leaves this browser's Log. Lists of marooned stations pass from hand to hand: paste one in to take it aboard, or copy yours out to share.</p>
 <div class="switches">
@@ -85,6 +98,7 @@
 <p class="fine">Each station says for itself whether it is mature or explicit. A station that lies about it is yours to maroon.</p>
 <p class="centre"><button id="mlist" class="btn">Maroon list</button></p>
 <div id="mbox" hidden><textarea id="mtext" spellcheck="false" aria-label="The maroon list"></textarea><div class="row-btns"><button id="mtake" class="btn">Take aboard</button><button id="mclear" class="btn quiet">Bring every station back</button></div><div id="mnote" class="fine"></div></div>
+</div>
 <details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your switches and marooned stations, the harbours it has met, your name and mutes in the chatter, the secret each room's voice is drawn from, and any pocket invitations you opened. It sends none of this anywhere. The address bar holds the public station you are on, and a pocket's never.</p><p>Forgetting it all makes this browser a stranger to the radio: a new voice in every room, and no pockets.</p></div></details>
 <p class="centre"><button id="forget" class="btn quiet">Forget this browser</button></p>
 </section>

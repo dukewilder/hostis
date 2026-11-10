@@ -1341,6 +1341,8 @@ impl Node {
         }
         let proto = Proto(Arc::new(Mutex::new(None)));
         let public_dns = cfg.public_dns;
+        // PYRATE_OPEN_PLAYER: where this node's invitations and flock links point.
+        if let Ok(u) = std::env::var("PYRATE_OPEN_PLAYER") { pyrate_core::set_open_player(&u); }
         let dark = std::env::var_os("PYRATE_DARK").is_some_and(|v| v != "0");
         // The network's own address book, filled from carriers' signed harbour notes.
         let book = iroh::address_lookup::MemoryLookup::new();
@@ -1740,6 +1742,8 @@ impl Node {
                 let live = inner.live.lock().unwrap().map(|(s, t)| json!({ "station": s.to_hex(), "since_ms": now_ms().saturating_sub(t) }));
                 Ok(json!({ "node": self.id().to_string(), "mine": mine, "jobs": jobs, "tuned": tuned, "now": np, "live": live }))
             }
+            // Where links for stations other than HOSTIS's point (the app's open player).
+            "open_player" => Ok(json!({ "ok": pyrate_core::set_open_player(req["url"].as_str().unwrap_or("")) })),
             "stations" => Ok(inner.stations_with(req["marooned"].as_bool().unwrap_or(false))),
             "keep" | "maroon" => {
                 let st = station()?;

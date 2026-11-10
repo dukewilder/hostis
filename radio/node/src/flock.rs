@@ -123,7 +123,7 @@ impl Inner {
 impl Inner {
     fn flock_link(&self, code: &[u8; 8]) -> String {
         let relay = self.endpoint.addr().relay_urls().next().map(|u| u.to_string()).unwrap_or_default();
-        format!("https://hostis.black/pyrateradio/listen/#flock={}@{}~{}", self.endpoint.id(), relay, hex(code))
+        format!("{}#flock={}@{}~{}", pyrate_core::open_player(), self.endpoint.id(), relay, hex(code))
     }
 }
 

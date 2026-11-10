@@ -203,7 +203,7 @@ async fn feed(State(w): State<Web>, Path(id): Path<String>, h: HeaderMap) -> Res
         _ => (st.call_sign(), String::new()),
     };
     let base = xml(&base(&h));
-    let link = format!("https://hostis.black/pyrateradio/listen/#{}", st.to_hex());
+    let link = format!("{}#{}", pyrate_core::open_player(), st.to_hex());
     let cover = a.art().and_then(|(c, _, _)| c).map(|c| format!("{base}/art/{}.jpg", crate::hex(&c.hash)));
     let lib = a.library().unwrap_or_default();
     let mut items = String::new();
