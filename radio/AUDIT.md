@@ -8,8 +8,6 @@ Each entry gives the threat, whether the wall held, and the fix.
 
 ### Track B: privacy, anonymity and decentralisation
 
-**B9. The PIN falls to a fast hash.** The Colours PIN is stored as a salted BLAKE3 hash, so a seized disk gives up a four-digit PIN at once, and with it any lock-screen PIN that matches. Holds only against a casual look. Fix: a memory-hard hash (Argon2id).
-
 ### Track A: the clock, the programme, sound and pictures
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
@@ -201,6 +199,8 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **P12. Station ids, bells and the alarm station sit in plaintext SharedPreferences and prefs.json.** (medium) Fixed: the node's chart, settings, pocket invitations and counts are sealed under the hold key (see B8). What remains: the Android side's own small store (the last station, bells and the wake station in SharedPreferences) is still in the clear. (359c9ae)
 
-**C17. Aboard token broadcasts what the tab is tuned to, whether or not it plays.** (medium) Fixed: a tab is counted aboard only while it plays (the page says when listening starts and stops), and its hourly token goes to an exit through a first hop drawn once a visit, as a phone's does: the first hop sees the tab and not the station, the exit the station and not the tab. With a single node to hand it falls back to the harbour, which would hear it anyway. The seal for private requests now lives in the core, shared by phones and tabs. Checked in Chromium against two Lanterns: nothing is counted while browsing, and the token goes through two hops once listening; voyage 22 of 22. (pending)
+**C17. Aboard token broadcasts what the tab is tuned to, whether or not it plays.** (medium) Fixed: a tab is counted aboard only while it plays (the page says when listening starts and stops), and its hourly token goes to an exit through a first hop drawn once a visit, as a phone's does: the first hop sees the tab and not the station, the exit the station and not the tab. With a single node to hand it falls back to the harbour, which would hear it anyway. The seal for private requests now lives in the core, shared by phones and tabs. Checked in Chromium against two Lanterns: nothing is counted while browsing, and the token goes through two hops once listening; voyage 22 of 22. (99cbb2f)
 
-**C19. Peers can probe a tab for what it has just played.** (medium) Fixed: a tab now answers nobody about what it holds: requests for logs, sealed chunks and plain chunks get nothing. It takes from the network and gives back its count and its chatter. (pending)
+**C19. Peers can probe a tab for what it has just played.** (medium) Fixed: a tab now answers nobody about what it holds: requests for logs, sealed chunks and plain chunks get nothing. It takes from the network and gives back its count and its chatter. (99cbb2f)
+
+**B9. The PIN falls to a fast hash.** The Colours PIN is stored as a salted BLAKE3 hash, so a seized disk gives up a four-digit PIN at once, and with it any lock-screen PIN that matches. Holds only against a casual look. Fixed: the PIN is kept under Argon2id (32 MiB, three passes), so each guess against a copy of the file costs real time, and a PIN from before is moved to it the first time it is entered right. The app checks and sets it off the screen's thread, and asking only whether one is set costs nothing. Unit tested. (pending)
