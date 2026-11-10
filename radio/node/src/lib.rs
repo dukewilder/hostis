@@ -1049,14 +1049,21 @@ impl Inner {
         h.update(guest);
         h.update(&hour.to_le_bytes());
         let token = *h.finalize().as_bytes();
-        let (me, st) = (self.clone(), *station);
-        // One guest at a time does the work, so a flood of tabs cannot flood the CPU.
-        static WORK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        std::thread::spawn(move || {
-            let _g = WORK.lock().unwrap();
-            let nonce = net::token_find(&st, hour, &token);
-            me.accept_token(st, hour, token, nonce, true);
+        // One worker does the work for every guest, from a short queue: a flood of tabs
+        // cannot flood the machine with threads, and past the queue a guest goes uncounted.
+        type Job = (Arc<Inner>, StationId, u64, [u8; 32]);
+        static QUEUE: std::sync::OnceLock<std::sync::mpsc::SyncSender<Job>> = std::sync::OnceLock::new();
+        let q = QUEUE.get_or_init(|| {
+            let (tx, rx) = std::sync::mpsc::sync_channel::<Job>(64);
+            std::thread::spawn(move || {
+                for (me, st, hour, token) in rx {
+                    let nonce = net::token_find(&st, hour, &token);
+                    me.accept_token(st, hour, token, nonce, true);
+                }
+            });
+            tx
         });
+        let _ = q.try_send((self.clone(), *station, hour, token));
     }
 
     pub fn archive(&self, id: &StationId) -> Option<Archive> {

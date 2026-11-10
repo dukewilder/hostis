@@ -43,15 +43,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
 
-- **C3** (high) count_guest spawns one OS thread per request, with no cap. `node/src/web.rs:325-328`
-- **C4** (high) Episode generation holds the whole recording in memory. `node/src/web.rs:205-232`
-- **C5** (medium) Concurrent first requests for one episode race on the same temp file. `node/src/web.rs:198-247`
-- **C6** (medium) Cached episodes ignore withdrawal and ignore which station owns the track. `node/src/web.rs:198-203`
-- **C7** (medium) Streaming tower busy-loops on bad entries. `node/src/web.rs:428`
-- **C8** (medium) No connection, rate or time limits on the HTTP listener; `--web-all` lets anyone spawn encoders. `node/src/web.rs:52-70`
-- **C9** (medium) Feed XML: unescaped Host-derived attributes and control characters. `node/src/web.rs:124-134`
-- **C10** (low) Episode Range handling reads the whole file per request and mis-answers unsatisfiable ranges. `node/src/web.rs:248-265`
-- **C11** (medium) Per-request cost amplification on unauthenticated routes. `node/src/web.rs:72-78`
 - **C12** (low) Lantern page and tower have no recovery when the stream ends. `node/src/web.rs:442-449`
 - **C13** (low) /player/ mirror: broken home links, no redirect, no hardening headers. `node/src/web.rs:62-63`
 - **C15** (high) Unsigned Carrier gossip: fake carriers jump the queue, grow memory and eclipse peers. `browser/src/lib.rs:328-345`
@@ -174,12 +165,30 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **A10. Clock correction jumps from 0 to 2 s instead of easing in.** (low) Fixed: the correction turns on past 2.5 seconds and off below one (see A1). (417040b)
 
-**A2. `t - cursor` underflow in `walk` when a run's computed start is after `t` (panic in debug, garbage in release).** (high) Fixed: every walk now refuses a start after the moment asked about, a tape whose start the clocks have only just reached begins a day or a week earlier, and a programme read from a log is made sane (offsets clamped to fourteen hours and sorted, minutes taken within the day, lengths within the week, days within seven). Regression tests: Berlin's spring change and a weekly tape at minute 65,535. (pending)
+**A2. `t - cursor` underflow in `walk` when a run's computed start is after `t` (panic in debug, garbage in release).** (high) Fixed: every walk now refuses a start after the moment asked about, a tape whose start the clocks have only just reached begins a day or a week earlier, and a programme read from a log is made sane (offsets clamped to fourteen hours and sorted, minutes taken within the day, lengths within the week, days within seven). Regression tests: Berlin's spring change and a weekly tape at minute 65,535. (bbfe09d)
 
-**A22. Spring-forward gap and `utc_ms` are inconsistent between east and west zones.** (low) Fixed: a local minute that was skipped begins when the clocks changed, and one that came twice begins the first time, by the same rule east and west of UTC. Tested at Berlin's spring change. (pending)
+**A22. Spring-forward gap and `utc_ms` are inconsistent between east and west zones.** (low) Fixed: a local minute that was skipped begins when the clocks changed, and one that came twice begins the first time, by the same rule east and west of UTC. Tested at Berlin's spring change. (bbfe09d)
 
-**A3. Rota walk has no step cap: a track of a few milliseconds hangs the lookup.** (high) Fixed: a recording under a second is not played (an Article ruling), the rota's walk has the same step cap as the programme's, and the watch bill has a budget of steps across all its lookups. A regression test signs a twenty-millisecond track and finds the clock quick and silent. (pending)
+**A3. Rota walk has no step cap: a track of a few milliseconds hangs the lookup.** (high) Fixed: a recording under a second is not played (an Article ruling), the rota's walk has the same step cap as the programme's, and the watch bill has a budget of steps across all its lookups. A regression test signs a twenty-millisecond track and finds the clock quick and silent. (bbfe09d)
 
-**A7. `at_ms + show_len` overflows for a signed Show with a huge `at_ms`.** (medium) Fixed: show ends are added with saturation. Tested with a show dated at u64::MAX. (pending)
+**A7. `at_ms + show_len` overflows for a signed Show with a huge `at_ms`.** (medium) Fixed: show ends are added with saturation. Tested with a show dated at u64::MAX. (bbfe09d)
 
-**A16. Spans and tables read from the log are not validated, so `now` and `listings` can disagree and costs are unbounded.** (low) Fixed: the clock builds one index of tracks by hash and normalises the programme once, in Clock::new (see A2). (pending)
+**A16. Spans and tables read from the log are not validated, so `now` and `listings` can disagree and costs are unbounded.** (low) Fixed: the clock builds one index of tracks by hash and normalises the programme once, in Clock::new (see A2). (bbfe09d)
+
+**C3. count_guest spawns one OS thread per request, with no cap.** (high) Fixed: one worker counts every web guest from a queue of 64, and a guest past a full queue goes uncounted; a tab is counted once it has listened thirty seconds, then hourly, so reconnects are not a crowd. (pending)
+
+**C4. Episode generation holds the whole recording in memory.** (high) Fixed: an episode is made a chunk at a time straight to disk, so memory stays flat however long the show, and recordings over six hours are refused. On the way a fault surfaced in the LAME wrapper: it writes into a vector's spare room and gives LAME no size when there is none, so the worst case is now reserved before every call. (pending)
+
+**C5. Concurrent first requests for one episode race on the same temp file.** (medium) Fixed: two requests for one episode wait on one maker, and each maker writes its own temporary file; at most two episodes are made at once. (pending)
+
+**C6. Cached episodes ignore withdrawal and ignore which station owns the track.** (medium) Fixed: an episode is served only if the recording is in the named station's library now, and the cache is named by station and recording. (pending)
+
+**C7. Streaming tower busy-loops on bad entries.** (medium) Fixed: a tower sleeps after any step that sends nothing and comes down after a minute of them; an off-air wait does not count. (pending)
+
+**C8. No connection, rate or time limits on the HTTP listener; `--web-all` lets anyone spawn encoders.** (medium) Fixed: the gangway streams to at most 512 listeners and 32 stations at once, and refuses a station it does not hold before starting a tower. What remains: no header-read timeout of its own; the tunnel in front of it is the first line for slow clients. (pending)
+
+**C9. Feed XML: unescaped Host-derived attributes and control characters.** (medium) Fixed: feed text drops the control characters XML forbids, and the base address takes only a plain host name and http or https, escaped. (pending)
+
+**C10. Episode Range handling reads the whole file per request and mis-answers unsatisfiable ranges.** (low) Fixed: episodes are read from disk as they go out, with suffix ranges and 416 for a range past the end. (pending)
+
+**C11. Per-request cost amplification on unauthenticated routes.** (medium) Fixed: a picture is looked for only among the stations the page may show. What remains: /now and /log.json still work out their answers on every request, cheap for a Lantern's own few stations. (pending)

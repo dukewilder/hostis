@@ -31,6 +31,14 @@ use crate::{Inner, now_ms, say};
 const PAGE: &str = include_str!("web/listen.html");
 /// How far ahead of the hour the encoder runs. Browsers buffer the rest.
 const LEAD_MS: u64 = 4_000;
+/// Listeners one gangway serves at once, and stations it streams at once.
+const MAX_LISTENERS: usize = 512;
+const MAX_TOWERS: usize = 32;
+/// The longest recording made into an episode, and how many are made at a time.
+const MAX_EPISODE_MS: u64 = 6 * 3_600_000;
+const EPISODE_MAKERS: usize = 2;
+/// A tab is counted aboard once it has listened this long.
+const COUNT_AFTER_MS: u64 = 30_000;
 
 type Towers = Arc<Mutex<HashMap<StationId, broadcast::Sender<Bytes>>>>;
 
@@ -41,6 +49,10 @@ struct Web {
     /// The gangway carries only its own Lantern's stations unless told otherwise. A public
     /// page that streams any station makes its keeper the distributor of whatever is on air.
     every_station: bool,
+    listeners: Arc<tokio::sync::Semaphore>,
+    makers: Arc<tokio::sync::Semaphore>,
+    /// Episodes being made, so two requests for one recording make it once.
+    making: Arc<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
 }
 
 impl Web {
@@ -51,7 +63,14 @@ impl Web {
 }
 
 pub async fn serve(inner: Arc<Inner>, addr: SocketAddr, every_station: bool) -> anyhow::Result<()> {
-    let web = Web { inner, towers: Arc::new(Mutex::new(HashMap::new())), every_station };
+    let web = Web {
+        inner,
+        towers: Arc::new(Mutex::new(HashMap::new())),
+        every_station,
+        listeners: Arc::new(tokio::sync::Semaphore::new(MAX_LISTENERS)),
+        makers: Arc::new(tokio::sync::Semaphore::new(EPISODE_MAKERS)),
+        making: Arc::new(Mutex::new(HashMap::new())),
+    };
     let app = Router::new()
         .route("/", get(|| async { Html(PAGE) }))
         .route("/log.json", get(log))
@@ -122,15 +141,30 @@ async fn now(State(w): State<Web>, Path(id): Path<String>) -> Response {
     ([(header::CACHE_CONTROL, "no-store")], axum::Json(body)).into_response()
 }
 
+/// Text made safe for XML: escaped, and without the control characters XML 1.0 forbids, any
+/// one of which would make a podcast app refuse the whole feed.
 fn xml(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    s.chars()
+        .filter(|c| !c.is_control() || matches!(c, '\t' | '\n' | '\r'))
+        .collect::<String>()
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 /// Where this page is reached from, for links inside the feed: the tunnel's name, not ours.
+/// Only a plain host name and http or https are taken from the request.
 fn base(h: &HeaderMap) -> String {
     let host = h.get("x-forwarded-host").or(h.get(header::HOST)).and_then(|v| v.to_str().ok()).unwrap_or("localhost");
+    let host = if !host.is_empty() && host.len() <= 255 && host.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']')) { host } else { "localhost" };
     let local = host.starts_with("127.") || host.starts_with("localhost") || host.starts_with("[::1]");
-    let proto = h.get("x-forwarded-proto").and_then(|v| v.to_str().ok()).unwrap_or(if local { "http" } else { "https" });
+    let proto = match h.get("x-forwarded-proto").and_then(|v| v.to_str().ok()) {
+        Some("http") => "http",
+        Some("https") => "https",
+        _ if local => "http",
+        _ => "https",
+    };
     format!("{proto}://{host}")
 }
 
@@ -162,7 +196,7 @@ async fn feed(State(w): State<Web>, Path(id): Path<String>, h: HeaderMap) -> Res
         Some(Entry::Colours { name, about, .. }) => (name.clone(), about.clone()),
         _ => (st.call_sign(), String::new()),
     };
-    let base = base(&h);
+    let base = xml(&base(&h));
     let link = format!("https://hostis.black/pyrateradio/listen/#{}", st.to_hex());
     let cover = a.art().and_then(|(c, _, _)| c).map(|c| format!("{base}/art/{}.jpg", crate::hex(&c.hash)));
     let lib = a.library().unwrap_or_default();
@@ -189,81 +223,135 @@ async fn feed(State(w): State<Web>, Path(id): Path<String>, h: HeaderMap) -> Res
     ([(header::CONTENT_TYPE, "application/rss+xml; charset=utf-8"), (header::CACHE_CONTROL, "max-age=300")], body).into_response()
 }
 
-/// One recording as an MP3 for podcast apps, encoded once and kept on disk.
+/// One recording as an MP3 for podcast apps, encoded once and kept on disk. It is made a chunk
+/// at a time, so a three-hour show costs no more memory than a song, and two requests for the
+/// same recording make it once.
 async fn episode(State(w): State<Web>, Path((id, track)): Path<(String, String)>, h: HeaderMap) -> Response {
     let Ok(st) = StationId::from_hex(&id) else { return StatusCode::NOT_FOUND.into_response() };
     let Ok(th) = crate::unhex(track.trim_end_matches(".mp3")) else { return StatusCode::NOT_FOUND.into_response() };
     if !w.allowed(&st) {
         return StatusCode::NOT_FOUND.into_response();
     }
+    // The recording must be in this station's library now: a withdrawn one, or another
+    // station's, is not served from the cache either.
+    let Some(a) = w.inner.archive(&st) else { return StatusCode::NOT_FOUND.into_response() };
+    let found = a.library().unwrap_or_default().into_iter().find(|(x, _)| *x == th).map(|(_, e)| e.entry.body().clone());
+    let Some(Entry::Track { chunks, channels, .. }) = found else { return StatusCode::NOT_FOUND.into_response() };
+    if chunks.iter().map(|c| c.duration_ms()).sum::<u64>() > MAX_EPISODE_MS || !(1..=2).contains(&channels) {
+        return StatusCode::PAYLOAD_TOO_LARGE.into_response();
+    }
     let dir = w.inner.cfg.dir.join("episodes");
-    let path = dir.join(format!("{}.mp3", crate::hex(&th)));
+    let key = format!("{}-{}", st.to_hex(), crate::hex(&th));
+    let path = dir.join(format!("{key}.mp3"));
     if !path.exists() {
-        let Some(a) = w.inner.archive(&st) else { return StatusCode::NOT_FOUND.into_response() };
-        let found = a.library().unwrap_or_default().into_iter().find(|(x, _)| *x == th);
-        let Some((_, e)) = found else { return StatusCode::NOT_FOUND.into_response() };
-        let Entry::Track { chunks, channels, .. } = e.entry.body().clone() else { return StatusCode::NOT_FOUND.into_response() };
-        let mut pcm = Vec::new();
-        let Ok(mut dec) = ChunkDecoder::new(channels) else { return StatusCode::INTERNAL_SERVER_ERROR.into_response() };
-        for c in &chunks {
-            let Ok(bytes) = w.inner.chunk(&st, &c.hash).await else { return StatusCode::SERVICE_UNAVAILABLE.into_response() };
-            pcm.extend(dec.decode(&bytes).unwrap_or_default());
-        }
-        let mp3 = tokio::task::spawn_blocking(move || -> Option<Vec<u8>> {
-            let mut lame = mp3lame_encoder::Builder::new()?;
-            lame.set_num_channels(channels.clamp(1, 2)).ok()?;
-            lame.set_sample_rate(48_000).ok()?;
-            lame.set_brate(if channels == 1 { mp3lame_encoder::Bitrate::Kbps64 } else { mp3lame_encoder::Bitrate::Kbps128 }).ok()?;
-            lame.set_quality(mp3lame_encoder::Quality::Good).ok()?;
-            let mut lame = lame.build().ok()?;
-            let mut out = Vec::with_capacity(pcm.len() / 3);
-            for part in pcm.chunks(48_000 * channels as usize) {
-                if channels == 1 {
-                    lame.encode_to_vec(mp3lame_encoder::MonoPcm(part), &mut out).ok()?;
-                } else {
-                    lame.encode_to_vec(mp3lame_encoder::InterleavedPcm(part), &mut out).ok()?;
+        let lock = w.making.lock().unwrap().entry(key.clone()).or_default().clone();
+        let _making = lock.lock().await;
+        if !path.exists() {
+            let Ok(_permit) = w.makers.clone().acquire_owned().await else { return StatusCode::SERVICE_UNAVAILABLE.into_response() };
+            let _ = std::fs::create_dir_all(&dir);
+            let tmp = dir.join(format!("{key}.{}.part", now_ms()));
+            let (inner, handle, tmp2) = (w.inner.clone(), tokio::runtime::Handle::current(), tmp.clone());
+            let made = tokio::task::spawn_blocking(move || make_episode(&inner, &handle, st, &chunks, channels, &tmp2)).await.ok().flatten();
+            if made.is_none() || std::fs::rename(&tmp, &path).is_err() {
+                let _ = std::fs::remove_file(&tmp);
+                return StatusCode::SERVICE_UNAVAILABLE.into_response();
+            }
+            // Keep the newest forty; the rest can be made again.
+            if let Ok(rd) = std::fs::read_dir(&dir) {
+                let mut files: Vec<_> = rd.filter_map(|f| f.ok()).filter(|f| f.path().extension().is_some_and(|e| e == "mp3")).filter_map(|f| Some((f.metadata().ok()?.modified().ok()?, f.path()))).collect();
+                files.sort();
+                let n = files.len().saturating_sub(40);
+                for (_, f) in files.into_iter().take(n) {
+                    let _ = std::fs::remove_file(f);
                 }
             }
-            lame.flush_to_vec::<mp3lame_encoder::FlushNoGap>(&mut out).ok()?;
-            Some(out)
-        })
-        .await
-        .ok()
-        .flatten();
-        let Some(mp3) = mp3 else { return StatusCode::INTERNAL_SERVER_ERROR.into_response() };
-        let _ = std::fs::create_dir_all(&dir);
-        let tmp = path.with_extension("part");
-        if std::fs::write(&tmp, &mp3).and_then(|_| std::fs::rename(&tmp, &path)).is_err() {
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
-        // Keep the newest forty; the rest can be made again.
-        if let Ok(rd) = std::fs::read_dir(&dir) {
-            let mut files: Vec<_> = rd.filter_map(|f| f.ok()).filter_map(|f| Some((f.metadata().ok()?.modified().ok()?, f.path()))).collect();
-            files.sort();
-            let n = files.len().saturating_sub(40);
-            for (_, f) in files.into_iter().take(n) {
-                let _ = std::fs::remove_file(f);
+        w.making.lock().unwrap().remove(&key);
+    }
+    serve_file(&path, &h).await
+}
+
+/// Fetches, decodes and encodes a recording chunk by chunk into `out`.
+fn make_episode(inner: &Arc<Inner>, handle: &tokio::runtime::Handle, st: StationId, chunks: &[pyrate_core::Chunk], channels: u8, out: &std::path::Path) -> Option<()> {
+    use std::io::Write;
+    let mut lame = mp3lame_encoder::Builder::new()?;
+    lame.set_num_channels(channels).ok()?;
+    lame.set_sample_rate(48_000).ok()?;
+    lame.set_brate(if channels == 1 { mp3lame_encoder::Bitrate::Kbps64 } else { mp3lame_encoder::Bitrate::Kbps128 }).ok()?;
+    lame.set_quality(mp3lame_encoder::Quality::Good).ok()?;
+    let mut lame = lame.build().ok()?;
+    let mut dec = ChunkDecoder::new(channels).ok()?;
+    let mut file = std::io::BufWriter::new(std::fs::File::create(out).ok()?);
+    let mut buf = Vec::new();
+    for c in chunks {
+        let bytes = handle.block_on(inner.chunk(&st, &c.hash)).ok()?;
+        let pcm = dec.decode(&bytes).unwrap_or_default();
+        // A second at a time. The wrapper writes into the vector's spare room and tells LAME
+        // nothing of its size when there is none, so LAME's worst case is reserved first:
+        // without it, it writes past the end.
+        for part in pcm.chunks(48_000 * channels as usize) {
+            buf.clear();
+            buf.reserve(part.len() * 5 / 4 + 7_200);
+            if channels == 1 {
+                lame.encode_to_vec(mp3lame_encoder::MonoPcm(part), &mut buf).ok()?;
+            } else {
+                lame.encode_to_vec(mp3lame_encoder::InterleavedPcm(part), &mut buf).ok()?;
+            }
+            file.write_all(&buf).ok()?;
+        }
+    }
+    buf.clear();
+    buf.reserve(7_200);
+    lame.flush_to_vec::<mp3lame_encoder::FlushNoGap>(&mut buf).ok()?;
+    file.write_all(&buf).ok()?;
+    file.flush().ok()
+}
+
+/// A file on disk, in the pieces podcast apps ask for: a range, a suffix, or the whole,
+/// read as it goes out rather than loaded whole.
+async fn serve_file(path: &std::path::Path, h: &HeaderMap) -> Response {
+    use tokio::io::{AsyncReadExt, AsyncSeekExt};
+    let Ok(mut f) = tokio::fs::File::open(path).await else { return StatusCode::NOT_FOUND.into_response() };
+    let Ok(total) = f.metadata().await.map(|m| m.len()) else { return StatusCode::NOT_FOUND.into_response() };
+    let asked = h.get(header::RANGE).and_then(|v| v.to_str().ok()).and_then(|r| r.strip_prefix("bytes="));
+    let (status, start, end) = match asked.map(|r| r.split_once('-')) {
+        None => (StatusCode::OK, 0, total.saturating_sub(1)),
+        Some(Some(("", n))) => match n.parse::<u64>() {
+            Ok(n) if n > 0 && total > 0 => (StatusCode::PARTIAL_CONTENT, total.saturating_sub(n), total - 1),
+            _ => return (StatusCode::RANGE_NOT_SATISFIABLE, [(header::CONTENT_RANGE, format!("bytes */{total}"))]).into_response(),
+        },
+        Some(Some((a, b))) => match (a.parse::<u64>(), if b.is_empty() { Ok(total.saturating_sub(1)) } else { b.parse::<u64>() }) {
+            (Ok(s), Ok(e)) if s < total && s <= e => (StatusCode::PARTIAL_CONTENT, s, e.min(total - 1)),
+            _ => return (StatusCode::RANGE_NOT_SATISFIABLE, [(header::CONTENT_RANGE, format!("bytes */{total}"))]).into_response(),
+        },
+        Some(None) => (StatusCode::OK, 0, total.saturating_sub(1)),
+    };
+    if f.seek(std::io::SeekFrom::Start(start)).await.is_err() {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let len = if total == 0 { 0 } else { end - start + 1 };
+    let body = stream::unfold((f, len), |(mut f, left)| async move {
+        if left == 0 {
+            return None;
+        }
+        let mut b = vec![0u8; left.min(64 * 1024) as usize];
+        match f.read(&mut b).await {
+            Ok(0) | Err(_) => None,
+            Ok(n) => {
+                b.truncate(n);
+                Some((Ok::<Bytes, std::io::Error>(Bytes::from(b)), (f, left - n as u64)))
             }
         }
-    }
-    let Ok(bytes) = std::fs::read(&path) else { return StatusCode::NOT_FOUND.into_response() };
-    let total = bytes.len();
-    // Podcast apps ask for pieces.
-    let range = h.get(header::RANGE).and_then(|v| v.to_str().ok()).and_then(|r| r.strip_prefix("bytes=")).and_then(|r| {
-        let (a, b) = r.split_once('-')?;
-        let start: usize = a.parse().ok()?;
-        let end: usize = if b.is_empty() { total.saturating_sub(1) } else { b.parse::<usize>().ok()?.min(total.saturating_sub(1)) };
-        (start <= end && end < total).then_some((start, end))
     });
-    match range {
-        Some((s0, e0)) => (
-            StatusCode::PARTIAL_CONTENT,
-            [(header::CONTENT_TYPE, "audio/mpeg".to_string()), (header::ACCEPT_RANGES, "bytes".into()), (header::CONTENT_RANGE, format!("bytes {s0}-{e0}/{total}"))],
-            bytes[s0..=e0].to_vec(),
-        )
-            .into_response(),
-        None => ([(header::CONTENT_TYPE, "audio/mpeg"), (header::ACCEPT_RANGES, "bytes")], bytes).into_response(),
+    let mut r = Response::builder()
+        .status(status)
+        .header(header::CONTENT_TYPE, "audio/mpeg")
+        .header(header::ACCEPT_RANGES, "bytes")
+        .header(header::CONTENT_LENGTH, len.to_string());
+    if status == StatusCode::PARTIAL_CONTENT {
+        r = r.header(header::CONTENT_RANGE, format!("bytes {start}-{end}/{total}"));
     }
+    r.body(Body::from_stream(body)).unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
 }
 
 /// The browser player, served from PYRATE_PLAYER (a folder holding a copy of
@@ -353,9 +441,12 @@ async fn brand(Path(name): Path<String>) -> Response {
 /// A picture, only when it belongs to a station this page may show.
 async fn art(State(w): State<Web>, Path(hash): Path<String>) -> Response {
     let Ok(h) = crate::unhex(hash.trim_end_matches(".jpg")) else { return StatusCode::NOT_FOUND.into_response() };
+    // Only stations this page may show are searched: its own, unless it serves every station.
     let owner = {
         let s = w.inner.store.lock().unwrap();
-        s.logs.iter().find(|(_, a)| a.art_hashes().contains(&h)).map(|(id, _)| *id)
+        let own = s.own();
+        let mut look: Box<dyn Iterator<Item = (&StationId, &Archive)>> = if w.every_station { Box::new(s.logs.iter()) } else { Box::new(own.iter().filter_map(|id| s.logs.get_key_value(id))) };
+        look.find(|(_, a)| a.art_hashes().contains(&h)).map(|(id, _)| *id)
     };
     if !owner.is_some_and(|st| w.allowed(&st)) {
         return StatusCode::NOT_FOUND.into_response();
@@ -370,17 +461,17 @@ async fn art(State(w): State<Web>, Path(hash): Path<String>) -> Response {
 async fn listen(State(w): State<Web>, Path(id): Path<String>) -> Response {
     let id = id.trim_end_matches(".mp3");
     let Ok(st) = StationId::from_hex(id) else { return StatusCode::NOT_FOUND.into_response() };
-    if !w.allowed(&st) {
+    if !w.allowed(&st) || w.inner.archive(&st).is_none() {
         return StatusCode::NOT_FOUND.into_response();
     }
+    let Ok(permit) = w.listeners.clone().try_acquire_owned() else { return StatusCode::SERVICE_UNAVAILABLE.into_response() };
     let mut guest = [0u8; 32];
-    if getrandom_fill(&mut guest).is_ok() {
-        w.inner.count_guest(&st, &guest);
-    }
+    let _ = getrandom_fill(&mut guest);
     let rx = {
         let mut towers = w.towers.lock().unwrap();
         match towers.get(&st) {
             Some(tx) => tx.subscribe(),
+            None if towers.len() >= MAX_TOWERS => return StatusCode::SERVICE_UNAVAILABLE.into_response(),
             None => {
                 let (tx, rx) = broadcast::channel(256);
                 towers.insert(st, tx.clone());
@@ -389,16 +480,19 @@ async fn listen(State(w): State<Web>, Path(id): Path<String>) -> Response {
             }
         }
     };
-    let body = stream::unfold((rx, guest, w.inner.clone(), st, now_ms()), |(mut rx, guest, inner, st, mut counted)| async move {
+    // A tab is counted once it has listened half a minute, then once each hour it stays: a
+    // flurry of reconnects is not a crowd.
+    let state = (rx, guest, w.inner.clone(), st, now_ms(), None::<u64>, permit);
+    let body = stream::unfold(state, |(mut rx, guest, inner, st, began, mut counted, permit)| async move {
         loop {
             match rx.recv().await {
                 Ok(b) => {
-                    // Still aboard: count this tab again each hour it stays.
-                    if now_ms() / 3_600_000 != counted / 3_600_000 {
+                    let t = now_ms();
+                    if t.saturating_sub(began) >= COUNT_AFTER_MS && counted.is_none_or(|c| c / 3_600_000 != t / 3_600_000) {
                         inner.count_guest(&st, &guest);
-                        counted = now_ms();
+                        counted = Some(t);
                     }
-                    return Some((Ok::<Bytes, Infallible>(b), (rx, guest, inner, st, counted)));
+                    return Some((Ok::<Bytes, Infallible>(b), (rx, guest, inner, st, began, counted, permit)));
                 }
                 Err(broadcast::error::RecvError::Lagged(_)) => continue,
                 Err(broadcast::error::RecvError::Closed) => return None,
@@ -439,7 +533,16 @@ async fn tower(inner: Arc<Inner>, towers: Towers, st: StationId, tx: broadcast::
     let mut live_seq: Option<u64> = None;
     let mut idle_since: Option<u64> = None;
     let mut last_sync = 0;
+    // Steps in a row that sent nothing: past a minute's worth, the tower comes down.
+    let mut dry = 0u32;
     loop {
+        if dry > 0 {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            if dry > 120 {
+                break;
+            }
+        }
+        dry += 1;
         let t = now_ms();
         if tx.receiver_count() == 0 {
             let since = *idle_since.get_or_insert(t);
@@ -460,6 +563,7 @@ async fn tower(inner: Arc<Inner>, towers: Towers, st: StationId, tx: broadcast::
         // Ahead enough? Rest.
         if let Some(ph) = playhead {
             if ph > t + LEAD_MS {
+                dry = 0;
                 tokio::time::sleep(Duration::from_millis(250)).await;
                 continue;
             }
@@ -493,6 +597,8 @@ async fn tower(inner: Arc<Inner>, towers: Towers, st: StationId, tx: broadcast::
             let Ok(clock) = Clock::new(&a) else { break };
             let at = playhead.unwrap_or(t);
             let Some(np) = clock.now(at) else {
+                // Off the air: the tower waits for the station to come back.
+                dry = 0;
                 tokio::time::sleep(Duration::from_secs(2)).await;
                 continue;
             };
@@ -518,6 +624,7 @@ async fn tower(inner: Arc<Inner>, towers: Towers, st: StationId, tx: broadcast::
         let mut out = Vec::with_capacity(stereo.len() / 2 + 7200);
         if lame.encode_to_vec(mp3lame_encoder::InterleavedPcm(&stereo), &mut out).is_ok() && !out.is_empty() {
             let _ = tx.send(Bytes::from(out));
+            dry = 0;
         }
     }
     towers.lock().unwrap().remove(&st);
