@@ -1553,7 +1553,7 @@ async function __wbg_init_once(module_or_path) {
     }
 
     if (module_or_path === undefined) {
-        module_or_path = new URL('pyrate_browser_bg.bdae717658.wasm', import.meta.url);
+        module_or_path = new URL('pyrate_browser_bg.b187bdd32f.wasm', import.meta.url);
     }
     const imports = __wbg_get_imports();
 
