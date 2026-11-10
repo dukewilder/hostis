@@ -15,10 +15,13 @@ pub mod clock;
 #[cfg(feature = "codec")]
 pub mod ingest;
 pub mod keys;
+pub mod page;
+pub mod programme;
 pub mod tape;
 
 pub use archive::{ArtRef, Archive, Body, Chunk, Entry, SignedEntry, release_message, release_trusted};
 pub use clock::{NowPlaying, Rota};
+pub use programme::{Fill, Mode, Programme, Slot, Span, Zone};
 pub use audio::Profile;
 #[cfg(feature = "codec")]
 pub use audio::{ChunkEncoder, decode_chunk};

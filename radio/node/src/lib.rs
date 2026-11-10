@@ -8,6 +8,7 @@ pub mod hop;
 pub mod trust;
 pub mod clockfix;
 pub mod net;
+pub mod page;
 #[cfg(feature = "playback")]
 pub mod player;
 pub mod store;
@@ -1351,6 +1352,13 @@ impl Node {
         let station = || -> Result<StationId> { Ok(StationId::from_hex(req["station"].as_str().context("station")?)?) };
         let inner = &self.inner;
         match cmd {
+            "page" | "programme" | "programme_set" | "show_add" | "show_cancel" | "notice_post" | "notice_remove" => {
+                let st = station()?;
+                if cmd == "page" && inner.store.lock().unwrap().logs.get(&st).is_none_or(|a| a.len() == 0) {
+                    let _ = self.rt.block_on(async { tokio::time::timeout(Duration::from_secs(8), inner.sync_log(st)).await });
+                }
+                inner.page_call(cmd, st, req)
+            }
             "status" => {
                 let mine = {
                 let s = inner.store.lock().unwrap();
@@ -1867,6 +1875,8 @@ mod playout {
     pub async fn run(inner: Arc<Inner>) {
         let mut st = State { station: None, playhead: None, track: None, decoder: None, live_seq: None };
         let mut last_sync = 0u64;
+        // Off the air: when the station comes back, worked out at most once a minute.
+        let mut off_air: Option<(StationId, u64, Option<u64>)> = None;
         loop {
             tokio::time::sleep(Duration::from_millis(250)).await;
             if RESET.swap(false, std::sync::atomic::Ordering::SeqCst) {
@@ -1938,10 +1948,8 @@ mod playout {
                     st.decoder = None;
                 }
                 let at = st.playhead.unwrap_or(now + 400);
-                let Some(np) = clock.now(at) else {
-                    *inner.np.lock().unwrap() = json!({ "station": station.to_hex(), "state": "dead air" });
-                    break;
-                };
+                // Nothing on the clock: off the air, or nothing yet to play. Said below.
+                let Some(np) = clock.now(at) else { break };
                 let entry = archive.entries().iter().find(|e| e.hash().ok() == Some(np.track));
                 let Some(Body::Track { chunks, channels, .. }) = entry.map(|e| e.entry.body()) else { break };
                 let Some(chunk) = chunks.get(np.chunk).copied() else { break };
@@ -1974,16 +1982,27 @@ mod playout {
 
             // What the listener hears now.
             if st.live_seq.is_none() {
-                if let Some(np) = clock.now(now.saturating_sub(0)) {
+                if let Some(np) = clock.now(now) {
                     let (title, by) = describe(&archive, &np.track);
                     let starved = inner.queue.lock().unwrap().starved;
                     let pic = archive.track_art(&np.track).map(|a| hex(&a.hash));
                     *inner.np.lock().unwrap() = json!({
                         "station": station.to_hex(),
                         "state": if starved { "searching" } else { "playing" },
-                        "title": title, "by": by, "art": pic,
+                        "title": title, "by": by, "art": pic, "slot": np.slot,
                         "position_ms": np.offset_ms, "duration_ms": np.duration_ms,
                     });
+                    off_air = None;
+                } else if queued_ms(&inner) < 300 {
+                    let stale = off_air.as_ref().is_none_or(|(s, at, _)| *s != station || now.saturating_sub(*at) > 60_000);
+                    if stale {
+                        let back = clock.upcoming(now, now + 7 * 86_400_000).first().map(|b| b.0);
+                        off_air = Some((station, now, back));
+                    }
+                    *inner.np.lock().unwrap() = match off_air.as_ref().and_then(|o| o.2) {
+                        Some(back) => json!({ "station": station.to_hex(), "state": "off air", "back_at": back }),
+                        None => json!({ "station": station.to_hex(), "state": "dead air" }),
+                    };
                 }
             }
         }

@@ -8,6 +8,9 @@
 //!                         maroon.txt, one station id per line, takes any station off this Lantern)
 //!         A seed folder's bell.mp3 (or .wav, .ogg) plays on the hour; replace it and the new one takes over.
 //!         A seed folder's station.jpg and banner.jpg become the station's art.
+//!         A seed folder's programme.json is the station's programme, in the JSON the app writes,
+//!         with "utc_offset_min" for the folder's own time and recordings named by title.
+//!         A seed folder's notices.txt holds the station's notices, one per paragraph.
 
 use std::{collections::HashSet, path::PathBuf, time::Duration};
 
@@ -127,6 +130,7 @@ fn seed_all(node: &Node, seeds: &[String]) -> anyhow::Result<()> {
         }
         ring_the_bell(node, id, folder, profile);
         let have: HashSet<String> = node.titles(&id).into_iter().collect();
+        let mut added = false;
         let mut files: Vec<PathBuf> = std::fs::read_dir(folder)?
             .filter_map(|f| f.ok().map(|f| f.path()))
             .filter(|p| p.extension().is_some_and(|e| ["mp3", "ogg", "flac", "wav", "m4a", "opus", "oga"].contains(&e.to_string_lossy().to_lowercase().as_str())))
@@ -144,12 +148,108 @@ fn seed_all(node: &Node, seeds: &[String]) -> anyhow::Result<()> {
             }
             let source = std::fs::read_to_string(f.with_extension("source.txt")).unwrap_or_default();
             match node.add_track(id, &f, &title, &by, source.trim(), profile) {
-                Ok(_) => println!("  set {title}"),
+                Ok(_) => {
+                    println!("  set {title}");
+                    added = true;
+                }
                 Err(e) => println!("  could not set {title}: {e}"),
             }
         }
+        // Recordings first, so the programme can name the ones just set.
+        let _ = added;
+        keep_programme(node, id, folder);
+        keep_notices(node, id, folder);
     }
     Ok(())
+}
+
+/// programme.json: the programme the station keeps. The same JSON the app writes, with two
+/// conveniences for a folder: "utc_offset_min" stands in for the app's table of offsets, and
+/// a recording can be named by its title, "Artist - Title", or its file name.
+fn keep_programme(node: &Node, id: pyrate_core::StationId, folder: &str) {
+    let Ok(text) = std::fs::read_to_string(PathBuf::from(folder).join("programme.json")) else { return };
+    let mut v: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(v) => v,
+        Err(e) => {
+            println!("  programme.json does not read: {e}");
+            return;
+        }
+    };
+    let Some(a) = node.archive(&id) else { return };
+    let lib = node.call(&serde_json::json!({ "cmd": "library", "station": id.to_hex() }));
+    let find = |name: &str| -> Option<String> {
+        if name.len() == 64 && name.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Some(name.to_lowercase());
+        }
+        let name = name.trim();
+        let stem = name.rsplit_once('.').filter(|(_, e)| e.len() <= 4).map(|(s, _)| s).unwrap_or(name);
+        lib.as_array().into_iter().flatten().find(|t| {
+            let (title, by) = (t["title"].as_str().unwrap_or(""), t["by"].as_str().unwrap_or(""));
+            title == name || title == stem || format!("{by} - {title}") == stem
+        }).and_then(|t| t["hash"].as_str().map(String::from))
+    };
+    for slot in v["slots"].as_array_mut().into_iter().flatten() {
+        if let Some(list) = slot["fill"]["tracks"].as_array_mut() {
+            *list = list.iter().filter_map(|t| {
+                let found = t.as_str().and_then(find);
+                if found.is_none() {
+                    println!("  programme.json names a recording not on the clock: {t}");
+                }
+                found.map(serde_json::Value::from)
+            }).collect();
+        }
+    }
+    if v.get("zone").is_none_or(|z| z.as_array().is_none_or(|z| z.is_empty())) {
+        let off = v["utc_offset_min"].as_i64().unwrap_or(0);
+        v["zone"] = serde_json::json!([[0, off]]);
+    }
+    // The bell keeps ringing unless the programme names its own.
+    let current_ident = a.programme().and_then(|p| p.ident).or(a.rota().ident).map(|h| pyrate_node::hex(&h));
+    match v["ident"].as_str().map(String::from) {
+        Some(name) => v["ident"] = find(&name).map(serde_json::Value::from).unwrap_or(serde_json::Value::Null),
+        None if v.get("ident").is_none() => {
+            v["ident"] = current_ident.map(serde_json::Value::from).unwrap_or(serde_json::Value::Null);
+            if v.get("ident_every_min").is_none() {
+                v["ident_every_min"] = 60.into();
+            }
+        }
+        None => {}
+    }
+    let want = match pyrate_core::page::programme_from(&v) {
+        Ok(p) => p,
+        Err(e) => {
+            println!("  programme.json: {e}");
+            return;
+        }
+    };
+    if a.programme().as_ref() == Some(&want) {
+        return;
+    }
+    let r = node.call(&serde_json::json!({ "cmd": "programme_set", "station": id.to_hex(), "programme": pyrate_core::page::programme_json(&want) }));
+    println!("  programme set {r}");
+}
+
+/// notices.txt: the station's notices, one per paragraph. A new paragraph goes up; a notice
+/// this Lantern put up comes down when its paragraph leaves the file. Notices a phone posted
+/// are the phone's own business.
+fn keep_notices(node: &Node, id: pyrate_core::StationId, folder: &str) {
+    let Ok(text) = std::fs::read_to_string(PathBuf::from(folder).join("notices.txt")) else { return };
+    let want: Vec<String> = text.replace("\r\n", "\n").split("\n\n").map(|p| p.split_whitespace().collect::<Vec<_>>().join(" ")).filter(|p| !p.is_empty()).collect();
+    let Some(a) = node.archive(&id) else { return };
+    let up = a.notices(now_ms());
+    let ours: HashSet<[u8; 32]> = a.entries().iter().filter(|e| matches!(e.entry.body, Body::Notice { .. })).filter_map(|e| e.hash().ok()).collect();
+    for (h, _, words) in &up {
+        if ours.contains(h) && !want.contains(words) {
+            node.call(&serde_json::json!({ "cmd": "notice_remove", "station": id.to_hex(), "notice": pyrate_node::hex(h) }));
+            println!("  notice taken down: {words}");
+        }
+    }
+    for w in want.iter().rev() {
+        if !up.iter().any(|(_, _, t)| t == w) {
+            node.call(&serde_json::json!({ "cmd": "notice_post", "station": id.to_hex(), "text": w, "until_ms": 0 }));
+            println!("  notice up: {w}");
+        }
+    }
 }
 
 /// bell.* in a seed folder is the station's bell: it plays on the hour. When the file changes,
@@ -168,6 +268,17 @@ fn ring_the_bell(node: &Node, id: pyrate_core::StationId, folder: &str, profile:
         println!("  the bell would not set");
         return;
     };
+    let prog = node.call(&serde_json::json!({ "cmd": "programme", "station": id.to_hex() }));
+    if let Some(mut p) = prog.get("programme").filter(|p| p.is_object()).cloned() {
+        // A programme is in force: the bell changes inside it, and nothing else does.
+        if let Some(old) = p["ident"].as_str() {
+            node.call(&serde_json::json!({ "cmd": "withdraw", "station": id.to_hex(), "track": old }));
+        }
+        p["ident"] = pyrate_node::hex(&track).into();
+        let r = node.call(&serde_json::json!({ "cmd": "programme_set", "station": id.to_hex(), "programme": p }));
+        println!("  the bell is set: {title} {r}");
+        return;
+    }
     let rota = node.call(&serde_json::json!({ "cmd": "rota", "station": id.to_hex() }));
     if let Some(old) = rota["ident"].as_str() {
         node.call(&serde_json::json!({ "cmd": "withdraw", "station": id.to_hex(), "track": old }));
