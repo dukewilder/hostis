@@ -36,6 +36,90 @@ Each entry gives the threat, whether the wall held, and the fix.
 
 **B15. Small faults.** The flock's round trip can underflow if the network clock steps between pings.
 
+### Track A: the clock, the programme, sound and pictures
+
+Reported by a reader of the code; each is checked against the code before it is fixed or set down.
+
+- **A1** (high) One hostile station can move every listener's clock by up to five minutes. `node/src/clockfix.rs:10-27`
+- **A2** (high) `t - cursor` underflow in `walk` when a run's computed start is after `t` (panic in debug, garbage in release). `core/src/clock.rs:351`
+- **A3** (high) Rota walk has no step cap: a track of a few milliseconds hangs the lookup. `core/src/clock.rs:555-604`
+- **A4** (medium) `walk` gives up after 400,000 steps, so short tracks mean dead air late in the week. `core/src/clock.rs:22`
+- **A5** (medium) Fall-back hour: Daily and Weekly tapes rewind, slots drop out. `core/src/clock.rs:440-451`
+- **A6** (medium) `upcoming()` (watch bill and the page's "next") ignores every cut. `core/src/clock.rs:275-291`
+- **A7** (medium) `at_ms + show_len` overflows for a signed Show with a huge `at_ms`. `core/src/clock.rs:319`
+- **A8** (medium) A show premiering before its track was added never airs, and the listing still promises it. `core/src/clock.rs:313-315`
+- **A9** (medium) Call signs carry ~35 bits, so a lookalike can be ground out for a target. `core/src/callsign.rs:9-23`
+- **A10** (low) Clock correction jumps from 0 to 2 s instead of easing in. `node/src/clockfix.rs:26`
+- **A11** (low) `ChunkDecoder::decode` trusts the chunk's packet count and sizes. `core/src/audio.rs:166-174; archive.rs `Chunk::check``
+- **A12** (low) Ogg writer can overflow the lacing byte and drops bad chunks silently. `core/src/tape.rs:26-45`
+- **A13** (low) `unhex` accepts a leading `+`. `core/src/page.rs:33`
+- **A14** (low) `span_from` truncates `days` and accepts a span that never runs. `core/src/page.rs:56`
+- **A15** (low) Hours plus a continuous mode silently skips what plays off the air. `core/src/clock.rs:422-453`
+- **A16** (low) Spans and tables read from the log are not validated, so `now` and `listings` can disagree and costs are unbounded. `core/src/programme.rs:82-121`
+- **A17** (low) `art::accent` depends on HashMap iteration order for ties. `core/src/art.rs:81`
+- **A18** (low) `art::prepare` ignores EXIF orientation. `core/src/art.rs:49-54`
+- **A19** (low) Ingest folds multichannel files badly. `core/src/ingest.rs:33-43`
+- **A20** (low) Hard seams at the week boundary (and at every anchor). `core/src/clock.rs:425-453`
+- **A21** (low) Offset table ends: time zone freezes after the last entry. `core/src/programme.rs:32-42; page.rs:88-95`
+- **A22** (low) Spring-forward gap and `utc_ms` are inconsistent between east and west zones. `core/src/programme.rs:50-55`
+- **A23** (low) Output and input streams ignore the device's sample format. `node/src/player.rs:41-43`
+- **A24** (low) `page_of` days overflow and repeated full-log hashing. `core/src/page.rs:39-47`
+
+### Track A and B: the browser, the Lantern's web listener and the landing
+
+Reported by a reader of the code; each is checked against the code before it is fixed or set down.
+
+- **C1** (high) /player/ serves any file on disk via an absolute path. `node/src/web.rs:271-277`
+- **C2** (high) The web listener publishes pocket (private) stations. `node/src/web.rs:47-50`
+- **C3** (high) count_guest spawns one OS thread per request, with no cap. `node/src/web.rs:325-328`
+- **C4** (high) Episode generation holds the whole recording in memory. `node/src/web.rs:205-232`
+- **C5** (medium) Concurrent first requests for one episode race on the same temp file. `node/src/web.rs:198-247`
+- **C6** (medium) Cached episodes ignore withdrawal and ignore which station owns the track. `node/src/web.rs:198-203`
+- **C7** (medium) Streaming tower busy-loops on bad entries. `node/src/web.rs:428`
+- **C8** (medium) No connection, rate or time limits on the HTTP listener; `--web-all` lets anyone spawn encoders. `node/src/web.rs:52-70`
+- **C9** (medium) Feed XML: unescaped Host-derived attributes and control characters. `node/src/web.rs:124-134`
+- **C10** (low) Episode Range handling reads the whole file per request and mis-answers unsatisfiable ranges. `node/src/web.rs:248-265`
+- **C11** (medium) Per-request cost amplification on unauthenticated routes. `node/src/web.rs:72-78`
+- **C12** (low) Lantern page and tower have no recovery when the stream ends. `node/src/web.rs:442-449`
+- **C13** (low) /player/ mirror: broken home links, no redirect, no hardening headers. `node/src/web.rs:62-63`
+- **C14** (high) One station can set every tab's clock wrong. `browser/src/lib.rs:175-186`
+- **C15** (high) Unsigned Carrier gossip: fake carriers jump the queue, grow memory and eclipse peers. `browser/src/lib.rs:328-345`
+- **C16** (medium) Chunk fetch is serial, has no failure memory, and retries dead peers every time. `browser/src/lib.rs:296-322`
+- **C17** (medium) Aboard token broadcasts what the tab is tuned to, whether or not it plays. `browser/src/lib.rs:519-543`
+- **C18** (high) Pocket station id leaks to the public network. `browser/src/lib.rs:519-543`
+- **C19** (medium) Peers can probe a tab for what it has just played. `browser/src/lib.rs:199-201`
+- **C20** (medium) Unbounded growth: cards, listings, archives, rooms, connections, seen set. `browser/src/lib.rs:472-502`
+- **C21** (medium) plan() re-hashes the whole log on every call. `browser/src/lib.rs:556-563`
+- **C22** (low) Struck station leaves the tab stuck "Searching the Log" and hammering carriers. `browser/src/lib.rs:378-381`
+- **C23** (low) Flock: no way to leave, relay URL taken from the link without checks. `browser/src/lib.rs:944-982`
+- **C24** (low) Chat: the keeper label can be imitated, and bidi controls are not stripped. `browser/www/app.js:453; core/src/chat.rs:166-168`
+- **C25** (low) Wasm traps are unrecoverable. `Cargo.toml `[profile.web] panic = "abort"`; browser/www/app.js:608-611`
+- **C26** (low) Console logs identify the fresh node and the station being synced. `browser/src/lib.rs:49-51`
+- **C27** (medium) presets::N0 may contact number0's discovery services and default relays. `browser/src/lib.rs:694-714`
+- **C28** (medium) No CSP, no Referrer-Policy, inline script in head. `node/src/web/listen.html:1-9`
+- **C29** (medium) Storage and URL inventory (what ties a visit to the next, and what stays in history). `browser/www/app.js:22-35`
+- **C30** (medium) Invitation key sits in the address bar for the whole join and forever on failure. `browser/www/app.js:391-397`
+- **C31** (medium) Playback loop can die silently (exception, empty decode, missing decoder script). `browser/www/app.js:205-256`
+- **C32** (medium) Going live after a track leaves silence and extra latency. `browser/www/app.js:206-207`
+- **C33** (low) The "No carrier answered yet" message is overwritten within a second. `browser/www/app.js:232`
+- **C34** (medium) Background and Safari playback: iPad detection, interruptions, meter, hidden tab buffer. `browser/www/app.js:100-111`
+- **C35** (medium) Hail: wrong target after switching station, stale stop timer, mic left on. `browser/www/app.js:472-486`
+- **C36** (medium) Chatter and rows are re-rendered wholesale on a timer. `browser/www/app.js:369-377`
+- **C37** (medium) Cover art is fetched for every listed station, retried every 4 s, with no size cap. `browser/www/app.js:43-49`
+- **C38** (low) Object URLs and animation work never released. `browser/www/app.js:46`
+- **C39** (low) Second tap on Listen while booting starts a second node (embed). `browser/www/app.js:407-412`
+- **C40** (medium) No relay or no stations is a dead end with no message. `browser/www/app.js:597-607`
+- **C41** (low) ICS export can be injected with a bare CR in a title or about text. `browser/www/app.js:285-291`
+- **C42** (low) Pass-it-on, clip QR and ICS links are hard-wired to hostis.black. `browser/www/app.js:494`
+- **C43** (low) Station chart, harbour merge and debug hook small defects. `browser/www/app.js:26-31`
+- **C44** (medium) Build: wasm is not cache-busted, so a deploy can mix new glue with old wasm. `browser/build.py:18`
+- **C45** (low) Build embeds env/config strings unescaped. `browser/build.py:13-17`
+- **C46** (medium) Android "open in the app" fallback goes to a 404. `landing/index.html:84`
+- **C47** (low) Landing build can publish placeholder text. `landing/build.py:21-22`
+- **C48** (low) Embedded set cannot record a hail and the copy there overpromises. `landing/index.html:79; browser/www/app.js:473-475`
+- **C49** (low) Red used as a general accent, pill buttons, and emoji-capable glyphs. `browser/player.css:4`
+- **C50** (low) Informational text set in the ghost tone and at sub-10px sizes. `browser/player.css:30`
+
 ## Fixed
 
-**B1. The stem names its origin.** `hop.rs` starts every stem at `hops: 0` and each relay adds one, so the guard that receives `hops: 0` knows its peer is the broadcaster. Does not hold. Fixed: every node, broadcaster and relay alike, now sends the count as zero and nothing reads it. A stem ends by the fluff draw alone (four hops on average), and a node that sees the same cargo come round again spreads it. Older nodes still count up from zero, which tells a new node only that its sender was a relay. Checked by the voyage test (18 of 18). (pending)
+**B1. The stem names its origin.** `hop.rs` starts every stem at `hops: 0` and each relay adds one, so the guard that receives `hops: 0` knows its peer is the broadcaster. Does not hold. Fixed: every node, broadcaster and relay alike, now sends the count as zero and nothing reads it. A stem ends by the fluff draw alone (four hops on average), and a node that sees the same cargo come round again spreads it. Older nodes still count up from zero, which tells a new node only that its sender was a relay. Checked by the voyage test (18 of 18). (ae5aa7b)
