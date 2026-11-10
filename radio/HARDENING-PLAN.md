@@ -233,6 +233,10 @@ Any carrier works because the signature is checked: gossip, IPFS, DNS TXT, Nostr
 **4.6 Telemetry in dependencies.**
 *Fix:* an audit, plus the test in 1.26. `C` W4
 
+## Progress
+
+- **W1 shipped in 0.8.7** (10 November). Found already in place while building it: the plain disguise (a plain icon named Radio, and a lock screen, notifications and car display that say only "Radio") covers 1.21 and part of 2.4, so R5 is settled by it, and it now blanks the recents screen too (1.22). Updates already need two of three release keys (part of 2.9). Encoder settings already match across app and browser (1.13). Clipboard history on Windows keeps its own copy for a time; the ninety-second clear removes it from the clipboard itself.
+
 ## Build waves
 
 Each wave has tests, the docs (DECISIONS, SHIPS-LOG, the brief) in the same commit, a push, a deploy and one line to Dylan.

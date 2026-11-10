@@ -169,6 +169,64 @@ pub fn shown(s: &str) -> String {
         .collect()
 }
 
+/// A title made from a file name, without what a phone or recorder writes into one: the
+/// moment it was made (a date with a time, which gives away the keeper's day and zone) and the
+/// device's own words around it ("VID", "Recording", "PXL"). A bare date stays, since a keeper
+/// may mean it. Returns the title and whether anything was taken out.
+pub fn plain_title(s: &str) -> (String, bool) {
+    let toks: Vec<&str> = s.split(|c: char| c.is_whitespace() || c == '_').filter(|t| !t.is_empty()).collect();
+    let stampy = |t: &str| t.chars().all(|c| c.is_ascii_digit() || "-.:hms".contains(c)) && t.chars().filter(|c| c.is_ascii_digit()).count() >= 2;
+    let mut keep = vec![true; toks.len()];
+    let mut i = 0;
+    let mut cut = false;
+    while i < toks.len() {
+        if !stampy(toks[i]) {
+            i += 1;
+            continue;
+        }
+        let mut j = i;
+        let mut digits = 0;
+        while j < toks.len() && stampy(toks[j]) {
+            digits += toks[j].chars().filter(|c| c.is_ascii_digit()).count();
+            j += 1;
+        }
+        if digits >= 12 {
+            keep[i..j].iter_mut().for_each(|k| *k = false);
+            cut = true;
+        }
+        i = j;
+    }
+    if cut {
+        const DEVICE: [&str; 14] = ["vid", "img", "aud", "rec", "pxl", "voice", "recording", "audio", "video", "sound", "new", "memo", "screen", "record"];
+        for (k, t) in toks.iter().enumerate() {
+            if keep[k] && DEVICE.contains(&t.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase().as_str()) {
+                keep[k] = false;
+            }
+        }
+    }
+    let out: Vec<&str> = toks.iter().zip(&keep).filter(|(_, k)| **k).map(|(t, _)| *t).collect();
+    let t = out.join(" ").trim_matches(|c: char| c == '-' || c == '.' || c.is_whitespace()).to_string();
+    if !cut {
+        return (s.trim().to_string(), false);
+    }
+    (if t.is_empty() { "Untitled".to_string() } else { t }, true)
+}
+
+/// True when a name mixes Latin with Greek or Cyrillic letters, the usual way to pass for
+/// another station ("HОSTIS" with a Cyrillic O). Shown as a mark, never hidden.
+pub fn mixed_script(s: &str) -> bool {
+    let (mut latin, mut greek, mut cyr) = (false, false, false);
+    for c in s.chars() {
+        match c as u32 {
+            0x41..=0x5a | 0x61..=0x7a | 0xc0..=0x24f => latin = true,
+            0x370..=0x3ff | 0x1f00..=0x1fff => greek = true,
+            0x400..=0x52f => cyr = true,
+            _ => {}
+        }
+    }
+    [latin, greek, cyr].iter().filter(|b| **b).count() > 1
+}
+
 /// A speaker's name as shown: as [`shown`], and never wearing the station's own mark, which
 /// only the keeper's key earns.
 pub fn shown_name(s: &str) -> String {
@@ -264,6 +322,14 @@ mod tests {
     fn names_cannot_wear_the_station_mark_or_turn_text_round() {
         assert_eq!(super::shown_name("Gangway (THE STATION)"), "Gangway");
         assert_eq!(super::shown_name("a\u{202e}b\u{2066}c"), "abc");
+        assert!(super::mixed_script("H\u{41e}STIS"));
+        assert!(!super::mixed_script("HOSTIS"));
+        assert_eq!(super::plain_title("Recording 2026-11-10 21-03-12"), ("Untitled".into(), true));
+        assert_eq!(super::plain_title("VID_20261110_210312 harbour song"), ("harbour song".into(), true));
+        assert_eq!(super::plain_title("Sea shanty 20261110-2103"), ("Sea shanty".into(), true));
+        assert_eq!(super::plain_title("1999-12-31 Party"), ("1999-12-31 Party".into(), false));
+        assert_eq!(super::plain_title("Track 01"), ("Track 01".into(), false));
+        assert!(!super::mixed_script("\u{41f}\u{438}\u{440}\u{430}\u{442}"));
         assert_eq!(super::shown("one\ntwo\u{200b}"), "one\ntwo");
     }
 

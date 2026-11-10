@@ -81,6 +81,7 @@ Docs: `DECISIONS.md` (the Ship's Articles, sections I to XXII), `SHIPS-LOG.md`, 
 - **Hardening.** Blind carrying (sealed chunks and logs served by fingerprint, plaintext only for your own stations), sealed logs at rest, a fresh node id every 24h for phones with a steady seed behind it, dark running (`PYRATE_DARK` no direct paths and no address published, `PYRATE_PROXY` over Tor), the two-identity harbour (public face plus dark hold), and no single door (nodes remember peers, browser tabs remember every harbour).
 - **Lantern.** Headless node carrying the whole Log, web listener (`--http`), relay (`--relay`), the `/player/` browser mirror, `--carry-own` to carry only its own stations. The drawer-phone Lantern is the Android foreground-service version with a ballast size from 1 to 256 GB.
 - **Browser.** A tab is a full node in wasm from the same core and wire protocol: listens, chatters, hails, joins flocks and pockets, remembers harbours, fresh key each visit.
+- **Hardening plan.** `HARDENING-PLAN.md` holds every attack found in three rounds of threat modelling, its fix, who does it, and the nine build waves. Wave 1 (device leaks) shipped in 0.8.7; work goes wave by wave from there, and the plan is marked as each wave ships.
 - **Distribution.** APK over BitTorrent with a web seed and magnet, phone-to-phone pass-on, in-app updates as a station verified by 2-of-3 HOSTIS release keys.
 
 ## 6. How to build and test

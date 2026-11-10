@@ -140,7 +140,7 @@ async fn now(State(w): State<Web>, Path(id): Path<String>) -> Response {
         Some(np) => {
             let (title, by) = describe(&a, &np.track);
             let pic = a.track_art(&np.track).map(|r| crate::hex(&r.hash));
-            json!({ "live": false, "title": title, "by": by, "art": pic, "position_ms": np.offset_ms, "duration_ms": np.duration_ms })
+            json!({ "live": false, "title": crate::shown(&title), "by": crate::shown(&by), "art": pic, "position_ms": np.offset_ms, "duration_ms": np.duration_ms })
         }
         None => json!({ "live": false, "title": "", "by": "" }),
     };

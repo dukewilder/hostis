@@ -148,6 +148,7 @@ void main(List<String> args) async {
     statusBarIconBrightness: Brightness.light,
   ));
   final dir = await getApplicationSupportDirectory();
+  await deskTidy(dir.path);
   // PYRATE_BOOTSTRAP names other first doors, for a private network or a test.
   final boot = Platform.environment['PYRATE_BOOTSTRAP'] ?? (await rootBundle.loadString('assets/bootstrap.txt')).trim();
   // HOSTIS's own stations, where a first open lands, and the keys that sign releases.
@@ -928,7 +929,7 @@ class _ColoursPageState extends State<ColoursPage> {
               title: Text('Write these down', style: serif(24)),
               content: SingleChildScrollView(
                 child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('These 24 words are the station. This phone keeps only a deputy key, which can broadcast but cannot strike. If the phone is lost or taken, the words take the station back and shut the deputy out. They are shown once and kept nowhere.',
+                  Text('These 24 words are the station. This phone keeps only a deputy key, which can broadcast but cannot strike. If the phone is lost or taken, the words take the station back and shut the deputy out. They are shown once and kept nowhere. Nobody from Pyrate Radio or HOSTIS will ever ask for them.',
                       style: serif(15, color: boneFaint, italic: true)),
                   const SizedBox(height: 14),
                   Container(
@@ -997,7 +998,7 @@ class _ColoursPageState extends State<ColoursPage> {
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Your phone fetches the picture once and redraws it. The site you link sees this phone\'s address; listeners never touch it.',
               style: serif(13, color: boneFaint, italic: true)),
-          TextField(controller: link, autofocus: true, style: mono(12, color: bone), decoration: field('https://')),
+          TextField(enableIMEPersonalizedLearning: false, controller: link, autofocus: true, style: mono(12, color: bone), decoration: field('https://')),
         ]),
         actions: [TextButton(onPressed: () => Navigator.pop(c, link.text.trim()), child: Text('FETCH', style: carved(11)))],
       ),
@@ -1086,8 +1087,8 @@ class _ColoursPageState extends State<ColoursPage> {
         Text('A station is a key made on this phone. Name it, put recordings on its clock, and it plays all day and all night, carried by every listener.',
             style: serif(16, color: boneFaint, italic: true)),
         const SizedBox(height: 22),
-        TextField(controller: name, style: serif(20), decoration: field('Name'), maxLength: 40),
-        TextField(controller: about, style: serif(16), decoration: field('What it broadcasts'), maxLength: 140),
+        TextField(enableIMEPersonalizedLearning: false, controller: name, style: serif(20), decoration: field('Name'), maxLength: 40),
+        TextField(enableIMEPersonalizedLearning: false, controller: about, style: serif(16), decoration: field('What it broadcasts'), maxLength: 140),
         const SizedBox(height: 18),
         StartShapePicker(shape: shape),
         Row(children: [

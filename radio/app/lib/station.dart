@@ -12,12 +12,12 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:path_provider/path_provider.dart';
 
 import 'art.dart';
 import 'main.dart';
 import 'more.dart';
 import 'native.dart';
+import 'shell.dart';
 
 // ---------------------------------------------------------------------------------------
 // Local time, as the station keeps it
@@ -376,7 +376,7 @@ class _NoticeEditorState extends State<NoticeEditor> {
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           heading('A NOTICE'),
           note('A word to everyone who opens your station\'s page. It travels in the log like everything else.'),
-          TextField(controller: text, maxLines: 4, maxLength: 600, style: serif(17), decoration: pyrateField('What you want to say')),
+          TextField(enableIMEPersonalizedLearning: false, controller: text, maxLines: 4, maxLength: 600, style: serif(17), decoration: pyrateField('What you want to say')),
           Wrap(children: [
             for (final (d, label) in [(0, 'Until I take it down'), (1, 'A day'), (7, 'A week')]) chip(label, days == d, () => setState(() => days = d)),
           ]),
@@ -463,8 +463,8 @@ class _ShowEditorState extends State<ShowEditor> {
         child: ListView(shrinkWrap: true, children: [
           heading('A PREMIERE'),
           note('A one-off airing at a set minute. Everyone aboard hears it at the same second, and anyone who kept the station can ring a bell for it.'),
-          TextField(controller: title, maxLength: 80, style: serif(18), decoration: pyrateField('What it is called')),
-          TextField(controller: about, maxLength: 400, style: serif(15), decoration: pyrateField('A line about it')),
+          TextField(enableIMEPersonalizedLearning: false, controller: title, maxLength: 80, style: serif(18), decoration: pyrateField('What it is called')),
+          TextField(enableIMEPersonalizedLearning: false, controller: about, maxLength: 400, style: serif(15), decoration: pyrateField('A line about it')),
           Row(children: [
             Text('${dayLabel(when.millisecondsSinceEpoch)} ${clockTime(when.millisecondsSinceEpoch)}', style: mono(14, color: bone)),
             const Spacer(),
@@ -583,8 +583,11 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
   List get slots => p['slots'] as List;
 
   Future<void> save() async {
-    p['zone'] = zoneOffsets();
-    p['zone_name'] = DateTime.now().timeZoneName;
+    // The zone goes out only when the programme keeps clock times. A station that only
+    // shuffles says nothing about where its keeper lives.
+    final clock = hours.isNotEmpty || slots.isNotEmpty;
+    p['zone'] = clock ? zoneOffsets() : [];
+    p['zone_name'] = clock ? DateTime.now().timeZoneName : '';
     final r = await Native.callAway({'cmd': 'programme_set', 'station': widget.station, 'programme': p});
     if (!mounted) return;
     setState(() => saved = r is Map && r['error'] != null ? r['error'] : 'Set. Every listener\'s clock follows it within a minute.');
@@ -596,7 +599,7 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
     final start = (mode['start_min'] as num?)?.toInt() ?? 18 * 60;
     return ListView(padding: const EdgeInsets.fromLTRB(24, 8, 24, 48), children: [
       masthead('The Programme'),
-      note('How your station fills the day, in your own time (${zoneLabel()}). It keeps doing this for as long as anyone carries it, whether or not you ever open the app again.'),
+      note('How your station fills the day, in your own time (${zoneLabel()}). Clock times carry that zone with them, where anyone can read it. It keeps doing this for as long as anyone carries it, whether or not you ever open the app again.'),
       if (!loaded && loadError == null) Padding(padding: const EdgeInsets.only(top: 16), child: note('Reading the log')),
       // The time-zone table a programme carries runs out some day; past it the local time
       // keeps its last offset. Setting the programme again writes a fresh forty years.
@@ -781,8 +784,8 @@ class _SlotEditorState extends State<SlotEditor> {
         padding: EdgeInsets.fromLTRB(24, 22, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
         child: ListView(shrinkWrap: true, children: [
           heading('A REGULAR SHOW'),
-          TextField(controller: title, maxLength: 80, style: serif(18), decoration: pyrateField('What it is called')),
-          TextField(controller: about, maxLength: 400, style: serif(15), decoration: pyrateField('A line about it')),
+          TextField(enableIMEPersonalizedLearning: false, controller: title, maxLength: 80, style: serif(18), decoration: pyrateField('What it is called')),
+          TextField(enableIMEPersonalizedLearning: false, controller: about, maxLength: 400, style: serif(15), decoration: pyrateField('A line about it')),
           dayToggles(days, (v) => setState(() => days = v)),
           Row(children: [
             pyrateButton('AT ${hhmm(start)}', () async {
@@ -915,7 +918,7 @@ class _StartShapePickerState extends State<StartShapePicker> {
         ],
       ],
       if (s.kind == 'feed') ...[
-        TextField(controller: feed, onChanged: (v) => s.feed = v, style: mono(12, color: bone), decoration: pyrateField('https://…/feed.xml')),
+        TextField(enableIMEPersonalizedLearning: false, controller: feed, onChanged: (v) => s.feed = v, style: mono(12, color: bone), decoration: pyrateField('https://…/feed.xml')),
         Wrap(children: [for (final n in [1, 5, 10, 25]) chip('Keep the newest $n', s.feedCount == n, () => setState(() => s.feedCount = n))]),
       ],
       if (s.kind == 'live') ...[
@@ -1068,7 +1071,7 @@ class _FeedsPanelState extends State<FeedsPanel> {
             if (mounted) setState(() {});
           }),
         ]),
-      TextField(controller: url, style: mono(12, color: bone), decoration: pyrateField('A podcast feed URL')),
+      TextField(enableIMEPersonalizedLearning: false, controller: url, style: mono(12, color: bone), decoration: pyrateField('A podcast feed URL')),
       const SizedBox(height: 10),
       Wrap(spacing: 6, children: [
         pyrateButton('ADD THE FEED', () async {
@@ -1140,7 +1143,7 @@ class _PosterSheetState extends State<PosterSheet> {
     final img = await ro.toImage(pixelRatio: 5);
     final png = await img.toByteData(format: ui.ImageByteFormat.png);
     if (png == null) return;
-    final dir = Directory('${(await getTemporaryDirectory()).path}/share');
+    final dir = Directory('${(await scratchDir()).path}/share');
     if (!dir.existsSync()) dir.createSync(recursive: true);
     final f = File('${dir.path}/${safeName(widget.station['name'] ?? 'Pyrate Radio')} poster.png');
     await f.writeAsBytes(png.buffer.asUint8List());
@@ -1328,7 +1331,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
         padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           heading('ASK FOR A RECORDING'),
-          TextField(controller: note2, maxLength: 140, style: serif(15), decoration: pyrateField('A word with it, if you like')),
+          TextField(enableIMEPersonalizedLearning: false, controller: note2, maxLength: 140, style: serif(15), decoration: pyrateField('A word with it, if you like')),
           Flexible(
             child: ListView(shrinkWrap: true, children: [
               for (final t in lib)
@@ -1435,7 +1438,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
         ),
       const SizedBox(height: 8),
       Row(children: [
-        Expanded(child: TextField(controller: say, maxLength: 280, style: serif(16), decoration: pyrateField('Say something'), onSubmitted: (t) {
+        Expanded(child: TextField(enableIMEPersonalizedLearning: false, controller: say, maxLength: 280, style: serif(16), decoration: pyrateField('Say something'), onSubmitted: (t) {
           if (t.trim().isEmpty) return;
           say.clear();
           send('text', text: t.trim());
@@ -1453,7 +1456,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
         pyrateButton('ASK FOR ONE', ask),
         if (!widget.own) pyrateButton(hailing ? 'SEND THE HAIL' : 'HAIL THE KEEPER', hail, color: hailing ? bloodBright : bone),
       ]),
-      TextField(controller: name, maxLength: 32, style: serif(15), decoration: pyrateField('Your name in the room'), onChanged: (v) => pref('chat_name', v.trim())),
+      TextField(enableIMEPersonalizedLearning: false, controller: name, maxLength: 32, style: serif(15), decoration: pyrateField('Your name in the room'), onChanged: (v) => pref('chat_name', v.trim())),
       if (err != null) note(err!),
       Wrap(spacing: 6, runSpacing: 6, children: [
         pyrateButton('LEAVE THE CHATTER', () async {
@@ -1635,7 +1638,7 @@ Future<String?> askText(BuildContext context, String title, String label, String
       backgroundColor: panel,
       shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
       title: Text(title, style: carved(13)),
-      content: TextField(controller: c, maxLines: 4, maxLength: 400, autofocus: true, style: serif(16), decoration: pyrateField(label)),
+      content: TextField(enableIMEPersonalizedLearning: false, controller: c, maxLines: 4, maxLength: 400, autofocus: true, style: serif(16), decoration: pyrateField(label)),
       actions: [TextButton(onPressed: () => Navigator.pop(d, c.text), child: Text('SPEAK IT', style: carved(11)))],
     ),
   );
@@ -1643,7 +1646,7 @@ Future<String?> askText(BuildContext context, String title, String label, String
 
 /// Speaks text into a WAV file in the phone's temporary folder. Null if the phone has no voice.
 Future<String?> speakToFile(String text, {double rate = 0.95, double pitch = 1.0}) async {
-  final dir = await getTemporaryDirectory();
+  final dir = await scratchDir();
   final path = '${dir.path}/voice-${DateTime.now().microsecondsSinceEpoch}.wav';
   final ok = await ship.invokeMethod<bool>('speak', {'text': text, 'path': path, 'rate': rate, 'pitch': pitch}).catchError((_) => false) ?? false;
   return ok && File(path).existsSync() && File(path).lengthSync() > 1000 ? path : null;
@@ -1898,7 +1901,7 @@ class _FlockSheetState extends State<FlockSheet> {
               if (r is Map) setState(() => link = r['link'] as String?);
             }),
             const SizedBox(height: 12),
-            TextField(controller: paste, style: mono(11, color: bone), decoration: pyrateField('Or paste a flock link')),
+            TextField(enableIMEPersonalizedLearning: false, controller: paste, style: mono(11, color: bone), decoration: pyrateField('Or paste a flock link')),
             const SizedBox(height: 8),
             pyrateButton('JOIN', () async {
               final r = await Native.callAway({'cmd': 'flock_join', 'link': paste.text.trim()});

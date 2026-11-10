@@ -16,6 +16,7 @@ const SCOPE = '{{SCOPE}}';
 const OPEN_PLAYERS = '{{OPEN_PLAYERS}}';
 const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
 const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
+const lastId = () => { if (SHARED) return ''; try { return sessionStorage.getItem('pyrate.cur') || '' } catch (e) { return '' } };
 const passedId = () => { const id = location.hash.slice(1); return /^[0-9a-f]{64}$/.test(id) ? id : null };
 const inSet = s => !HOSTIS_ONLY || isHarbour(s.id);
 // The open player's fixed name if it answers within a few seconds, since a browser keeps what it
@@ -437,7 +438,9 @@ async function show(s) {
   document.querySelectorAll('.row').forEach(r => r.classList.toggle('on', r.dataset.id === s.id));
   // A pocket's id never goes in the address bar or the history.
   if (isPocket(s)) history.replaceState(null, '', location.pathname);
-  else if (location.hash.slice(1) !== s.id) history.replaceState(null, '', '#' + s.id);
+  // The station tuned stays out of the address bar, so it never lands in history or a synced
+  // browser. The tab alone remembers it, for a reload, and forgets it when it closes.
+  else { if (location.hash) history.replaceState(null, '', location.pathname + location.search); if (!SHARED) try { sessionStorage.setItem('pyrate.cur', s.id) } catch (e) { } }
   radio.tune(s.id);
   nowPlaying(); page(true); chatter();
 }
@@ -483,7 +486,7 @@ function rows() {
     if (s.cover) { mini.classList.add('pic'); if (lazy) lazy.observe(r); else pic(s.id, s.cover).then(u => { if (u) mini.innerHTML = '<img alt="" src="' + u + '">' }) }
     const nm = r.querySelector('.name'); nm.textContent = s.name;
     // What a station says of itself, as hairline tags: the open air in bright red, the rest in bone.
-    for (const [t, c] of [[s.live && 'On air', 'lv'], [s.pocket && 'Private', ''], [s.explicit ? 'Explicit' : s.mature && 'Mature', '']]) if (t) { const g = document.createElement('span'); g.className = 'tag ' + c; g.textContent = t; nm.append(g) }
+    for (const [t, c] of [[s.live && 'On air', 'lv'], [s.mixed && !isHarbour(s.id) && 'False colours?', ''], [s.pocket && 'Private', ''], [s.explicit ? 'Explicit' : s.mature && 'Mature', '']]) if (t) { const g = document.createElement('span'); g.className = 'tag ' + c; g.textContent = t; nm.append(g) }
     r.querySelector('.cs').textContent = s.call_sign; r.querySelector('.about').textContent = s.about || '';
     r.querySelector('.count').innerHTML = s.aboard + '<small>ABOARD</small><span class="fq">' + fq(s.id).toFixed(1) + '</span>';
     r.classList.toggle('on', cur?.id === s.id);
@@ -500,7 +503,7 @@ function refresh() {
   $('flockleave').hidden = !flocking;
   rows();
   if (cur) { const u = stations.find(x => x.id === cur.id); if (u) { const pic0 = cur.cover, ban0 = cur.banner; cur = u; $('cs').textContent = u.call_sign + '  ' + u.aboard + ' aboard'; $('name').textContent = u.name; if (u.cover !== pic0 || u.banner !== ban0) show(u) } }
-  else { const id = wanted || location.hash.slice(1); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations.find(x => allowed(x) && inSet(x) && !marooned().has(x.id))); if (s) show(s) }
+  else { const id = wanted || location.hash.slice(1) || lastId(); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations.find(x => allowed(x) && inSet(x) && !marooned().has(x.id))); if (s) show(s) }
 }
 
 // A flock link (#flock=...): this tab plays in step with the phone that showed it.
@@ -532,7 +535,7 @@ async function pocketJoin(link, open) {
 
 // A station link (#<id>) works before the station's card arrives: the harbour carries it.
 function followLink() {
-  const id = wanted || location.hash.slice(1);
+  const id = wanted || location.hash.slice(1) || lastId();
   if (!/^[0-9a-f]{64}$/.test(id) || cur?.id === id || (HOSTIS_ONLY && !isHarbour(id))) return;
   // On an Android phone, a passed station can go straight to the app if it is there.
   if (/Android/.test(navigator.userAgent) && !pockets.has(id)) { $('appopen').href = 'intent://station/' + id + '#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url=' + encodeURIComponent('https://hostis.black/pyrateradio/#set') + ';end'; $('appnote').hidden = false }
@@ -752,6 +755,7 @@ $('forget').onclick = () => {
   if (!confirm('Forget everything this browser keeps for the radio? Pockets go too, unless you still have their invitations. A station raised here stays on the air, but this browser can speak for it again only from its 24 words.')) return;
   try { for (const k of Object.keys(localStorage)) if (k.startsWith('pyrate.')) localStorage.removeItem(k) } catch (e) { }
   try { for (const k of Object.keys(sessionStorage)) if (k.startsWith('pyrate.')) sessionStorage.removeItem(k) } catch (e) { }
+  try { for (const k of Object.keys(sessionStorage)) if (k.startsWith('pyrate.')) sessionStorage.removeItem(k) } catch (e) { }
   location.replace(location.pathname + location.search);
 };
 $('mclear').onclick = () => { setMarooned(new Set()); $('mnote').textContent = 'Every station is back in the Log.'; refresh() };
@@ -761,8 +765,34 @@ $('mclear').onclick = () => { setMarooned(new Set()); $('mnote').textContent = '
 // tab signs with a deputy whose seed this browser keeps. Recordings are decoded by the browser,
 // levelled and encoded with libopus off the page's thread, signed into the log, and sent along
 // the stem as a phone sends them. Nothing goes to any server.
-const kept = () => { try { const l = JSON.parse(store('pyrate.mine') || '[]'); return Array.isArray(l) ? l.filter(k => /^[0-9a-f]{64}$/.test(k.id) && /^[0-9a-f]{64}$/.test(k.deputy)) : [] } catch (e) { return [] } };
-const keep = l => store('pyrate.mine', JSON.stringify(l));
+// The deputy seeds sit in this browser in one of three ways: plain, sealed under a passphrase
+// (PBKDF2 and AES-GCM, so a copied profile gives up nothing), or in the tab alone, forgotten
+// when it closes. The 24 words bring a station back in every case.
+let mineMem = null, mineSeal = null;
+const tabKeys = () => { if (SHARED) return false; try { return sessionStorage.getItem('pyrate.mine') !== null } catch (e) { return false } };
+const sealed = () => { try { const o = JSON.parse(store('pyrate.mine') || 'null'); return o && o.ct ? o : null } catch (e) { return null } };
+const validKeys = l => Array.isArray(l) ? l.filter(k => /^[0-9a-f]{64}$/.test(k.id) && /^[0-9a-f]{64}$/.test(k.deputy)) : [];
+const kept = () => {
+  if (mineMem) return mineMem;
+  try { return validKeys(JSON.parse((tabKeys() ? sessionStorage.getItem('pyrate.mine') : store('pyrate.mine')) || '[]')) } catch (e) { return [] }
+};
+const unstore = k => { if (SHARED) passing.delete(k); else try { localStorage.removeItem(k) } catch (e) { } };
+function keep(l) {
+  mineMem = l; const s = JSON.stringify(l);
+  if (mineSeal) { sealWith(mineSeal, s).then(o => store('pyrate.mine', JSON.stringify(o))); return }
+  if (tabKeys()) { try { sessionStorage.setItem('pyrate.mine', s) } catch (e) { } return }
+  store('pyrate.mine', s);
+}
+const b64 = u => btoa(String.fromCharCode(...u)), unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function sealKey(pass, salt) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return { salt, key: await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 600000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']) };
+}
+async function sealWith(k, text) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k.key, new TextEncoder().encode(text)));
+  return { v: 1, salt: b64(k.salt), iv: b64(iv), ct: b64(ct) };
+}
 let mineCur = null, airing = 0, adopted = new Set();
 const stNote = t => { $('st-note').textContent = t };
 
@@ -795,6 +825,11 @@ async function powWork(id) {
 }
 async function studioBoot() {
   if (SCOPE !== 'open' || EMBED || !radio) return;
+  $('st-tabonly').checked = tabKeys(); $('st-safer').hidden = SHARED;
+  if (sealed() && !mineMem) { $('st-lock').hidden = false; $('st-new').hidden = true; setInterval(studioStatus, 1500); return }
+  adoptAll(); setInterval(studioStatus, 1500);
+}
+function adoptAll() {
   for (const k of kept()) {
     mineCur ??= k.id;
     radio.adopt(k.id, k.deputy).then(ok => {
@@ -804,10 +839,35 @@ async function studioBoot() {
       studioShow();
     }, () => { });
   }
-  studioShow(); setInterval(studioStatus, 1500);
+  studioShow();
 }
+$('st-open').onclick = async () => {
+  const o = sealed(); if (!o) return;
+  $('st-locknote2').textContent = 'Opening';
+  try {
+    const k = await sealKey($('st-pass').value, unb64(o.salt));
+    const text = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.iv) }, k.key, unb64(o.ct)));
+    mineMem = validKeys(JSON.parse(text)); mineSeal = k; $('st-pass').value = ''; $('st-locknote2').textContent = '';
+    $('st-lock').hidden = true; adoptAll();
+  } catch (e) { $('st-locknote2').textContent = 'That is not the passphrase.' }
+};
+$('st-pass').onkeydown = e => { if (e.key === 'Enter') $('st-open').click() };
+$('st-lockit').onclick = async () => {
+  const p = $('st-newpass').value; if (p.length < 8) { $('st-locknote').textContent = 'Eight characters at least. A short line of words is best.'; return }
+  $('st-locknote').textContent = 'Sealing';
+  try { sessionStorage.removeItem('pyrate.mine') } catch (e) { }
+  $('st-tabonly').checked = false;
+  mineSeal = await sealKey(p, crypto.getRandomValues(new Uint8Array(16))); keep(kept()); $('st-newpass').value = '';
+  $('st-locknote').textContent = 'Sealed. This browser asks for the passphrase before it broadcasts again.';
+};
+$('st-tabonly').onchange = () => {
+  const l = kept(); mineSeal = null;
+  if ($('st-tabonly').checked) { try { sessionStorage.setItem('pyrate.mine', JSON.stringify(l)) } catch (e) { } unstore('pyrate.mine'); $('st-locknote').textContent = 'The key goes when this tab closes. The 24 words bring it back.' }
+  else { try { sessionStorage.removeItem('pyrate.mine') } catch (e) { } store('pyrate.mine', JSON.stringify(l)); $('st-locknote').textContent = 'The key stays in this browser.' }
+};
 $('raisego').onclick = () => $('studio').scrollIntoView({ behavior: 'smooth', block: 'start' });
 $('st-raise').onclick = async () => {
+  if (sealed() && !mineMem) { stNote('Open the sealed stations first.'); return }
   const name = $('st-name').value.trim(); if (!name) { stNote('A station needs a name.'); $('st-name').focus(); return }
   if (!radio) { stNote('Coming aboard first.'); booting ??= boot(); await booting; if (!radio) return }
   let r; try { r = JSON.parse(radio.raise(name, $('st-about').value, $('st-kinds').value, $('st-mature').checked, $('st-explicit').checked)) } catch (e) { stNote(String(e)); return }
@@ -821,6 +881,7 @@ $('st-raise').onclick = async () => {
 $('st-written').onchange = () => { $('st-done').disabled = !$('st-written').checked };
 $('st-done').onclick = () => { $('st-wordlist').innerHTML = ''; $('st-show').hidden = true; studioShow(); studioStatus() };
 $('st-restore').onclick = async () => {
+  if (sealed() && !mineMem) { stNote('Open the sealed stations first.'); return }
   const words = $('st-words').value.trim().toLowerCase().split(/\s+/).join(' ');
   if (words.split(' ').length !== 24) { stNote('A station’s key is twenty-four words.'); return }
   if (!radio) { booting ??= boot(); await booting; if (!radio) return }
@@ -842,10 +903,28 @@ function encode(kind, data = {}, transfer = []) {
   return new Promise((res, rej) => { const id = ++encSeq; encWait.set(id, { res, rej }); enc.postMessage({ id, kind, ...data }, transfer) });
 }
 // A title and a name from a file's own name: "Artist - Title.mp3" reads as both.
+// As the app's plain_title: a recorder's date and time, and its own words around them, never
+// become a title. A bare date stays, since a keeper may mean it.
+const DEVICE = new Set(['vid', 'img', 'aud', 'rec', 'pxl', 'voice', 'recording', 'audio', 'video', 'sound', 'new', 'memo', 'screen', 'record']);
+function plainTitle(s) {
+  const t = s.split(/[\s_]+/).filter(Boolean), keep = t.map(() => true);
+  const stampy = x => /^[0-9.:hms-]+$/.test(x) && (x.match(/\d/g) || []).length >= 2;
+  let cut = false;
+  for (let i = 0; i < t.length;) {
+    if (!stampy(t[i])) { i++; continue }
+    let j = i, d = 0; while (j < t.length && stampy(t[j])) { d += t[j].match(/\d/g).length; j++ }
+    if (d >= 12) { for (let k = i; k < j; k++) keep[k] = false; cut = true }
+    i = j;
+  }
+  if (!cut) return { text: s.trim(), cut };
+  t.forEach((x, k) => { if (keep[k] && DEVICE.has(x.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase())) keep[k] = false });
+  const out = t.filter((_, k) => keep[k]).join(' ').replace(/^[\s.-]+|[\s.-]+$/g, '');
+  return { text: out || 'Untitled', cut };
+}
 function titled(f) {
-  const base = f.name.replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const p = plainTitle(f.name.replace(/\.[a-z0-9]{1,5}$/i, '')), base = p.text.replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
   const m = base.match(/^(.{1,80}?)\s+[-–—]\s+(.+)$/);
-  return m ? { title: m[2], by: m[1] } : { title: base, by: '' };
+  return m ? { title: m[2], by: m[1], cut: p.cut } : { title: base, by: '', cut: p.cut };
 }
 const BLOCK = 48000 * 4;
 function block(chans, at, n, ch, gain = 1) {
@@ -890,7 +969,7 @@ async function airFile(f, row) {
 async function airFiles(list) {
   if (!mineCur || !adopted.has(mineCur)) return;
   const files = [...list].filter(f => f.size > 0);
-  const rows = files.map(f => { const r = document.createElement('div'); r.className = 'qi'; r.innerHTML = '<span class="qt"></span><span class="bar"><i></i></span><span class="qs">Waiting</span>'; r.querySelector('.qt').textContent = titled(f).title; $('st-queue').prepend(r); return r });
+  const rows = files.map(f => { const r = document.createElement('div'); r.className = 'qi'; r.innerHTML = '<span class="qt"></span><span class="bar"><i></i></span><span class="qs">Waiting</span>'; const tf = titled(f); r.querySelector('.qt').textContent = tf.title; if (tf.cut) r.title = 'The date and time the file was made are left out of its title.'; $('st-queue').prepend(r); return r });
   for (const [i, f] of files.entries()) { airing++; try { await airFile(f, rows[i]) } finally { airing-- } }
   studioStatus();
 }

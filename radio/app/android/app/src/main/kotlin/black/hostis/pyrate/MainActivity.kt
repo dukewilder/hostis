@@ -74,7 +74,16 @@ class MainActivity : FlutterActivity() {
         takeLink(intent)
     }
 
+    private fun quiet() = getSharedPreferences("pyrate", Context.MODE_PRIVATE).getBoolean("plain_lock", false)
+
+    /** With the lock screen saying only "Radio", the recents screen shows nothing either. */
+    private fun discreet() {
+        val flag = android.view.WindowManager.LayoutParams.FLAG_SECURE
+        if (quiet()) window.addFlags(flag) else window.clearFlags(flag)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        discreet()
         super.configureFlutterEngine(flutterEngine)
         takeLink(intent)
         initNative(applicationContext)
@@ -119,11 +128,28 @@ class MainActivity : FlutterActivity() {
                     val info = packageManager.getPackageInfo(packageName, 0)
                     result.success(if (Build.VERSION.SDK_INT >= 28) info.longVersionCode.toInt() else @Suppress("DEPRECATION") info.versionCode)
                 }
+                "copy_secret" -> {
+                    // Marked sensitive, so keyboards and clipboard previews keep it out of their
+                    // history and cloud; gone after a minute and a half if nothing replaced it.
+                    val text = call.argument<String>("text") ?: ""
+                    val cm = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("", text)
+                    clip.description.extras = android.os.PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
+                    cm.setPrimaryClip(clip)
+                    android.os.Handler(mainLooper).postDelayed({
+                        try { if (cm.primaryClip?.getItemAt(0)?.text?.toString() == text) cm.clearPrimaryClip() } catch (_: Exception) { }
+                    }, 90_000L)
+                    result.success(null)
+                }
+                "signer" -> {
+                    val s = packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES).signingInfo?.apkContentsSigners?.firstOrNull()
+                    result.success(s?.let { java.security.MessageDigest.getInstance("SHA-256").digest(it.toByteArray()).joinToString(":") { b -> "%02X".format(b) } })
+                }
                 "secure" -> {
                     // While the 24 words or a PIN are on screen: no screenshots, no recents
                     // thumbnail, no screen recording.
                     val flag = android.view.WindowManager.LayoutParams.FLAG_SECURE
-                    if (call.argument<Boolean>("on") == true) window.addFlags(flag) else window.clearFlags(flag)
+                    if (call.argument<Boolean>("on") == true) window.addFlags(flag) else if (!quiet()) window.clearFlags(flag)
                     result.success(null)
                 }
                 "live" -> {
@@ -209,6 +235,7 @@ class MainActivity : FlutterActivity() {
                 "plain_get" -> result.success(Ship.isPlain(this))
                 "plain_lock_set" -> {
                     getSharedPreferences("pyrate", Context.MODE_PRIVATE).edit().putBoolean("plain_lock", call.argument<Boolean>("value") == true).apply()
+                    discreet()
                     result.success(null)
                 }
                 "plain_lock_get" -> result.success(getSharedPreferences("pyrate", Context.MODE_PRIVATE).getBoolean("plain_lock", false))

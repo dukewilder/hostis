@@ -9,7 +9,6 @@ import 'shell.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'art.dart';
 import 'main.dart';
@@ -101,6 +100,8 @@ bool isHarbour(String id) => harbour.contains(id);
 /// A station flying a harbour station's name without its key: false colours.
 bool falseColours(Map s) {
   if (isHarbour(s['id'] as String)) return false;
+  // Latin mixed with Greek or Cyrillic letters is how one name passes for another.
+  if (s['mixed'] == true) return true;
   final name = (s['name'] ?? '').toString().trim().toLowerCase();
   return name.isNotEmpty && harbourNames.contains(name);
 }
@@ -293,7 +294,7 @@ class _LogPageState extends State<LogPage> {
               ),
             const SizedBox(height: 10),
             Row(children: [
-              Expanded(child: TextField(controller: search, style: serif(17), decoration: pyrateField('Search the Log'))),
+              Expanded(child: TextField(enableIMEPersonalizedLearning: false, controller: search, style: serif(17), decoration: pyrateField('Search the Log'))),
               const SizedBox(width: 12),
               IconButton(
                 tooltip: 'The chart of the seas',
@@ -545,7 +546,7 @@ class _WatchBillState extends State<WatchBill> {
 String safeName(String s) => s.replaceAll(RegExp(r'[^\w\s\-.,()]'), '').trim();
 
 Future<void> tapeIt(BuildContext context) async {
-  final dir = await getTemporaryDirectory();
+  final dir = await scratchDir();
   final share = Directory('${dir.path}/share');
   if (!share.existsSync()) share.createSync(recursive: true);
   final tmp = '${share.path}/tape-${DateTime.now().millisecondsSinceEpoch}.ogg';
@@ -569,7 +570,7 @@ Future<String?> fetchOut(String url, {int maxBytes = 30000000}) async {
     ..connectionTimeout = const Duration(seconds: 20)
     ..idleTimeout = const Duration(seconds: 15)
     ..userAgent = 'Mozilla/5.0';
-  final dir = await getTemporaryDirectory();
+  final dir = await scratchDir();
   final stem = '${dir.path}/out-${DateTime.now().microsecondsSinceEpoch}';
   final part = File('$stem.part');
   try {
@@ -632,7 +633,7 @@ Future<bool> askMic(BuildContext context) async {
 Future<void> dropCopy(String? path) async {
   if (path == null) return;
   try {
-    final tmp = (await getTemporaryDirectory()).path;
+    final tmp = (await scratchDir()).path;
     if (File(path).absolute.path.startsWith('$tmp/')) await File(path).delete();
   } catch (_) {}
 }
@@ -660,7 +661,7 @@ Future<String?> _setQueue = Future.value(null);
 /// made for passing it on.
 Future<void> sweepTemp() async {
   try {
-    final dir = await getTemporaryDirectory();
+    final dir = await scratchDir();
     final old = DateTime.now().subtract(const Duration(hours: 6));
     const prefixes = ['out-', 'feed-', 'pyrate-art-', 'rec-', 'voice-'];
     await for (final e in dir.list(recursive: true)) {
@@ -726,21 +727,21 @@ class _TipSheetState extends State<TipSheet> {
           note('It goes from your own wallet straight to the station. Pyrate Radio moves no money and sees none of it.'),
           const SizedBox(height: 10),
           SelectableText(widget.addr, style: mono(11, color: boneDim)),
-          TextField(controller: memo, maxLength: 140, style: serif(16), decoration: pyrateField(lightning ? 'A note for the keeper (paste it in your wallet\'s comment)' : 'A note for the keeper')),
+          TextField(enableIMEPersonalizedLearning: false, controller: memo, maxLength: 140, style: serif(16), decoration: pyrateField(lightning ? 'A note for the keeper (paste it in your wallet\'s comment)' : 'A note for the keeper')),
           Wrap(spacing: 6, runSpacing: 6, children: [
             pyrateButton('OPEN MY WALLET', () async {
-              if (lightning && memo.text.trim().isNotEmpty) await Clipboard.setData(ClipboardData(text: memo.text.trim()));
+              if (lightning && memo.text.trim().isNotEmpty) await copySecret(memo.text.trim());
               final ok = await ship.invokeMethod<bool>('open_uri', {'uri': tipUri(widget.addr, memo.text)}).catchError((_) => false) ?? false;
               if (!context.mounted) return;
               if (!ok) {
-                await Clipboard.setData(ClipboardData(text: widget.addr));
+                await copySecret(widget.addr);
                 if (context.mounted) toast(context, 'No wallet on this phone answered. The address is copied.');
               } else if (lightning && memo.text.trim().isNotEmpty) {
                 toast(context, 'Your note is copied: paste it in the wallet\'s comment.');
               }
             }),
             pyrateButton('COPY THE ADDRESS', () async {
-              await Clipboard.setData(ClipboardData(text: widget.addr));
+              await copySecret(widget.addr);
               if (context.mounted) toast(context, 'The address is copied.');
             }),
           ]),
@@ -947,7 +948,7 @@ class _RecordPanelState extends State<RecordPanel> {
       if (path != null) ...[
         const SizedBox(height: 10),
         Text('${fmtTime(ms)} recorded', style: mono(11)),
-        TextField(controller: title, style: serif(17), decoration: pyrateField('Title')),
+        TextField(enableIMEPersonalizedLearning: false, controller: title, style: serif(17), decoration: pyrateField('Title')),
         const SizedBox(height: 10),
         Row(children: [
           pyrateButton('PUT IT ON THE CLOCK', () {
@@ -1026,8 +1027,10 @@ class _DetailsPanelState extends State<DetailsPanel> {
       ]),
       pyrateSwitch(mature, (v) => setState(() => mature = v), 'Mature: strong language or themes. Listeners who hide mature stations will not see it'),
       pyrateSwitch(explicit, (v) => setState(() => explicit = v), 'Explicit: sexual or graphic material. Only listeners who turn explicit stations on will see it'),
-      TextField(controller: port, style: serif(16), decoration: pyrateField('Home port (a city, for Local)')),
-      TextField(controller: tip, style: mono(12, color: bone), decoration: pyrateField('Tips: a Lightning address, Bitcoin or Monero')),
+      TextField(enableIMEPersonalizedLearning: false, controller: port, style: serif(16), decoration: pyrateField('Home port (a city, for Local)')),
+      note('Everyone can read the home port. Leave it empty, or name a city that is not yours.'),
+      TextField(enableIMEPersonalizedLearning: false, controller: tip, style: mono(12, color: bone), decoration: pyrateField('Tips: a Lightning address, Bitcoin or Monero')),
+      note('A Bitcoin address shows every payment to anyone who looks it up. Monero shows none.'),
       const SizedBox(height: 12),
       Row(children: [
         pyrateButton('SET THE PAPERS', () {
@@ -1110,8 +1113,8 @@ class _HandsPanelState extends State<HandsPanel> {
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             note('Your co-host opens Colours, presses JOIN A CREW and sends you the code it shows. Their phone can then broadcast for this station. Your words can take it back at any time.'),
-            TextField(controller: code, style: mono(12, color: bone), decoration: pyrateField('Their code')),
-            TextField(controller: label, style: serif(16), decoration: pyrateField('Their name, for your own record')),
+            TextField(enableIMEPersonalizedLearning: false, controller: code, style: mono(12, color: bone), decoration: pyrateField('Their code')),
+            TextField(enableIMEPersonalizedLearning: false, controller: label, style: serif(16), decoration: pyrateField('Their name, for your own record')),
             TextField(controller: words, style: mono(12, color: bone), maxLines: 3, decoration: pyrateField('Your 24 words'),
                 enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, keyboardType: TextInputType.visiblePassword),
           ]),
@@ -1141,7 +1144,7 @@ class _HandsPanelState extends State<HandsPanel> {
         backgroundColor: panel,
         shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
         title: Text('JOIN THE CREW', style: carved(13)),
-        content: TextField(controller: id, style: mono(12, color: bone), decoration: pyrateField('The station\'s id, from its captain')),
+        content: TextField(enableIMEPersonalizedLearning: false, controller: id, style: mono(12, color: bone), decoration: pyrateField('The station\'s id, from its captain')),
         actions: [TextButton(onPressed: () => Navigator.pop(c, true), child: Text('JOIN', style: carved(11)))],
       ),
     );
@@ -1313,6 +1316,7 @@ class _ShipPapersState extends State<ShipPapers> {
   bool plain = false;
   bool plainLock = false;
   bool pinSet = false;
+  String? sig;
   Map wake = {};
   String? msg;
 
@@ -1324,6 +1328,7 @@ class _ShipPapersState extends State<ShipPapers> {
     pinSet = (Native.call({'cmd': 'pin_check', 'pin': ''}) as Map?)?['set'] == true;
     ship.invokeMethod<bool>('plain_get').then((v) => setState(() => plain = v == true)).catchError((_) {});
     ship.invokeMethod<bool>('plain_lock_get').then((v) => setState(() => plainLock = v == true)).catchError((_) {});
+    signer().then((v) { if (mounted) setState(() => sig = v); });
     ship.invokeMethod<String>('wake_get').then((v) => setState(() => wake = jsonDecode(v ?? '{}'))).catchError((_) {});
   }
 
@@ -1377,7 +1382,7 @@ class _ShipPapersState extends State<ShipPapers> {
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             note('Paste a maroon list someone shared with you. Every station on it leaves your Log. It is a copy: nobody can change it afterwards.'),
-            TextField(controller: text, maxLines: 6, style: mono(11, color: bone), decoration: pyrateField('The list')),
+            TextField(enableIMEPersonalizedLearning: false, controller: text, maxLines: 6, style: mono(11, color: bone), decoration: pyrateField('The list')),
           ]),
         ),
         actions: [
@@ -1421,6 +1426,13 @@ class _ShipPapersState extends State<ShipPapers> {
       note('Hand the app to someone beside you, with no store and no internet.'),
       const SizedBox(height: 10),
       Row(children: [pyrateButton('PASS IT ON', () => pyrateSheet(context, const PassItOn()))]),
+      if (sig != null) ...[
+        const SizedBox(height: 26),
+        heading('THIS COPY'),
+        note('Signed with the key below. A copy signed with any other is not ours, whatever it calls itself. hostis.black/pyrateradio shows the same fingerprint.'),
+        const SizedBox(height: 6),
+        SelectableText(sig!, style: mono(10, color: boneDim)),
+      ],
       const SizedBox(height: 26),
       heading('MAROON LISTS'),
       note('Share the stations you have marooned, or take aboard someone else\'s list. Each phone keeps its own copy; nobody can change yours.'),
@@ -1448,7 +1460,7 @@ class _ShipPapersState extends State<ShipPapers> {
       pyrateSwitch(plainLock, (v) {
         ship.invokeMethod('plain_lock_set', {'value': v});
         setState(() => plainLock = v);
-      }, 'The lock screen says only "Radio"'),
+      }, 'The lock screen says only "Radio", and the recents screen shows nothing'),
       pyrateSwitch(pinSet, (v) {
         if (v) {
           setPin();
