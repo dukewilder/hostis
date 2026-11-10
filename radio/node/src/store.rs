@@ -242,10 +242,11 @@ impl Store {
         Ok(signed)
     }
 
-    /// A struck station's log and chunks go. The strike entry itself is kept,
+    /// A struck station's log, chunks and pictures go. The strike entry itself is kept,
     /// so the station is not fetched again.
     fn drop_station(&mut self, id: &StationId) -> Result<()> {
-        let hashes = self.chunks_of(id);
+        let mut hashes = self.chunks_of(id);
+        hashes.extend(self.logs.get(id).map(|a| a.art_hashes()).unwrap_or_default());
         for h in hashes {
             let _ = fs::remove_file(self.chunk_path(&h));
             let _ = fs::remove_file(self.legacy_path(&h));
@@ -290,6 +291,14 @@ impl Store {
     pub fn get_sealed(&self, name: &Hash) -> Option<Vec<u8>> {
         let p = self.named_path(name);
         let b = fs::read(&p).ok()?;
+        // A chunk from before sealing lies under its plain hash. Asked for by that hash as a
+        // name, it would go out in the clear: it is sealed in place instead, and nothing is said.
+        if blake3::hash(&b).as_bytes() == name {
+            if self.put_chunk(name, &b).is_ok() {
+                let _ = fs::remove_file(&p);
+            }
+            return None;
+        }
         if let Ok(f) = fs::File::options().append(true).open(&p) {
             let _ = f.set_modified(SystemTime::now());
         }
@@ -320,7 +329,6 @@ impl Store {
     }
 
     pub fn put_chunk(&self, h: &Hash, bytes: &[u8]) -> Result<()> {
-        use chacha20poly1305::aead::Aead;
         if blake3::hash(bytes).as_bytes() != h {
             anyhow::bail!("chunk does not match its hash");
         }
@@ -437,5 +445,27 @@ impl Store {
             freed += len;
         }
         Ok(freed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_plain_chunk_from_before_sealing_never_answers_a_sealed_request() {
+        let dir = std::env::temp_dir().join(format!("pyrate-store-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let s = Store::open(&dir, 1 << 20).unwrap();
+        let plain = b"six seconds of old sound".to_vec();
+        let h = *blake3::hash(&plain).as_bytes();
+        let legacy = s.legacy_path(&h);
+        fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        fs::write(&legacy, &plain).unwrap();
+        assert_eq!(s.get_sealed(&h), None, "asked for by its plain hash, it says nothing");
+        assert!(!legacy.exists(), "and the plain file is gone");
+        let sealed = s.get_sealed(&pyrate_core::seal::name(&h)).expect("it is held sealed now");
+        assert_eq!(pyrate_core::seal::unseal(&h, &sealed), Some(plain));
+        let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -10,21 +10,13 @@ Each entry gives the threat, whether the wall held, and the fix.
 
 **B5. Private fetches have no guard.** Each private fetch draws a fresh first hop, so over a day of listening a hostile pair of nodes (first hop and exit) will eventually both be drawn and can tie a listener to a station. Holds only in part. Fix: a long-lived first hop for fetches, as the stem already has, and as Tor's entry guards do.
 
-**B7. Old plain chunks answer to a sealed request.** A chunk kept from before sealing lies on disk under its plain hash, and a `SealedChunk` request naming that hash is served the plain bytes. Does not hold for those files. Fix: a sealed request that finds a plain file seals it in place and answers nothing.
-
 **B8. The hold opens for anyone with the public Log.** Chunks and logs are sealed under keys drawn from public facts (a station's id, a chunk's hash), and filed under names drawn from the same. Someone who seizes a disk and also runs a node can test it for every station on the Log, and a deleted file on flash may still be read. Holds against a casual look only. Fix: a hold key of the device's own, under which every file is sealed again and named, so the disk is noise without it and Clear the hold destroys the key.
 
 **B9. The PIN falls to a fast hash.** The Colours PIN is stored as a salted BLAKE3 hash, so a seized disk gives up a four-digit PIN at once, and with it any lock-screen PIN that matches. Holds only against a casual look. Fix: a memory-hard hash (Argon2id).
 
-**B11. A struck station's art stays on disk.** Strike drops a station's recordings but not its pictures. Fix: drop the art with them.
-
-**B12. A Lantern's chatter memory never empties.** Each room keeps every line id it has seen for the life of the process. Fix: forget ids older than the window in which a line is accepted at all.
-
 **B13. One company's DNS sits under the network.** Nodes publish their id and relay to number0's pkarr server and look carriers up there, and every lookup also goes out as a plain DNS query that the line's provider can read. If that server goes, nodes can find each other only through gossip neighbours; while it stands, it and the line see who dials whom. Holds only in part. Fix: no plain DNS lookups of node ids, and each node's relay address carried inside the network, signed by the node, so nodes find each other without number0.
 
 **B14. A broadcaster asks carriers for its own station directly.** When the private route fails, a phone syncing its own station asks carriers for the log by id from its own address, which tells them who keeps it. Does not hold. Fix: a keeper's phone never asks directly for its own station unless that station is already on the air directly from the phone.
-
-**B15. Small faults.** The flock's round trip can underflow if the network clock steps between pings.
 
 ### Track A: the clock, the programme, sound and pictures
 
@@ -163,14 +155,22 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **C30. Invitation key sits in the address bar for the whole join and forever on failure.** (medium) Fixed: the page reads an invitation and clears the address bar before anything else runs, joins from memory, and never writes a pocket's id into the address bar or the history. A flock link leaves the address bar as soon as it is read. (ce61d80)
 
-**B4. Ballast is announced and served away from the charger.** A phone keeps announcing its ballast stations and serving sealed chunks to strangers on mobile data, which spends the owner's data, and its ballast set (fixed by its steady seed) ties each day's fresh id to the last and each network it uses to the next. Holds only in part. Fixed: a phone announces its ballast only while it is on Wi-Fi and charging, and on mobile data it serves strangers no sealed chunks at all. What remains: a phone that charges on Wi-Fi in more than one place can still be tied across those places by its ballast set, and a keeper who cares can set the ballast aside. (pending)
+**B4. Ballast is announced and served away from the charger.** A phone keeps announcing its ballast stations and serving sealed chunks to strangers on mobile data, which spends the owner's data, and its ballast set (fixed by its steady seed) ties each day's fresh id to the last and each network it uses to the next. Holds only in part. Fixed: a phone announces its ballast only while it is on Wi-Fi and charging, and on mobile data it serves strangers no sealed chunks at all. What remains: a phone that charges on Wi-Fi in more than one place can still be tied across those places by its ballast set, and a keeper who cares can set the ballast aside. (a5f12b1)
 
-**B6. Stems and ballast ignore the listener's own switches.** A stem can end on a phone for a station its owner marooned, and ballast and stems take aboard explicit stations on a phone whose owner keeps them hidden. Does not hold for the owner's choice. Fixed: a node declines the stem and the ballast for any station its owner marooned, and a phone declines explicit stations while its owner hides them, and mature ones while they hide those. The station's word is read from its card, its log or the stem's own cargo. A declined stem is handed on, as a Lantern that carries its own already does. Checked by a new voyage test step (20 of 20). (pending)
+**B6. Stems and ballast ignore the listener's own switches.** A stem can end on a phone for a station its owner marooned, and ballast and stems take aboard explicit stations on a phone whose owner keeps them hidden. Does not hold for the owner's choice. Fixed: a node declines the stem and the ballast for any station its owner marooned, and a phone declines explicit stations while its owner hides them, and mature ones while they hide those. The station's word is read from its card, its log or the stem's own cargo. A declined stem is handed on, as a Lantern that carries its own already does. Checked by a new voyage test step (20 of 20). (a5f12b1)
 
-**B10. A malformed id can stop a node.** `StationId::from_hex`, `unhex` and the browser's `unhex32` slice strings by byte, so 64 bytes holding a multi-byte character panic. The FFI and the browser are reached by pasted links. Fixed: every hex parser (ids, keys, hashes, flock codes, release signatures) now goes through one strict parser in the core that reads bytes, takes only hex digits and cannot panic. A test feeds it 64 bytes holding a two-byte character and a leading plus. (pending)
+**B10. A malformed id can stop a node.** `StationId::from_hex`, `unhex` and the browser's `unhex32` slice strings by byte, so 64 bytes holding a multi-byte character panic. The FFI and the browser are reached by pasted links. Fixed: every hex parser (ids, keys, hashes, flock codes, release signatures) now goes through one strict parser in the core that reads bytes, takes only hex digits and cannot panic. A test feeds it 64 bytes holding a two-byte character and a leading plus. (7bd378e)
 
-**P6. One non-ASCII "hex" string aborts the app: no catch_unwind and byte-slicing parsers.** (medium) Fixed: the same strict parser closes the panics, and every door of the FFI (the C calls and the JNI calls) now catches a panic and answers with an error instead of aborting the app. (pending)
+**P6. One non-ASCII "hex" string aborts the app: no catch_unwind and byte-slicing parsers.** (medium) Fixed: the same strict parser closes the panics, and every door of the FFI (the C calls and the JNI calls) now catches a panic and answers with an error instead of aborting the app. (7bd378e)
 
-**P1. Second `initNative` call aborts the process.** (high) Fixed: the Android context is set once a process on the Rust side, whoever asks first, so the playback service starting after the app (or before it) no longer trips ndk-context's assertion. Confirmed in ndk-context 0.1.1, which asserts on a second call; checked by building the FFI for Android. (pending)
+**P1. Second `initNative` call aborts the process.** (high) Fixed: the Android context is set once a process on the Rust side, whoever asks first, so the playback service starting after the app (or before it) no longer trips ndk-context's assertion. Confirmed in ndk-context 0.1.1, which asserts on a second call; checked by building the FFI for Android. (7bd378e)
 
-**A13. `unhex` accepts a leading `+`.** (low) Fixed: the strict parser takes no sign. (pending)
+**A13. `unhex` accepts a leading `+`.** (low) Fixed: the strict parser takes no sign. (7bd378e)
+
+**B7. Old plain chunks answer to a sealed request.** A chunk kept from before sealing lies on disk under its plain hash, and a `SealedChunk` request naming that hash is served the plain bytes. Does not hold for those files. Fixed: a sealed request that finds a plain file under its name seals it in place, removes the plain copy and answers nothing. A unit test plants an old plain chunk and asks for it by its hash. (pending)
+
+**B11. A struck station's art stays on disk.** Strike drops a station's recordings but not its pictures. Fixed: a strike drops the station's pictures with its recordings. (pending)
+
+**B12. A Lantern's chatter memory never empties.** Each room keeps every line id it has seen for the life of the process. Fixed: each room, on a node and in a tab, forgets a line's id once a line that old would be refused anyway (twenty minutes), so memory holds only the last few minutes. Unit tested. (pending)
+
+**B15. Small faults.** The flock's round trip can underflow if the network clock steps between pings. Fixed: the round trip is taken with a saturating subtraction. (pending)

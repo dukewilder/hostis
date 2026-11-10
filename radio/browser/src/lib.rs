@@ -122,7 +122,7 @@ impl Hold {
 struct Room {
     tx: GossipSender,
     lines: VecDeque<pyrate_core::chat::Signed>,
-    seen: HashSet<Hash>,
+    seen: pyrate_core::chat::Seen,
     neighbours: usize,
 }
 
@@ -225,7 +225,7 @@ impl Ship {
         }
         let mut rooms = self.rooms.lock().unwrap();
         let Some(r) = rooms.get_mut(&st) else { return false };
-        if !r.seen.insert(pyrate_core::chat::id(&l)) {
+        if !r.seen.insert(pyrate_core::chat::id(&l), l.line.at_ms, self.now()) {
             return false;
         }
         r.lines.push_back(l);
@@ -255,7 +255,7 @@ impl Ship {
         let topic = key.map(|k| pyrate_core::pocket::chat_topic(&k)).unwrap_or_else(|| pyrate_core::chat::topic(&st));
         let sub = self.gossip.subscribe(TopicId::from_bytes(topic), peers.clone()).await.map_err(|e| anyhow!("{e}"))?;
         let (tx, mut rx) = sub.split();
-        self.rooms.lock().unwrap().insert(st, Room { tx, lines: VecDeque::new(), seen: HashSet::new(), neighbours: 0 });
+        self.rooms.lock().unwrap().insert(st, Room { tx, lines: VecDeque::new(), seen: Default::default(), neighbours: 0 });
         let me = self.clone();
         spawn(async move {
             while let Some(ev) = rx.next().await {
