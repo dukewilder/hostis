@@ -13,10 +13,15 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32"/>
+    <!-- Nothing of this app goes to anyone's cloud backup or to a phone-to-phone transfer: the
+         deputy key, pocket invitations and what the owner keeps all stay on this phone. -->
     <application
         android:label="Pyrate Radio"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/no_backup">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -100,7 +105,7 @@
             </intent-filter>
         </receiver>
         <receiver android:name=".AlarmReceiver" android:exported="false"/>
-        <receiver android:name=".BootReceiver" android:exported="true">
+        <receiver android:name=".BootReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
             </intent-filter>

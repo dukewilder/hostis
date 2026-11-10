@@ -43,7 +43,13 @@ use store::Store;
 
 /// A line in the system log: logcat on Android, stderr elsewhere.
 pub fn say(msg: &str) {
-    #[cfg(target_os = "android")]
+    // On a phone the system log is readable by bug reports and by anything with adb: a
+    // released app writes nothing there about stations, peers or what plays.
+    #[cfg(all(target_os = "android", not(debug_assertions)))]
+    {
+        let _ = msg;
+    }
+    #[cfg(all(target_os = "android", debug_assertions))]
     {
         #[link(name = "log")]
         unsafe extern "C" {
@@ -2010,11 +2016,12 @@ impl Node {
                     anyhow::bail!("a station needs a name");
                 }
                 let (id, words) = self.raise_with(name, req["about"].as_str().unwrap_or(""), req["port"].as_str().map(String::from), false)?;
-                // A pocket station: for invited listeners only, never on the public Log.
-                if req["pocket"].as_bool() == Some(true) {
-                    inner.pocket_new(id)?;
-                }
-                Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "words": words }))
+                // A pocket station: for invited listeners only, never on the public Log. The words
+                // come back whatever happens here: they are shown once, and the station exists.
+                // (A pocket is marked private before its topic opens, so a failure here leaves it
+                // private, never public.)
+                let pocket_error = if req["pocket"].as_bool() == Some(true) { inner.pocket_new(id).err().map(|e| e.to_string()) } else { None };
+                Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "words": words, "pocket_error": pocket_error }))
             }
             "add_track" => {
                 let st = station()?;

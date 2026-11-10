@@ -111,3 +111,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - Nodes find each other inside the network: carriers sign a note of their relay into the gossip, no node id is looked up in plain DNS, and tabs publish nothing about themselves.
 - Private fetches keep a long-lived first hop, as Tor's guards do, and a broadcaster's phone never asks carriers for its own station from its own address.
 - Strike colours works from the app: it takes the 24 words, as the screen always said.
+- The app keeps its secrets on the phone: no backup or transfer, a media browser only for the system and the car, a quiet log, and the 24 words guarded from loss, screenshots and keyboard learning.

@@ -69,7 +69,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 override fun onSkipToNext() { Native.cmd("cmd" to "tune_next", "dir" to 1); startPlaying() }
                 override fun onSkipToPrevious() { Native.cmd("cmd" to "tune_next", "dir" to -1); startPlaying() }
                 override fun onPlayFromMediaId(id: String?, extras: Bundle?) {
-                    if (id != null) tune(id)
+                    if (id != null && Regex("^[0-9a-f]{64}$").matches(id)) tune(id)
                 }
             })
             isActive = true
@@ -269,7 +269,20 @@ class PlaybackService : MediaBrowserServiceCompat() {
         Bells.rescheduleWake(this)
     }
 
-    override fun onGetRoot(clientPackageName: String, clientUid: Int, rootHints: Bundle?) = BrowserRoot("root", null)
+    /** Only this app, the system and the car browse the Log: no other app on the phone may
+     *  read the stations its owner listens to, or tune it. */
+    override fun onGetRoot(clientPackageName: String, clientUid: Int, rootHints: Bundle?): BrowserRoot? {
+        val trusted = clientUid == android.os.Process.myUid() ||
+            clientUid == android.os.Process.SYSTEM_UID ||
+            clientPackageName in setOf(
+                "com.android.systemui",
+                "com.google.android.projection.gearhead",
+                "com.google.android.mediasimulator",
+                "com.google.android.autosimulator",
+                "com.android.bluetooth",
+            )
+        return if (trusted) BrowserRoot("root", null) else null
+    }
 
     /** The Log, for the car and anything else that browses media. */
     override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
@@ -277,6 +290,8 @@ class PlaybackService : MediaBrowserServiceCompat() {
         val stations = Native.list("stations")
         for (i in 0 until stations.length()) {
             val s = stations.getJSONObject(i)
+            // A pocket station is for its members, never for a list another app can read.
+            if (s.optBoolean("pocket")) continue
             val d = MediaDescriptionCompat.Builder()
                 .setMediaId(s.optString("id"))
                 .setTitle(s.optString("name"))

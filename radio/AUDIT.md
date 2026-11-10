@@ -76,16 +76,12 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
 
-- **P3** (high) Auto Backup is left on: deputy keys, pocket secrets and prefs go to the user's Google account. `AndroidManifest.xml:16-19`
-- **P4** (high) The 24 words can be lost three ways. `main.dart:646-679`
-- **P5** (high) Exported MediaBrowser service hands the station list and control to any app, private pocket stations included. `AndroidManifest.xml:81-88; PlaybackService.kt:272-288`
 - **P7** (medium) Podcast feeds and "cover from a link" call the network straight from the phone, outside the node. `station.dart:929-976`
 - **P8** (medium) Feed "keep the newest N" downloads the whole back catalogue, and the feed list can be overwritten. `station.dart:889-926`
 - **P9** (medium) Podcast feeds are never refreshed on their own. `station.dart:804`
 - **P10** (medium) Drawer Lantern: the service restarts with no node, and the charging and Wi-Fi gate lives only in the Dart UI. `LanternService.kt:27-52`
 - **P11** (medium) The "plain" disguise leaks the station name and the app name. `PlaybackService.kt:239-244`
 - **P12** (medium) Station ids, bells and the alarm station sit in plaintext SharedPreferences and prefs.json. `PlaybackService.kt:90 and MainActivity.kt:164`
-- **P13** (medium) Listening history is written to logcat. `main.dart:59`
 - **P14** (medium) Temporary audio, pictures and APK copies are left on disk. `Ship.kt:22-42`
 - **P15** (medium) After END BROADCAST the "ON AIR" notification, foreground state and both locks stay. `PlaybackService.kt:239-245`
 - **P16** (medium) Every tune stacks a new audio-focus request. `PlaybackService.kt:102-107 and 123-140`
@@ -101,7 +97,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 - **P26** (low) Bell ids differ between screens, depend on `String.hashCode`, and notifications are not checked. `station.dart:290 vs more.dart:373`
 - **P27** (medium) The numbers kit decodes and rewrites WAV files sample by sample on the UI isolate. `station.dart:1562-1596`
 - **P28** (low) Direct fixes to misplaced results: CLEAR THE HOLD, strike and restore all write the same `error` field. `main.dart:903-906`
-- **P29** (medium) The 24 words and PINs are typed and shown with the keyboard's learning and no screen protection. `main.dart:825`
 - **P30** (low) Opening the app always autoplays. `main.dart:70`
 - **P31** (low) Android App Links are not verified, so scanned posters open the browser. `AndroidManifest.xml:43-54`
 - **P32** (low) `pyrate_start` is not safe against two starters, and a failed start is invisible. `ffi/src/lib.rs:38-68; main.dart:58-60; Native.kt:21-31`
@@ -194,4 +189,14 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **B14. A broadcaster asks carriers for its own station directly.** When the private route fails, a phone syncing its own station asks carriers for the log by id from its own address, which tells them who keeps it. Does not hold. Fixed: a phone asks carriers for its own station directly only once that station is already on the air directly from it. (5a20daf)
 
-**P2. STRIKE COLOURS can never complete: the node drops the 24 words and signs with the deputy key.** (high) Fixed: strike now takes the master from the 24 words through the same path as restore, and still strikes with the key itself on a Lantern that keeps it. The app shows the result beside the act, and the words field learns nothing (no suggestions, autocorrect or keyboard learning) and is cleared after. Two new voyage steps: wrong words strike nothing, the right ones end the station (22 of 22). (pending)
+**P2. STRIKE COLOURS can never complete: the node drops the 24 words and signs with the deputy key.** (high) Fixed: strike now takes the master from the 24 words through the same path as restore, and still strikes with the key itself on a Lantern that keeps it. The app shows the result beside the act, and the words field learns nothing (no suggestions, autocorrect or keyboard learning) and is cleared after. Two new voyage steps: wrong words strike nothing, the right ones end the station (22 of 22). (ff7121e)
+
+**P3. Auto Backup is left on: deputy keys, pocket secrets and prefs go to the user's Google account.** (high) Fixed: the app turns off backup and device transfer entirely (allowBackup false, no full-backup content, and extraction rules excluding every domain), so the deputy key, pocket invitations and the owner's chart never leave the phone that way. (pending)
+
+**P4. The 24 words can be lost three ways.** (high) Fixed: the words are shown before anything that can fail, in a dialog that neither the back gesture nor a stray tap can close, and that closes only once the keeper ticks that all 24 are on paper; a later error is shown after. The node returns the words even if a pocket's topic fails to open (the station stays private, as it is marked so before the topic opens). (pending)
+
+**P5. Exported MediaBrowser service hands the station list and control to any app, private pocket stations included.** (high) Fixed: the media browser answers only this app, the system, Bluetooth and the car, lists no pocket stations, and tunes only to a well-formed id. (pending)
+
+**P13. Listening history is written to logcat.** (medium) Fixed: the released app writes nothing to the phone's log: the Dart prints are gone and the node's log line is empty on Android outside debug builds. (pending)
+
+**P29. The 24 words and PINs are typed and shown with the keyboard's learning and no screen protection.** (medium) Fixed: the 24 words and PIN fields learn nothing (no suggestions, autocorrect or keyboard learning), are cleared once read, and the screen is marked secure (no screenshot, recents thumbnail or recording) while the words, strike and appoint dialogs are up. (pending)
