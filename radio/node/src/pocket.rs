@@ -82,7 +82,8 @@ impl Inner {
                 let ok = match &g {
                     Gossip::Station(a) => a.station == st,
                     Gossip::Carrier { station, .. } => *station == st,
-                    _ => false,
+                    // The members' hourly tokens, so a pocket counts who is aboard.
+                    Gossip::Aboard { station, .. } => *station == st,
                 };
                 if ok {
                     me.on_gossip(g);
@@ -120,6 +121,23 @@ impl Inner {
         let mut s = self.store.lock().unwrap();
         s.open_log(&st);
         s.logs.get(&st).map(|a| a.entries().iter().skip(from as usize).take(2000).filter_map(|e| e.to_bytes().ok()).map(|b| pocket::seal(&key, &b)).collect()).unwrap_or_default()
+    }
+
+    /// A pocket's log from the first member or host that answers, from `from` on.
+    pub(crate) async fn pocket_fetch(&self, st: StationId, key: [u8; 32], from: u64) -> Vec<SignedEntry> {
+        let tag = pocket::tag(&key);
+        let mut asked: Vec<EndpointId> = self.pockets.lock().unwrap().get(&st).map(|p| p.hosts.clone()).unwrap_or_default();
+        asked.extend(self.carriers(&st));
+        asked.retain(|p| *p != self.endpoint.id());
+        asked.dedup();
+        for node in asked.into_iter().take(6) {
+            let Ok(Response::Entries(list)) = self.ask(node, &Request::PocketLog { tag, from }).await else { continue };
+            let entries: Vec<SignedEntry> = list.iter().filter_map(|b| pocket::open(&key, b)).filter_map(|b| SignedEntry::from_bytes(&b).ok()).filter(|e| e.entry.station == st).collect();
+            if !entries.is_empty() {
+                return entries;
+            }
+        }
+        vec![]
     }
 
     /// Brings a pocket's log up to date from its members and hosts, never by its id.

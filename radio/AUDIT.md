@@ -8,8 +8,6 @@ Each entry gives the threat, whether the wall held, and the fix.
 
 ### Track B: privacy, anonymity and decentralisation
 
-**B2. Pocket stations surface on the public Log.** Three ways: a listener's hourly token for a pocket station is gossiped on the public Log by whoever counts it (phones through their exit, tabs directly), naming the station; a pocket station that goes ON AIR sends its live entries down the public stem, where a stranger takes them aboard, announces itself as a carrier and serves the log by id; and a keeper's phone syncing its own pocket asks an exit for it by id. Does not hold. Fix: pocket tokens travel sealed on the pocket's own topic; pocket stations never use the stem; a keeper syncs a pocket by its tag.
-
 **B3. Pocket chatter is open.** A pocket's room sits on a topic drawn from the station's id and its lines travel in the clear, so anyone who learns the id can read the room. Does not hold. Fix: a pocket's room uses a topic drawn from its key and every line is sealed with the key.
 
 **B4. Ballast is announced and served away from the charger.** A phone keeps announcing its ballast stations and serving sealed chunks to strangers on mobile data, which spends the owner's data, and its ballast set (fixed by its steady seed) ties each day's fresh id to the last and each network it uses to the next. Holds only in part. Fix: ballast is announced and served only while the phone is on Wi-Fi and charging; on mobile data a phone serves strangers nothing.
@@ -70,7 +68,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
 
 - **C1** (high) /player/ serves any file on disk via an absolute path. `node/src/web.rs:271-277`
-- **C2** (high) The web listener publishes pocket (private) stations. `node/src/web.rs:47-50`
 - **C3** (high) count_guest spawns one OS thread per request, with no cap. `node/src/web.rs:325-328`
 - **C4** (high) Episode generation holds the whole recording in memory. `node/src/web.rs:205-232`
 - **C5** (medium) Concurrent first requests for one episode race on the same temp file. `node/src/web.rs:198-247`
@@ -123,3 +120,7 @@ Reported by a reader of the code; each is checked against the code before it is 
 ## Fixed
 
 **B1. The stem names its origin.** `hop.rs` starts every stem at `hops: 0` and each relay adds one, so the guard that receives `hops: 0` knows its peer is the broadcaster. Does not hold. Fixed: every node, broadcaster and relay alike, now sends the count as zero and nothing reads it. A stem ends by the fluff draw alone (four hops on average), and a node that sees the same cargo come round again spreads it. Older nodes still count up from zero, which tells a new node only that its sender was a relay. Checked by the voyage test (18 of 18). (ae5aa7b)
+
+**B2. Pocket stations surface on the public Log.** Three ways: a listener's hourly token for a pocket station is gossiped on the public Log by whoever counts it (phones through their exit, tabs directly), naming the station; a pocket station that goes ON AIR sends its live entries down the public stem, where a stranger takes them aboard, announces itself as a carrier and serves the log by id; and a keeper's phone syncing its own pocket asks an exit for it by id. Does not hold. Fixed: a pocket's hourly tokens now travel sealed on its own topic and are counted among its members; a pocket station never goes down the public stem; a keeper's phone asks its members for its own pocket by tag; and a member fetches a pocket's sound from the circle rather than through an exit, which would have learnt the id. The browser's half is C18. The pocket test now runs phones as they ship and checks that an outsider never hears of the station while a member listens and the keeper goes live; on the old code that check fails. (pending)
+
+**C2. The web listener publishes pocket (private) stations.** (high) Fixed: the gangway refuses pocket stations in every route and leaves them out of log.json. (pending)
