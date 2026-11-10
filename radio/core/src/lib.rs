@@ -18,6 +18,7 @@ pub mod drift;
 pub mod ingest;
 pub mod keys;
 pub mod page;
+pub mod papers;
 pub mod pocket;
 pub mod programme;
 pub mod route;

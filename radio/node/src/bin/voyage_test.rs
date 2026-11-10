@@ -148,7 +148,8 @@ fn main() -> anyhow::Result<()> {
     let third = Node::start(cfg("third", false, boot.clone()))?;
     s.call(&json!({ "cmd": "details_set", "station": id, "kinds": ["talk"], "mature": true, "explicit": true }));
     let mut heard = false;
-    for _ in 0..40 {
+    // The new card comes by the stem, whose end waits up to a minute and a half.
+    for _ in 0..60 {
         std::thread::sleep(Duration::from_secs(3));
         if third.call(&json!({ "cmd": "stations", "marooned": true })).as_array().is_some_and(|v| !v.iter().any(|x| x["id"] == id.as_str())) && third.heard_of(&sid) && !third.will_carry(&sid) {
             heard = true;

@@ -23,9 +23,8 @@ fn main() -> anyhow::Result<()> {
     let get = |flag: &str| args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1)).cloned();
     let dir = PathBuf::from(get("--dir").unwrap_or_else(|| "lantern-data".into()));
     let quota = get("--quota-gb").and_then(|q| q.parse::<u64>().ok()).unwrap_or(20) * 1_000_000_000;
-    let bootstrap = get("--bootstrap")
-        .map(|b| b.split(',').filter_map(|s| s.trim().parse().ok()).collect())
-        .unwrap_or_default();
+    // Each door an id, or `id@relay` to reach it without a lookup.
+    let bootstrap = get("--bootstrap").map(|b| pyrate_node::doors_from(&b)).unwrap_or_default();
     let seeds: Vec<String> = args.windows(2).filter(|w| w[0] == "--seed").map(|w| w[1].clone()).collect();
     std::fs::create_dir_all(&dir)?;
 

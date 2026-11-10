@@ -1,0 +1,5 @@
+{
+ "browser/www/opus/opusscript_native_wasm.js": "176802f6e4a7616d3049c5361e2d448f6b2cadd6d9946f1d434e5ab5789d2fe3",
+ "browser/www/opus/opusscript_native_wasm.wasm": "e24b269dbfde9f357de19f5b4f6458010be356d7122b0bb8bfe439504a6d5c33",
+ "browser/www/opus-decoder.min.js": "68a08546a23df78bc837808af82af5a7550899ed5e17e281826dc2b3320dccdf"
+}

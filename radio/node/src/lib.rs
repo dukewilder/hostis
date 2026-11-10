@@ -117,6 +117,21 @@ pub const CREW_RELAYS: &[&str] = &["https://relay.hostis.black"];
 /// The node id type, for callers that parse doors.
 pub type EndpointIdOf = EndpointId;
 
+/// Doors from a list by commas or spaces, each an id or `id@relay`: the ids to start from,
+/// with any relays named noted in [`DOOR_RELAYS`].
+pub fn doors_from(text: &str) -> Vec<EndpointId> {
+    let mut out = Vec::new();
+    for item in text.split(|c: char| c == ',' || c.is_whitespace()).filter(|s| !s.is_empty()) {
+        let (id, relay) = item.split_once('@').map(|(a, b)| (a, Some(b))).unwrap_or((item, None));
+        let Ok(id) = id.parse::<EndpointId>() else { continue };
+        if let Some(r) = relay {
+            DOOR_RELAYS.lock().unwrap().push((id, r.to_string()));
+        }
+        out.push(id);
+    }
+    out
+}
+
 pub static DOOR_RELAYS: Mutex<Vec<(EndpointId, String)>> = Mutex::new(Vec::new());
 
 /// number0's address lookup, asked only about the first doors and peers met before. A phone
@@ -1394,6 +1409,16 @@ impl Inner {
 }
 
 impl Node {
+    /// For harnesses: this node's own address, and the outcome of dialling a peer by id.
+    pub fn diag(&self, peer: EndpointId) -> String {
+        let ep = self.inner.endpoint.clone();
+        self.rt.block_on(async move {
+            let me = format!("{:?}", ep.addr());
+            let r = tokio::time::timeout(Duration::from_secs(15), ep.connect(peer, net::ALPN)).await;
+            format!("me {me}\ndial {peer}: {:?}", r.map(|c| c.map(|_| "ok")))
+        })
+    }
+
     pub fn start(cfg: Config) -> Result<Self> {
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build()?;
         let store = Store::open_with(&cfg.dir, cfg.quota + cfg.ballast, HOLD_KEY.lock().unwrap().take())?;
@@ -1445,6 +1470,19 @@ impl Node {
         // They are kept sealed, each with the relay its own signed note named, so the next start
         // reaches them without a lookup.
         let mut cfg = cfg;
+        // Bearings the release keys signed, checked on an earlier run, add their doors.
+        if let Some(b) = hold.read_note(&cfg.dir, "bearings", None).and_then(|t| serde_json::from_slice::<Value>(&t).ok()).filter(|b| pyrate_core::papers::trusted(&cfg.release_keys, b)) {
+            for d in b["doors"].as_array().into_iter().flatten().filter_map(|d| d.as_str()) {
+                let (id, relay) = d.split_once('@').map(|(a, r)| (a, Some(r))).unwrap_or((d, None));
+                let Ok(id) = id.parse::<EndpointId>() else { continue };
+                if let Some(r) = relay {
+                    DOOR_RELAYS.lock().unwrap().push((id, r.to_string()));
+                }
+                if !cfg.bootstrap.contains(&id) {
+                    cfg.bootstrap.push(id);
+                }
+            }
+        }
         let doors: Vec<EndpointId> = cfg.bootstrap.clone();
         let mut met: Vec<(EndpointId, String)> = DOOR_RELAYS.lock().unwrap().clone();
         let peers_text = hold.read_note(&cfg.dir, "peers", Some(&cfg.dir.join("peers"))).and_then(|b| String::from_utf8(b).ok()).unwrap_or_default();
@@ -2272,7 +2310,18 @@ impl Node {
                 inner.relay_ok.store(req["unmetered"].as_bool().unwrap_or(false), std::sync::atomic::Ordering::Relaxed);
                 Ok(json!({ "ok": true, "carrying": inner.store.lock().unwrap().pinned.len() }))
             }
-            "update" => Ok(match self.rt.block_on(inner.check_update(req["code"].as_u64().unwrap_or(0) as u32)) {
+            "papers" => {
+                // What this copy knows of the canary: its line, when it was signed, and how old.
+                let (_, c) = inner.papers();
+                Ok(match c {
+                    Some(c) => {
+                        let at = c["at"].as_u64().unwrap_or(0);
+                        json!({ "canary": { "text": c["text"], "at_ms": at, "age_days": now_ms().saturating_sub(at) / 86_400_000 } })
+                    }
+                    None => json!({ "canary": null }),
+                })
+            }
+            "update" => Ok(match self.rt.block_on(inner.check_update(req["code"].as_u64().unwrap_or(0) as u32, req["now"].as_bool() == Some(true))) {
                 Ok(v) => v,
                 Err(e) => json!({ "available": false, "why": e.to_string() }),
             }),
