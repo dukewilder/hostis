@@ -537,6 +537,33 @@ Future<String?> fetchOut(String url, {int maxBytes = 30000000}) async {
   }
 }
 
+/// Asks for the microphone. True once it is allowed; otherwise says why on the spot and,
+/// when only the phone's settings can allow it now, offers to open them.
+Future<bool> askMic(BuildContext context) async {
+  final r = await ship.invokeMethod<String>('mic').catchError((_) => 'denied') ?? 'denied';
+  if (r == 'ok') return true;
+  if (!context.mounted) return false;
+  if (r == 'blocked') {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: panel,
+        shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+        title: Text('The microphone is shut', style: serif(20)),
+        content: Text('This phone will not ask again. Allow the microphone for the app in its settings, then come back and press again.', style: serif(14, color: boneFaint, italic: true)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text('NOT NOW', style: carved(11, color: boneFaint))),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: Text('OPEN SETTINGS', style: carved(11))),
+        ],
+      ),
+    );
+    if (go == true) ship.invokeMethod('app_settings').catchError((_) {});
+  } else {
+    toast(context, 'Recording needs the microphone. Press again to be asked again.');
+  }
+  return false;
+}
+
 /// Removes a file, but only one inside this app's own cache: a copy, a take or a fetch,
 /// never something the owner keeps elsewhere.
 Future<void> dropCopy(String? path) async {
@@ -812,9 +839,10 @@ class _RecordPanelState extends State<RecordPanel> {
 
   Future<void> toggle() async {
     if (!recording) {
+      if (!await askMic(context)) return;
       final p = await ship.invokeMethod<String>('record_start').catchError((_) => null);
       if (p == null) {
-        if (mounted) toast(context, 'Allow the microphone, then press again.');
+        if (mounted) toast(context, 'The microphone would not start. Another app may have it.');
         return;
       }
       setState(() {

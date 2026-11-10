@@ -122,3 +122,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - Closing the segment recorder stops the microphone, takes and copies leave the phone once set, recordings are set one at a time, and the programme editor will not save over a programme it failed to read.
 - The dial keeps its station when the Log reorders, and turning it from a link no longer tunes in before the owner says yes.
 - A hosted flock keeps its code when the sheet closes, and clearing the hold or taking a station back answers on the spot.
+- Asking for the microphone waits for the answer, and a phone that will not ask again offers its settings instead of the same dead message.
