@@ -320,3 +320,14 @@ Every node already carried the whole Log. This voyage asks what a carrier can be
 - **Hail.** A listener sends the keeper a short voice note, sealed to the station's key and its deputies, that only the keeper can open. A Lantern may hold hails for a keeper who is away, still sealed, in a folder it cannot read.
 - **The drawer phone.** An old phone kept as a Lantern by itself: a foreground service with wake and Wi-Fi locks, a ballast size from one to 256 GB, carrying the Log in the back of a drawer.
 - **Tips with a note.** A listener leaves the keeper a tip with a line of thanks.
+
+## XXIII. The audit (10 November 2026)
+
+Rulings made while reading every line again. The findings themselves are in `AUDIT.md`.
+
+- **The stem carries no count.** Every node sends the hop count as zero, so the first hop cannot tell a broadcaster from a relay. A stem ends by the fluff draw, and cargo that comes round again spreads.
+- **A pocket is sealed end to end.** Its card, carriers, tokens, log and chatter travel only on topics drawn from its key, sealed with it. It never takes the public stem, never goes through a stranger's exit, and never stands on a Lantern's gangway.
+- **A phone carries for the fleet only on its charger.** Ballast is announced and served only on Wi-Fi while charging, and on mobile data a phone serves strangers nothing.
+- **Carrying is the owner's choice all the way down.** No node takes a stem or ballast for a station its owner marooned, and a phone takes no explicit station while its owner hides them. Lanterns still carry the whole Log unless their keeper maroons.
+- **One vote a station for the network's clock**, and five must agree before anything moves.
+- **A recording shorter than a second is not played.** It is not a recording worth airing, and it would let a station make every listener's clock walk a week in twenty-millisecond steps.
