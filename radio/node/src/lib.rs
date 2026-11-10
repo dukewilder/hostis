@@ -228,6 +228,11 @@ pub struct Inner {
     pub(crate) stem_seen: Mutex<std::collections::VecDeque<Hash>>,
     /// Nodes that failed to answer lately, and when: asked only after the others.
     pub(crate) failed: Mutex<HashMap<[u8; 32], u64>>,
+    /// Where carriers said they can be reached, signed by each: the network's own address book.
+    book: iroh::address_lookup::MemoryLookup,
+    /// Running dark: publishes no address anywhere, its own harbour note included.
+    dark: bool,
+    last_harbour: std::sync::atomic::AtomicU64,
     /// On mobile data a phone listens and broadcasts, and carries nobody else's traffic.
     relay_ok: std::sync::atomic::AtomicBool,
 }
@@ -623,6 +628,16 @@ impl Inner {
                 }
                 return None;
             }
+            g @ Gossip::Harbour { .. } => {
+                // Only a node this one would dial (a carrier it knows, or a bootstrap peer) goes in
+                // the book, so the book is no bigger than the Log's carrier lists.
+                let Some((node, relay)) = g.harbour_checked(now) else { return None };
+                let known = log.values().any(|l| l.carriers.contains_key(&node)) || self.cfg.bootstrap.iter().any(|b| *b.as_bytes() == node);
+                if let (true, Ok(id), Ok(url)) = (known, EndpointId::from_bytes(&node), relay.parse::<iroh::RelayUrl>()) {
+                    self.book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+                }
+                return None;
+            }
         }
         None
     }
@@ -727,12 +742,14 @@ impl Inner {
             self.broadcast(&Gossip::Station(a)).await;
         }
         let own_set: std::collections::HashSet<StationId> = self.store.lock().unwrap().own().into_iter().collect();
+        let mut said_carrier = false;
         for (station, head) in carried {
             // A pocket's carriers say so only to its members.
             if self.is_pocket(&station) {
                 let g = Gossip::Carrier { station, node: me, head };
                 self.on_gossip(g.clone());
                 self.pocket_say(station, &g).await;
+                said_carrier = true;
                 continue;
             }
             // A phone never says what it listened to: it announces only its ballast, which
@@ -754,6 +771,20 @@ impl Inner {
             let g = Gossip::Carrier { station, node: me, head };
             self.on_gossip(g.clone());
             self.broadcast(&g).await;
+            said_carrier = true;
+        }
+        // Having said it carries something, this node says where it can be reached, every
+        // couple of minutes: the network's own address book, in place of anyone's directory.
+        if said_carrier && !self.dark && now.saturating_sub(self.last_harbour.load(std::sync::atomic::Ordering::Relaxed)) > 120_000 {
+            if let Some(relay) = self.endpoint.addr().relay_urls().next().map(|u| u.to_string()) {
+                self.last_harbour.store(now, std::sync::atomic::Ordering::Relaxed);
+                let note = Gossip::harbour(&self.secret, &relay, now);
+                self.broadcast(&note).await;
+                let pockets: Vec<StationId> = self.pockets.lock().unwrap().keys().copied().collect();
+                for st in pockets {
+                    self.pocket_say(st, &note).await;
+                }
+            }
         }
         let tuned = self.tuned.lock().unwrap().as_ref().map(|t| t.station);
         if let Some(station) = tuned {
@@ -1275,6 +1306,10 @@ impl Node {
         }
         let proto = Proto(Arc::new(Mutex::new(None)));
         let public_dns = cfg.public_dns;
+        let dark = std::env::var_os("PYRATE_DARK").is_some_and(|v| v != "0");
+        // The network's own address book, filled from carriers' signed harbour notes.
+        let book = iroh::address_lookup::MemoryLookup::new();
+        let book2 = book.clone();
         let (endpoint, router, gossip) = rt.block_on(async {
             let relays = iroh::defaults::prod::default_relay_map();
             for r in CREW_RELAYS {
@@ -1286,19 +1321,18 @@ impl Node {
             let custom: Vec<iroh::RelayUrl> = std::env::var("PYRATE_RELAYS").unwrap_or_default().split(',').filter_map(|r| r.trim().parse().ok()).collect();
             let private_net = !custom.is_empty();
             let relays = if custom.is_empty() { relays } else { iroh::RelayMap::from_iter(custom) };
-            let dark = std::env::var_os("PYRATE_DARK").is_some_and(|v| v != "0");
-            // A dark node resolves others but never publishes its own address: no signed pkarr or
-            // DNS record ties this node id to a relay or an IP. It stays reachable through relays
-            // and through the addresses shared inside each station's gossip.
-            let mut b = if dark {
-                Endpoint::builder(presets::Minimal)
-                    .secret_key(secret)
-                    .address_lookup(iroh::address_lookup::PkarrResolver::n0_dns())
-                    .address_lookup(iroh::address_lookup::DnsAddressLookup::n0_dns())
-                    .relay_mode(iroh::RelayMode::Custom(relays))
-            } else {
-                Endpoint::builder(presets::N0).secret_key(secret).relay_mode(iroh::RelayMode::Custom(relays))
-            };
+            // Peers are found first in the network's own book, then through number0's pkarr
+            // server over HTTPS. No node id is ever looked up in plain DNS, where the line's
+            // provider would read who this node dials. A dark node resolves others but never
+            // publishes its own address: no record anywhere ties its id to a relay or an IP.
+            let mut b = Endpoint::builder(presets::Minimal)
+                .secret_key(secret)
+                .address_lookup(book2)
+                .address_lookup(iroh::address_lookup::PkarrResolver::n0_dns())
+                .relay_mode(iroh::RelayMode::Custom(relays));
+            if !dark {
+                b = b.address_lookup(iroh::address_lookup::PkarrPublisher::n0_dns());
+            }
             if public_dns {
                 b = b.dns_resolver(
                     iroh::dns::DnsResolver::builder()
@@ -1365,6 +1399,9 @@ impl Node {
             stem_misses: Mutex::new(HashMap::new()),
             stem_seen: Mutex::new(std::collections::VecDeque::new()),
             failed: Mutex::new(HashMap::new()),
+            book: book.clone(),
+            dark,
+            last_harbour: std::sync::atomic::AtomicU64::new(0),
             relay_ok: std::sync::atomic::AtomicBool::new(!cfg.private),
         });
         *proto.0.lock().unwrap() = Some(inner.clone());

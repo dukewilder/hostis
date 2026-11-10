@@ -210,6 +210,38 @@ pub enum Gossip {
     /// Listener tokens for one station in one hour, each with its proof of work. Every node
     /// checks them and counts for itself; nobody's sketch is taken on trust.
     Aboard { station: StationId, hour: u64, tokens: Vec<([u8; 32], u64)> },
+    /// A carrier saying which relay it can be reached through, signed with its own node key, so
+    /// nodes find each other inside the network without asking anyone's directory. Older nodes
+    /// do not know this message and pass over it.
+    Harbour { node: [u8; 32], relay: String, at_ms: u64, sig: Vec<u8> },
+}
+
+fn harbour_message(node: &[u8; 32], relay: &str, at_ms: u64) -> Vec<u8> {
+    let mut m = b"pyrate/harbour/v1\0".to_vec();
+    m.extend_from_slice(node);
+    m.extend_from_slice(&at_ms.to_le_bytes());
+    m.extend_from_slice(relay.as_bytes());
+    m
+}
+
+impl Gossip {
+    /// This node's relay, signed with the node's own secret.
+    pub fn harbour(secret: &[u8; 32], relay: &str, at_ms: u64) -> Self {
+        let key = StationKey::from_seed(*secret);
+        let node = key.id().0;
+        Gossip::Harbour { node, relay: relay.into(), at_ms, sig: key.sign(&harbour_message(&node, relay, at_ms)).to_vec() }
+    }
+
+    /// For a harbour note: the node and its relay, if the node itself signed it near `now`.
+    pub fn harbour_checked(&self, now: u64) -> Option<([u8; 32], String)> {
+        let Gossip::Harbour { node, relay, at_ms, sig } = self else { return None };
+        let sig: [u8; 64] = sig.as_slice().try_into().ok()?;
+        if relay.len() > 256 || at_ms.abs_diff(now) > 15 * 60_000 {
+            return None;
+        }
+        StationId(*node).verify(&harbour_message(node, relay, *at_ms), &sig).ok()?;
+        Some((*node, relay.clone()))
+    }
 }
 
 /// Carriers a station's listing keeps: the freshest claims, the oldest giving way.
@@ -304,6 +336,19 @@ mod serde_bytes64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_harbour_note_is_the_node_s_own_word() {
+        let secret = [5u8; 32];
+        let g = Gossip::harbour(&secret, "https://relay.example/", 1_000_000);
+        let (node, relay) = g.harbour_checked(1_000_000).unwrap();
+        assert_eq!(node, StationKey::from_seed(secret).id().0);
+        assert_eq!(relay, "https://relay.example/");
+        assert!(g.harbour_checked(1_000_000 + 16 * 60_000).is_none(), "stale");
+        let Gossip::Harbour { node, at_ms, sig, .. } = g else { unreachable!() };
+        let forged = Gossip::Harbour { node, relay: "https://elsewhere.example/".into(), at_ms, sig };
+        assert!(forged.harbour_checked(1_000_000).is_none(), "another relay under the same signature");
+    }
 
     #[test]
     fn a_false_claim_jumps_no_queue_and_a_flood_grows_nothing() {

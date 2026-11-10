@@ -331,3 +331,4 @@ Rulings made while reading every line again. The findings themselves are in `AUD
 - **Carrying is the owner's choice all the way down.** No node takes a stem or ballast for a station its owner marooned, and a phone takes no explicit station while its owner hides them. Lanterns still carry the whole Log unless their keeper maroons.
 - **One vote a station for the network's clock**, and five must agree before anything moves.
 - **A recording shorter than a second is not played.** It is not a recording worth airing, and it would let a station make every listener's clock walk a week in twenty-millisecond steps.
+- **The network keeps its own address book.** Carriers sign where they can be reached into the gossip, so no directory outside the network is needed to find a carrier, and nothing is looked up in plain DNS. Publishing to number0's directory continues only until the fleet carries the notes.
