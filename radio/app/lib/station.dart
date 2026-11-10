@@ -153,7 +153,7 @@ class _StationPageState extends State<StationPage> {
     return all.where((l) => (days..add(dayLabel((l['start_ms'] as num).toInt()))).length <= 2).toList();
   }
 
-  Widget section(String title) => Padding(padding: const EdgeInsets.only(top: 26, bottom: 8), child: Text(title, style: carved(12, color: brass, spacing: 0.3)));
+  Widget section(String title) => Padding(padding: const EdgeInsets.only(top: 26, bottom: 8), child: Text(title, style: carved(11, color: bloodBright, spacing: 0.45)));
 
   @override
   Widget build(BuildContext context) {
@@ -289,7 +289,7 @@ class _StationPageState extends State<StationPage> {
                         Row(children: [
                           Flexible(child: Text(l['title'] ?? '', style: serif(16, color: onNow ? bone : boneDim))),
                           if (l['live'] == true) Padding(padding: const EdgeInsets.only(left: 8), child: Text('LIVE', style: carved(8.5, color: bloodBright, spacing: 0.3))),
-                          if (l['kind'] == 'show') Padding(padding: const EdgeInsets.only(left: 8), child: Text('PREMIERE', style: carved(8.5, color: brass, spacing: 0.3))),
+                          if (l['kind'] == 'show') Padding(padding: const EdgeInsets.only(left: 8), child: Text('PREMIERE', style: carved(8.5, color: bone, spacing: 0.3))),
                         ]),
                         if ((l['about'] ?? '').toString().isNotEmpty) Text(l['about'], style: serif(13, color: boneFaint, italic: true)),
                         if (own && l['show'] != null)
@@ -395,7 +395,7 @@ class TrackPicker extends StatelessWidget {
               child: Row(children: [
                 SizedBox(
                   width: 28,
-                  child: picked.contains(t['track']) ? Text('${picked.indexOf(t['track']) + 1}', style: mono(12, color: brass, weight: FontWeight.w700)) : const Text('·', style: TextStyle(color: boneGhost)),
+                  child: picked.contains(t['track']) ? Text('${picked.indexOf(t['track']) + 1}', style: mono(12, color: bloodBright, weight: FontWeight.w700)) : const Text('·', style: TextStyle(color: boneGhost)),
                 ),
                 Expanded(child: Text(t['title'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(15, color: picked.contains(t['track']) ? bone : boneFaint))),
               ]),
