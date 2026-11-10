@@ -8,8 +8,6 @@ Each entry gives the threat, whether the wall held, and the fix.
 
 ### Track B: privacy, anonymity and decentralisation
 
-**B3. Pocket chatter is open.** A pocket's room sits on a topic drawn from the station's id and its lines travel in the clear, so anyone who learns the id can read the room. Does not hold. Fix: a pocket's room uses a topic drawn from its key and every line is sealed with the key.
-
 **B4. Ballast is announced and served away from the charger.** A phone keeps announcing its ballast stations and serving sealed chunks to strangers on mobile data, which spends the owner's data, and its ballast set (fixed by its steady seed) ties each day's fresh id to the last and each network it uses to the next. Holds only in part. Fix: ballast is announced and served only while the phone is on Wi-Fi and charging; on mobile data a phone serves strangers nothing.
 
 **B5. Private fetches have no guard.** Each private fetch draws a fresh first hop, so over a day of listening a hostile pair of nodes (first hop and exit) will eventually both be drawn and can tie a listener to a station. Holds only in part. Fix: a long-lived first hop for fetches, as the stem already has, and as Tor's entry guards do.
@@ -83,7 +81,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 - **C15** (high) Unsigned Carrier gossip: fake carriers jump the queue, grow memory and eclipse peers. `browser/src/lib.rs:328-345`
 - **C16** (medium) Chunk fetch is serial, has no failure memory, and retries dead peers every time. `browser/src/lib.rs:296-322`
 - **C17** (medium) Aboard token broadcasts what the tab is tuned to, whether or not it plays. `browser/src/lib.rs:519-543`
-- **C18** (high) Pocket station id leaks to the public network. `browser/src/lib.rs:519-543`
 - **C19** (medium) Peers can probe a tab for what it has just played. `browser/src/lib.rs:199-201`
 - **C20** (medium) Unbounded growth: cards, listings, archives, rooms, connections, seen set. `browser/src/lib.rs:472-502`
 - **C21** (medium) plan() re-hashes the whole log on every call. `browser/src/lib.rs:556-563`
@@ -95,7 +92,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 - **C27** (medium) presets::N0 may contact number0's discovery services and default relays. `browser/src/lib.rs:694-714`
 - **C28** (medium) No CSP, no Referrer-Policy, inline script in head. `node/src/web/listen.html:1-9`
 - **C29** (medium) Storage and URL inventory (what ties a visit to the next, and what stays in history). `browser/www/app.js:22-35`
-- **C30** (medium) Invitation key sits in the address bar for the whole join and forever on failure. `browser/www/app.js:391-397`
 - **C31** (medium) Playback loop can die silently (exception, empty decode, missing decoder script). `browser/www/app.js:205-256`
 - **C32** (medium) Going live after a track leaves silence and extra latency. `browser/www/app.js:206-207`
 - **C33** (low) The "No carrier answered yet" message is overwritten within a second. `browser/www/app.js:232`
@@ -117,10 +113,61 @@ Reported by a reader of the code; each is checked against the code before it is 
 - **C49** (low) Red used as a general accent, pill buttons, and emoji-capable glyphs. `browser/player.css:4`
 - **C50** (low) Informational text set in the ghost tone and at sub-10px sizes. `browser/player.css:30`
 
+### Track A and B: the phone app, its Android shell and the FFI
+
+Reported by a reader of the code; each is checked against the code before it is fixed or set down.
+
+- **P1** (high) Second `initNative` call aborts the process. `ffi/src/lib.rs:115-126; Native.kt:21-31; MainActivity.kt:49`
+- **P2** (high) STRIKE COLOURS can never complete: the node drops the 24 words and signs with the deputy key. `main.dart:1079-1101; node/src/lib.rs:1957-1960`
+- **P3** (high) Auto Backup is left on: deputy keys, pocket secrets and prefs go to the user's Google account. `AndroidManifest.xml:16-19`
+- **P4** (high) The 24 words can be lost three ways. `main.dart:646-679`
+- **P5** (high) Exported MediaBrowser service hands the station list and control to any app, private pocket stations included. `AndroidManifest.xml:81-88; PlaybackService.kt:272-288`
+- **P6** (medium) One non-ASCII "hex" string aborts the app: no catch_unwind and byte-slicing parsers. `ffi/src/lib.rs:72-79`
+- **P7** (medium) Podcast feeds and "cover from a link" call the network straight from the phone, outside the node. `station.dart:929-976`
+- **P8** (medium) Feed "keep the newest N" downloads the whole back catalogue, and the feed list can be overwritten. `station.dart:889-926`
+- **P9** (medium) Podcast feeds are never refreshed on their own. `station.dart:804`
+- **P10** (medium) Drawer Lantern: the service restarts with no node, and the charging and Wi-Fi gate lives only in the Dart UI. `LanternService.kt:27-52`
+- **P11** (medium) The "plain" disguise leaks the station name and the app name. `PlaybackService.kt:239-244`
+- **P12** (medium) Station ids, bells and the alarm station sit in plaintext SharedPreferences and prefs.json. `PlaybackService.kt:90 and MainActivity.kt:164`
+- **P13** (medium) Listening history is written to logcat. `main.dart:59`
+- **P14** (medium) Temporary audio, pictures and APK copies are left on disk. `Ship.kt:22-42`
+- **P15** (medium) After END BROADCAST the "ON AIR" notification, foreground state and both locks stay. `PlaybackService.kt:239-245`
+- **P16** (medium) Every tune stacks a new audio-focus request. `PlaybackService.kt:102-107 and 123-140`
+- **P17** (medium) Blocking native calls on the UI thread, in Dart and in the service. `PlaybackService.kt:53-58`
+- **P18** (medium) The dial's PageView follows list position, not the station. `main.dart:203-214`
+- **P19** (medium) Links join pockets, flocks and stations without asking. `main.dart:178-197; MainActivity.kt:28-39`
+- **P20** (medium) Microphone permission dead-ends and the messages mislead. `MainActivity.kt:69-75`
+- **P21** (medium) RECORD A SEGMENT leaves the microphone open if the panel is closed. `more.dart:700-703`
+- **P22** (medium) The programme editor treats a failed load as loaded and can overwrite the real programme. `station.dart:536-547`
+- **P23** (medium) A hosted flock loses its code when the sheet is closed. `station.dart:1688`
+- **P24** (medium) Joined chatter and joined pockets cannot be left; muted voices cannot be unmuted. `station.dart:1212`
+- **P25** (medium) Pocket stations are offered a public share link, poster and QR. `station.dart:199-201`
+- **P26** (low) Bell ids differ between screens, depend on `String.hashCode`, and notifications are not checked. `station.dart:290 vs more.dart:373`
+- **P27** (medium) The numbers kit decodes and rewrites WAV files sample by sample on the UI isolate. `station.dart:1562-1596`
+- **P28** (low) Direct fixes to misplaced results: CLEAR THE HOLD, strike and restore all write the same `error` field. `main.dart:903-906`
+- **P29** (medium) The 24 words and PINs are typed and shown with the keyboard's learning and no screen protection. `main.dart:825`
+- **P30** (low) Opening the app always autoplays. `main.dart:70`
+- **P31** (low) Android App Links are not verified, so scanned posters open the browser. `AndroidManifest.xml:43-54`
+- **P32** (low) `pyrate_start` is not safe against two starters, and a failed start is invisible. `ffi/src/lib.rs:38-68; main.dart:58-60; Native.kt:21-31`
+- **P33** (low) Feed and URL fetch code writes unsolicited temp files and the downloads can be stranded. `station.dart:952-975`
+- **P34** (medium) Brass (amber) is used throughout. `main.dart:25`
+- **P35** (low) Red is used beyond ON AIR, and there are two reds; M3 defaults bring rounded pickers and Roboto. `main.dart:23 vs 24`
+- **P36** (low) The window behind Flutter is white in light mode. `app/android/app/src/main/res/values/styles.xml`
+- **P37** (low) `kBuildCode` duplicates the pubspec build number. `main.dart:37`
+- **P38** (low) Manifest hygiene. `AndroidManifest.xml:4`
+- **P39** (low) `setState` after await without `mounted`, and controllers that are never disposed. `more.dart:394-406`
+- **P40** (low) Passing the app on: a LAN HTTP server with no timeouts, binding every interface. `Ship.kt:90-125`
+
 ## Fixed
 
 **B1. The stem names its origin.** `hop.rs` starts every stem at `hops: 0` and each relay adds one, so the guard that receives `hops: 0` knows its peer is the broadcaster. Does not hold. Fixed: every node, broadcaster and relay alike, now sends the count as zero and nothing reads it. A stem ends by the fluff draw alone (four hops on average), and a node that sees the same cargo come round again spreads it. Older nodes still count up from zero, which tells a new node only that its sender was a relay. Checked by the voyage test (18 of 18). (ae5aa7b)
 
-**B2. Pocket stations surface on the public Log.** Three ways: a listener's hourly token for a pocket station is gossiped on the public Log by whoever counts it (phones through their exit, tabs directly), naming the station; a pocket station that goes ON AIR sends its live entries down the public stem, where a stranger takes them aboard, announces itself as a carrier and serves the log by id; and a keeper's phone syncing its own pocket asks an exit for it by id. Does not hold. Fixed: a pocket's hourly tokens now travel sealed on its own topic and are counted among its members; a pocket station never goes down the public stem; a keeper's phone asks its members for its own pocket by tag; and a member fetches a pocket's sound from the circle rather than through an exit, which would have learnt the id. The browser's half is C18. The pocket test now runs phones as they ship and checks that an outsider never hears of the station while a member listens and the keeper goes live; on the old code that check fails. (pending)
+**B2. Pocket stations surface on the public Log.** Three ways: a listener's hourly token for a pocket station is gossiped on the public Log by whoever counts it (phones through their exit, tabs directly), naming the station; a pocket station that goes ON AIR sends its live entries down the public stem, where a stranger takes them aboard, announces itself as a carrier and serves the log by id; and a keeper's phone syncing its own pocket asks an exit for it by id. Does not hold. Fixed: a pocket's hourly tokens now travel sealed on its own topic and are counted among its members; a pocket station never goes down the public stem; a keeper's phone asks its members for its own pocket by tag; and a member fetches a pocket's sound from the circle rather than through an exit, which would have learnt the id. The browser's half is C18. The pocket test now runs phones as they ship and checks that an outsider never hears of the station while a member listens and the keeper goes live; on the old code that check fails. (b85e7bd)
 
-**C2. The web listener publishes pocket (private) stations.** (high) Fixed: the gangway refuses pocket stations in every route and leaves them out of log.json. (pending)
+**C2. The web listener publishes pocket (private) stations.** (high) Fixed: the gangway refuses pocket stations in every route and leaves them out of log.json. (b85e7bd)
+
+**B3. Pocket chatter is open.** A pocket's room sits on a topic drawn from the station's id and its lines travel in the clear, so anyone who learns the id can read the room. Does not hold. Fixed: a pocket's room now sits on a topic drawn from its key, met through its hosts and members, and every line (hails included) is sealed with the key in the app, on a Lantern and in the browser. The last lines go to members who ask by the pocket's tag, sealed, through a new request at the end of the enum; a request by the station's id gets nothing. Older apps in a pocket keep their own room until they update. Checked by the pocket test: the keeper hears a member and a browser tab, and an outsider joining by the id hears nothing. (pending)
+
+**C18. Pocket station id leaks to the public network.** (high) Fixed: a tab's hourly token for a pocket goes sealed on the pocket's own topic and never on the public Log; the pocket's room is sealed as in B3; and Clip it stays hidden for a pocket. Checked with the browser in the pocket test: an outsider never hears of the station while the tab listens and talks. (pending)
+
+**C30. Invitation key sits in the address bar for the whole join and forever on failure.** (medium) Fixed: the page reads an invitation and clears the address bar before anything else runs, joins from memory, and never writes a pocket's id into the address bar or the history. A flock link leaves the address bar as soon as it is read. (pending)

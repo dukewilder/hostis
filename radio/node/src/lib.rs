@@ -273,6 +273,9 @@ impl Inner {
         if let Request::PocketLog { tag, from } = &req {
             return Response::Entries(self.pocket_entries(tag, *from));
         }
+        if let Request::PocketChatter { tag } = &req {
+            return Response::Chatter(self.pocket_chatter(tag));
+        }
         let pocket = matches!(&req, Request::Log { station, .. } if self.is_pocket(station));
         let mut store = self.store.lock().unwrap();
         match req {
@@ -301,6 +304,7 @@ impl Inner {
             Request::PocketLog { .. } => Response::Entries(vec![]),
             Request::Hop(_) => Response::Hop(vec![]),
             Request::Chatter { station } => Response::Chatter(self.chatter_for(&station)),
+            Request::PocketChatter { tag } => Response::Chatter(self.pocket_chatter(&tag)),
         }
     }
 

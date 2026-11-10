@@ -19,6 +19,11 @@ pub fn topic(key: &[u8; 32]) -> Hash {
     blake3::derive_key("pyrate/pocket/topic/v1", key)
 }
 
+/// The topic a pocket's chatter travels on, sealed with its key like everything else of it.
+pub fn chat_topic(key: &[u8; 32]) -> Hash {
+    blake3::derive_key("pyrate/pocket/chat/v1", key)
+}
+
 /// What a member asks carriers for in place of the station's id.
 pub fn tag(key: &[u8; 32]) -> Hash {
     blake3::derive_key("pyrate/pocket/tag/v1", key)

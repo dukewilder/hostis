@@ -332,7 +332,9 @@ async function show(s) {
   // A pocket station is passed on only by its keeper's invitation.
   $('pass').hidden = !!s.pocket; $('maroon').hidden = false; if (s.pocket) $('clip').hidden = true;
   document.querySelectorAll('.row').forEach(r => r.classList.toggle('on', r.dataset.id === s.id));
-  if (location.hash.slice(1) !== s.id) history.replaceState(null, '', '#' + s.id);
+  // A pocket's id never goes in the address bar or the history.
+  if (isPocket(s)) history.replaceState(null, '', location.pathname);
+  else if (location.hash.slice(1) !== s.id) history.replaceState(null, '', '#' + s.id);
   radio.tune(s.id);
   nowPlaying(); page(true); chatter();
 }
@@ -344,7 +346,7 @@ function listen(s) {
 }
 
 function stop() { gen++; stopAll(); playing = false; power(); lamps(false); ctx?.suspend() }
-function power() { $('clip').hidden = !(playing && clipType()); const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■' : '▶'; g.querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen' }
+function power() { $('clip').hidden = !(playing && clipType()) || isPocket(cur); const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■' : '▶'; g.querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen' }
 
 function rows() {
   const m = marooned();
@@ -373,13 +375,14 @@ function refresh() {
   $('signal').textContent = n ? n + (n === 1 ? ' neighbour' : ' neighbours') + ' · ' + stations.length + ' on the air' : 'Coming aboard';
   rows();
   if (cur) { const u = stations.find(x => x.id === cur.id); if (u) { const pic0 = cur.cover, ban0 = cur.banner; cur = u; $('cs').textContent = u.call_sign + '  ' + u.aboard + ' aboard'; $('name').textContent = u.name; if (u.cover !== pic0 || u.banner !== ban0) show(u) } }
-  else { const id = location.hash.slice(1); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations.find(x => allowed(x) && inSet(x) && !marooned().has(x.id))); if (s) show(s) }
+  else { const id = wanted || location.hash.slice(1); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations.find(x => allowed(x) && inSet(x) && !marooned().has(x.id))); if (s) show(s) }
 }
 
 // A flock link (#flock=...): this tab plays in step with the phone that showed it.
 function flockFollow() {
   const h = location.hash; if (!radio || !h.includes('flock=')) return false;
   try { radio.flock_join(h) } catch (e) { return false }
+  history.replaceState(null, '', location.pathname);
   $('signal').textContent = 'In a flock: playing in step with its host';
   setInterval(() => { const id = radio.flock_station(); if (id && cur?.id !== id) { const s = stations.find(x => x.id === id) || { id, call_sign: '', name: 'The flock\'s station' }; playing ? listen(s) : show(s) } }, 3000);
   return true;
@@ -387,20 +390,24 @@ function flockFollow() {
 
 // A pocket station's invitation (#pocket=...): the tab joins, keeps the invitation in this
 // browser only, and clears the key from the address bar.
+const pockets = new Set();
+let wanted = null;
+const isPocket = s => !!s && (!!s.pocket || pockets.has(s.id));
 function savedPockets() { try { return JSON.parse(store('pyrate.pockets') || '[]') } catch (e) { return [] } }
 async function pocketJoin(link, open) {
   try {
     const id = await radio.pocket_join(link);
+    pockets.add(id);
     const all = savedPockets(); if (!all.includes(link)) { all.push(link); store('pyrate.pockets', JSON.stringify(all)) }
-    if (open) { history.replaceState(null, '', location.pathname + '#' + id); followLink() }
+    if (open) { wanted = id; followLink() }
   } catch (e) { $('signal').textContent = 'That invitation did not open: ' + e }
 }
 
 // A station link (#<id>) works before the station's card arrives: the harbour carries it.
 function followLink() {
-  const id = location.hash.slice(1);
+  const id = wanted || location.hash.slice(1);
   if (!/^[0-9a-f]{64}$/.test(id) || cur?.id === id) return;
-  const s = stations.find(x => x.id === id) || { id, call_sign: id.slice(0, 8).toUpperCase(), name: 'A passed-on station' };
+  const s = stations.find(x => x.id === id) || { id, call_sign: id.slice(0, 8).toUpperCase(), name: pockets.has(id) ? 'A private station' : 'A passed-on station', pocket: pockets.has(id) };
   show(s);
 }
 
@@ -595,6 +602,9 @@ for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-expl
 $('mclear').onclick = () => { setMarooned(new Set()); $('mnote').textContent = 'Every station is back in the Log.'; refresh() };
 
 async function boot() {
+  // An invitation's key leaves the address bar before anything else happens.
+  const invite = location.hash.includes('pocket=') ? location.hash : null;
+  if (invite) history.replaceState(null, '', location.pathname);
   scale();
   $('signal').textContent = 'Coming aboard';
   try { await init() } catch (e) { $('name').textContent = 'This browser cannot run the radio'; return }
@@ -602,7 +612,7 @@ async function boot() {
   if (!/^[0-9a-f]{64}$/.test(key || '')) { const b = new Uint8Array(32); crypto.getRandomValues(b); key = [...b].map(x => x.toString(16).padStart(2, '0')).join(''); store('pyrate.token', key) }
   try { radio = await Radio.start(rememberHarbours(), key, RELAYS) } catch (e) { console.warn(e); $('name').textContent = 'Could not reach a relay'; $('signal').textContent = String(e); return }
   for (const l of savedPockets()) pocketJoin(l, false);
-  if (location.hash.includes('pocket=')) pocketJoin(location.hash, true);
+  if (invite) pocketJoin(invite, true);
   else if (!flockFollow()) followLink();
   refresh();
   setInterval(refresh, 4000); setInterval(nowPlaying, 1000); setInterval(() => page(false), 5000);
