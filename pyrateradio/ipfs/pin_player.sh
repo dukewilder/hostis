@@ -19,3 +19,11 @@ for cid in $LIST; do
   fi
   rm -f "$tmp"
 done
+# With IPNS_KEY set (the name of a key in this node, made once with `ipfs key gen pyrate-player`),
+# the newest player is also published under that key's fixed name, so its address, and with it
+# everything a browser keeps for the radio, stays the same from one release to the next.
+if [ -n "$IPNS_KEY" ]; then
+  newest=$(echo "$LIST" | grep '^bafy' | tail -1)
+  [ -n "$newest" ] && ipfs name publish --key="$IPNS_KEY" --lifetime=72h "/ipfs/$newest" >/dev/null && echo "named $newest"
+fi
+

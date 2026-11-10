@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=a9f785d479';
+import init, { Radio } from './pkg/pyrate_browser.js?v=7e3b409561';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -13,7 +13,7 @@ const EMBED = document.documentElement.classList.contains('embed');
 // flock goes straight to an open player, the same set served where no one owns it (IPFS, a
 // Lantern). 'open' is that copy: the whole Log, the chatter and the colours.
 const SCOPE = "harbour";
-const OPEN_PLAYERS = ["https://bafybeie65u2bmtct5ftzyhwmftnzim4asbbf5miyxe2wyirf2iuk5hps2q.ipfs.dweb.link/", "https://bafybeie65u2bmtct5ftzyhwmftnzim4asbbf5miyxe2wyirf2iuk5hps2q.ipfs.w3s.link/", "https://ipfs.io/ipfs/bafybeie65u2bmtct5ftzyhwmftnzim4asbbf5miyxe2wyirf2iuk5hps2q/"];
+const OPEN_PLAYERS = ["https://bafybeih3pkaeapdddazpva5kt5nspl2gla3dm7duojqwdk4olc3cnol7qu.ipfs.dweb.link/", "https://bafybeih3pkaeapdddazpva5kt5nspl2gla3dm7duojqwdk4olc3cnol7qu.ipfs.w3s.link/", "https://ipfs.io/ipfs/bafybeih3pkaeapdddazpva5kt5nspl2gla3dm7duojqwdk4olc3cnol7qu/"];
 const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
 const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
 const passedId = () => { const id = location.hash.slice(1); return /^[0-9a-f]{64}$/.test(id) ? id : null };
@@ -737,12 +737,189 @@ for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-expl
   el.onchange = () => { store(key, (el.checked ? on : (on === '1' ? '0' : '1'))); forgetPics(); rowsKey = ''; refresh(); if (cur) show(cur) };
 }
 $('forget').onclick = () => {
-  if (!confirm('Forget everything this browser keeps for the radio? Pockets go too, unless you still have their invitations.')) return;
+  if (!confirm('Forget everything this browser keeps for the radio? Pockets go too, unless you still have their invitations. A station raised here stays on the air, but this browser can speak for it again only from its 24 words.')) return;
   try { for (const k of Object.keys(localStorage)) if (k.startsWith('pyrate.')) localStorage.removeItem(k) } catch (e) { }
   try { for (const k of Object.keys(sessionStorage)) if (k.startsWith('pyrate.')) sessionStorage.removeItem(k) } catch (e) { }
   location.replace(location.pathname + location.search);
 };
 $('mclear').onclick = () => { setMarooned(new Set()); $('mnote').textContent = 'Every station is back in the Log.'; refresh() };
+
+// ---- Raising colours from the tab: the open player only ----
+// A station raised here is a key made here. Its 24 words are shown once and kept nowhere; the
+// tab signs with a deputy whose seed this browser keeps. Recordings are decoded by the browser,
+// levelled and encoded with libopus off the page's thread, signed into the log, and sent along
+// the stem as a phone sends them. Nothing goes to any server.
+const kept = () => { try { const l = JSON.parse(store('pyrate.mine') || '[]'); return Array.isArray(l) ? l.filter(k => /^[0-9a-f]{64}$/.test(k.id) && /^[0-9a-f]{64}$/.test(k.deputy)) : [] } catch (e) { return [] } };
+const keep = l => store('pyrate.mine', JSON.stringify(l));
+let mineCur = null, airing = 0, adopted = new Set();
+const stNote = t => { $('st-note').textContent = t };
+
+function studioShow() {
+  const on = !!mineCur && adopted.has(mineCur);
+  $('st-mine').hidden = !on; $('st-new').hidden = on || !$('st-show').hidden;
+  if (!on) return;
+  const k = JSON.parse(radio.mine()).find(m => m.id === mineCur);
+  $('st-mname').textContent = k?.name || 'Your station'; $('st-mcs').textContent = (k?.call_sign || '') + '  ' + fq(mineCur).toFixed(1);
+  flag($('st-flag'), mineCur, false);
+}
+function studioStatus() {
+  if (!radio || !mineCur) return;
+  const k = JSON.parse(radio.mine()).find(m => m.id === mineCur);
+  const el = $('st-status'); if (!k) { el.textContent = adopted.has(mineCur) ? '' : 'Looking for the station on the network'; return }
+  el.textContent = !k.pow ? 'Working the station’s proof of work · a few seconds'
+    : airing ? 'Setting a recording on the clock'
+    : k.unsent ? 'Sailing · ' + (k.chunks - k.unsent) + ' of ' + k.chunks + ' chunks aboard the network'
+    : k.carriers && !k.tracks ? 'On the Log \u00b7 carried by ' + k.carriers + (k.carriers === 1 ? ' node' : ' nodes') + ' \u00b7 drop recordings in to start it playing'
+    : k.carriers ? 'On the air · carried by ' + k.carriers + (k.carriers === 1 ? ' node' : ' nodes') + ' · ' + k.tracks + (k.tracks === 1 ? ' recording' : ' recordings')
+    : 'Waiting for the first carrier';
+}
+// The proof of work a station shows once, so ten thousand junk stations cost ten thousand times one.
+async function powWork(id) {
+  for (let n = 0; ; n += 150000) {
+    const got = radio.pow_step(id, n, 150000);
+    if (got >= 0) { const l = kept(); const k = l.find(x => x.id === id); if (k) { k.pow = got; keep(l) } studioStatus(); return }
+    await sleep(0);
+  }
+}
+async function studioBoot() {
+  if (SCOPE !== 'open' || EMBED || !radio) return;
+  for (const k of kept()) {
+    mineCur ??= k.id;
+    radio.adopt(k.id, k.deputy).then(ok => {
+      if (!ok) return;
+      adopted.add(k.id);
+      if (!(typeof k.pow === 'number' && radio.set_pow(k.id, k.pow))) powWork(k.id);
+      studioShow();
+    }, () => { });
+  }
+  studioShow(); setInterval(studioStatus, 1500);
+}
+$('raisego').onclick = () => $('studio').scrollIntoView({ behavior: 'smooth', block: 'start' });
+$('st-raise').onclick = async () => {
+  const name = $('st-name').value.trim(); if (!name) { stNote('A station needs a name.'); $('st-name').focus(); return }
+  if (!radio) { stNote('Coming aboard first.'); booting ??= boot(); await booting; if (!radio) return }
+  let r; try { r = JSON.parse(radio.raise(name, $('st-about').value, $('st-kinds').value, $('st-mature').checked, $('st-explicit').checked)) } catch (e) { stNote(String(e)); return }
+  const l = kept(); l.push({ id: r.id, deputy: r.deputy, pow: null }); keep(l);
+  mineCur = r.id; adopted.add(r.id); powWork(r.id);
+  $('st-wordlist').innerHTML = r.words.split(/\s+/).map(w => '<li>' + esc(w) + '</li>').join('');
+  $('st-written').checked = false; $('st-done').disabled = true;
+  $('st-new').hidden = true; $('st-show').hidden = false; stNote('');
+  $('st-show').scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+$('st-written').onchange = () => { $('st-done').disabled = !$('st-written').checked };
+$('st-done').onclick = () => { $('st-wordlist').innerHTML = ''; $('st-show').hidden = true; studioShow(); studioStatus() };
+$('st-restore').onclick = async () => {
+  const words = $('st-words').value.trim().toLowerCase().split(/\s+/).join(' ');
+  if (words.split(' ').length !== 24) { stNote('A station’s key is twenty-four words.'); return }
+  if (!radio) { booting ??= boot(); await booting; if (!radio) return }
+  stNote('Looking for the station’s log on the network.');
+  try {
+    const r = JSON.parse(await radio.restore(words));
+    $('st-words').value = '';
+    const l = kept().filter(k => k.id !== r.id); l.push({ id: r.id, deputy: r.deputy, pow: null }); keep(l);
+    mineCur = r.id; adopted.add(r.id); powWork(r.id); stNote(''); studioShow();
+  } catch (e) { stNote(String(e)) }
+};
+$('st-another').onclick = () => { mineCur = null; $('st-name').value = $('st-about').value = $('st-kinds').value = ''; studioShow() };
+$('st-tune').onclick = () => { const s = stations.find(x => x.id === mineCur) || { id: mineCur, name: $('st-mname').textContent, call_sign: '' }; tuneTo(s); scrollTo({ top: 0, behavior: 'smooth' }) };
+
+// libopus in a worker, one job at a time.
+let enc = null, encSeq = 0; const encWait = new Map();
+function encode(kind, data = {}, transfer = []) {
+  if (!enc) { enc = new Worker('encode-worker.js'); enc.onmessage = e => { const p = encWait.get(e.data.id); encWait.delete(e.data.id); e.data.error ? p?.rej(new Error(e.data.error)) : p?.res(e.data) }; enc.onerror = e => { for (const p of encWait.values()) p.rej(new Error('the encoder would not start')); encWait.clear() } }
+  return new Promise((res, rej) => { const id = ++encSeq; encWait.set(id, { res, rej }); enc.postMessage({ id, kind, ...data }, transfer) });
+}
+// A title and a name from a file's own name: "Artist - Title.mp3" reads as both.
+function titled(f) {
+  const base = f.name.replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const m = base.match(/^(.{1,80}?)\s+[-–—]\s+(.+)$/);
+  return m ? { title: m[2], by: m[1] } : { title: base, by: '' };
+}
+const BLOCK = 48000 * 4;
+function block(chans, at, n, ch, gain = 1) {
+  const out = new Float32Array(n * ch), L = chans[0], R = chans[1] || chans[0];
+  for (let i = 0; i < n; i++) {
+    if (ch === 1) out[i] = (L[at + i] + R[at + i]) * 0.5 * gain;
+    else { out[2 * i] = L[at + i] * gain; out[2 * i + 1] = R[at + i] * gain }
+  }
+  return out;
+}
+async function airFile(f, row) {
+  const st = (t, p) => { row.querySelector('.qs').textContent = t; if (p !== undefined) row.querySelector('.bar i').style.width = Math.round(p * 100) + '%' };
+  const talk = $('st-talk').checked, ch = talk ? 1 : 2, bitrate = talk ? 24000 : 64000;
+  try {
+    st('Reading', 0);
+    const raw = await f.arrayBuffer();
+    st('Decoding', 0.05);
+    // A context at 48 kHz decodes and resamples in one step.
+    const ab = await new OfflineAudioContext(1, 1, 48000).decodeAudioData(raw);
+    const chans = [ab.getChannelData(0)]; if (ab.numberOfChannels > 1) chans.push(ab.getChannelData(1));
+    const frames = ab.length;
+    if (frames < 48000) throw new Error('shorter than a second');
+    st('Levelling', 0.1);
+    radio.level_begin(ch);
+    for (let i = 0; i < frames; i += BLOCK) { radio.level_feed(block(chans, i, Math.min(BLOCK, frames - i), ch)); if ((i / BLOCK) % 8 === 7) await sleep(0) }
+    const lv = JSON.parse(radio.level_end());
+    st('Encoding', 0.2);
+    await encode('begin', { channels: ch, bitrate, talk });
+    for (let i = lv.start; i < lv.end; i += BLOCK) {
+      const fb = block(chans, i, Math.min(BLOCK, lv.end - i), ch, lv.gain), pcm = new Int16Array(fb.length);
+      for (let j = 0; j < fb.length; j++) pcm[j] = Math.max(-1, Math.min(1, fb[j])) * 32767;
+      await encode('feed', { pcm }, [pcm.buffer]);
+      st('Encoding', 0.2 + 0.7 * (i - lv.start) / Math.max(1, lv.end - lv.start));
+    }
+    const done = await encode('end');
+    st('Signing', 0.95);
+    const t = titled(f);
+    radio.add_track(mineCur, t.title, t.by, $('st-source').value, ch, bitrate, done.out);
+    st('On the clock', 1); row.classList.add('done');
+  } catch (e) { st('Not set: ' + (e.message || e)); row.classList.add('bad') }
+}
+async function airFiles(list) {
+  if (!mineCur || !adopted.has(mineCur)) return;
+  const files = [...list].filter(f => f.size > 0);
+  const rows = files.map(f => { const r = document.createElement('div'); r.className = 'qi'; r.innerHTML = '<span class="qt"></span><span class="bar"><i></i></span><span class="qs">Waiting</span>'; r.querySelector('.qt').textContent = titled(f).title; $('st-queue').prepend(r); return r });
+  for (const [i, f] of files.entries()) { airing++; try { await airFile(f, rows[i]) } finally { airing-- } }
+  studioStatus();
+}
+// Live from the tab: the microphone, nothing else, only while the button is held on.
+let live = null;
+$('st-live').onmouseenter = () => { $('st-livenote').hidden = false };
+$('st-live').onclick = async () => {
+  if (live) return endLive();
+  if (!mineCur || !adopted.has(mineCur)) return;
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }) }
+  catch (e) { $('st-livenote').hidden = false; $('st-livenote').textContent = window !== parent ? 'A page holding the radio cannot lend it the microphone. Open the open player itself.' : 'The microphone was not allowed. Your browser’s site settings can allow it.'; return }
+  const w = new Worker('encode-worker.js'), id = mineCur;
+  const ac = new AudioContext({ sampleRate: 48000 }), src = ac.createMediaStreamSource(stream), proc = ac.createScriptProcessor(4096, 1, 1), mute = ac.createGain();
+  mute.gain.value = 0; src.connect(proc); proc.connect(mute); mute.connect(ac.destination);
+  w.onmessage = e => { if (e.data.live || (e.data.out && e.data.frames !== undefined)) { try { if (e.data.out?.length) radio.live_chunk(id, e.data.out, 1, 24000) } catch (err) { console.warn(err) } } if (e.data.out && !e.data.live) w.terminate() };
+  w.postMessage({ id: 0, kind: 'begin', channels: 1, bitrate: 24000, talk: true, live: true });
+  proc.onaudioprocess = ev => { const f = ev.inputBuffer.getChannelData(0), pcm = new Int16Array(f.length); for (let i = 0; i < f.length; i++) pcm[i] = Math.max(-1, Math.min(1, f[i])) * 32767; w.postMessage({ id: 0, kind: 'feed', pcm }, [pcm.buffer]) };
+  const t0 = Date.now();
+  live = { stream, ac, proc, w, timer: setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); $('st-livetime').textContent = 'ON AIR ' + String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0') }, 500) };
+  $('st-live').classList.add('on'); $('st-live').querySelector('.lbl').textContent = 'End the broadcast';
+};
+function endLive() {
+  const l = live; live = null; if (!l) return;
+  l.stream.getTracks().forEach(t => t.stop()); l.proc.disconnect(); l.ac.close();
+  // What is left of the last six seconds goes out too.
+  l.w.postMessage({ id: 1, kind: 'end' });
+  clearInterval(l.timer); $('st-livetime').textContent = '';
+  $('st-live').classList.remove('on'); $('st-live').querySelector('.lbl').textContent = 'Go live';
+}
+$('st-files').onchange = e => { airFiles(e.target.files); e.target.value = '' };
+const drop = $('st-drop');
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over') });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); airFiles(e.dataTransfer.files) });
+// Closing the tab while recordings are still sailing would leave them half aboard.
+addEventListener('beforeunload', e => {
+  if (!radio || SCOPE !== 'open') return;
+  const busy = airing > 0 || JSON.parse(radio.mine()).some(m => m.unsent > 0);
+  if (busy) { e.preventDefault(); e.returnValue = '' }
+});
 
 // A copy of the set served anywhere but hostis.black/pyrateradio/listen/ (a Lantern's
 // /player/, a mirror) points its links to the landing at the landing itself.
@@ -774,6 +951,7 @@ async function boot() {
   else if (!flockFollow()) followLink();
   refresh();
   setInterval(refresh, 4000); setInterval(nowPlaying, 1000); setInterval(() => page(false), 5000);
+  studioBoot();
   window.addEventListener('hashchange', () => handOff() || followLink());
   if ('mediaSession' in navigator) { navigator.mediaSession.setActionHandler('play', () => cur && listen(cur)); navigator.mediaSession.setActionHandler('pause', stop); navigator.mediaSession.setActionHandler('stop', stop) }
 }
