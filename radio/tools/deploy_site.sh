@@ -13,7 +13,10 @@ cd "$SITE"
 git fetch -q origin main
 git rebase -q origin/main
 cp "$R/landing/out/index.html" pyrateradio/index.html
-# The computers' builds, if the landing carried them, beside the Android app.
+# The computers' builds, if the landing carried them, beside the Android app; older ones go.
+if ls "$R"/landing/out/pyrate-radio-*-windows.zip >/dev/null 2>&1; then
+  git rm -q --ignore-unmatch pyrateradio/pyrate-radio-*-windows.zip* pyrateradio/pyrate-radio-*-macos.zip* pyrateradio/pyrate-radio-*-linux-x64.tar.gz* >/dev/null
+fi
 for f in "$R"/landing/out/pyrate-radio-*-windows.zip* "$R"/landing/out/pyrate-radio-*-macos.zip* "$R"/landing/out/pyrate-radio-*-linux-x64.tar.gz*; do
   [ -e "$f" ] && cp "$f" pyrateradio/
 done
