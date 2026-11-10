@@ -493,27 +493,58 @@ impl Store {
         Ok(n)
     }
 
-    /// Evicts carried chunks, oldest-touched first, until under quota.
+    /// Evicts carried chunks until under quota. Chunks no station names go first, then the
+    /// oldest-touched chunk of whichever station holds the most here, so one station flooding
+    /// the disk shrinks before any other loses a chunk. Its own stations and pinned ones stay.
     pub fn enforce_quota(&self) -> Result<u64> {
         let own_art = self.own().iter().filter_map(|id| self.logs.get(id)).flat_map(|a| a.art_hashes()).collect::<Vec<_>>();
         let keep: HashSet<String> = self.own().iter().chain(self.pinned.iter()).flat_map(|id| self.chunks_of(id)).chain(own_art).flat_map(|h| self.file_names(&h)).collect();
-        let mut files = Vec::new();
+        let mut whose: HashMap<String, StationId> = HashMap::new();
+        for id in self.logs.keys() {
+            for h in self.chunks_of(id) {
+                for n in self.file_names(&h) {
+                    whose.entry(n).or_insert(*id);
+                }
+            }
+        }
         let mut total = 0u64;
+        let mut orphans = Vec::new();
+        let mut by: HashMap<StationId, (u64, Vec<(SystemTime, u64, PathBuf)>)> = HashMap::new();
         for f in self.chunk_files()? {
             let m = f.metadata()?;
             total += m.len();
-            files.push((m.modified().unwrap_or(SystemTime::UNIX_EPOCH), m.len(), f.path()));
-        }
-        files.sort();
-        let mut freed = 0;
-        for (_, len, path) in files {
-            if total <= self.quota {
-                break;
-            }
-            let name = path.file_name().unwrap().to_string_lossy().to_string();
+            let name = f.file_name().to_string_lossy().to_string();
             if keep.contains(&name) {
                 continue;
             }
+            let e = (m.modified().unwrap_or(SystemTime::UNIX_EPOCH), m.len(), f.path());
+            match whose.get(&name) {
+                Some(id) => {
+                    let g = by.entry(*id).or_default();
+                    g.0 += m.len();
+                    g.1.push(e);
+                }
+                None => orphans.push(e),
+            }
+        }
+        orphans.sort();
+        for g in by.values_mut() {
+            g.1.sort();
+            g.1.reverse();
+        }
+        let mut freed = 0;
+        for (_, len, path) in orphans {
+            if total <= self.quota {
+                return Ok(freed);
+            }
+            fs::remove_file(&path)?;
+            total -= len;
+            freed += len;
+        }
+        while total > self.quota {
+            let Some(g) = by.values_mut().filter(|g| !g.1.is_empty()).max_by_key(|g| g.0) else { break };
+            let (_, len, path) = g.1.pop().unwrap();
+            g.0 -= len;
             fs::remove_file(&path)?;
             total -= len;
             freed += len;

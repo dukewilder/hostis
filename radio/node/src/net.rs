@@ -175,6 +175,18 @@ fn pow_hash(station: &StationId, nonce: u64) -> u32 {
     u32::from_be_bytes(b.as_bytes()[..4].try_into().unwrap()).leading_zeros()
 }
 
+/// How much work a nonce shows for a station: the leading zero bits of its hash.
+pub fn pow_bits(station: &StationId, nonce: u64) -> u32 {
+    pow_hash(station, nonce)
+}
+
+/// A better nonce than `from` shows, searched over `span` nonces after `start`: what a
+/// station does when the Log is full and a newcomer must outwork the weakest card in it.
+pub fn pow_improve(station: &StationId, from: u64, start: u64, span: u64) -> Option<u64> {
+    let have = pow_hash(station, from);
+    (start..start.saturating_add(span)).find(|n| pow_hash(station, *n) > have)
+}
+
 pub fn pow_ok(station: &StationId, nonce: u64) -> bool {
     pow_hash(station, nonce) >= POW_BITS
 }
@@ -336,6 +348,74 @@ mod serde_bytes64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A stranger's bytes, random and mutated from real ones, into every decoder the wire
+    /// reaches: none may panic, hang or allocate without bound. A small fuzzer that runs with
+    /// the ordinary tests, so every build is checked.
+    #[test]
+    fn strangers_bytes_never_panic_a_decoder() {
+        let mut x = 0x9e37_79b9_7f4a_7c15u64;
+        let mut rnd = move || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        let k = StationKey::generate().unwrap();
+        let card = Card {
+            station: k.id(), head: 3, name: "HOSTIS".into(), about: "a line".into(), port: Some("Tortuga".into()),
+            live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None,
+            kinds: vec!["talk".into()], mature: false, tip: None, explicit: false,
+        }
+        .sign(&k);
+        let entry = pyrate_core::SignedEntry::sign(&k, pyrate_core::Entry { station: k.id(), seq: 0, prev: [0; 32], at_ms: 1, body: pyrate_core::Body::Colours { name: "x".into(), about: "y".into(), port: None, tip: None } }).unwrap().to_bytes().unwrap();
+        let seeds: Vec<Vec<u8>> = vec![
+            postcard::to_stdvec(&Gossip::Station(card.clone())).unwrap(),
+            postcard::to_stdvec(&card).unwrap(),
+            entry.clone(),
+            postcard::to_stdvec(&Request::Log { station: k.id(), from: 0 }).unwrap(),
+        ];
+        let mut dec = pyrate_core::audio::ChunkDecoder::new(2).unwrap();
+        // PYRATE_FUZZ_ROUNDS runs it longer, for a deep pass.
+        let rounds: u32 = std::env::var("PYRATE_FUZZ_ROUNDS").ok().and_then(|v| v.parse().ok()).unwrap_or(6_000);
+        for i in 0..rounds {
+            let mut b: Vec<u8> = if i % 2 == 0 {
+                (0..(rnd() % 2048) as usize).map(|_| rnd() as u8).collect()
+            } else {
+                let mut b = seeds[(rnd() % seeds.len() as u64) as usize].clone();
+                for _ in 0..1 + rnd() % 6 {
+                    if b.is_empty() {
+                        break;
+                    }
+                    let at = (rnd() % b.len() as u64) as usize;
+                    match rnd() % 3 {
+                        0 => b[at] = rnd() as u8,
+                        1 => b.truncate(at),
+                        _ => b.insert(at, 0xff),
+                    }
+                }
+                b
+            };
+            let _ = postcard::from_bytes::<Gossip>(&b);
+            if let Ok(a) = postcard::from_bytes::<Announce>(&b) {
+                let _ = a.verify();
+            }
+            let _ = postcard::from_bytes::<Request>(&b);
+            let _ = postcard::from_bytes::<Response>(&b);
+            let _ = postcard::from_bytes::<crate::hop::Hop>(&b);
+            let _ = postcard::from_bytes::<pyrate_core::chat::Signed>(&b);
+            if let Ok(e) = pyrate_core::SignedEntry::from_bytes(&b) {
+                let _ = e.verify();
+            }
+            let _ = pyrate_core::audio::packets(&b);
+            let _ = dec.decode_as(&b, 300);
+            if i % 50 == 0 {
+                let _ = pyrate_core::art::decode(&b);
+                b.splice(0..0, [0xff, 0xd8, 0xff, 0xe0]);
+                let _ = pyrate_core::art::decode(&b);
+            }
+        }
+    }
 
     #[test]
     fn a_harbour_note_is_the_node_s_own_word() {

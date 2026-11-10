@@ -368,3 +368,10 @@ Rulings made while reading every line again. The findings themselves are in `AUD
 - **The app shows the fingerprint of the key that signed it**, so a copy signed by anyone else can be told apart.
 - **On computers, the radio's files stay its own.** Recordings and shares go to a scratch folder inside the app's own folder, emptied at each start, never the shared temporary folder another account can read. That folder is kept out of Spotlight, Windows Search and Tracker.
 
+## XXVIII. Floods cost more than they buy (10 November 2026)
+
+- **A full Log takes a newcomer only for more work.** Past 5,000 cards, a new station comes in only by showing more proof of work than the weakest card a stranger holds there. Each further junk station costs twice the last. A node's own stations, the ones it keeps and pockets are never at stake. Counts aboard only break ties, since they are cheap to inflate and work is not.
+- **Real stations climb.** When its Log is nine-tenths full, a node keeps working on its own stations' proof, a little each tick and off the async threads, and flies the better nonce. When there is room it spends nothing.
+- **A flood shrinks first.** Over quota, a node drops chunks no station names, then the oldest chunk of whichever station holds the most on its disk. One station filling a disk loses chunks before any other loses one.
+- **Every decoder a stranger reaches is fuzzed with every build.** Random bytes and mutated real messages go into the gossip, card, request, response, hop, chatter, entry, chunk, Opus and art decoders, 6,000 rounds with the ordinary tests and 120,000 in a deep pass, with no panic. libopus is 1.6.1.
+
