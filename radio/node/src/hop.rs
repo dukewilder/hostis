@@ -220,8 +220,9 @@ impl Inner {
             }
             Hop::Stem { station, entries, chunks, announce, hops: _ } => {
                 // A Lantern that carries only its own stations never ends a stranger's stem: it
-                // hands the cargo on, so nothing of anyone else's lands on its disk.
-                let declines = self.cfg.lantern && !self.cfg.carry_all && !self.is_own(&station);
+                // hands the cargo on, so nothing of anyone else's lands on its disk. Nor does any
+                // node end a stem for a station its owner chose not to carry.
+                let declines = (self.cfg.lantern && !self.cfg.carry_all && !self.is_own(&station)) || !self.will_carry(&station, Some((&announce, &entries)));
                 // Cargo that has been here before has gone round: it spreads now.
                 let id = cargo_id(&station, &entries, &announce);
                 let again = {
