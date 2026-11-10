@@ -23,6 +23,7 @@ object Native {
         if (started) return
         synchronized(this) {
             if (started) return
+            Hold.clearIfScuttled(ctx.applicationContext)
             MainActivity.initNative(ctx.applicationContext)
             fun asset(name: String) = try {
                 ctx.assets.open("flutter_assets/assets/$name").bufferedReader().readText()

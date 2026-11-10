@@ -105,7 +105,16 @@ class MainActivity : FlutterActivity() {
                     } catch (e: Exception) {}
                     result.success(null)
                 }
-                "hold_key" -> result.success(Hold.key(applicationContext))
+                "hold_key" -> { Hold.clearIfScuttled(applicationContext); result.success(Hold.key(applicationContext)) }
+                // The key goes first, then the radio stops dead: the process ends with the node.
+                "scuttle" -> {
+                    try { stopService(Intent(this, PlaybackService::class.java)) } catch (e: Exception) {}
+                    try { LanternService.set(this, false, 1) } catch (e: Exception) {}
+                    Bells.cancelAll(this)
+                    Hold.scuttle(applicationContext)
+                    result.success(null)
+                    window.decorView.postDelayed({ finishAndRemoveTask(); android.os.Process.killProcess(android.os.Process.myPid()) }, 300)
+                }
                 "build_code" -> {
                     val info = packageManager.getPackageInfo(packageName, 0)
                     result.success(if (Build.VERSION.SDK_INT >= 28) info.longVersionCode.toInt() else @Suppress("DEPRECATION") info.versionCode)
