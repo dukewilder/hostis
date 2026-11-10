@@ -1086,7 +1086,8 @@ class _ColoursPageState extends State<ColoursPage> {
               title: Text('Strike colours?', style: serif(22)),
               content: Column(mainAxisSize: MainAxisSize.min, children: [
                 Text('The station ends for good. This cannot be undone.', style: serif(15, color: boneFaint)),
-                TextField(controller: words, style: mono(12, color: bone), maxLines: 3, decoration: field('The 24 words')),
+                TextField(controller: words, style: mono(12, color: bone), maxLines: 3, decoration: field('The 24 words'),
+                    enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, keyboardType: TextInputType.visiblePassword),
               ]),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(c, false), child: Text('KEEP FLYING', style: carved(11))),
@@ -1094,9 +1095,13 @@ class _ColoursPageState extends State<ColoursPage> {
               ],
             ),
           );
+          final phrase = words.text;
+          words.clear();
+          words.dispose();
           if (ok == true) {
-            final r = Native.call({'cmd': 'strike', 'station': id, 'phrase': words.text});
-            if (r is Map && r['error'] != null) setState(() => error = r['error']);
+            final r = Native.call({'cmd': 'strike', 'station': id, 'phrase': phrase});
+            if (!context.mounted) return;
+            toast(context, r is Map && r['error'] != null ? 'Not struck: ${r['error']}' : 'Colours struck. The station has ended.');
           }
         }, color: bloodBright),
       ]),

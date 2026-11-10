@@ -110,3 +110,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - A false carrier claim jumps no queue and a flood of them grows nothing; peers that fail to answer are asked last.
 - Nodes find each other inside the network: carriers sign a note of their relay into the gossip, no node id is looked up in plain DNS, and tabs publish nothing about themselves.
 - Private fetches keep a long-lived first hop, as Tor's guards do, and a broadcaster's phone never asks carriers for its own station from its own address.
+- Strike colours works from the app: it takes the 24 words, as the screen always said.
