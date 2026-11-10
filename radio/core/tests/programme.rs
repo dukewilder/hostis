@@ -330,3 +330,35 @@ fn skipping_whole_rounds_changes_nothing() {
         }
     }
 }
+
+/// Chicago's autumn: at 07:00 UTC on 1 November 2026 the clocks go back from 02:00 to 01:00.
+fn chicago_autumn() -> Zone {
+    Zone { name: "Test/Chicago".into(), offsets: vec![(0, -300), (1_793_516_400_000, -360)] }
+}
+const FALL_BACK: u64 = 1_793_516_400_000;
+
+#[test]
+fn the_hour_that_comes_twice_neither_rewinds_a_tape_nor_cuts_a_slot() {
+    let k = StationKey::from_seed([43; 32]);
+    let (mut a, h, t) = station(&k);
+    let z = chicago_autumn();
+    // A daily tape from 01:30, three 20-minute recordings: 01:30 came first at 06:30 UTC.
+    a.write(&k, t, Body::Programme(Programme { zone: z.clone(), mode: Mode::Daily { start_min: 90 }, ..Default::default() })).unwrap();
+    let c = Clock::new(&a).unwrap();
+    let tape = FALL_BACK - 30 * MIN;
+    for (when, started) in [(FALL_BACK - MIN, tape + 20 * MIN), (FALL_BACK + 5 * MIN, tape + 20 * MIN), (FALL_BACK + 20 * MIN, tape + 40 * MIN), (FALL_BACK + 40 * MIN, tape + 60 * MIN)] {
+        assert_eq!(c.now(when).unwrap().started_at_ms, started, "the tape at {}", (when as i64 - FALL_BACK as i64) / 60_000);
+    }
+    // A slot from 01:30 for an hour runs an hour of real time, 06:30 to 07:30 UTC, and the
+    // page says the same.
+    let mut b = a.clone();
+    let slot = Slot { title: "Night Watch".into(), about: "".into(), span: Span::every_day(90, 60), fill: Fill::Tracks { tracks: vec![h[2]], shuffle: false }, live: false };
+    b.write(&k, t + 1, Body::Programme(Programme { zone: z.clone(), slots: vec![slot], ..Default::default() })).unwrap();
+    let c = Clock::new(&b).unwrap();
+    for m in [-20i64, 0, 10, 25] {
+        assert_eq!(c.now((FALL_BACK as i64 + m * MIN as i64) as u64).unwrap().slot.as_deref(), Some("Night Watch"), "{m} minutes from the change");
+    }
+    assert_eq!(c.now(FALL_BACK + 35 * MIN).unwrap().slot, None, "the slot has had its hour");
+    let l: Vec<_> = c.listings(FALL_BACK - 3 * 3_600_000, FALL_BACK + 3 * 3_600_000).into_iter().filter(|l| l.kind == "slot").collect();
+    assert!(l.iter().any(|l| l.start_ms == FALL_BACK - 30 * MIN && l.end_ms == FALL_BACK + 30 * MIN), "{l:?}");
+}
