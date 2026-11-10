@@ -789,7 +789,10 @@ class _ColoursPageState extends State<ColoursPage> {
   Future<void> pickArt(String station, String kind) async {
     final picked = await FilePicker.platform.pickFiles(type: FileType.image);
     final path = picked?.files.single.path;
-    if (path != null) await _setArt(station, kind, path);
+    if (path != null) {
+      await _setArt(station, kind, path);
+      unawaited(dropCopy(path));
+    }
   }
 
   Future<void> linkArt(String station, String kind) async {
@@ -863,8 +866,8 @@ class _ColoursPageState extends State<ColoursPage> {
       if (f.path == null) continue;
       final stem = f.name.replaceAll(RegExp(r'\.[^.]+$'), '');
       final parts = stem.split(' - ');
-      Native.call({
-        'cmd': 'add_track',
+      // One at a time, and the picker's copy goes once each is set.
+      setTrack({
         'station': station,
         'path': f.path,
         'title': parts.length > 1 ? parts.sublist(1).join(' - ') : stem,

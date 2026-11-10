@@ -537,15 +537,47 @@ Future<String?> fetchOut(String url, {int maxBytes = 30000000}) async {
   }
 }
 
-/// Clears what earlier runs fetched or copied and never cleaned up: a fetch cut off by a
-/// closed app, a picture or an episode left behind by a crash.
+/// Removes a file, but only one inside this app's own cache: a copy, a take or a fetch,
+/// never something the owner keeps elsewhere.
+Future<void> dropCopy(String? path) async {
+  if (path == null) return;
+  try {
+    final tmp = (await getTemporaryDirectory()).path;
+    if (File(path).absolute.path.startsWith('$tmp/')) await File(path).delete();
+  } catch (_) {}
+}
+
+/// Sets a recording on a station, one after another rather than all at once, and drops
+/// the cache copy once it is on the clock or has failed. The job's last word, or null.
+Future<String?> setTrack(Map<String, dynamic> req) => _setQueue = _setQueue.then((_) async {
+      final r = await Native.callAway({'cmd': 'add_track', ...req});
+      final job = r is Map ? r['job'] : null;
+      String? last;
+      for (var i = 0; job != null && i < 1200; i++) {
+        await Future.delayed(const Duration(seconds: 2));
+        final st = await Native.callAway({'cmd': 'status'});
+        final j = st is Map ? ((st['jobs'] as List?) ?? []).firstWhere((x) => x['id'] == job, orElse: () => null) : null;
+        last = j?['state'] as String?;
+        if (j == null || !(last ?? '').startsWith('Setting')) break;
+      }
+      await dropCopy(req['path'] as String?);
+      return last;
+    });
+Future<String?> _setQueue = Future.value(null);
+
+/// Clears what earlier runs fetched, recorded or copied and never cleaned up: a fetch cut
+/// off by a closed app, a take never set, a picked file, a shared tape, the app's own copy
+/// made for passing it on.
 Future<void> sweepTemp() async {
   try {
     final dir = await getTemporaryDirectory();
     final old = DateTime.now().subtract(const Duration(hours: 6));
-    await for (final e in dir.list()) {
-      final n = e.path.split('/').last;
-      if (e is File && (n.startsWith('out-') || n.startsWith('feed-') || n.startsWith('pyrate-art-')) && e.statSync().modified.isBefore(old)) {
+    const prefixes = ['out-', 'feed-', 'pyrate-art-', 'rec-', 'voice-'];
+    await for (final e in dir.list(recursive: true)) {
+      if (e is! File) continue;
+      final rel = e.path.substring(dir.path.length + 1);
+      final mine = rel.startsWith('share/') || rel.startsWith('file_picker/') || (!rel.contains('/') && prefixes.any(rel.startsWith));
+      if (mine && e.statSync().modified.isBefore(old)) {
         try {
           e.deleteSync();
         } catch (_) {}
@@ -768,6 +800,13 @@ class _RecordPanelState extends State<RecordPanel> {
   @override
   void dispose() {
     tick?.cancel();
+    // Closing the panel stops the microphone at once; a take never set goes with it.
+    if (recording) {
+      ship.invokeMethod<Map>('record_stop').then((r) => dropCopy(r?['path'] as String?)).catchError((_) {});
+    } else {
+      dropCopy(path);
+    }
+    title.dispose();
     super.dispose();
   }
 
@@ -787,6 +826,10 @@ class _RecordPanelState extends State<RecordPanel> {
     } else {
       tick?.cancel();
       final r = await ship.invokeMethod<Map>('record_stop').catchError((_) => <dynamic, dynamic>{}) ?? {};
+      if (!mounted) {
+        dropCopy(r['path'] as String?);
+        return;
+      }
       setState(() {
         recording = false;
         path = r['path'] as String?;
@@ -812,8 +855,7 @@ class _RecordPanelState extends State<RecordPanel> {
         const SizedBox(height: 10),
         Row(children: [
           pyrateButton('PUT IT ON THE CLOCK', () {
-            Native.call({
-              'cmd': 'add_track',
+            setTrack({
               'station': widget.station,
               'path': path,
               'title': title.text.trim().isEmpty ? 'Segment, ${clockTime(DateTime.now().millisecondsSinceEpoch)}' : title.text.trim(),
@@ -825,7 +867,10 @@ class _RecordPanelState extends State<RecordPanel> {
             });
           }),
           const SizedBox(width: 10),
-          pyrateButton('DISCARD', () => setState(() => path = null), color: boneFaint),
+          pyrateButton('DISCARD', () {
+            dropCopy(path);
+            setState(() => path = null);
+          }, color: boneFaint),
         ]),
       ],
     ]);
