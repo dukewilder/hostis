@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=7e3b409561';
+import init, { Radio } from './pkg/pyrate_browser.js?v=45393d6111';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -13,7 +13,7 @@ const EMBED = document.documentElement.classList.contains('embed');
 // flock goes straight to an open player, the same set served where no one owns it (IPFS, a
 // Lantern). 'open' is that copy: the whole Log, the chatter and the colours.
 const SCOPE = "harbour";
-const OPEN_PLAYERS = ["https://bafybeih3pkaeapdddazpva5kt5nspl2gla3dm7duojqwdk4olc3cnol7qu.ipfs.dweb.link/", "https://bafybeih3pkaeapdddazpva5kt5nspl2gla3dm7duojqwdk4olc3cnol7qu.ipfs.w3s.link/", "https://ipfs.io/ipfs/bafybeih3pkaeapdddazpva5kt5nspl2gla3dm7duojqwdk4olc3cnol7qu/"];
+const OPEN_PLAYERS = ["https://bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm.ipfs.dweb.link/", "https://bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm.ipfs.w3s.link/", "https://ipfs.io/ipfs/bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm/"];
 const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
 const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
 const passedId = () => { const id = location.hash.slice(1); return /^[0-9a-f]{64}$/.test(id) ? id : null };
@@ -42,7 +42,15 @@ let radio = null, stations = [], cur = null, playing = false, gen = 0, bootAt = 
 let ctx = null, gain = null, sources = [], meter = null;
 const pics = new Map();
 
-function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v) } catch (e) { return null } }
+// An IPFS gateway that serves by path (/ipfs/<name>/) gives every page it serves one shared
+// origin, so anything kept there could be read by any other page on it. There the tab keeps
+// nothing past the visit, and offers the player's own address instead.
+const SHARED = /^\/ip[fn]s\//.test(location.pathname);
+const passing = new Map();
+function store(k, v) {
+  if (SHARED) { if (v === undefined) return passing.get(k) ?? null; passing.set(k, v); return }
+  try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v) } catch (e) { return null }
+}
 
 // Every harbour this tab has ever been handed, kept so a returning listener never loses a
 // door even if a later build ships a different set. Dead entries just fail to resolve.
@@ -471,7 +479,9 @@ function rows() {
     const mini = r.querySelector('.mini');
     flag(mini, s.id, s.live);
     if (s.cover) { mini.classList.add('pic'); if (lazy) lazy.observe(r); else pic(s.id, s.cover).then(u => { if (u) mini.innerHTML = '<img alt="" src="' + u + '">' }) }
-    r.querySelector('.name').textContent = s.name + (s.live ? '  ON AIR' : '') + (s.pocket ? '  PRIVATE' : '') + (s.explicit ? '  EXPLICIT' : s.mature ? '  MATURE' : '');
+    const nm = r.querySelector('.name'); nm.textContent = s.name;
+    // What a station says of itself, as hairline tags: the open air in bright red, the rest in bone.
+    for (const [t, c] of [[s.live && 'On air', 'lv'], [s.pocket && 'Private', ''], [s.explicit ? 'Explicit' : s.mature && 'Mature', '']]) if (t) { const g = document.createElement('span'); g.className = 'tag ' + c; g.textContent = t; nm.append(g) }
     r.querySelector('.cs').textContent = s.call_sign; r.querySelector('.about').textContent = s.about || '';
     r.querySelector('.count').innerHTML = s.aboard + '<small>ABOARD</small><span class="fq">' + fq(s.id).toFixed(1) + '</span>';
     r.classList.toggle('on', cur?.id === s.id);
@@ -992,5 +1002,6 @@ if (document.documentElement.classList.contains('embed') && parent !== window) {
   new ResizeObserver(tell).observe(document.body); addEventListener('load', tell);
 }
 document.querySelectorAll('a.openlink').forEach(a => { if (!a.id) a.href = OPEN_PLAYERS[0] });
+if (SHARED) { const m = location.pathname.match(/^\/ipfs\/([a-z2-7]{20,})\//); $('sharedgo').href = m ? 'https://' + m[1] + '.ipfs.dweb.link/' + location.hash : OPEN_PLAYERS[0] || '#'; $('sharednote').hidden = false }
 if (EMBED) { scale(); const p = passedId(); dormant(p && isHarbour(p) ? HARBOUR_STATIONS.find(h => h.id === p) : HARBOUR_STATIONS[0]); $('signal').textContent = '' }
 else booting = boot();
