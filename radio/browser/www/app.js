@@ -18,10 +18,12 @@ const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
 const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
 const passedId = () => { const id = location.hash.slice(1); return /^[0-9a-f]{64}$/.test(id) ? id : null };
 const inSet = s => !HOSTIS_ONLY || isHarbour(s.id);
-// The open player that answers first; the first on the list if none answers in time.
+// The open player's fixed name if it answers within a few seconds, since a browser keeps what it
+// keeps there from one release to the next; otherwise whichever other copy answers first.
 async function openPlayer() {
-  const tries = OPEN_PLAYERS.map(u => fetch(u + 'favicon.png', { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(3500) }).then(() => u));
-  try { return await Promise.any(tries) } catch (e) { return OPEN_PLAYERS[0] }
+  const ping = (u, ms) => fetch(u + 'favicon.png', { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(ms) }).then(() => u);
+  try { return await ping(OPEN_PLAYERS[0], 4000) } catch (e) { }
+  try { return await Promise.any(OPEN_PLAYERS.slice(1).map(u => ping(u, 3500))) } catch (e) { return OPEN_PLAYERS[0] }
 }
 // A link for anything that is not HOSTIS's own leaves this copy before it is read: the part
 // after the # never reaches a server, and this page never shows, names or plays what it holds.

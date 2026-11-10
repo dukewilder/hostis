@@ -106,8 +106,11 @@ html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doo
 (function(){var H={{HARBOUR_IDS}},P={{OPEN_PLAYERS}},h=(location.hash||'').toLowerCase(),id=h.slice(1);
 if(/pocket=|flock=/.test(h)||(/^[0-9a-f]{64}$/.test(id)&&H.indexOf(id)<0)){history.replaceState(null,'',location.pathname);
 document.documentElement.className+=' leaving';var go=function(u){location.replace(u+h)},done=0;
-P.forEach(function(u){fetch(u+'favicon.png',{mode:'no-cors',cache:'no-store'}).then(function(){if(!done++)go(u)},function(){})});
-setTimeout(function(){if(!done++)go(P[0])},3500);return}
+var ping=function(u){return fetch(u+'favicon.png',{mode:'no-cors',cache:'no-store'}).then(function(){return u})};
+// The player's fixed name first, for a few seconds; then whichever copy answers.
+ping(P[0]).then(function(u){if(!done++)go(u)},function(){});
+setTimeout(function(){if(done)return;P.slice(1).forEach(function(u){ping(u).then(function(){if(!done++)go(u)},function(){})})},4000);
+setTimeout(function(){if(!done++)go(P[0])},8000);return}
 if(!/^[0-9a-f]{64}$/.test(id))return;var b=document.getElementById('passed');
 var app=/Android/.test(navigator.userAgent)?' <a href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url='+encodeURIComponent(new URL('listen/#'+id,location.href).href)+';end">Open in the app</a>':'';
 document.getElementById('radio').src='listen/?embed#'+id;
