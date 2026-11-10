@@ -114,3 +114,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - The app keeps its secrets on the phone: no backup or transfer, a media browser only for the system and the car, a quiet log, and the 24 words guarded from loss, screenshots and keyboard learning.
 - App 0.8.1 (build 14) built with everything above. It waits on Dylan's Android key: the debug key that signed 0.8.0 is gone, so this build cannot install over it unsigned.
 - Everything a node keeps on disk is sealed under a key of the device's own, wrapped by the phone's secure hardware: a seized phone is noise, even to someone holding the whole Log.
+- A browser tab is counted only while it plays, through two hops as a phone is, and answers nobody about what it holds.

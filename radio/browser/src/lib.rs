@@ -88,6 +88,23 @@ impl Listing {
     }
 }
 
+/// A private route's hop, as the nodes read it: forward a sealed request, or open one. The
+/// variants and their order are the node's (`node/src/hop.rs`); a tab only ever sends these two.
+#[derive(serde::Serialize)]
+enum Hop {
+    Forward { next: [u8; 32], blob: Vec<u8> },
+    Sealed { eph: [u8; 32], ct: Vec<u8> },
+}
+
+/// What a tab asks an exit for. The order is the node's; a tab only sends `Token`.
+#[allow(dead_code)]
+#[derive(serde::Serialize)]
+enum Ask {
+    Log { station: StationId, from: u64 },
+    Chunk { station: StationId, hash: Hash },
+    Token { station: StationId, hour: u64, token: [u8; 32], nonce: u64 },
+}
+
 /// Chunks and pictures this tab has fetched, oldest out first.
 #[derive(Default)]
 struct Hold {
@@ -98,11 +115,6 @@ struct Hold {
 impl Hold {
     fn get(&self, h: &Hash) -> Option<Vec<u8>> {
         self.items.iter().find(|(k, _)| k == h).map(|(_, v)| v.clone())
-    }
-
-    /// What this tab holds under a sealed name, sealed for handing on.
-    fn sealed(&self, name: &Hash) -> Option<Vec<u8>> {
-        self.items.iter().find(|(k, _)| pyrate_core::seal::name(k) == *name).map(|(k, v)| pyrate_core::seal::seal(k, v))
     }
 
     fn put(&mut self, h: Hash, b: Vec<u8>) {
@@ -155,6 +167,17 @@ struct Ship {
     drift: Mutex<pyrate_core::drift::Drift>,
     /// Nodes that failed to answer lately, and when: asked only after the others.
     failed: Mutex<HashMap<[u8; 32], u64>>,
+    /// Whether the visitor is listening: only then is the tab counted aboard.
+    listening: std::sync::atomic::AtomicBool,
+    /// The first hop of this visit's private route.
+    first_hop: Mutex<Option<EndpointId>>,
+}
+
+/// A number below `n` from the browser's own randomness.
+fn pick(n: usize) -> usize {
+    let mut b = [0u8; 8];
+    let _ = getrandom::fill(&mut b);
+    (u64::from_le_bytes(b) % n.max(1) as u64) as usize
 }
 
 fn raw_now() -> u64 {
@@ -175,18 +198,12 @@ impl Ship {
 
     fn serve(&self, req: Request) -> Response {
         match req {
-            Request::Log { station, .. } if self.pockets.lock().unwrap().contains_key(&station) => Response::Entries(vec![]),
-            Request::Log { station, from } => Response::Entries(
-                self.archives
-                    .lock()
-                    .unwrap()
-                    .get(&station)
-                    .map(|a| a.entries().iter().skip(from as usize).take(2000).filter_map(|e| e.to_bytes().ok()).collect())
-                    .unwrap_or_default(),
-            ),
-            // A tab hands on what it holds sealed, by name, as every node does.
+            // A tab answers nobody about what it holds: whoever could ask it for a station's log
+            // or the chunks just played would learn what this visitor is hearing. It takes from
+            // the network and gives back its count, its chatter and nothing else.
+            Request::Log { .. } => Response::Entries(vec![]),
             Request::Chunk { .. } => Response::Chunk(None),
-            Request::SealedChunk { name } => Response::Sealed(self.hold.lock().unwrap().sealed(&name)),
+            Request::SealedChunk { .. } => Response::Sealed(None),
             Request::Flock { .. } => Response::Flock { now_ms: 0, station: None },
             Request::PocketLog { .. } => Response::Entries(vec![]),
             Request::Hop(_) => Response::Hop(vec![]),
@@ -573,6 +590,9 @@ impl Ship {
     /// Once an hour, for the station on: one token, worked for, so the station counts this
     /// tab once. The token is a keyed hash nobody can tie to the last hour's.
     async fn count_me(&self) {
+        if !self.listening.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
         let Some(station) = *self.tuned.lock().unwrap() else { return };
         let hour = self.now() / 3_600_000;
         if self.tokens_sent.lock().unwrap().get(&station) == Some(&hour) {
@@ -595,6 +615,8 @@ impl Ship {
             sleep(Duration::from_millis(1)).await;
         }
         self.accept_token(station, hour, token, nonce);
+        // Two hops away, as a phone does: the first sees this tab and not the station, the exit
+        // sees the station and not the tab, and counts it for everyone.
         let g = Gossip::Aboard { station, hour, tokens: vec![(token, nonce)] };
         // A pocket's listeners are counted among its members only: a token on the public Log
         // would name the station to everyone.
@@ -606,7 +628,46 @@ impl Ship {
             }
             return;
         }
-        self.broadcast(&g).await;
+        if self.token_privately(station, hour, token, nonce).await.is_err() {
+            // No second node to route through yet: the harbour hears it, as it would anyway.
+            self.broadcast(&g).await;
+        }
+    }
+
+    /// Sends the hourly token to an exit through a first hop. The first hop is drawn once a
+    /// visit; the exit afresh each hour, never the first hop.
+    async fn token_privately(&self, station: StationId, hour: u64, token: [u8; 32], nonce: u64) -> Result<()> {
+        let mut nodes: Vec<EndpointId> = self.harbour.clone();
+        let now = self.now();
+        for l in self.log.lock().unwrap().values() {
+            nodes.extend(l.carriers.iter().filter(|(_, (_, seen))| now.saturating_sub(*seen) < 10 * 60_000).filter_map(|(n, _)| EndpointId::from_bytes(n).ok()));
+        }
+        nodes.retain(|n| *n != self.ep.id());
+        nodes.sort();
+        nodes.dedup();
+        if nodes.len() < 2 {
+            return Err(anyhow!("one node only"));
+        }
+        let first = {
+            let mut g = self.first_hop.lock().unwrap();
+            if g.is_none_or(|f| !nodes.contains(&f)) {
+                *g = Some(nodes[pick(nodes.len())]);
+            }
+            g.unwrap()
+        };
+        let exits: Vec<EndpointId> = nodes.into_iter().filter(|n| *n != first).collect();
+        let exit = exits[pick(exits.len())];
+        let ask = postcard::to_stdvec(&Ask::Token { station, hour, token, nonce })?;
+        let (eph, ct, c) = pyrate_core::route::seal_to(exit.as_bytes(), &ask).ok_or_else(|| anyhow!("seal"))?;
+        let blob = postcard::to_stdvec(&Hop::Sealed { eph, ct })?;
+        let hop = postcard::to_stdvec(&Hop::Forward { next: *exit.as_bytes(), blob })?;
+        match self.ask(first, &Request::Hop(hop)).await? {
+            Response::Hop(raw) if pyrate_core::route::open_answer(&c, &raw).is_some() => {
+                say("counted aboard through two hops");
+                Ok(())
+            }
+            _ => Err(anyhow!("no answer")),
+        }
     }
 
     fn sync_soon(self: &Arc<Self>, station: StationId) {
@@ -809,6 +870,8 @@ impl Radio {
             syncing: Mutex::new(HashSet::new()),
             drift: Mutex::new(pyrate_core::drift::Drift::new()),
             failed: Mutex::new(HashMap::new()),
+            listening: std::sync::atomic::AtomicBool::new(false),
+            first_hop: Mutex::new(None),
         });
         *proto.0.lock().unwrap() = Some(ship.clone());
 
@@ -886,6 +949,16 @@ impl Radio {
         let s = self.ship.clone();
         spawn(async move { s.count_me().await });
         Ok(())
+    }
+
+    /// Whether the visitor is listening. A tab is counted aboard only while it plays: looking
+    /// at a station on the dial tells nobody anything.
+    pub fn listening(&self, on: bool) {
+        self.ship.listening.store(on, std::sync::atomic::Ordering::Relaxed);
+        if on {
+            let s = self.ship.clone();
+            spawn(async move { s.count_me().await });
+        }
     }
 
     pub fn untune(&self) {
