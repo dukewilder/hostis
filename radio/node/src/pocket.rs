@@ -52,12 +52,13 @@ impl Inner {
     /// Pockets this node knows, kept beside its keys: one line each, station and key.
     fn save_pockets(&self) {
         let lines: Vec<String> = self.pockets.lock().unwrap().iter().map(|(st, p)| format!("{} {} {}", st.to_hex(), hex(&p.key), p.hosts.iter().map(|h| h.to_string()).collect::<Vec<_>>().join(","))).collect();
-        let _ = std::fs::write(self.cfg.dir.join("keys").join("pockets"), lines.join("\n"));
+        let _ = self.hold.write_note(&self.cfg.dir, "pockets", lines.join("\n").as_bytes());
     }
 
     /// Loads the pockets this node knows and meets each on its own topic.
     pub(crate) async fn open_pockets(self: &Arc<Self>) {
-        let text = std::fs::read_to_string(self.cfg.dir.join("keys").join("pockets")).unwrap_or_default();
+        let old = self.cfg.dir.join("keys").join("pockets");
+        let text = self.hold.read_note(&self.cfg.dir, "pockets", Some(&old)).and_then(|b| String::from_utf8(b).ok()).unwrap_or_default();
         for line in text.lines() {
             let mut p = line.split_whitespace();
             let (Some(st), Some(k)) = (p.next().and_then(|s| StationId::from_hex(s).ok()), p.next().and_then(|k| crate::unhex(k).ok())) else { continue };

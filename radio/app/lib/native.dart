@@ -37,6 +37,14 @@ class Native {
   static final _CallD _call = _lib.lookupFunction<_CallC, _CallD>('pyrate_call');
   static final _FreeD _free = _lib.lookupFunction<_FreeC, _FreeD>('pyrate_free');
 
+  /// The device's hold key, unwrapped by the phone's secure hardware. Before `start`.
+  static void setHoldKey(String hex) {
+    final f = _lib.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('pyrate_set_hold_key');
+    final p = hex.toNativeUtf8();
+    f(p);
+    calloc.free(p);
+  }
+
   static void setReleaseKeys(String keys) {
     final f = _lib.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('pyrate_set_release_keys');
     final p = keys.toNativeUtf8();

@@ -74,6 +74,7 @@ class MainActivity : FlutterActivity() {
                         result.success(false)
                     }
                 }
+                "hold_key" -> result.success(Hold.key(applicationContext))
                 "build_code" -> {
                     val info = packageManager.getPackageInfo(packageName, 0)
                     result.success(if (Build.VERSION.SDK_INT >= 28) info.longVersionCode.toInt() else @Suppress("DEPRECATION") info.versionCode)

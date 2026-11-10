@@ -8,8 +8,6 @@ Each entry gives the threat, whether the wall held, and the fix.
 
 ### Track B: privacy, anonymity and decentralisation
 
-**B8. The hold opens for anyone with the public Log.** Chunks and logs are sealed under keys drawn from public facts (a station's id, a chunk's hash), and filed under names drawn from the same. Someone who seizes a disk and also runs a node can test it for every station on the Log, and a deleted file on flash may still be read. Holds against a casual look only. Fix: a hold key of the device's own, under which every file is sealed again and named, so the disk is noise without it and Clear the hold destroys the key.
-
 **B9. The PIN falls to a fast hash.** The Colours PIN is stored as a salted BLAKE3 hash, so a seized disk gives up a four-digit PIN at once, and with it any lock-screen PIN that matches. Holds only against a casual look. Fix: a memory-hard hash (Argon2id).
 
 ### Track A: the clock, the programme, sound and pictures
@@ -81,7 +79,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 - **P9** (medium) Podcast feeds are never refreshed on their own. `station.dart:804`
 - **P10** (medium) Drawer Lantern: the service restarts with no node, and the charging and Wi-Fi gate lives only in the Dart UI. `LanternService.kt:27-52`
 - **P11** (medium) The "plain" disguise leaks the station name and the app name. `PlaybackService.kt:239-244`
-- **P12** (medium) Station ids, bells and the alarm station sit in plaintext SharedPreferences and prefs.json. `PlaybackService.kt:90 and MainActivity.kt:164`
 - **P14** (medium) Temporary audio, pictures and APK copies are left on disk. `Ship.kt:22-42`
 - **P15** (medium) After END BROADCAST the "ON AIR" notification, foreground state and both locks stay. `PlaybackService.kt:239-245`
 - **P16** (medium) Every tune stacks a new audio-focus request. `PlaybackService.kt:102-107 and 123-140`
@@ -200,4 +197,8 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **P29. The 24 words and PINs are typed and shown with the keyboard's learning and no screen protection.** (medium) Fixed: the 24 words and PIN fields learn nothing (no suggestions, autocorrect or keyboard learning), are cleared once read, and the screen is marked secure (no screenshot, recents thumbnail or recording) while the words, strike and appoint dialogs are up. (bddbcf2)
 
-**P37. `kBuildCode` duplicates the pubspec build number.** (low) Fixed: the app reads its version code from the installed package through the shell, so it can never disagree with the build; the constant is gone. (pending)
+**P37. `kBuildCode` duplicates the pubspec build number.** (low) Fixed: the app reads its version code from the installed package through the shell, so it can never disagree with the build; the constant is gone. (d6e1097)
+
+**B8. The hold opens for anyone with the public Log.** Chunks and logs are sealed under keys drawn from public facts (a station's id, a chunk's hash), and filed under names drawn from the same. Someone who seizes a disk and also runs a node can test it for every station on the Log, and a deleted file on flash may still be read. Holds against a casual look only. Fixed: every file the node keeps is now sealed again and named under a hold key of the device's own (node/src/hold.rs): chunks (inside, still sealed under their own addresses, so a carrier still cannot read what it carries), logs, station keys, and the small files that name stations (the chart of kept and marooned, the settings, pocket invitations, proof-of-work and aboard counts). On a phone the hold key is wrapped by the Android Keystore, so a copy of storage taken off the chip is noise; a Lantern keeps it in hold.key, or wherever PYRATE_HOLD_KEY points. Files from before are carried over the first time each is read. Unit tests: someone holding a station's id, log and chunk address, and the old naming, finds nothing on the disk to test or open, another device's key opens nothing, and an old hold comes across and leaves no old file behind. Voyage (22 of 22), pocket (8 of 8) and art pass; the APK builds. What remains: destroying the hold key as a one-tap scuttle is not built yet. (pending)
+
+**P12. Station ids, bells and the alarm station sit in plaintext SharedPreferences and prefs.json.** (medium) Fixed: the node's chart, settings, pocket invitations and counts are sealed under the hold key (see B8). What remains: the Android side's own small store (the last station, bells and the wake station in SharedPreferences) is still in the clear. (pending)

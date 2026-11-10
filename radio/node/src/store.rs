@@ -3,10 +3,14 @@
 //! quota and leaves oldest-touched first.
 //!
 //! Nothing on the disk says what it is. Chunks are sealed under keys drawn from their own
-//! addresses, and logs under keys drawn from their stations' ids, each filed under a hash
-//! no one can turn back into an id. A seized disk is unlabelled noise: only someone who
-//! already knows a station's id can test whether it is here. The node itself opens a log
-//! only when the station's card reaches it again from the network.
+//! addresses, and logs under keys drawn from their stations' ids, and then everything is
+//! sealed again and named under the device's own hold key (see `hold.rs`). Without the hold
+//! key a seized disk is noise, even to someone holding every station's id; with it, a node
+//! still opens a log only when the station's id reaches it, and never holds a stranger's
+//! sound in the clear.
+//!
+//! Files from before the hold key (logs under `.sl`, chunks under `chunks/`, keys under the
+//! station's hex) are carried over the first time each is read.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -18,6 +22,8 @@ use std::{
 
 use anyhow::Result;
 use pyrate_core::{Archive, Body, Hash, SignedEntry, StationId, StationKey};
+
+use crate::hold::Hold;
 
 fn hex(h: &[u8]) -> String {
     h.iter().map(|b| format!("{b:02x}")).collect()
@@ -35,17 +41,22 @@ pub fn filed_as(id: &StationId) -> String {
     hex(&derive(b"pyrate/log-name/v1", id))
 }
 
-fn log_cipher(id: &StationId) -> chacha20poly1305::ChaCha20Poly1305 {
+fn log_cipher(key: &[u8; 32]) -> chacha20poly1305::ChaCha20Poly1305 {
     use chacha20poly1305::KeyInit;
-    chacha20poly1305::ChaCha20Poly1305::new(&derive(b"pyrate/log-key/v1", id).into())
+    chacha20poly1305::ChaCha20Poly1305::new(&(*key).into())
 }
 
-/// One sealed record: its length, a fresh nonce, and the entry under the station's log key.
-fn seal_record(id: &StationId, plain: &[u8]) -> Result<Vec<u8>> {
+/// The key a log from before the hold key was sealed under: drawn from the id alone.
+fn old_log_key(id: &StationId) -> [u8; 32] {
+    derive(b"pyrate/log-key/v1", id)
+}
+
+/// One sealed record: its length, a fresh nonce, and the entry under the log's key.
+fn seal_record(key: &[u8; 32], plain: &[u8]) -> Result<Vec<u8>> {
     use chacha20poly1305::aead::Aead;
     let mut nonce = [0u8; 12];
     rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce);
-    let ct = log_cipher(id).encrypt(chacha20poly1305::Nonce::from_slice(&nonce), plain).map_err(|_| anyhow::anyhow!("seal"))?;
+    let ct = log_cipher(key).encrypt(chacha20poly1305::Nonce::from_slice(&nonce), plain).map_err(|_| anyhow::anyhow!("seal"))?;
     let mut out = Vec::with_capacity(4 + 12 + ct.len());
     out.extend(((12 + ct.len()) as u32).to_be_bytes());
     out.extend(nonce);
@@ -53,9 +64,9 @@ fn seal_record(id: &StationId, plain: &[u8]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-fn read_sealed(id: &StationId, bytes: &[u8]) -> Archive {
+fn read_sealed(id: &StationId, key: &[u8; 32], bytes: &[u8]) -> Archive {
     use chacha20poly1305::aead::Aead;
-    let c = log_cipher(id);
+    let c = log_cipher(key);
     let mut a = Archive::new(*id);
     let mut at = 0;
     while at + 4 <= bytes.len() {
@@ -75,6 +86,7 @@ fn read_sealed(id: &StationId, bytes: &[u8]) -> Archive {
 
 pub struct Store {
     dir: PathBuf,
+    pub hold: Hold,
     pub quota: u64,
     pub logs: HashMap<StationId, Archive>,
     pub keys: HashMap<StationId, StationKey>,
@@ -84,16 +96,35 @@ pub struct Store {
 
 impl Store {
     pub fn open(dir: &Path, quota: u64) -> Result<Self> {
-        for d in ["logs", "chunks", "keys"] {
+        Self::open_with(dir, quota, None)
+    }
+
+    /// Opens the store under a hold key handed in (a phone's, from its secure hardware), or
+    /// the folder's own.
+    pub fn open_with(dir: &Path, quota: u64, hold: Option<[u8; 32]>) -> Result<Self> {
+        for d in ["logs", "chunks", "keys", "hold"] {
             fs::create_dir_all(dir.join(d))?;
         }
-        let mut s = Self { dir: dir.to_path_buf(), quota, logs: HashMap::new(), keys: HashMap::new(), pinned: HashSet::new() };
-        // keys/<station hex> holds the station's master seed, or a deputy's.
+        let hold = Hold::for_dir(dir, hold)?;
+        let mut s = Self { dir: dir.to_path_buf(), hold, quota, logs: HashMap::new(), keys: HashMap::new(), pinned: HashSet::new() };
+        // keys/<name>.k2 holds a station's id and its master seed, or a deputy's, sealed. From
+        // before the hold key, keys/<station hex> held the seed in the clear: sealed now.
         for f in fs::read_dir(dir.join("keys"))? {
             let f = f?;
-            let Ok(station) = StationId::from_hex(&f.file_name().to_string_lossy()) else { continue };
+            let name = f.file_name().to_string_lossy().to_string();
+            if name.ends_with(".k2") {
+                let Some(b) = fs::read(f.path()).ok().and_then(|b| s.hold.open(b"key", &b)) else { continue };
+                if b.len() == 64 {
+                    let station = StationId(b[..32].try_into().unwrap());
+                    s.keys.insert(station, StationKey::from_seed(b[32..].try_into().unwrap()));
+                }
+                continue;
+            }
+            let Ok(station) = StationId::from_hex(&name) else { continue };
             let seed = fs::read(f.path())?;
             if let Ok(seed) = <[u8; 32]>::try_from(seed.as_slice()) {
+                s.save_key(station, &StationKey::from_seed(seed))?;
+                let _ = fs::remove_file(f.path());
                 s.keys.insert(station, StationKey::from_seed(seed));
             }
         }
@@ -181,14 +212,29 @@ impl Store {
 
     /// Keeps a key (master or deputy) for a station.
     pub fn add_key_for(&mut self, id: StationId, key: StationKey) -> Result<StationId> {
-        let p = self.dir.join("keys").join(id.to_hex());
-        fs::write(&p, key.seed())?;
+        self.save_key(id, &key)?;
         self.keys.insert(id, key);
         self.logs.entry(id).or_insert_with(|| Archive::new(id));
         Ok(id)
     }
 
+    /// A station's key, sealed under the hold key in a file whose name says nothing.
+    fn save_key(&self, id: StationId, key: &StationKey) -> Result<()> {
+        let mut what = id.0.to_vec();
+        what.extend(key.id().0);
+        let p = self.dir.join("keys").join(format!("{}.k2", self.hold.name(&what)));
+        let mut plain = id.0.to_vec();
+        plain.extend(key.seed());
+        fs::write(p, self.hold.seal(b"key", &plain))?;
+        Ok(())
+    }
+
     fn log_path(&self, id: &StationId) -> PathBuf {
+        self.dir.join("logs").join(format!("{}.sl2", self.hold.name(&derive(b"pyrate/log-name/v1", id))))
+    }
+
+    /// Where a log lay before the hold key.
+    fn old_log_path(&self, id: &StationId) -> PathBuf {
         self.dir.join("logs").join(format!("{}.sl", filed_as(id)))
     }
 
@@ -198,9 +244,18 @@ impl Store {
         if self.logs.contains_key(id) {
             return true;
         }
-        let Ok(bytes) = fs::read(self.log_path(id)) else { return false };
-        let a = read_sealed(id, &bytes);
-        self.logs.insert(*id, a);
+        if let Ok(bytes) = fs::read(self.log_path(id)) {
+            let a = read_sealed(id, &self.hold.log_key(&id.0), &bytes);
+            self.logs.insert(*id, a);
+            return true;
+        }
+        // A log from before the hold key: sealed again under it, and the old file goes.
+        let old = self.old_log_path(id);
+        let Ok(bytes) = fs::read(&old) else { return false };
+        let a = read_sealed(id, &old_log_key(id), &bytes);
+        if self.replace_log(*id, a).is_ok() {
+            let _ = fs::remove_file(old);
+        }
         true
     }
 
@@ -217,7 +272,7 @@ impl Store {
             }
             let bytes = e.to_bytes()?;
             a.append(e)?;
-            file.write_all(&seal_record(&id, &bytes)?)?;
+            file.write_all(&seal_record(&self.hold.log_key(&id.0), &bytes)?)?;
             added += 1;
         }
         if a.is_struck() {
@@ -268,39 +323,58 @@ impl Store {
         out
     }
 
-    /// Chunks are sealed on disk, after Freenet's content-hash keys: the file is named by a
-    /// hash of the chunk's address and encrypted with a key drawn from the address itself.
-    /// A seized device holds unlabelled noise. Nothing on it says what any file is; only
-    /// someone who already holds a station's log can test for that station's chunks.
-    fn sealed_name(h: &Hash) -> String {
-        hex(&pyrate_core::seal::name(h))
+    /// Chunks are sealed on disk twice. Inside, after Freenet's content-hash keys, under a key
+    /// drawn from the chunk's address, which only a station's log names. Outside, under the
+    /// hold key, in a file named by the hold key from the chunk's sealed name: nobody without
+    /// the device's key can say what any file is, or test the disk for any station.
+    fn hold_path(&self, name: &Hash) -> PathBuf {
+        let x = self.hold.name(name);
+        self.dir.join("hold").join(&x[..2]).join(x)
     }
 
     fn chunk_path(&self, h: &Hash) -> PathBuf {
-        let x = Self::sealed_name(h);
-        self.dir.join("chunks").join(&x[..2]).join(x)
+        self.hold_path(&pyrate_core::seal::name(h))
     }
 
-    fn named_path(&self, name: &Hash) -> PathBuf {
+    /// Where a chunk lay before the hold key: under its sealed name, sealed once.
+    fn old_sealed_path(&self, name: &Hash) -> PathBuf {
         let x = hex(name);
         self.dir.join("chunks").join(&x[..2]).join(x)
     }
 
-    /// A chunk's sealed bytes by the name it is filed under, as they lie on the disk. Nothing
-    /// is opened: this is what a carrier hands on.
+    /// Writes a chunk's sealed bytes under the hold key.
+    fn file_sealed(&self, name: &Hash, sealed: &[u8]) -> Result<()> {
+        let p = self.hold_path(name);
+        fs::create_dir_all(p.parent().unwrap())?;
+        let tmp = p.with_extension("part");
+        fs::write(&tmp, self.hold.seal(name, sealed))?;
+        fs::rename(tmp, p)?;
+        Ok(())
+    }
+
+    /// A chunk's sealed bytes by the name it is asked for under: opened from the hold key's
+    /// layer only, never from its own. This is what a carrier hands on.
     pub fn get_sealed(&self, name: &Hash) -> Option<Vec<u8>> {
-        let p = self.named_path(name);
-        let b = fs::read(&p).ok()?;
+        let p = self.hold_path(name);
+        if let Ok(b) = fs::read(&p) {
+            if let Ok(f) = fs::File::options().append(true).open(&p) {
+                let _ = f.set_modified(SystemTime::now());
+            }
+            return self.hold.open(name, &b);
+        }
+        let old = self.old_sealed_path(name);
+        let b = fs::read(&old).ok()?;
         // A chunk from before sealing lies under its plain hash. Asked for by that hash as a
         // name, it would go out in the clear: it is sealed in place instead, and nothing is said.
         if blake3::hash(&b).as_bytes() == name {
             if self.put_chunk(name, &b).is_ok() {
-                let _ = fs::remove_file(&p);
+                let _ = fs::remove_file(&old);
             }
             return None;
         }
-        if let Ok(f) = fs::File::options().append(true).open(&p) {
-            let _ = f.set_modified(SystemTime::now());
+        // From before the hold key: filed under it now.
+        if self.file_sealed(name, &b).is_ok() {
+            let _ = fs::remove_file(&old);
         }
         Some(b)
     }
@@ -310,12 +384,7 @@ impl Store {
         if pyrate_core::seal::unseal(h, sealed).is_none() {
             anyhow::bail!("sealed chunk does not match its hash");
         }
-        let p = self.chunk_path(h);
-        fs::create_dir_all(p.parent().unwrap())?;
-        let tmp = p.with_extension("part");
-        fs::write(&tmp, sealed)?;
-        fs::rename(tmp, p)?;
-        Ok(())
+        self.file_sealed(&pyrate_core::seal::name(h), sealed)
     }
 
     /// Where unsealed chunks lived before sealing. Read once, sealed, removed.
@@ -325,31 +394,21 @@ impl Store {
     }
 
     pub fn has_chunk(&self, h: &Hash) -> bool {
-        self.chunk_path(h).exists() || self.legacy_path(h).exists()
+        let name = pyrate_core::seal::name(h);
+        self.hold_path(&name).exists() || self.old_sealed_path(&name).exists() || self.legacy_path(h).exists()
     }
 
     pub fn put_chunk(&self, h: &Hash, bytes: &[u8]) -> Result<()> {
         if blake3::hash(bytes).as_bytes() != h {
             anyhow::bail!("chunk does not match its hash");
         }
-        let sealed = pyrate_core::seal::seal(h, bytes);
-        let p = self.chunk_path(h);
-        fs::create_dir_all(p.parent().unwrap())?;
-        let tmp = p.with_extension("part");
-        fs::write(&tmp, sealed)?;
-        fs::rename(tmp, p)?;
-        Ok(())
+        self.file_sealed(&pyrate_core::seal::name(h), &pyrate_core::seal::seal(h, bytes))
     }
 
     pub fn get_chunk(&self, h: &Hash) -> Option<Vec<u8>> {
-        let p = self.chunk_path(h);
-        if let Ok(sealed) = fs::read(&p) {
-            let bytes = pyrate_core::seal::unseal(h, &sealed)?;
-            // Touch, so carrying keeps what is listened to.
-            if let Ok(f) = fs::File::options().append(true).open(&p) {
-                let _ = f.set_modified(SystemTime::now());
-            }
-            return Some(bytes);
+        let name = pyrate_core::seal::name(h);
+        if let Some(sealed) = self.get_sealed(&name) {
+            return pyrate_core::seal::unseal(h, &sealed);
         }
         let legacy = self.legacy_path(h);
         let bytes = fs::read(&legacy).ok()?;
@@ -361,9 +420,10 @@ impl Store {
 
     /// Replaces a log outright: used only when two phones wrote one station at once.
     pub fn replace_log(&mut self, id: StationId, a: Archive) -> Result<()> {
+        let key = self.hold.log_key(&id.0);
         let mut bytes = Vec::new();
         for e in a.entries() {
-            bytes.extend(seal_record(&id, &e.to_bytes()?)?);
+            bytes.extend(seal_record(&key, &e.to_bytes()?)?);
         }
         let tmp = self.log_path(&id).with_extension("tmp");
         fs::write(&tmp, bytes)?;
@@ -376,33 +436,54 @@ impl Store {
     pub fn forget_log(&mut self, id: &StationId) {
         self.logs.remove(id);
         let _ = fs::remove_file(self.log_path(id));
+        let _ = fs::remove_file(self.old_log_path(id));
         let _ = fs::remove_file(self.dir.join("logs").join(format!("{}.log", id.to_hex())));
     }
 
     pub fn remove_chunk(&self, h: &Hash) {
-        let _ = fs::remove_file(self.chunk_path(h));
+        let name = pyrate_core::seal::name(h);
+        let _ = fs::remove_file(self.hold_path(&name));
+        let _ = fs::remove_file(self.old_sealed_path(&name));
         let _ = fs::remove_file(self.legacy_path(h));
+    }
+
+    /// Every name a chunk may lie under on this disk, now or from before.
+    fn file_names(&self, h: &Hash) -> [String; 3] {
+        let name = pyrate_core::seal::name(h);
+        [self.hold.name(&name), hex(&name), hex(h)]
+    }
+
+    /// The chunk files on disk, in the hold and from before it.
+    fn chunk_files(&self) -> Result<Vec<fs::DirEntry>> {
+        let mut out = Vec::new();
+        for top in ["hold", "chunks"] {
+            let Ok(rd) = fs::read_dir(self.dir.join(top)) else { continue };
+            for sub in rd {
+                let sub = sub?;
+                if !sub.file_type()?.is_dir() {
+                    continue;
+                }
+                for f in fs::read_dir(sub.path())? {
+                    out.push(f?);
+                }
+            }
+        }
+        Ok(out)
     }
 
     /// Empties the hold: every carried chunk and log that is neither ours nor ballast.
     pub fn clear_hold(&mut self) -> Result<usize> {
         let keep_ids: HashSet<StationId> = self.own().into_iter().chain(self.pinned.iter().copied()).collect();
-        let keep: HashSet<String> = keep_ids.iter().flat_map(|id| self.chunks_of(id)).flat_map(|h| [Self::sealed_name(&h), hex(&h)]).collect();
+        let keep_art: Vec<Hash> = keep_ids.iter().filter_map(|id| self.logs.get(id)).flat_map(|a| a.art_hashes()).collect();
+        let keep: HashSet<String> = keep_ids.iter().flat_map(|id| self.chunks_of(id)).chain(keep_art).flat_map(|h| self.file_names(&h)).collect();
         let mut n = 0;
-        for sub in fs::read_dir(self.dir.join("chunks"))? {
-            let sub = sub?;
-            if !sub.file_type()?.is_dir() {
-                continue;
-            }
-            for f in fs::read_dir(sub.path())? {
-                let f = f?;
-                if !keep.contains(&f.file_name().to_string_lossy().to_string()) {
-                    fs::remove_file(f.path())?;
-                    n += 1;
-                }
+        for f in self.chunk_files()? {
+            if !keep.contains(&f.file_name().to_string_lossy().to_string()) {
+                fs::remove_file(f.path())?;
+                n += 1;
             }
         }
-        let keep_logs: HashSet<String> = keep_ids.iter().map(|id| format!("{}.sl", filed_as(id))).collect();
+        let keep_logs: HashSet<String> = keep_ids.iter().flat_map(|id| [self.log_path(id), self.old_log_path(id)]).filter_map(|p| p.file_name().map(|n| n.to_string_lossy().to_string())).collect();
         for f in fs::read_dir(self.dir.join("logs"))?.flatten() {
             if !keep_logs.contains(&f.file_name().to_string_lossy().to_string()) {
                 let _ = fs::remove_file(f.path());
@@ -415,20 +496,13 @@ impl Store {
     /// Evicts carried chunks, oldest-touched first, until under quota.
     pub fn enforce_quota(&self) -> Result<u64> {
         let own_art = self.own().iter().filter_map(|id| self.logs.get(id)).flat_map(|a| a.art_hashes()).collect::<Vec<_>>();
-        let keep: HashSet<String> = self.own().iter().chain(self.pinned.iter()).flat_map(|id| self.chunks_of(id)).chain(own_art).flat_map(|h| [Self::sealed_name(&h), hex(&h)]).collect();
+        let keep: HashSet<String> = self.own().iter().chain(self.pinned.iter()).flat_map(|id| self.chunks_of(id)).chain(own_art).flat_map(|h| self.file_names(&h)).collect();
         let mut files = Vec::new();
         let mut total = 0u64;
-        for sub in fs::read_dir(self.dir.join("chunks"))? {
-            let sub = sub?;
-            if !sub.file_type()?.is_dir() {
-                continue;
-            }
-            for f in fs::read_dir(sub.path())? {
-                let f = f?;
-                let m = f.metadata()?;
-                total += m.len();
-                files.push((m.modified().unwrap_or(SystemTime::UNIX_EPOCH), m.len(), f.path()));
-            }
+        for f in self.chunk_files()? {
+            let m = f.metadata()?;
+            total += m.len();
+            files.push((m.modified().unwrap_or(SystemTime::UNIX_EPOCH), m.len(), f.path()));
         }
         files.sort();
         let mut freed = 0;
@@ -466,6 +540,82 @@ mod tests {
         assert!(!legacy.exists(), "and the plain file is gone");
         let sealed = s.get_sealed(&pyrate_core::seal::name(&h)).expect("it is held sealed now");
         assert_eq!(pyrate_core::seal::unseal(&h, &sealed), Some(plain));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Every file under `dir`, as (name, bytes).
+    fn files(dir: &Path) -> Vec<(String, Vec<u8>)> {
+        let mut out = Vec::new();
+        for e in fs::read_dir(dir).unwrap().flatten() {
+            if e.path().is_dir() {
+                out.extend(files(&e.path()));
+            } else {
+                out.push((e.file_name().to_string_lossy().to_string(), fs::read(e.path()).unwrap()));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn without_the_hold_key_the_disk_is_noise_even_to_someone_with_the_log() {
+        let dir = std::env::temp_dir().join(format!("pyrate-hold-store-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let k = StationKey::generate().unwrap();
+        let id = k.id();
+        let plain = b"six seconds of a station's sound".to_vec();
+        let h = *blake3::hash(&plain).as_bytes();
+        {
+            let mut s = Store::open_with(&dir, 1 << 20, Some([7; 32])).unwrap();
+            s.add_key(StationKey::from_seed(k.seed())).unwrap();
+            s.write(id, 1_000, Body::Colours { name: "Hidden".into(), about: "".into(), port: None, tip: None }).unwrap();
+            s.put_chunk(&h, &plain).unwrap();
+        }
+        // Someone who holds the station's id, its log and the chunk's address, and knows the old
+        // way of naming and sealing, still finds nothing on the disk to test or open.
+        let named = [filed_as(&id), hex(&pyrate_core::seal::name(&h)), hex(&h), id.to_hex()];
+        for (name, bytes) in files(&dir) {
+            assert!(!named.iter().any(|n| name.contains(n.as_str())), "{name} gives itself away");
+            assert!(pyrate_core::seal::unseal(&h, &bytes).is_none(), "{name} opens with the chunk's own key");
+            assert!(read_sealed(&id, &old_log_key(&id), &bytes).is_empty(), "{name} opens with the id's key");
+            assert!(!bytes.windows(32).any(|w| w == k.seed()), "{name} holds the station key in the clear");
+        }
+        // With another device's hold key nothing opens; with this one, everything does.
+        let other = Store::open_with(&dir, 1 << 20, Some([8; 32])).unwrap();
+        assert!(other.keys.is_empty() && other.get_chunk(&h).is_none());
+        let mut s = Store::open_with(&dir, 1 << 20, Some([7; 32])).unwrap();
+        assert!(s.keys.contains_key(&id));
+        assert!(s.open_log(&id) && s.logs[&id].len() == 1);
+        assert_eq!(s.get_chunk(&h), Some(plain));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_hold_from_before_the_hold_key_comes_across_and_leaves_nothing_behind() {
+        let dir = std::env::temp_dir().join(format!("pyrate-hold-old-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        for d in ["logs", "chunks", "keys"] {
+            fs::create_dir_all(dir.join(d)).unwrap();
+        }
+        let k = StationKey::generate().unwrap();
+        let id = k.id();
+        // The old layout: a key in the clear, a log under the id's key, a chunk sealed once.
+        fs::write(dir.join("keys").join(id.to_hex()), k.seed()).unwrap();
+        let mut a = Archive::new(id);
+        a.write(&k, 1_000, Body::Colours { name: "Old".into(), about: "".into(), port: None, tip: None }).unwrap();
+        let rec = seal_record(&old_log_key(&id), &a.entries()[0].to_bytes().unwrap()).unwrap();
+        fs::write(dir.join("logs").join(format!("{}.sl", filed_as(&id))), rec).unwrap();
+        let plain = b"an old chunk".to_vec();
+        let h = *blake3::hash(&plain).as_bytes();
+        let name = hex(&pyrate_core::seal::name(&h));
+        fs::create_dir_all(dir.join("chunks").join(&name[..2])).unwrap();
+        fs::write(dir.join("chunks").join(&name[..2]).join(&name), pyrate_core::seal::seal(&h, &plain)).unwrap();
+        let mut s = Store::open_with(&dir, 1 << 20, Some([9; 32])).unwrap();
+        assert!(s.keys.contains_key(&id), "the key comes across");
+        assert_eq!(s.logs.get(&id).map(|a| a.len()), Some(1), "the log comes across");
+        assert_eq!(s.get_chunk(&h), Some(plain), "the chunk comes across");
+        assert!(s.open_log(&id));
+        assert!(!dir.join("keys").join(id.to_hex()).exists() && !dir.join("logs").join(format!("{}.sl", filed_as(&id))).exists());
+        assert!(!dir.join("chunks").join(&name[..2]).join(&name).exists(), "and the old files are gone");
         let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -11,7 +11,8 @@ fn files(d: &PathBuf) -> usize {
     fn walk(p: &std::path::Path) -> usize {
         std::fs::read_dir(p).map(|r| r.flatten().map(|e| if e.path().is_dir() { walk(&e.path()) } else { 1 }).sum()).unwrap_or(0)
     }
-    walk(&d.join("chunks"))
+    // Chunks and pictures, in the hold and from before it.
+    walk(&d.join("hold")) + walk(&d.join("chunks"))
 }
 
 fn check(ok: bool, what: &str) {
