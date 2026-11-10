@@ -182,6 +182,13 @@ class Tuner extends ChangeNotifier {
           Native.call({'cmd': 'flock_join', 'link': id});
           return;
         }
+        // An invitation to a pocket station: joined here, and tuned once its log arrives.
+        if (id != null && id.startsWith('pocket=')) {
+          Native.callAway({'cmd': 'pocket_join', 'link': id}).then((r) {
+            if (r is Map && r['station'] is String) pendingLink = r['station'] as String;
+          });
+          return;
+        }
         if (id != null) {
           firstTuneDone = true;
           pendingLink = id;
@@ -537,7 +544,7 @@ class _StationFace extends StatelessWidget {
             ('WATCH BILL', () => pyrateSheet(context, WatchBill(station: s))),
             ('FLOCK', () => pyrateSheet(context, const FlockSheet())),
             if (isTuned) ('TAPE IT', () => tapeIt(context)),
-            ('PASS IT ON', () => shareStation(s)),
+            if (s['pocket'] != true) ('PASS IT ON', () => shareStation(s)),
             if ((s['tip'] ?? '').toString().isNotEmpty) ('TIP', () => tipStation(context, s['tip'], name: (s['name'] ?? 'the station').toString())),
           ])
             TextButton(
@@ -615,6 +622,7 @@ class _ColoursPageState extends State<ColoursPage> {
   String? libraryFor;
   int libraryCount = -1;
   final shape = StartShape();
+  bool pocket = false;
   Map? programme;
   String? programmeFor;
 
@@ -640,7 +648,7 @@ class _ColoursPageState extends State<ColoursPage> {
       raising = true;
       error = null;
     });
-    final r = await Native.callAway({'cmd': 'raise', 'name': name.text, 'about': about.text});
+    final r = await Native.callAway({'cmd': 'raise', 'name': name.text, 'about': about.text, 'pocket': pocket});
     if (r is Map && r['id'] is String) await shape.apply(r['id']);
     setState(() {
       raising = false;
@@ -793,6 +801,13 @@ class _ColoursPageState extends State<ColoursPage> {
         TextField(controller: about, style: serif(16), decoration: field('What it broadcasts'), maxLength: 140),
         const SizedBox(height: 18),
         StartShapePicker(shape: shape),
+        Row(children: [
+          Switch(value: pocket, onChanged: (v) => setState(() => pocket = v), activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel),
+          Flexible(child: Text('A pocket station: only listeners you invite', style: mono(11))),
+        ]),
+        if (pocket)
+          Text('It never shows on the Log. Whoever holds an invitation can find it, hear it and carry it; nobody else can tell it exists.',
+              style: serif(13, color: boneFaint, italic: true)),
         const SizedBox(height: 10),
         Text('All of it can change later, and none of it needs you once it is set: the station keeps to it for as long as anyone carries it.',
             style: serif(13, color: boneGhost, italic: true)),
@@ -956,7 +971,10 @@ class _ColoursPageState extends State<ColoursPage> {
         button('A PREMIERE', () => after(pyrateSheet(context, ShowEditor(station: id)))),
         button('A NOTICE', () => after(pyrateSheet(context, NoticeEditor(station: id)))),
         button('YOUR PAGE', () => openPage(context, mine, widget.radio)),
-        button('A POSTER', () => pyrateSheet(context, PosterSheet(station: mine))),
+        if (widget.radio.stations.any((x) => x['id'] == id && x['pocket'] == true))
+          button('INVITE', () => pyrateSheet(context, InviteSheet(station: id)))
+        else
+          button('A POSTER', () => pyrateSheet(context, PosterSheet(station: mine))),
         button('NUMBERS', () => after(pyrateSheet(context, NumbersKit(station: id)))),
       ]),
     ];

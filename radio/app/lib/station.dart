@@ -1771,3 +1771,39 @@ class _FlockSheetState extends State<FlockSheet> {
     );
   }
 }
+
+// ---------------------------------------------------------------------------------------
+// A pocket station's invitation: the link and its code carry the station's secret key.
+// Whoever holds it can hear the station and carry it; hand it only to those you mean.
+
+class InviteSheet extends StatelessWidget {
+  final String station;
+  const InviteSheet({super.key, required this.station});
+
+  @override
+  Widget build(BuildContext context) {
+    final r = Native.call({'cmd': 'pocket_invite', 'station': station});
+    final link = r is Map ? r['link'] as String? : null;
+    final q = link == null ? null : Native.call({'cmd': 'qr', 'text': link});
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        heading('AN INVITATION'),
+        note('Whoever holds this can hear the station, carry it and pass the invitation on. Hand it only to people you mean to have it. It works in the app and in any browser.'),
+        const SizedBox(height: 12),
+        if (q is Map)
+          Center(
+            child: Container(
+              color: const Color(0xFFFBF8F1),
+              width: 220,
+              height: 220,
+              child: CustomPaint(painter: QrPainter((q['size'] as num).toInt(), q['bits'] as String, const Color(0xFF0A0A0A))),
+            ),
+          ),
+        const SizedBox(height: 12),
+        if (link != null) pyrateButton('SEND THE INVITATION', () => ship.invokeMethod('share_text', {'text': link})),
+        if (link == null) note('This station has no invitation: it is on the public Log.'),
+      ]),
+    );
+  }
+}
