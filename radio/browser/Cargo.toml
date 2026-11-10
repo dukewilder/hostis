@@ -26,3 +26,5 @@ js-sys = "0.3"
 web-sys = { version = "0.3", features = ["console", "Window", "Location"] }
 getrandom = { version = "0.3", features = ["wasm_js"] }
 qrcode = { version = "0.14", default-features = false }
+# Loudness for recordings put on the air from the tab, as the app measures it.
+ebur128 = "0.1"

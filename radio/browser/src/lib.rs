@@ -101,7 +101,26 @@ impl Listing {
 enum Hop {
     Forward { next: [u8; 32], blob: Vec<u8> },
     Sealed { eph: [u8; 32], ct: Vec<u8> },
+    /// A station's entries and chunks on the stem: the tab broadcasts as a phone does, never
+    /// showing the network its own station first. `hops` is always zero.
+    Stem { station: StationId, entries: Vec<Vec<u8>>, chunks: Vec<(Hash, Vec<u8>)>, announce: Option<Announce>, hops: u8 },
 }
+
+/// A station this tab keeps: the key it signs with (a deputy, or the master while it is
+/// raised), its proof of work, and the chunks still to sail. Nothing of it touches the disk
+/// here; the page keeps the deputy's seed, and the network keeps everything else.
+struct Mine {
+    key: pyrate_core::StationKey,
+    pow: Option<u64>,
+    chunks: HashMap<Hash, Vec<u8>>,
+    unsent: VecDeque<Hash>,
+    /// When the last full pass of the chunks sailed, so they go round again now and then.
+    passed: u64,
+}
+
+/// Chunks to a stem's cargo, and bytes at most: well inside a node's frame.
+const STEM_CHUNKS: usize = 40;
+const STEM_BYTES: usize = 3 * 1024 * 1024;
 
 /// What a tab asks an exit for. The order is the node's; a tab only sends `Token`.
 #[allow(dead_code)]
@@ -187,6 +206,10 @@ struct Ship {
     /// Stations that struck their colours: never searched for, listed or played again.
     struck: Mutex<HashSet<StationId>>,
     last_trim: std::sync::atomic::AtomicU64,
+    mine: Mutex<HashMap<StationId, Mine>>,
+    /// The first hop of this visit's stems, kept for the visit.
+    stem_guard: Mutex<Option<EndpointId>>,
+    sailing: std::sync::atomic::AtomicBool,
 }
 
 /// A relay named in a link someone passed on: HTTPS only, so a link cannot send the tab's
@@ -761,6 +784,142 @@ impl Ship {
         }
     }
 
+    /// The card this tab flies for one of its stations, signed by the key it keeps.
+    fn card(&self, id: &StationId) -> Option<Announce> {
+        let now = raw_now();
+        let mine = self.mine.lock().unwrap();
+        let m = mine.get(id)?;
+        let pow = m.pow?;
+        let archives = self.archives.lock().unwrap();
+        let log = archives.get(id)?;
+        let Some(Body::Colours { name, about, port, tip }) = log.colours().cloned() else { return None };
+        if log.is_struck() {
+            return None;
+        }
+        let proof = (m.key.id() != *id)
+            .then(|| log.entries().iter().find(|e| matches!(&e.entry.body, Body::Deputy { key: k, .. } if *k == m.key.id().0)).and_then(|e| e.to_bytes().ok()))
+            .flatten();
+        if m.key.id() != *id && proof.is_none() {
+            return None;
+        }
+        let live = log.entries().last().is_some_and(|e| matches!(e.entry.body(), Body::Live { .. }) && now.saturating_sub(e.entry.at_ms) < 25_000);
+        let since = log.entries().first().map(|e| e.entry.at_ms).unwrap_or(now);
+        let art = log.art();
+        let (kinds, mature) = log.details().unwrap_or_default();
+        Some(
+            net::Card {
+                station: *id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof,
+                cover: art.and_then(|a| a.0).map(|a| a.hash), accent: art.map(|a| a.2), kinds, mature, tip, explicit: log.explicit(),
+            }
+            .sign(&m.key),
+        )
+    }
+
+    /// The first hop of every stem this visit: anyone but the well-known harbours if it can,
+    /// so no one place sees every browser broadcaster.
+    fn stem_guard(&self) -> Option<EndpointId> {
+        let now = self.now();
+        let mut known: Vec<EndpointId> = self.log.lock().unwrap().values()
+            .flat_map(|l| l.carriers.iter().filter(|(_, (_, seen))| now.saturating_sub(*seen) < 10 * 60_000).map(|(n, _)| *n).collect::<Vec<_>>())
+            .filter_map(|n| EndpointId::from_bytes(&n).ok()).filter(|n| *n != self.ep.id()).collect();
+        known.sort();
+        known.dedup();
+        let mut g = self.stem_guard.lock().unwrap();
+        if g.is_some_and(|x| known.contains(&x) || self.harbour.contains(&x)) {
+            return *g;
+        }
+        let others: Vec<EndpointId> = known.iter().filter(|n| !self.harbour.contains(n)).copied().collect();
+        *g = if !others.is_empty() { Some(others[pick(others.len())]) } else if !self.harbour.is_empty() { Some(self.harbour[pick(self.harbour.len())]) } else { known.first().copied() };
+        *g
+    }
+
+    /// One stem for one of this tab's stations: its whole log, so whichever node ends the stem
+    /// can check every entry, its fresh card, and the next of its chunks still to sail.
+    async fn sail(&self, id: StationId) -> bool {
+        let Some(announce) = self.card(&id) else { return false };
+        // The tab's own Log shows the station at once.
+        self.on_gossip(Gossip::Station(announce.clone()));
+        let entries: Vec<Vec<u8>> = self.archives.lock().unwrap().get(&id).map(|a| a.entries().iter().filter_map(|e| e.to_bytes().ok()).collect()).unwrap_or_default();
+        let (chunks, batch): (Vec<(Hash, Vec<u8>)>, Vec<Hash>) = {
+            let mine = self.mine.lock().unwrap();
+            let Some(m) = mine.get(&id) else { return false };
+            let (mut out, mut hs, mut bytes) = (Vec::new(), Vec::new(), 0usize);
+            for h in m.unsent.iter() {
+                let Some(b) = m.chunks.get(h) else { continue };
+                if out.len() >= STEM_CHUNKS || bytes + b.len() > STEM_BYTES {
+                    break;
+                }
+                bytes += b.len();
+                out.push((*h, b.clone()));
+                hs.push(*h);
+            }
+            (out, hs)
+        };
+        let hop = match postcard::to_stdvec(&Hop::Stem { station: id, entries, chunks, announce: Some(announce), hops: 0 }) {
+            Ok(h) => h,
+            Err(_) => return false,
+        };
+        let mut tried = Vec::new();
+        let mut nodes: Vec<EndpointId> = self.stem_guard().into_iter().collect();
+        nodes.extend(self.harbour.iter().copied());
+        for n in nodes {
+            if tried.contains(&n) || tried.len() >= 3 {
+                continue;
+            }
+            tried.push(n);
+            if let Ok(Ok(Response::Hop(b))) = timeout(Duration::from_secs(30), self.ask(n, &Request::Hop(hop.clone()))).await {
+                if !b.is_empty() {
+                    let mut mine = self.mine.lock().unwrap();
+                    if let Some(m) = mine.get_mut(&id) {
+                        m.unsent.retain(|h| !batch.contains(h));
+                        if m.unsent.is_empty() && !batch.is_empty() {
+                            m.passed = raw_now();
+                        }
+                    }
+                    if n != tried[0] {
+                        *self.stem_guard.lock().unwrap() = Some(n);
+                    }
+                    return true;
+                }
+            }
+        }
+        say("stem: no node took the cargo; it goes again shortly");
+        false
+    }
+
+    /// While the tab keeps a station: its card every twenty seconds, its chunks as fast as the
+    /// stem takes them, and every chunk again each quarter hour while the tab stays open.
+    fn sail_on(self: &Arc<Self>) {
+        if self.sailing.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
+        let me = self.clone();
+        spawn(async move {
+            let mut last_card: HashMap<StationId, u64> = HashMap::new();
+            loop {
+                let ids: Vec<StationId> = me.mine.lock().unwrap().keys().copied().collect();
+                let mut busy = false;
+                for id in ids {
+                    let (pending, passed) = me.mine.lock().unwrap().get(&id).map(|m| (!m.unsent.is_empty(), m.passed)).unwrap_or((false, 0));
+                    let now = raw_now();
+                    if !pending && passed > 0 && now.saturating_sub(passed) > 15 * 60_000 {
+                        if let Some(m) = me.mine.lock().unwrap().get_mut(&id) {
+                            m.unsent = m.chunks.keys().copied().collect();
+                            m.passed = now;
+                        }
+                    }
+                    if pending || now.saturating_sub(*last_card.get(&id).unwrap_or(&0)) > 20_000 {
+                        if me.sail(id).await {
+                            last_card.insert(id, now);
+                        }
+                        busy |= pending;
+                    }
+                }
+                sleep(Duration::from_millis(if busy { 400 } else { 5_000 })).await;
+            }
+        });
+    }
+
     fn sync_soon(self: &Arc<Self>, station: StationId) {
         if !self.syncing.lock().unwrap().insert(station) {
             return;
@@ -904,6 +1063,9 @@ impl std::fmt::Debug for Ship {
 pub struct Radio {
     ship: Arc<Ship>,
     _router: Router,
+    /// A recording being measured, a block at a time: the meter, where sound first and last
+    /// rose above dead air, the frames seen, and the channels.
+    meter: Mutex<Option<(ebur128::EbuR128, Option<usize>, usize, usize, usize)>>,
 }
 
 #[wasm_bindgen]
@@ -985,6 +1147,9 @@ impl Radio {
             touched: Mutex::new(HashMap::new()),
             struck: Mutex::new(HashSet::new()),
             last_trim: std::sync::atomic::AtomicU64::new(0),
+            mine: Mutex::new(HashMap::new()),
+            stem_guard: Mutex::new(None),
+            sailing: std::sync::atomic::AtomicBool::new(false),
         });
         *proto.0.lock().unwrap() = Some(ship.clone());
 
@@ -1033,7 +1198,7 @@ impl Radio {
                 }
             }
         });
-        Ok(Radio { ship, _router: router })
+        Ok(Radio { ship, _router: router, meter: Mutex::new(None) })
     }
 
     pub fn id(&self) -> String {
@@ -1076,6 +1241,229 @@ impl Radio {
 
     pub fn untune(&self) {
         *self.ship.tuned.lock().unwrap() = None;
+    }
+
+    // ---- Broadcasting from the tab ----
+    //
+    // A station raised here is a key made here. The master's 24 words go to the visitor once,
+    // to write down; the tab signs with a deputy whose seed the page keeps in this browser.
+    // Everything the station airs goes out along the stem, as from a phone: the tab never shows
+    // the network its own station first, and it serves no one.
+
+    /// Raises a station. Returns its id, call sign, the master's 24 words and the deputy's seed.
+    pub fn raise(&self, name: &str, about: &str, kinds: &str, mature: bool, explicit: bool) -> Result<String, JsValue> {
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 40 {
+            return Err(js(anyhow!("a station needs a name of forty letters or fewer")));
+        }
+        let master = pyrate_core::StationKey::generate().map_err(|e| js(anyhow!("{e}")))?;
+        let deputy = pyrate_core::StationKey::generate().map_err(|e| js(anyhow!("{e}")))?;
+        let id = master.id();
+        let now = raw_now();
+        let mut a = Archive::new(id);
+        let kinds: Vec<String> = kinds.split(',').map(|k| k.trim().to_lowercase()).filter(|k| !k.is_empty()).take(3).collect();
+        let w = |a: &mut Archive, at: u64, b: Body| a.write(&master, at, b).map(|_| ()).map_err(|e| js(anyhow!("{e}")));
+        w(&mut a, now, Body::Colours { name: name.into(), about: about.trim().chars().take(140).collect(), port: None, tip: None })?;
+        w(&mut a, now + 1, Body::Deputy { key: deputy.id().0, label: "browser".into() })?;
+        if !kinds.is_empty() || mature {
+            w(&mut a, now + 2, Body::Details { kinds, mature })?;
+        }
+        if explicit {
+            w(&mut a, now + 3, Body::Rating { explicit: true })?;
+        }
+        self.ship.archives.lock().unwrap().insert(id, a);
+        let seed = hex(&deputy.seed());
+        self.ship.mine.lock().unwrap().insert(id, Mine { key: deputy, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0 });
+        Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "words": master.phrase(), "deputy": seed }).to_string())
+    }
+
+    /// Takes back a station this browser keeps, from its deputy's seed. Resolves once its log is
+    /// aboard from the network, to whether this deputy still speaks for it.
+    pub fn adopt(&self, id: &str, deputy: &str) -> Result<js_sys::Promise, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let key = pyrate_core::StationKey::from_seed(unhex32(deputy).map_err(js)?);
+        let s = self.ship.clone();
+        Ok(wasm_bindgen_futures::future_to_promise(async move {
+            let _ = timeout(Duration::from_secs(40), s.sync(st)).await;
+            let ok = s.archives.lock().unwrap().get(&st).is_some_and(|a| a.deputies().contains(&key.id().0) && !a.is_struck());
+            if ok {
+                s.mine.lock().unwrap().entry(st).or_insert(Mine { key, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0 });
+            }
+            Ok(JsValue::from_bool(ok))
+        }))
+    }
+
+    /// Takes a station back from its 24 words on a new browser: its log comes aboard, then the
+    /// master appoints a fresh deputy here. Resolves to the id and the new deputy's seed.
+    pub fn restore(&self, words: &str) -> Result<js_sys::Promise, JsValue> {
+        let master = pyrate_core::StationKey::from_phrase(words).map_err(|e| js(anyhow!("those are not a station's 24 words: {e}")))?;
+        let s = self.ship.clone();
+        Ok(wasm_bindgen_futures::future_to_promise(async move {
+            let id = master.id();
+            let _ = timeout(Duration::from_secs(40), s.sync(id)).await;
+            let deputy = pyrate_core::StationKey::generate().map_err(|e| js(anyhow!("{e}")))?;
+            {
+                let mut archives = s.archives.lock().unwrap();
+                let Some(a) = archives.get_mut(&id).filter(|a| a.len() > 0) else {
+                    return Err(js(anyhow!("the station's log could not be found yet; try again in a minute")));
+                };
+                let at = raw_now().max(a.entries().last().map(|e| e.entry.at_ms + 1).unwrap_or(0));
+                a.write(&master, at, Body::Deputy { key: deputy.id().0, label: "browser".into() }).map_err(|e| js(anyhow!("{e}")))?;
+            }
+            let seed = hex(&deputy.seed());
+            s.mine.lock().unwrap().insert(id, Mine { key: deputy, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0 });
+            Ok(JsValue::from_str(&json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "deputy": seed }).to_string()))
+        }))
+    }
+
+    /// The station's proof of work, a slice at a time so the page stays awake: tries `count`
+    /// numbers from `start` and returns the one that works, or -1.
+    pub fn pow_step(&self, id: &str, start: f64, count: u32) -> Result<f64, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let start = start as u64;
+        for n in start..start + count as u64 {
+            if net::pow_ok(&st, n) {
+                if let Some(m) = self.ship.mine.lock().unwrap().get_mut(&st) {
+                    m.pow = Some(n);
+                }
+                self.ship.sail_on();
+                return Ok(n as f64);
+            }
+        }
+        Ok(-1.0)
+    }
+
+    /// A proof of work found before, as the page kept it. Checked before it is taken.
+    pub fn set_pow(&self, id: &str, n: f64) -> Result<bool, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        if !net::pow_ok(&st, n as u64) {
+            return Ok(false);
+        }
+        if let Some(m) = self.ship.mine.lock().unwrap().get_mut(&st) {
+            m.pow = Some(n as u64);
+        }
+        self.ship.sail_on();
+        Ok(true)
+    }
+
+    /// Measures a recording a block at a time, so an hour of it never sits in memory twice:
+    /// `level_begin`, then `level_feed` with interleaved 48 kHz samples, then `level_end`.
+    /// The rule is the app's: -16 LUFS, no more than 18 dB of gain, no peak past -1 dBFS, and
+    /// dead air under -50 dBFS trimmed from the head and tail.
+    pub fn level_begin(&self, channels: u32) -> Result<(), JsValue> {
+        let ch = channels.clamp(1, 2) as usize;
+        let m = ebur128::EbuR128::new(ch as u32, 48_000, ebur128::Mode::I | ebur128::Mode::SAMPLE_PEAK).map_err(|e| js(anyhow!("{e:?}")))?;
+        *self.meter.lock().unwrap() = Some((m, None, 0, 0, ch));
+        Ok(())
+    }
+
+    pub fn level_feed(&self, pcm: &[f32]) -> Result<(), JsValue> {
+        let mut g = self.meter.lock().unwrap();
+        let (m, first, last, at, ch) = g.as_mut().ok_or_else(|| js(anyhow!("no recording is being measured")))?;
+        let _ = m.add_frames_f32(pcm);
+        for (i, f) in pcm.chunks_exact(*ch).enumerate() {
+            if f.iter().any(|s| s.abs() > 0.003_16) {
+                first.get_or_insert(*at + i);
+                *last = *at + i + 1;
+            }
+        }
+        *at += pcm.len() / *ch;
+        Ok(())
+    }
+
+    /// The gain, and the first and last frame to keep, as JSON.
+    pub fn level_end(&self) -> Result<String, JsValue> {
+        let (m, first, last, frames, ch) = self.meter.lock().unwrap().take().ok_or_else(|| js(anyhow!("no recording is being measured")))?;
+        let Some(first) = first else { return Err(js(anyhow!("the recording is silent"))) };
+        let lufs = m.loudness_global().unwrap_or(f64::NEG_INFINITY);
+        let peak = (0..ch as u32).filter_map(|c| m.sample_peak(c).ok()).fold(0.0f64, f64::max);
+        let mut gain_db = if lufs.is_finite() { (-16.0 - lufs).min(18.0) } else { 0.0 };
+        if peak > 0.0 {
+            gain_db = gain_db.min(-1.0 - 20.0 * peak.log10());
+        }
+        // A breath of tail is kept so endings are not clipped.
+        Ok(json!({ "gain": 10f64.powf(gain_db / 20.0), "start": first, "end": (last + 14_400).min(frames) }).to_string())
+    }
+
+    /// Puts a recording on one of this tab's stations: `frames` are its 20 ms Opus packets, each
+    /// after its length as a big-endian u16, in order. They are cut into six-second chunks,
+    /// named by their fingerprints and signed into the log; then they sail. Returns the track.
+    pub fn add_track(&self, id: &str, title: &str, by: &str, source: &str, channels: u8, bitrate: u32, frames: &[u8]) -> Result<String, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let key = self.ship.mine.lock().unwrap().get(&st).map(|m| pyrate_core::StationKey::from_seed(m.key.seed())).ok_or_else(|| js(anyhow!("not a station this browser keeps")))?;
+        let (mut chunks, mut bytes) = (Vec::new(), Vec::new());
+        let (mut cur, mut n, mut at) = (Vec::with_capacity(64 * 1024), 0u16, 0usize);
+        while at + 2 <= frames.len() {
+            let len = u16::from_be_bytes([frames[at], frames[at + 1]]) as usize;
+            if len == 0 || at + 2 + len > frames.len() {
+                return Err(js(anyhow!("a broken frame in the recording")));
+            }
+            cur.extend_from_slice(&frames[at..at + 2 + len]);
+            n += 1;
+            at += 2 + len;
+            if n == pyrate_core::audio::FRAMES_PER_CHUNK {
+                let c = pyrate_core::Chunk::of(&cur, n);
+                chunks.push(c);
+                bytes.push(std::mem::take(&mut cur));
+                n = 0;
+            }
+        }
+        if n > 0 {
+            chunks.push(pyrate_core::Chunk::of(&cur, n));
+            bytes.push(cur);
+        }
+        if chunks.is_empty() {
+            return Err(js(anyhow!("the recording is empty")));
+        }
+        let track = {
+            let mut archives = self.ship.archives.lock().unwrap();
+            let a = archives.get_mut(&st).ok_or_else(|| js(anyhow!("the station's log is not aboard yet")))?;
+            let at = raw_now().max(a.entries().last().map(|e| e.entry.at_ms + 1).unwrap_or(0));
+            let body = Body::Track {
+                title: title.trim().chars().take(120).collect(),
+                by: by.trim().chars().take(120).collect(),
+                source: source.trim().chars().take(280).collect(),
+                channels: channels.clamp(1, 2),
+                bitrate,
+                chunks: chunks.clone(),
+            };
+            // A deputy wraps what it writes, so carriers can check the deputy's signature.
+            let body = if key.id() == st { body } else { Body::Deputed { by: key.id().0, body: Box::new(body) } };
+            a.write(&key, at, body).map_err(|e| js(anyhow!("{e}")))?.hash().map_err(|e| js(anyhow!("{e}")))?
+        };
+        self.ship.clocks.lock().unwrap().remove(&st);
+        {
+            let mut mine = self.ship.mine.lock().unwrap();
+            let m = mine.get_mut(&st).unwrap();
+            for (c, b) in chunks.iter().zip(bytes) {
+                m.unsent.push_back(c.hash);
+                // The tab can play its own recordings at once, from its hold.
+                self.ship.hold.lock().unwrap().put(c.hash, b.clone());
+                m.chunks.insert(c.hash, b);
+            }
+        }
+        self.ship.sail_on();
+        Ok(hex(&track))
+    }
+
+    /// The stations this tab keeps, with what is still to sail and whether the network has them.
+    pub fn mine(&self) -> String {
+        let now = self.ship.now();
+        let mine = self.ship.mine.lock().unwrap();
+        let archives = self.ship.archives.lock().unwrap();
+        let log = self.ship.log.lock().unwrap();
+        let me = *self.ship.ep.id().as_bytes();
+        let v: Vec<Value> = mine.iter().map(|(id, m)| {
+            let a = archives.get(id);
+            let name = a.and_then(|a| match a.colours() { Some(Body::Colours { name, .. }) => Some(name.clone()), _ => None }).unwrap_or_default();
+            let len = a.map(|a| a.len()).unwrap_or(0);
+            let tracks = a.and_then(|a| a.library().ok()).map(|l| l.len()).unwrap_or(0);
+            let landed = log.get(id).map(|l| l.carriers.iter().filter(|(n, (_, seen))| **n != me && now.saturating_sub(*seen) < 10 * 60_000).map(|(_, (h, _))| *h).max().unwrap_or(0)).unwrap_or(0);
+            let carriers = log.get(id).map(|l| l.carriers.iter().filter(|(n, (_, seen))| **n != me && now.saturating_sub(*seen) < 10 * 60_000).count()).unwrap_or(0);
+            json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": name, "entries": len, "tracks": tracks, "landed": landed, "carriers": carriers,
+                    "unsent": m.unsent.len(), "chunks": m.chunks.len(), "pow": m.pow.is_some() })
+        }).collect();
+        json!(v).to_string()
     }
 
     /// Brings a station's log up to date. Resolves to how many entries came in.

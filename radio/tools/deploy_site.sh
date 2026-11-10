@@ -13,6 +13,10 @@ cd "$SITE"
 git fetch -q origin main
 git rebase -q origin/main
 cp "$R/landing/out/index.html" pyrateradio/index.html
+# The computers' builds, if the landing carried them, beside the Android app.
+for f in "$R"/landing/out/pyrate-radio-*-windows.zip* "$R"/landing/out/pyrate-radio-*-macos.zip* "$R"/landing/out/pyrate-radio-*-linux-x64.tar.gz*; do
+  [ -e "$f" ] && cp "$f" pyrateradio/
+done
 rm -rf pyrateradio/listen
 cp -r "$R/landing/out/listen" pyrateradio/listen
 # The open player's CAR, kept beside every earlier one still on the site (the newest twelve),

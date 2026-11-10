@@ -349,3 +349,10 @@ Rulings made while reading every line again. The findings themselves are in `AUD
 - **A link for anything else goes straight on, unread.** A stranger's station, an invitation or a flock arriving at hostis.black is handed to the first open player that answers, with the part after the # intact. That part never reaches a server, and the page never names, shows or plays what it holds.
 - **A stranger's station never wears hostis.black.** The app, the open player, invitations and flock links name the open player for every station but HOSTIS's own, and its posters say only to scan the code or search the call sign.
 
+## XXVI. Every platform can listen and broadcast (10 November 2026)
+
+- **The open player raises stations.** Any browser, an iPhone's included, can raise a station, put recordings on its clock and send them out, with nothing installed. The station is a key made in the tab. Its 24 words are shown once and kept nowhere; the browser keeps only a deputy's seed, which the words can always replace. Recordings are decoded by the browser, brought to the house loudness by the app's own rule, encoded with libopus off the page's thread, signed into the log, and sent along the stem as a phone sends them: the tab never shows the network its own station first, and it serves no one. Once a carrier has them, they play whether or not the tab is open.
+- **A tab broadcasts with less cover than a phone, and says so.** The relay a tab speaks through sees its address. The page offers Tor Browser for the most cover, and the app for more still.
+- **The app runs on computers.** Windows, macOS and Linux run the same app from the same code, with the node in Rust playing, going live and recording through the computer's own sound. A computer has no secure chip the app can reach, so its hold key lives in a file only its user can read. Builds come from the public source on GitHub's machines and are published on the radio's page with checksums and torrents; nothing secret goes into them, and anyone can build the same.
+- **The open player installs to a home screen** as an app of its own, on HOSTIS black.
+

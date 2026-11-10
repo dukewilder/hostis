@@ -29,6 +29,24 @@ import json
 op = json.load(open(f"{R}/browser/www/open.json"))
 page = page.replace("{{OPEN_PLAYERS}}", json.dumps(op["players"])).replace("{{HARBOUR_IDS}}", json.dumps([h["id"] for h in json.load(open(f"{R}/browser/harbour.json", encoding="utf-8"))]))
 page = page.replace("{{VERSION}}", version).replace("{{SHA}}", sha).replace("{{SIZE}}", size).replace("{{MAGNET}}", magnet.replace("&", "&amp;"))
+# The computers' builds, when tools/fetch_desktop.sh has brought them: each with its checksum
+# and a torrent that seeds from this site.
+desk = ""
+D = f"{R}/landing/desktop"
+appver = re.search(r"^version:\s*([0-9.]+)", open(f"{R}/app/pubspec.yaml").read(), re.M).group(1)
+kinds = [("windows", "pyrate-radio-windows.zip", "Windows", "10 and 11 · zip"), ("macos", "pyrate-radio-macos.zip", "Mac", "Apple and Intel · zip"), ("linux", "pyrate-radio-linux-x64.tar.gz", "Linux", "x86-64 · tar.gz")]
+if os.path.isdir(D) and all(os.path.exists(f"{D}/{k[1]}") for k in kinds):
+    links, sums = [], []
+    for key, f, label, how in kinds:
+        name = f.replace("pyrate-radio-", f"pyrate-radio-{appver}-")
+        shutil.copy(f"{D}/{f}", f"{out}/{name}")
+        sha_d = hashlib.sha256(open(f"{out}/{name}", "rb").read()).hexdigest()
+        subprocess.run([sys.executable, f"{R}/tools/torrent.py", f"{out}/{name}", f"{out}/{name}.torrent", f"https://hostis.black/pyrateradio/{name}"], capture_output=True, text=True, check=True)
+        links.append(f'<a href="{name}"><b>{label}</b><small>{how}</small></a>')
+        sums.append(f"{label.lower()} {sha_d} · <a href=\"{name}.torrent\">torrent</a>")
+    desk = ('<h3 class="small">On a computer</h3>\n<div class="desk">' + "".join(links) + '</div>\n<p class="desk-sums">' + "<br>".join(sums) + "</p>\n"
+            '<p class="note">Version ' + appver + ', built from the public source by GitHub\'s machines. On a Mac, open it the first time with a right-click and Open: it is signed by nobody. Computers take new versions from this page.</p>')
+page = page.replace("{{DESKTOP}}", desk)
 open(f"{out}/index.html", "w", encoding="utf-8").write(page)
 shutil.copytree(f"{R}/browser/www/dist", f"{out}/listen")
 # The HOSTIS skull, the same icon as every sibling page.
