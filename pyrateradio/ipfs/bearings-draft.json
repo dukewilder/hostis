@@ -1,0 +1,41 @@
+{
+ "pyrate": "bearings",
+ "at": 1794353820613,
+ "doors": [
+  "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442"
+ ],
+ "players": [
+  "https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/",
+  "https://bafybeihalhkw733w43cxuwlbf2khfovr4kb57pv3t62oedxsbzjqk4b2mi.ipfs.inbrowser.link/",
+  "https://bafybeihalhkw733w43cxuwlbf2khfovr4kb57pv3t62oedxsbzjqk4b2mi.ipfs.dweb.link/",
+  "https://ipfs.io/ipfs/bafybeihalhkw733w43cxuwlbf2khfovr4kb57pv3t62oedxsbzjqk4b2mi/"
+ ],
+ "ipns": "k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr",
+ "onion": "",
+ "files": [
+  {
+   "name": "pyrate-radio-0.7.1.apk",
+   "cid": "bafybeiel2c7q4t6prkxbmhipczlcsm2yavc46hao3to3q2ja5w2s7rjmb4"
+  },
+  {
+   "name": "pyrate-radio-0.8.0.apk",
+   "cid": "bafybeichldvlwtsryew4tpwi6l2bzn4iqtvsuo4mcve4x7fgwzzibvwpca"
+  },
+  {
+   "name": "pyrate-radio-0.9.1-macos.zip",
+   "cid": "bafybeiguwfktkyeh6ta23sk5hrwci2q2ihsl4yvg2woe5r4rstvzb6usri"
+  },
+  {
+   "name": "pyrate-radio-0.9.1-windows.zip",
+   "cid": "bafybeighmqc5jbqdjm365u7iyfrhhls2larr2alkp4exd43gfkd7mvnhfe"
+  },
+  {
+   "name": "pyrate-radio-0.9.1-linux-x64.tar.gz",
+   "cid": "bafybeiabfjd3dgpt3crqno6kne5f2gg3tpnfdmcykfcfpmphjuexg3k6xy"
+  },
+  {
+   "name": "source/pyrate-radio-src-8efcf5f.tar.gz",
+   "cid": "bafybeidcbq4uf54ppz7idztm4itm5ywikz4noefox2652su2nhaabipl5e"
+  }
+ ]
+}
