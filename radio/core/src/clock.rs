@@ -338,25 +338,86 @@ impl Clock {
         Some(((limit - cursor) / d, d))
     }
 
-    /// What plays between two moments: each track's start, its entry hash and its length.
-    /// The watch bill, worked out on the device; no server is asked.
+    /// What plays between two moments: each piece's start, its entry hash and how long it
+    /// is on. The watch bill, worked out on the device; no server is asked. A recording is
+    /// cut wherever the air changes hands (a show or slot begins or ends, the hours end, a
+    /// tape starts over, the week turns), and one that resumes after a cut is listed from
+    /// where it resumes.
     pub fn upcoming(&self, from: u64, until: u64) -> Vec<(u64, Hash, u64)> {
-        let mut out = Vec::new();
+        let cuts = self.cuts(from, until);
+        let mut out: Vec<(u64, Hash, u64)> = Vec::new();
+        let mut last_started = 0u64;
         let mut t = from;
         self.steps.set(0);
         while t < until && out.len() < 2000 && self.steps.get() < BILL_STEPS {
+            let next_cut = |after: u64| cuts.iter().copied().find(|c| *c > after);
             // A quiet minute (nothing yet added, off the air, a gap between blocks): step past it.
             let Some(np) = self.now(t) else {
-                t = (t / 60_000 + 1) * 60_000;
+                let minute = (t / 60_000 + 1) * 60_000;
+                t = next_cut(t).map_or(minute, |c| c.min(minute));
                 continue;
             };
             let start = t - np.offset_ms;
-            if out.last().is_none_or(|l: &(u64, Hash, u64)| l.0 != start) {
-                out.push((start, np.track, np.duration_ms));
+            let natural = start + np.duration_ms.max(1000);
+            let end = next_cut(t).filter(|c| *c < natural).unwrap_or(natural);
+            match out.last_mut() {
+                // The same playing carried on across a cut that changed nothing.
+                Some(l) if l.1 == np.track && last_started == start && l.0 + l.2 == t => l.2 = end - l.0,
+                _ => {
+                    let begin = if out.is_empty() { start } else { t };
+                    out.push((begin, np.track, end - begin));
+                }
             }
-            t = start + np.duration_ms.max(1000);
+            last_started = start;
+            t = end;
         }
         out
+    }
+
+    /// Every moment between two at which the air may change hands, in order.
+    fn cuts(&self, from: u64, until: u64) -> Vec<u64> {
+        let mut c: Vec<u64> = self.listings(from, until).iter().flat_map(|l| [l.start_ms, l.end_ms]).collect();
+        match &self.programme {
+            Some(p) => {
+                let (lf, lu) = (p.zone.local_min(from), p.zone.local_min(until));
+                let mut w = Zone::week_origin(lf);
+                while w <= lu {
+                    c.push(p.zone.utc_ms(w));
+                    if let Mode::Weekly { day, start_min } = p.mode {
+                        c.push(p.zone.utc_ms(w + day as i64 * 1440 + start_min as i64));
+                    }
+                    w += 7 * 1440;
+                }
+                if let Mode::Daily { start_min } = p.mode {
+                    let mut d = lf.div_euclid(1440) * 1440 + start_min as i64;
+                    while d <= lu {
+                        c.push(p.zone.utc_ms(d));
+                        d += 1440;
+                    }
+                }
+            }
+            None => {
+                if from >= FIRST_MONDAY_MS {
+                    let mut w = FIRST_MONDAY_MS + (from - FIRST_MONDAY_MS) / WEEK_MS * WEEK_MS;
+                    while w <= until {
+                        c.push(w);
+                        w += WEEK_MS;
+                    }
+                }
+                let mut day = from / 86_400_000 * 86_400_000;
+                while day <= until && !self.rota.blocks.is_empty() {
+                    for b in &self.rota.blocks {
+                        c.push(day + b.start_min as u64 * 60_000);
+                        c.push(day + b.end_min as u64 * 60_000);
+                    }
+                    day += 86_400_000;
+                }
+            }
+        }
+        c.retain(|x| *x > from && *x < until);
+        c.sort_unstable();
+        c.dedup();
+        c
     }
 
     /// What is on at `t`, in Unix milliseconds. None is dead air: an empty library, or the
