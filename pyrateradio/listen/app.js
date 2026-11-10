@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=4bf7bc505e';
+import init, { Radio } from './pkg/pyrate_browser.js?v=4ced0658b5';
 
 const HARBOUR = 'a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442';
 const RELAYS = '';
@@ -328,7 +328,7 @@ function listen(s) {
 }
 
 function stop() { gen++; stopAll(); playing = false; power(); lamps(false); ctx?.suspend() }
-function power() { const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■' : '▶'; g.querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen' }
+function power() { $('clip').hidden = !(playing && clipType()); const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■' : '▶'; g.querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen' }
 
 function rows() {
   const m = marooned();
@@ -401,6 +401,65 @@ $('askfor').onclick = () => {
 };
 $('asksend').onclick = () => { speak('request', $('asknote').value.trim(), $('asktrack').value); $('asknote').value = ''; $('askbox').hidden = true };
 setInterval(() => { if (!$('chatroom').hidden || !$('chatjoin').hidden) chatter() }, 2000);
+
+// ---- Clip it: twenty seconds of the station as a video to post anywhere ----------------
+const CLIP_S = 20;
+function clipType() { for (const t of ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm']) if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t; return null }
+async function clipIt() {
+  const type = clipType(); if (!type || !playing || !cur) return;
+  const W = 720, H = 1280, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+  const st = cur, url = 'https://hostis.black/pyrateradio/listen/#' + st.id, q = JSON.parse(radio.qr(url));
+  const coverUrl = await pic(st.id, st.cover); let img = null;
+  if (coverUrl) { img = new Image(); img.src = coverUrl; await img.decode().catch(() => { img = null }) }
+  const dest = ctx.createMediaStreamDestination(); gain.connect(dest);
+  const stream = new MediaStream([...cv.captureStream(30).getVideoTracks(), ...dest.stream.getAudioTracks()]);
+  const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 2500000 }), parts = [];
+  rec.ondataavailable = e => e.data.size && parts.push(e.data);
+  const buf = new Float32Array(meter.fftSize), t0 = performance.now(); let lv = 0;
+  const bone = '#ede4ce', faint = 'rgba(237,228,206,.55)', ghost = 'rgba(237,228,206,.22)', blood = '#ed5555';
+  const fit = (t, font, max) => { g.font = font; let s = t; while (g.measureText(s).width > max && s.length > 3) s = s.slice(0, -2) + '…'; return s };
+  const draw = () => {
+    const el = (performance.now() - t0) / 1000;
+    g.fillStyle = '#030303'; g.fillRect(0, 0, W, H);
+    g.strokeStyle = faint; g.lineWidth = 2; g.strokeRect(40, 40, W - 80, H - 80);
+    g.textAlign = 'center'; g.fillStyle = faint; g.font = '600 22px Cinzel'; g.fillText('P Y R A T E   R A D I O', W / 2, 110);
+    const A = 400, ax = (W - A) / 2, ay = 160;
+    g.strokeStyle = ghost; g.strokeRect(ax, ay, A, A);
+    if (img) g.drawImage(img, ax + 1, ay + 1, A - 2, A - 2);
+    else { const b = bits(st.id); g.font = '700 30px "JetBrains Mono"'; for (let r = 0; r < 6; r++) for (let c = 0; c < 9; c++) { const half = c < 5 ? c : 8 - c, on = b[(r * 5 + half) % b.length]; g.fillStyle = on ? bone : 'rgba(237,228,206,.12)'; g.fillText(on ? '1' : '0', ax + 60 + c * 35, ay + 120 + r * 38) } }
+    g.fillStyle = bone; g.font = '800 54px Cinzel'; g.fillText(fit((st.name || st.call_sign).toUpperCase(), '800 54px Cinzel', W - 120), W / 2, 650);
+    g.fillStyle = faint; g.font = '28px "JetBrains Mono"'; g.fillText(fq(st.id).toFixed(1) + ' on the dial', W / 2, 700);
+    g.fillStyle = 'rgba(237,228,206,.82)'; g.font = 'italic 38px "IM Fell English"'; g.fillText(fit($('np').textContent, 'italic 38px "IM Fell English"', W - 140), W / 2, 780);
+    g.fillStyle = faint; g.font = '600 20px Cinzel'; g.fillText(fit($('by').textContent.toUpperCase(), '600 20px Cinzel', W - 140), W / 2, 822);
+    // The meter, from the sound itself.
+    meter.getFloatTimeDomainData(buf); let rms = 0; for (const x of buf) rms += x * x; rms = Math.sqrt(rms / buf.length);
+    lv += (Math.min(1, Math.max(0, (20 * Math.log10(rms + 1e-6) + 42) / 42)) - lv) * 0.3;
+    const cx = W / 2, cy = 960, R = 90, a = (-48 + lv * 96) * Math.PI / 180;
+    g.strokeStyle = faint; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, R, Math.PI * 1.23, Math.PI * 1.77); g.stroke();
+    g.strokeStyle = blood; g.lineWidth = 4; g.beginPath(); g.arc(cx, cy, R, Math.PI * 1.62, Math.PI * 1.77); g.stroke();
+    g.strokeStyle = bone; g.lineWidth = 3; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.sin(a) * (R + 6), cy - Math.cos(a) * (R + 6)); g.stroke();
+    // A code to scan, and where it goes.
+    const n = q.size, QS = 150, cell = QS / (n + 8), qx = W / 2 - QS / 2, qy = 1010;
+    g.fillStyle = '#fbf8f1'; g.fillRect(qx, qy, QS, QS); g.fillStyle = '#0a0a0a';
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.bits[y * n + x] === '1') g.fillRect(qx + (x + 4) * cell, qy + (y + 4) * cell, cell + .3, cell + .3);
+    g.fillStyle = faint; g.font = '22px "JetBrains Mono"'; g.fillText('hostis.black/pyrateradio', W / 2, 1200);
+    g.fillStyle = blood; g.fillRect(40, H - 46, (W - 80) * Math.min(1, el / CLIP_S), 4);
+    if (el < CLIP_S && rec.state === 'recording') requestAnimationFrame(draw); else if (rec.state === 'recording') rec.stop();
+  };
+  rec.onstop = () => {
+    gain.disconnect(dest);
+    const blob = new Blob(parts, { type: type.split(';')[0] }), ext = type.includes('mp4') ? 'mp4' : 'webm', name = (st.name || 'Pyrate Radio').replace(/[^\w ]+/g, '').trim() + ' clip.' + ext;
+    const u = URL.createObjectURL(blob); $('clipv').src = u; $('clipsave').href = u; $('clipsave').download = name; $('clipbox').hidden = false; $('clip').textContent = 'Clip it'; $('clip').disabled = false;
+    const file = new File([blob], name, { type: blob.type });
+    $('clipshare').hidden = !(navigator.canShare && navigator.canShare({ files: [file] }));
+    $('clipshare').onclick = () => navigator.share({ files: [file], title: st.name, text: 'On Pyrate Radio: ' + url }).catch(() => { });
+    $('clipbox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+  $('clip').disabled = true; $('clip').textContent = 'Clipping';
+  rec.start(500); requestAnimationFrame(draw);
+}
+$('clip').onclick = clipIt;
+$('clipclose').onclick = () => { $('clipbox').hidden = true; URL.revokeObjectURL($('clipv').src) };
 
 // Pass it on: the station's code to scan, its link to copy or share.
 $('pass').onclick = () => {
