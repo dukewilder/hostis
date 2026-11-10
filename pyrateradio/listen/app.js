@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=999b95c661';
+import init, { Radio } from './pkg/pyrate_browser.js?v=9824273712';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -23,9 +23,11 @@ function store(k, v) { try { if (v === undefined) return localStorage.getItem(k)
 
 // Every harbour this tab has ever been handed, kept so a returning listener never loses a
 // door even if a later build ships a different set. Dead entries just fail to resolve.
+// Only well-formed doors are kept, this build's own first, and at most twenty-four.
 function rememberHarbours() {
   let saved = []; try { saved = JSON.parse(store('pyrate.harbours') || '[]') } catch (e) {}
-  const union = [...new Set(HARBOUR.split(/[,\s]+/).filter(Boolean).concat(saved))];
+  const door = h => typeof h === 'string' && /^[0-9a-f]{64}(@https?:\/\/[^\s,@]+)?$/.test(h);
+  const union = [...new Set(HARBOUR.split(/[,\s]+/).filter(door).concat(Array.isArray(saved) ? saved.filter(door) : []))].slice(0, 24);
   try { store('pyrate.harbours', JSON.stringify(union)) } catch (e) {}
   return union.join(',');
 }
@@ -109,11 +111,16 @@ function audio() {
   ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000, latencyHint: 'playback' });
   gain = ctx.createGain();
   meter = ctx.createAnalyser(); meter.fftSize = 1024; gain.connect(meter); vu();
-  // On iPhones a page's own audio stops when the screen locks. Sent through an audio
-  // element instead, it keeps playing and shows on the lock screen.
-  if (/iPhone|iPad|iPod/.test(navigator.userAgent) && ctx.createMediaStreamDestination) {
+  // On iPhones and iPads a page's own audio stops when the screen locks. Sent through an
+  // audio element instead, it keeps playing and shows on the lock screen. An iPad's Safari
+  // calls itself a Mac, and only its touch screen gives it away.
+  const apple = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  // A call or another app can take the sound away; when it gives it back, the set picks up.
+  ctx.onstatechange = () => { if (playing && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => { }) };
+  if (apple && ctx.createMediaStreamDestination) {
     const dest = ctx.createMediaStreamDestination(); gain.connect(dest);
-    const el = $('a'); el.srcObject = dest.stream; el.play().catch(() => { gain.disconnect(); gain.connect(ctx.destination) });
+    const el = $('a'); el.srcObject = dest.stream; el.play().catch(() => { gain.disconnect(); gain.connect(meter); gain.connect(ctx.destination) });
+    el.onpause = () => { if (playing) el.play().catch(() => { }) };
   } else gain.connect(ctx.destination);
 }
 
@@ -133,7 +140,7 @@ function schedule(chs, skipMs, when) {
 
 function status(t) { $('np').textContent = t; $('by').textContent = ''; $('slot').textContent = ''; $('prog').style.width = '0'; $('time').textContent = '' }
 // A trouble the player is in, shown in place of the title until it clears.
-let trouble = null;
+let trouble = null, aheadMs = 0;
 
 // ---- The set: frequencies, the dial glass, the lamps and the meter ----------------------
 // Every station sits at the same place on every dial: its frequency comes from its key.
@@ -229,9 +236,10 @@ async function play(id, g) {
   const reset = () => { stopAll(); playhead = null; next = 0; track = null; liveSeq = null; dec?.close(); dec = null };
   while (g === gen) {
     try {
-      const queued = Math.max(0, next - ctx.currentTime) * 1000;
+      const queued = Math.max(0, next - ctx.currentTime) * 1000; aheadMs = Math.round(queued);
       if (playhead !== null || liveSeq !== null) {
-        if (queued > AHEAD_MS) { await sleep(400); continue }
+        // A hidden tab may be woken only once a minute: it keeps a minute and more queued.
+        if (queued > (document.hidden ? 75000 : AHEAD_MS)) { await sleep(400); continue }
         // Off the beat: something stalled. Drop what is queued and rejoin the clock.
         if (liveSeq === null && Math.abs(playhead - queued - radio.now()) > 4000) reset();
       }
@@ -485,7 +493,7 @@ $('spin').onclick = () => {
   if (pool.length) { listen(pool[Math.floor(Math.random() * pool.length)]); scrollTo({ top: 0, behavior: 'smooth' }) }
 };
 // ---- The chart of the seas: stations by the home port they name ------------------------
-let chartData = null; const ports = new Map();
+let chartData = null, chartLoad = null; const ports = new Map();
 const norm = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 // "Austin" or "Austin, Texas" or "Paris, France": the most populous place that fits.
 function place(port) {
@@ -495,15 +503,16 @@ function place(port) {
   const r = hit ? [hit[5], hit[6]] : null; ports.set(port, r); return r;
 }
 async function chart() {
-  if (!chartData) { try { chartData = await (await fetch('chart.json')).json() } catch (e) { $('chart').innerHTML = '<p class="fine">The chart did not load. The list still works.</p>'; return } }
+  // One fetch of the chart at a time, however often the list redraws while it loads.
+  if (!chartData) { try { chartData = await (chartLoad ??= fetch('chart.json').then(r => r.json())) } catch (e) { chartLoad = null; $('chart').innerHTML = '<p class="fine">The chart did not load. The list still works.</p>'; return } }
   const m = marooned(); let dots = '', n = 0;
-  for (const s of stations.filter(s => !m.has(s.id) && allowed(s) && s.port)) {
+  for (const s of stations.filter(s => !m.has(s.id) && allowed(s) && inSet(s) && s.port)) {
     const p = place(s.port); if (!p) continue; n++;
     const j = parseInt(s.id.slice(0, 4), 16), x = (p[1] + 180) * 2 + (j % 7 - 3) * .6, y = (90 - p[0]) * 2 + ((j >> 3) % 7 - 3) * .6;
     dots += '<g class="dot' + (s.live ? ' live' : '') + (cur?.id === s.id ? ' on' : '') + '" data-id="' + s.id + '" tabindex="0" role="button" aria-label="' + esc(s.name + ', ' + s.port) + '"><circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3.4"/><title>' + esc(s.name + ', ' + s.port) + '</title></g>';
   }
   $('chart').innerHTML = '<svg viewBox="0 20 720 290" role="img" aria-label="The chart of the seas"><path class="land" d="' + chartData.land + '"/>' + dots + '</svg><p class="fine">' + (n ? n + (n === 1 ? ' station names' : ' stations name') + ' a home port. The rest sail under no port.' : 'No station on the air has named a home port yet.') + '</p>';
-  $('chart').querySelectorAll('.dot').forEach(d => { const go = () => { const s = stations.find(x => x.id === d.dataset.id); if (s) { tuneTo(s); scrollTo({ top: 0, behavior: 'smooth' }) } }; d.onclick = go; d.onkeydown = e => e.key === 'Enter' && go() });
+  $('chart').querySelectorAll('.dot').forEach(d => { const go = () => { const s = stations.find(x => x.id === d.dataset.id); if (s) { tuneTo(s); scrollTo({ top: 0, behavior: 'smooth' }) } }; d.onclick = go; d.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go() } } });
 }
 function view(c) { $('chart').hidden = !c; $('rows').hidden = c; $('vchart').classList.toggle('on', c); $('vlist').classList.toggle('on', !c); $('vchart').setAttribute('aria-pressed', c); $('vlist').setAttribute('aria-pressed', !c); if (c) chart() }
 $('vlist').onclick = () => view(false); $('vchart').onclick = () => view(true);
@@ -731,8 +740,12 @@ function wrecked() {
 addEventListener('error', e => { if (e.error instanceof WebAssembly.RuntimeError) wrecked() });
 addEventListener('unhandledrejection', e => { if (e.reason instanceof WebAssembly.RuntimeError) wrecked() });
 
+// Back in view, or back from another app's sound: the set makes sure it is still sounding.
+document.addEventListener('visibilitychange', () => { if (!document.hidden && playing && ctx && ctx.state !== 'running') ctx.resume().catch(() => { }) });
+
 // For anyone looking under the hood: what the player is doing.
-window.pyrate = { tap: () => { const d = ctx.createMediaStreamDestination(); gain.connect(d); return d.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, station: cur?.id, scheduled: sources.length, ahead_ms: ctx ? Math.round(Math.max(0, (sources.length ? 1 : 0) * 1)) : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, webcodecs }) };
+let tapped = null;
+window.pyrate = { tap: () => { if (!ctx) return null; if (!tapped) { tapped = ctx.createMediaStreamDestination(); gain.connect(tapped) } return tapped.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, station: cur?.id, scheduled: sources.length, ahead_ms: playing ? aheadMs : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, webcodecs }) };
 // The set at rest, before it joins the network: a HOSTIS station, or the one passed on.
 function dormant(s) {
   cur = s; flag($('flag'), s.id, false); art(null);
