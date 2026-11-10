@@ -33,6 +33,7 @@
 <button id="go" class="power" hidden><span class="glyph">▶︎</span><span class="lbl">Listen</span></button>
 <div class="buttons">
 <button id="spin" class="btn">Spin the dial</button>
+<button id="raisego" class="btn open-only">Raise your own</button>
 <button id="pass" class="btn" hidden>Pass it on</button>
 <button id="clip" class="btn" hidden>Clip it</button>
 <button id="tip" class="btn" hidden>Tip</button>
@@ -84,6 +85,37 @@
 <p class="fine">Every other station on the Log plays in the open player: the same set, served from IPFS and from Lanterns, owned by nobody.</p>
 <p class="centre"><a class="lead-btn openlink" href="#"><span class="fc-lead">Every station</span><span class="fc-sub">the open player &#183; the whole Log</span></a></p>
 </div>
+<div class="open-only studio" id="studio">
+<div class="sechead gap"><h2>Raise Colours</h2><span class="cap">a station of your own &#183; from this browser</span></div>
+<div id="st-new">
+<p class="fine">Name it, drop recordings in, and it plays all day and all night, carried by every listener. The station is a key made in this tab. Nobody can take it from you, and nobody can give it back if you lose its twenty-four words.</p>
+<label class="field"><span>Name</span><input id="st-name" maxlength="40" autocomplete="off" placeholder="The name on the dial"></label>
+<label class="field"><span>What it broadcasts</span><input id="st-about" maxlength="140" autocomplete="off" placeholder="A line for the Log"></label>
+<label class="field"><span>Its kinds</span><input id="st-kinds" maxlength="80" autocomplete="off" placeholder="Up to three, by commas: jazz, talk, sea shanties"></label>
+<div class="switches"><label><input type="checkbox" id="st-mature"><span>It is mature</span></label><label><input type="checkbox" id="st-explicit"><span>It is explicit</span></label></div>
+<p class="centre"><button id="st-raise" class="lead-btn"><span class="fc-lead">Raise colours</span><span class="fc-sub">a key made here &#183; nothing leaves until it sails</span></button></p>
+<p id="st-note" class="fine" role="status"></p>
+<details class="fold"><summary>Take back a station from its 24 words</summary><div><textarea id="st-words" spellcheck="false" autocomplete="off" aria-label="The station's 24 words"></textarea><p class="centre"><button id="st-restore" class="btn">Take it back</button></p></div></details>
+<details class="fold"><summary>Broadcasting with the most cover</summary><div><p>What you air goes out along a stem of other nodes before anyone shows it to the network, so no listener can trace it to this tab. The relay this tab speaks through sees its address and nothing of what passes. For the most cover, open this page in Tor Browser, and the relay sees only Tor. The app on a phone goes further still.</p></div></details>
+</div>
+<div id="st-show" class="st-show" hidden>
+<p class="boxhead">Write these down</p>
+<p class="fine">These twenty-four words are the station. Whoever holds them can speak for it, strike it or take it to another device. They are shown once, never sent anywhere and never kept here. Write them on paper, in order.</p>
+<ol id="st-wordlist" class="wordlist"></ol>
+<div class="switches"><label><input type="checkbox" id="st-written"><span>I have written them down, in order</span></label></div>
+<p class="centre"><button id="st-done" class="btn" disabled>On to the station</button></p>
+</div>
+<div id="st-mine" hidden>
+<div class="st-card"><div id="st-flag" class="mini"></div><div class="meta"><div id="st-mname" class="name"></div><div id="st-mcs" class="cs"></div></div><button id="st-tune" class="btn">Tune in</button></div>
+<p id="st-status" class="st-status" role="status"></p>
+<label class="drop" id="st-drop"><input type="file" id="st-files" multiple accept="audio/*,video/mp4,video/webm,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.webm"><span class="drop-lead">Drop recordings here</span><span class="drop-sub">or choose them &#183; music or talk &#183; they play round the clock</span></label>
+<div class="st-opts"><label><input type="checkbox" id="st-talk"><span>Talk, not music (mono, smaller)</span></label></div>
+<label class="field"><span>Where they came from</span><input id="st-source" maxlength="280" autocomplete="off" placeholder="And why they are free to air, in your words"></label>
+<div id="st-queue" class="st-queue"></div>
+<p class="fine">Keep this tab open while recordings sail. Once the network carries them they play whether or not this tab is open, and whether or not anyone is listening.</p>
+<div class="row-btns"><button id="st-another" class="btn quiet">Raise another</button></div>
+</div>
+</div>
 <div class="sechead gap"><h2>Take the Set</h2><span class="cap">android &#183; no store, no account</span></div>
 <p class="fine">The app plays with the screen off, keeps the stations you love on your phone and raises stations of your own.</p>
 <p class="centre"><a class="lead-btn" href="../#set"><span class="fc-lead">Take the set</span><span class="fc-sub">the app for android</span></a></p>
@@ -99,7 +131,7 @@
 <p class="centre"><button id="mlist" class="btn">Maroon list</button></p>
 <div id="mbox" hidden><textarea id="mtext" spellcheck="false" aria-label="The maroon list"></textarea><div class="row-btns"><button id="mtake" class="btn">Take aboard</button><button id="mclear" class="btn quiet">Bring every station back</button></div><div id="mnote" class="fine"></div></div>
 </div>
-<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your switches and marooned stations, the harbours it has met, your name and mutes in the chatter, the secret each room's voice is drawn from, and any pocket invitations you opened. It sends none of this anywhere. The address bar holds the public station you are on, and a pocket's never.</p><p>Forgetting it all makes this browser a stranger to the radio: a new voice in every room, and no pockets.</p></div></details>
+<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your switches and marooned stations, the harbours it has met, your name and mutes in the chatter, the secret each room's voice is drawn from, any pocket invitations you opened, and the deputy key of any station you raised here (never its twenty-four words). It sends none of this anywhere. The address bar holds the public station you are on, and a pocket's never.</p><p>Forgetting it all makes this browser a stranger to the radio: a new voice in every room, and no pockets.</p></div></details>
 <p class="centre"><button id="forget" class="btn quiet">Forget this browser</button></p>
 </section>
 </div>

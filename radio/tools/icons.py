@@ -49,6 +49,11 @@ sq = Image.new("RGBA", (256, 256), BLACK); sq.alpha_composite(skull(256, 0.8))
 sq.save(f"{APP}/windows/runner/resources/app_icon.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 sq.save(f"{APP}/linux/pyrate-radio.png")
 
+# The browser set, added to a home screen: a full-bleed square with room for any mask.
+for n in [192, 512]:
+    sq = Image.new("RGBA", (n, n), BLACK); sq.alpha_composite(skull(n, 0.6))
+    sq.convert("RGB").save(f"{R}/browser/www/icon-{n}.png")
+
 # The notification icon: the same glyph as a vector, white on clear, in a 24 by 24 box.
 font = TTFont(FONT)
 gname = font.getBestCmap()[ord(SK)]

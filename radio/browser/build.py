@@ -26,6 +26,11 @@ head = """<!DOCTYPE html>
 <meta name="twitter:site" content="@hostis_black">
 <link rel="icon" type="image/png" sizes="48x48" href="favicon.png">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Pyrate Radio">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <style>
 """ + fonts.faces() + "\n" + fonts.sheet()
 extra = "\n" + open(f"{R}/browser/player.css", encoding="utf-8").read()
@@ -74,9 +79,21 @@ def build(scope, dist, open_players):
     open(f"{dist}/pkg/pyrate_browser.js", "w", encoding="utf-8").write(glue.replace("new URL('pyrate_browser_bg.wasm', import.meta.url)", f"new URL('pyrate_browser_bg.{v}.wasm', import.meta.url)"))
     shutil.copy(f"{W}/pkg/pyrate_browser_bg.wasm", f"{dist}/pkg/pyrate_browser_bg.{v}.wasm")
     shutil.copy(f"{W}/opus-decoder.min.js", dist)
+    if scope == "open":
+        # Raising colours from the tab: libopus in wasm, run off the page's thread.
+        shutil.copy(f"{W}/encode-worker.js", dist)
+        shutil.copytree(f"{W}/opus", f"{dist}/opus")
     shutil.copy(f"{W}/chart.json", dist)
     for f in ["favicon.png", "apple-touch-icon.png"]:
         shutil.copy(f"{R}/../{f}", dist)
+    # Added to a home screen it opens as an app of its own, on HOSTIS black.
+    for f in ["icon-192.png", "icon-512.png"]:
+        shutil.copy(f"{W}/{f}", dist)
+    json.dump({"name": "Pyrate Radio", "short_name": "Pyrate", "description": "Radio every listener carries, under HOSTIS colours.",
+               "start_url": "./", "scope": "./", "display": "standalone", "background_color": "#030303", "theme_color": "#030303",
+               "icons": [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+                         {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}]},
+              open(f"{dist}/manifest.webmanifest", "w"), indent=1)
     print("built", scope, v)
     return v
 
