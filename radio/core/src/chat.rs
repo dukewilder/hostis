@@ -198,6 +198,40 @@ pub fn check(s: &Signed, station: &StationId, now: u64) -> bool {
     worked(&digest(l), l.nonce) && StationId(l.from).verify(&bytes, &sig).is_ok()
 }
 
+/// The line ids a room has taken, each forgotten once a line that old would be refused anyway,
+/// so a room that runs for months holds only the last few minutes of them.
+#[derive(Default)]
+pub struct Seen {
+    order: std::collections::VecDeque<(u64, Hash)>,
+    ids: std::collections::HashSet<Hash>,
+}
+
+impl Seen {
+    /// True if the id is new. `at_ms` is the line's own time, `now` the reader's.
+    pub fn insert(&mut self, id: Hash, at_ms: u64, now: u64) -> bool {
+        while let Some((t, old)) = self.order.front() {
+            if now.saturating_sub(*t) <= 2 * SKEW_MS {
+                break;
+            }
+            self.ids.remove(old);
+            self.order.pop_front();
+        }
+        if !self.ids.insert(id) {
+            return false;
+        }
+        self.order.push_back((at_ms, id));
+        true
+    }
+
+    pub fn len(&self) -> usize {
+        self.ids.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.ids.is_empty()
+    }
+}
+
 /// A line's own fingerprint, for telling repeats apart.
 pub fn id(s: &Signed) -> Hash {
     *blake3::hash(&s.sig).as_bytes()
@@ -237,6 +271,15 @@ mod tests {
         let me = voice(&[3; 32], &master.id());
         let s = speak(&me, &master.id(), "Gull", 5_000_000, say);
         assert!(check(&s, &master.id(), 5_000_000));
+    }
+
+    #[test]
+    fn seen_ids_are_forgotten_once_a_line_that_old_is_refused() {
+        let mut s = Seen::default();
+        assert!(s.insert([1; 32], 1_000, 1_000));
+        assert!(!s.insert([1; 32], 1_000, 2_000), "a repeat is caught");
+        assert!(s.insert([2; 32], 10_000_000, 10_000_000));
+        assert_eq!(s.len(), 1, "the old id went once it could no longer be taken");
     }
 
     #[test]

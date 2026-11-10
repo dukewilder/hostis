@@ -7,7 +7,7 @@
 //!
 //! No rights reserved.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow};
@@ -29,7 +29,7 @@ const KEEP: usize = 200;
 pub(crate) struct Room {
     tx: GossipSender,
     lines: VecDeque<Signed>,
-    seen: HashSet<[u8; 32]>,
+    seen: chat::Seen,
     task: tokio::task::JoinHandle<()>,
     neighbours: usize,
 }
@@ -74,7 +74,7 @@ impl Inner {
         }
         let mut rooms = self.chats.lock().unwrap();
         let Some(r) = rooms.get_mut(&st) else { return false };
-        if !r.seen.insert(chat::id(&s)) {
+        if !r.seen.insert(chat::id(&s), s.line.at_ms, now_ms()) {
             return false;
         }
         r.lines.push_back(s);
@@ -131,7 +131,7 @@ impl Inner {
                 }
             }
         });
-        self.chats.lock().unwrap().insert(st, Room { tx, lines: VecDeque::new(), seen: HashSet::new(), task, neighbours: 0 });
+        self.chats.lock().unwrap().insert(st, Room { tx, lines: VecDeque::new(), seen: chat::Seen::default(), task, neighbours: 0 });
         // What was said before we came: a carrier that sat in the room holds the last lines.
         let me = self.clone();
         self.handle.spawn(async move {

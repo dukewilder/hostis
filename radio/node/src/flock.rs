@@ -41,7 +41,7 @@ impl Inner {
             if h == 0 {
                 anyhow::bail!("the host has stopped the flock");
             }
-            let rtt = t1 - t0;
+            let rtt = t1.saturating_sub(t0);
             let off = h as i64 + rtt as i64 / 2 - t1 as i64;
             if best.as_ref().is_none_or(|b| rtt < b.0) {
                 best = Some((rtt, off, station));
