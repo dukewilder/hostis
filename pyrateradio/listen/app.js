@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=07448379e7';
+import init, { Radio } from './pkg/pyrate_browser.js?v=27b17b8d09';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -13,7 +13,7 @@ const EMBED = document.documentElement.classList.contains('embed');
 // flock goes straight to an open player, the same set served where no one owns it (IPFS, a
 // Lantern). 'open' is that copy: the whole Log, the chatter and the colours.
 const SCOPE = "harbour";
-const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeidikalo3az6nr35sir6sy45xxe4essv5r7x6pgvymhkbkckap64qe.ipfs.inbrowser.link/", "https://bafybeidikalo3az6nr35sir6sy45xxe4essv5r7x6pgvymhkbkckap64qe.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeidikalo3az6nr35sir6sy45xxe4essv5r7x6pgvymhkbkckap64qe/"];
+const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeihalhkw733w43cxuwlbf2khfovr4kb57pv3t62oedxsbzjqk4b2mi.ipfs.inbrowser.link/", "https://bafybeihalhkw733w43cxuwlbf2khfovr4kb57pv3t62oedxsbzjqk4b2mi.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeihalhkw733w43cxuwlbf2khfovr4kb57pv3t62oedxsbzjqk4b2mi/"];
 const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
 const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
 const lastId = () => { if (SHARED) return ''; try { return sessionStorage.getItem('pyrate.cur') || '' } catch (e) { return '' } };
