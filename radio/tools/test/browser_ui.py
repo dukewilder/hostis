@@ -26,6 +26,10 @@ with sync_playwright() as p:
     pg.click("#pass"); time.sleep(1)
     link = pg.text_content("#plink") or ""
     check("a link served from a bare address points at hostis.black", link.startswith("https://hostis.black/pyrateradio/listen/#"))
+    pg.evaluate("localStorage.setItem('pyrate.name', 'Test')")
+    pg.on("dialog", lambda d: d.accept())
+    pg.click("#forget"); time.sleep(4)
+    check("forgetting clears what the browser keeps", pg.evaluate("Object.keys(localStorage).filter(k => k.startsWith('pyrate.') && k !== 'pyrate.token' && k !== 'pyrate.harbours').length") == 0)
     check("the page's policy refuses nothing it needs", not any("Content Security Policy" in l for l in logs))
     check("no page errors", not errs)
     if errs: print(errs[:3])

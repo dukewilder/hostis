@@ -138,3 +138,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - The Lantern's page and the browser set both run under a strict content policy with no referrer, and a Lantern's /player/ copy links home properly.
 - A Lantern's web listener reconnects by itself when its stream breaks.
 - A browser tab whose node faults says so and comes back aboard by itself, once.
+- The browser set says what it keeps and can forget all of it in one press.
