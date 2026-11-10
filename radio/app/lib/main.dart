@@ -608,7 +608,7 @@ class Dial extends StatelessWidget {
                     shape: const RoundedRectangleBorder(),
                     padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 14),
                   ),
-                  child: Text(radio.playing ? '■  STOP' : '▶  LISTEN', style: carved(12, spacing: 0.25)),
+                  child: Text(radio.playing ? '■︎  STOP' : '▶︎  LISTEN', style: carved(12, spacing: 0.25)),
                 ),
               ]),
       ),

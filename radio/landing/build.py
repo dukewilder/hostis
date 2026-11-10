@@ -3,8 +3,12 @@
 # keeps one type.
 import re, os, shutil, sys, hashlib, subprocess
 R = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-apk = sys.argv[1] if len(sys.argv) > 1 else None
-version = sys.argv[2] if len(sys.argv) > 2 else "0.6.2"
+# The page names the app it offers, so it is built only with one: build.py <apk> <version>.
+# A draft for looking at, with placeholders in place of the app, takes --draft instead.
+if len(sys.argv) < 3 and "--draft" not in sys.argv:
+    sys.exit("build.py <apk> <version>, or --draft for a local look with no app")
+apk = sys.argv[1] if len(sys.argv) > 2 else None
+version = sys.argv[2] if len(sys.argv) > 2 else "draft"
 out = f"{R}/landing/out"
 site = open(f"{R}/../index.html", encoding="utf-8").read()
 faces = [b for b in re.findall(r"@font-face\s*{.*?}", site, re.S)

@@ -921,7 +921,7 @@ class _RecordPanelState extends State<RecordPanel> {
       note('Talk into the phone and put it on the clock: a show, a reading, a word between records. No files needed.'),
       const SizedBox(height: 12),
       Row(children: [
-        pyrateButton(recording ? '■  STOP  ${fmtTime(running)}' : '●  RECORD', toggle, color: recording ? bloodBright : bone),
+        pyrateButton(recording ? '■︎  STOP  ${fmtTime(running)}' : '●︎  RECORD', toggle, color: recording ? bloodBright : bone),
       ]),
       if (path != null) ...[
         const SizedBox(height: 10),

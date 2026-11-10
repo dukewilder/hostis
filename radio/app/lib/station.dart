@@ -193,7 +193,7 @@ class _StationPageState extends State<StationPage> {
           if ((s['about'] ?? '').toString().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 14), child: Text(s['about'], style: serif(16, color: boneDim, italic: true))),
           const SizedBox(height: 14),
           Wrap(spacing: 4, runSpacing: 4, children: [
-            pyrateButton('▶ LISTEN', () {
+            pyrateButton('▶︎ LISTEN', () {
               widget.radio.tune(id);
               Navigator.pop(context);
             }),
