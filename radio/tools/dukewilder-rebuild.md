@@ -20,7 +20,8 @@ Rules that hold throughout:
 4. The harbour (the public face). Recreate the existing Lantern with everything step 1 recorded: same name, same data volume, same `--seed`, `--release-keys` and `--quota-gb`, same network mode and restart policy. Change two things and add one:
    - add `--carry-own`, so it serves only its own stations and sheds the third-party logs it was holding. Those move to the hold in step 5. Expect `dropped N held stations` in its first log lines. This is meant to happen.
    - keep `--http` and `--relay`. The harbour is a bootstrap door and a web mirror, so it must stay reachable and must not run dark.
-   - set `PYRATE_PLAYER=/player` in its environment and mount a copy of the browser player there (step 6). It then serves the player at `/player/`.
+   - do not give it `PYRATE_PLAYER`. The harbour answers at a HOSTIS name, and the player that plays every station must never be served from one. If an earlier run set `PYRATE_PLAYER`, remove it.
+   - set `PYRATE_OPEN_PLAYER=` to the first line of `radio/app/assets/open_players.txt`, so its invitations and links name the open player on IPFS.
    With compose: `docker compose up -d --no-deps --force-recreate <harbour service>`.
 
 5. The hold (the dark carrier). Add a second Lantern service, advertised nowhere, that carries the whole Log over Tor:
@@ -33,12 +34,14 @@ Rules that hold throughout:
    5a. A Tor container for the hold. Add a small `tor` service in gluetun's namespace (network mode `container:gluetun`) configured with `HTTPTunnelPort 8118`. Nothing it does leaves gluetun, so Tor itself reaches the internet through the VPN. If you would rather not run Tor, drop `PYRATE_PROXY` and the hold still runs dark over the VPN alone. That is weaker: the relay then sees the VPN exit instead of a Tor exit. Tor is the recommended path for the first node.
 
 6. Mirrors, so no single door sinks the network:
-   - the browser player: copy the built `radio/browser/dist` into the volume the harbour mounts at `/player`, so `/player/` serves it.
+   - the open player on IPFS. This is the copy of the radio that plays every station, and it lives where nobody owns it. Add a `kubo` service (image `ipfs/kubo:latest`) in gluetun's namespace (network mode `container:gluetun`), with a data volume `pyrate-ipfs` at `/data/ipfs` and no published ports. It reaches the IPFS network through the VPN. If gluetun has a forwarded port spare, set kubo's swarm to listen on it (`ipfs config --json Addresses.Swarm '["/ip4/0.0.0.0/tcp/<port>","/ip4/0.0.0.0/udp/<port>/quic-v1"]'`); otherwise leave the defaults, and kubo reaches out through relays.
+     Then pin the player and keep it pinned: copy `radio/tools/pin_player.sh` into the container and run `docker exec <kubo> sh /pin_player.sh` once; it prints `pinned bafy…`. Add a host cron line to run it hourly, so every new player HOSTIS publishes is pinned within the hour: `17 * * * * docker exec <kubo> sh /pin_player.sh`. The script fetches each player's CAR from hostis.black and IPFS checks every block against the name.
+     Check it from outside: `https://<cid>.ipfs.dweb.link/` (the cid is in `radio/app/assets/open_players.txt`) should show the open player within a few minutes of pinning.
    - the APK over BitTorrent: add the `.torrent` built by `radio/tools/torrent.py` to the existing qBittorrent, pointing it at the APK file, and let it seed. The magnet and web seed are already on the landing page.
-   - optional, an IPFS pin of the APK and the player if an IPFS node is already running. Do not stand one up just for this.
+   - optional, an IPFS pin of the APK too: `docker exec <kubo> ipfs add -Q --cid-version=1 <apk>` and report the cid.
 
 7. Check it:
-   - harbour: `docker logs --tail 60 <harbour>` shows `LANTERN LIT`, `neighbour up`, `dropped … held stations`, and only its own stations under `in the Log:`. From inside the namespace, `docker exec gluetun wget -qO- http://127.0.0.1:<port>/log.json | head -c 300` returns JSON, `/player/` returns the player page, and `/feed/<station id>.xml` returns a feed for each of its own stations.
+   - harbour: `docker logs --tail 60 <harbour>` shows `LANTERN LIT`, `neighbour up`, `dropped … held stations`, and only its own stations under `in the Log:`. From inside the namespace, `docker exec gluetun wget -qO- http://127.0.0.1:<port>/log.json | head -c 300` returns JSON, `/player/` is not found, and `/feed/<station id>.xml` returns a feed for each of its own stations.
    - hold: `docker logs --tail 60 <hold>` shows `dark running: relays only, no address published`, `neighbour up`, and the full Log under `in the Log:`. It should list far more stations than the harbour.
    - confirm the hold has no published port of its own: `docker inspect <hold>` shows its network mode is gluetun's and its `Ports` are empty.
 

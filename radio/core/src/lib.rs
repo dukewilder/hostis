@@ -32,6 +32,25 @@ pub use audio::Profile;
 pub use audio::{ChunkEncoder, decode_chunk};
 pub use keys::{StationId, StationKey};
 
+/// Where links for stations other than HOSTIS's own point: an open player, the browser set
+/// served where nobody owns it (IPFS, a Lantern). Invitations and flock links name it, so a
+/// stranger's station never wears hostis.black. Until a build sets one, hostis.black's own
+/// copy, which hands every such link straight on to an open player.
+static OPEN_PLAYER: std::sync::RwLock<String> = std::sync::RwLock::new(String::new());
+pub const HOSTIS_PLAYER: &str = "https://hostis.black/pyrateradio/listen/";
+pub fn open_player() -> String {
+    let p = OPEN_PLAYER.read().map(|p| p.clone()).unwrap_or_default();
+    if p.is_empty() { HOSTIS_PLAYER.to_string() } else { p }
+}
+/// Only an https address with no fragment or query is taken, ending in a slash.
+pub fn set_open_player(url: &str) -> bool {
+    let u = url.trim();
+    if !u.starts_with("https://") || u.len() > 200 || u.contains(['#', '?', ' ', '"', '<', '>']) { return false }
+    let u = if u.ends_with('/') { u.to_string() } else { format!("{u}/") };
+    if let Ok(mut p) = OPEN_PLAYER.write() { *p = u }
+    true
+}
+
 /// A BLAKE3 hash. The same hash iroh-blobs uses, so chunks are blobs as they stand.
 pub type Hash = [u8; 32];
 

@@ -135,6 +135,9 @@ Future<int> buildCode() async => await _service.invokeMethod<int>('build_code').
 /// The stations a first open lands on when no station has yet earned it: HOSTIS's own.
 List<String> harbour = [];
 
+/// The open players this build knows, the first the one its links name.
+List<String> openPlayers = [];
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -156,6 +159,10 @@ void main() async {
   if (hold != null) Native.setHoldKey(hold);
   // Nothing about the node, the stations or the listener goes to the phone's log.
   nodeStarted = Native.start('${dir.path}${Platform.pathSeparator}node', boot) >= 0;
+  // Every station that is not HOSTIS's own is passed on as an open player's link (IPFS), and so
+  // are invitations and flocks; hostis.black carries HOSTIS's stations alone.
+  openPlayers = (await rootBundle.loadString('assets/open_players.txt')).split('\n').map((l) => l.trim()).where((l) => l.startsWith('https://')).toList();
+  if (nodeStarted && openPlayers.isNotEmpty) Native.call({'cmd': 'open_player', 'url': openPlayers.first});
   runApp(const PyrateApp());
 }
 

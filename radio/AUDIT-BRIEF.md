@@ -112,6 +112,7 @@ Also weigh new features or improvements that would strengthen either track while
 Known now:
 - Generate the signing keys on his PC with `pyrate-keys.exe` and send `release_keys.txt` and the Android cert; the release and Android signing keys never enter this workspace.
 - Test on real devices: a flock of several phones, the drawer Lantern over days (and after a reboot), iPhone and iPad lock-screen playback through a phone call, the playback service from the lock screen and the car (its threading is new in 0.8.4 and has only been built, never run), a bell, and SCUTTLE on a phone you can spare.
+- Pin the open player on IPFS from dukewilder (step 6 of `tools/dukewilder-rebuild.md`: a kubo container inside gluetun and an hourly `pin_player.sh`). Until a node pins it, links to other stations open a gateway that cannot find the player. Anyone with an IPFS node can run the same script.
 - Run the two-identity dukewilder rebuild in `tools/dukewilder-rebuild.md` (harbour plus dark hold plus Tor, all inside gluetun), and send back the logs.
 - Send DNS screenshots, and `station.jpg` / `banner.jpg` if still wanted.
 - Approve any change to the hostis.black front page, including a link to the radio.

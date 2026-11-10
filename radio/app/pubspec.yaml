@@ -18,6 +18,7 @@ flutter:
   assets:
     - assets/bootstrap.txt
     - assets/harbour.txt
+    - assets/open_players.txt
     - assets/release_keys.txt
     - assets/chart.json
     - assets/brand/

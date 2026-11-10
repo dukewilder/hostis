@@ -1098,7 +1098,8 @@ class _FeedsPanelState extends State<FeedsPanel> {
 /// Where a station sits on every dial, from its key: 87.5 to 108.0.
 double frequency(String id) => (875 + int.parse(id.substring(0, 6), radix: 16) % 206) / 10;
 
-String stationLink(String id) => 'https://hostis.black/pyrateradio/listen/#$id';
+/// HOSTIS's own stations are passed on as hostis.black links; every other as an open player's.
+String stationLink(String id) => isHarbour(id) || openPlayers.isEmpty ? 'https://hostis.black/pyrateradio/listen/#$id' : '${openPlayers.first}#$id';
 
 class QrPainter extends CustomPainter {
   final int n;
@@ -1192,7 +1193,7 @@ class _PosterSheetState extends State<PosterSheet> {
                   const Spacer(),
                   Text('Scan to listen. No app, no account.', style: serif(14, color: ink)),
                   const SizedBox(height: 4),
-                  Text('hostis.black/pyrateradio, or search the call sign in any Pyrate Radio', textAlign: TextAlign.center, style: mono(8.5, color: soft)),
+                  Text(isHarbour(id) ? 'hostis.black/pyrateradio, or search the call sign in any Pyrate Radio' : 'Or search the call sign in any Pyrate Radio', textAlign: TextAlign.center, style: mono(8.5, color: soft)),
                 ]),
               ),
             ),
