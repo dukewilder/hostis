@@ -45,7 +45,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 - **C12** (low) Lantern page and tower have no recovery when the stream ends. `node/src/web.rs:442-449`
 - **C13** (low) /player/ mirror: broken home links, no redirect, no hardening headers. `node/src/web.rs:62-63`
-- **C15** (high) Unsigned Carrier gossip: fake carriers jump the queue, grow memory and eclipse peers. `browser/src/lib.rs:328-345`
 - **C16** (medium) Chunk fetch is serial, has no failure memory, and retries dead peers every time. `browser/src/lib.rs:296-322`
 - **C17** (medium) Aboard token broadcasts what the tab is tuned to, whether or not it plays. `browser/src/lib.rs:519-543`
 - **C19** (medium) Peers can probe a tab for what it has just played. `browser/src/lib.rs:199-201`
@@ -175,20 +174,22 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **A16. Spans and tables read from the log are not validated, so `now` and `listings` can disagree and costs are unbounded.** (low) Fixed: the clock builds one index of tracks by hash and normalises the programme once, in Clock::new (see A2). (bbfe09d)
 
-**C3. count_guest spawns one OS thread per request, with no cap.** (high) Fixed: one worker counts every web guest from a queue of 64, and a guest past a full queue goes uncounted; a tab is counted once it has listened thirty seconds, then hourly, so reconnects are not a crowd. (pending)
+**C3. count_guest spawns one OS thread per request, with no cap.** (high) Fixed: one worker counts every web guest from a queue of 64, and a guest past a full queue goes uncounted; a tab is counted once it has listened thirty seconds, then hourly, so reconnects are not a crowd. (261c896)
 
-**C4. Episode generation holds the whole recording in memory.** (high) Fixed: an episode is made a chunk at a time straight to disk, so memory stays flat however long the show, and recordings over six hours are refused. On the way a fault surfaced in the LAME wrapper: it writes into a vector's spare room and gives LAME no size when there is none, so the worst case is now reserved before every call. (pending)
+**C4. Episode generation holds the whole recording in memory.** (high) Fixed: an episode is made a chunk at a time straight to disk, so memory stays flat however long the show, and recordings over six hours are refused. On the way a fault surfaced in the LAME wrapper: it writes into a vector's spare room and gives LAME no size when there is none, so the worst case is now reserved before every call. (261c896)
 
-**C5. Concurrent first requests for one episode race on the same temp file.** (medium) Fixed: two requests for one episode wait on one maker, and each maker writes its own temporary file; at most two episodes are made at once. (pending)
+**C5. Concurrent first requests for one episode race on the same temp file.** (medium) Fixed: two requests for one episode wait on one maker, and each maker writes its own temporary file; at most two episodes are made at once. (261c896)
 
-**C6. Cached episodes ignore withdrawal and ignore which station owns the track.** (medium) Fixed: an episode is served only if the recording is in the named station's library now, and the cache is named by station and recording. (pending)
+**C6. Cached episodes ignore withdrawal and ignore which station owns the track.** (medium) Fixed: an episode is served only if the recording is in the named station's library now, and the cache is named by station and recording. (261c896)
 
-**C7. Streaming tower busy-loops on bad entries.** (medium) Fixed: a tower sleeps after any step that sends nothing and comes down after a minute of them; an off-air wait does not count. (pending)
+**C7. Streaming tower busy-loops on bad entries.** (medium) Fixed: a tower sleeps after any step that sends nothing and comes down after a minute of them; an off-air wait does not count. (261c896)
 
-**C8. No connection, rate or time limits on the HTTP listener; `--web-all` lets anyone spawn encoders.** (medium) Fixed: the gangway streams to at most 512 listeners and 32 stations at once, and refuses a station it does not hold before starting a tower. What remains: no header-read timeout of its own; the tunnel in front of it is the first line for slow clients. (pending)
+**C8. No connection, rate or time limits on the HTTP listener; `--web-all` lets anyone spawn encoders.** (medium) Fixed: the gangway streams to at most 512 listeners and 32 stations at once, and refuses a station it does not hold before starting a tower. What remains: no header-read timeout of its own; the tunnel in front of it is the first line for slow clients. (261c896)
 
-**C9. Feed XML: unescaped Host-derived attributes and control characters.** (medium) Fixed: feed text drops the control characters XML forbids, and the base address takes only a plain host name and http or https, escaped. (pending)
+**C9. Feed XML: unescaped Host-derived attributes and control characters.** (medium) Fixed: feed text drops the control characters XML forbids, and the base address takes only a plain host name and http or https, escaped. (261c896)
 
-**C10. Episode Range handling reads the whole file per request and mis-answers unsatisfiable ranges.** (low) Fixed: episodes are read from disk as they go out, with suffix ranges and 416 for a range past the end. (pending)
+**C10. Episode Range handling reads the whole file per request and mis-answers unsatisfiable ranges.** (low) Fixed: episodes are read from disk as they go out, with suffix ranges and 416 for a range past the end. (261c896)
 
-**C11. Per-request cost amplification on unauthenticated routes.** (medium) Fixed: a picture is looked for only among the stations the page may show. What remains: /now and /log.json still work out their answers on every request, cheap for a Lantern's own few stations. (pending)
+**C11. Per-request cost amplification on unauthenticated routes.** (medium) Fixed: a picture is looked for only among the stations the page may show. What remains: /now and /log.json still work out their answers on every request, cheap for a Lantern's own few stations. (261c896)
+
+**C15. Unsigned Carrier gossip: fake carriers jump the queue, grow memory and eclipse peers.** (high) Fixed: a carrier's claimed head never counts past the station's own card, a listing keeps the 64 freshest carriers, a carrier or token for a station with no card here is dropped (pockets excepted), and a node that failed to answer in the last ten minutes is asked last. The same in the app, on Lanterns and in tabs; cards now go out before carrier claims so nothing honest is dropped. Unit tested; voyage (20 of 20) and pocket (8 of 8) pass. (pending)
