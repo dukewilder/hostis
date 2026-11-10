@@ -214,7 +214,7 @@ b.innerHTML='Someone passed you a station.<br><a href="listen/#'+id+'">▶ Liste
 <p class="lead">Radio that plays all day and all night, that anyone can raise, that every listener carries, and that answers to no server, no store and no account.</p>
 <nav class="doors">
 <a class="first" href="listen/"><span class="what">▶ Listen now</span><span class="how">In this browser, on any phone or computer. Nothing to install.</span></a>
-<a href="#set"><span class="what">Take the set</span><span class="how">The app for Android 0.6.2. Plays with the screen off.</span></a>
+<a href="#set"><span class="what">Take the set</span><span class="how">The app for Android 0.6.3. Plays with the screen off.</span></a>
 <a href="#colours"><span class="what">Raise colours</span><span class="how">Your own station, from your phone, on the air in a minute.</span></a>
 </nav>
 <div class="toc"><a href="#how">How it works</a> <a href="#air">On the air</a> <a href="#lantern">Keep a Lantern</a> <a href="#faq">Questions</a></div>
@@ -232,11 +232,11 @@ b.innerHTML='Someone passed you a station.<br><a href="listen/#'+id+'">▶ Liste
 
 <h2 id="set">Take the set</h2>
 <nav class="doors" style="grid-template-columns:1fr;margin-top:1.2rem">
-<a href="pyrate-radio-0.6.2.apk"><span class="what">Android</span><span class="how">Pyrate Radio 0.6.2 · 41 MB · arm64</span></a>
+<a href="pyrate-radio-0.6.3.apk"><span class="what">Android</span><span class="how">Pyrate Radio 0.6.3 · 41 MB · arm64</span></a>
 <a href="listen/"><span class="what">Any browser</span><span class="how">iPhone, iPad, Windows, Mac, Linux. Listening only, for now.</span></a>
 <a href="https://github.com/dukewilder/hostis/tree/radio/radio"><span class="what">Source</span><span class="how">Rust and Flutter, CC0. Build it yourself and compare.</span></a>
 </nav>
-<p class="mono">sha-256 4e89db872cd5adda34410e2b86fd5b90a3893fc8a2747aca16c7c005f8319e79</p>
+<p class="mono">sha-256 8c62ba8202a2b745ad4a068e111ef4863ad846c3c6f1f2d3177725605854756d</p>
 <p class="faint">Check what you install against the checksum above. Once signing begins, every release will carry HOSTIS's signature, and the app takes an update only when two of the three release keys have signed it.</p>
 
 <h3 class="eyebrow" style="margin:2rem 0 .8rem">On stock Android</h3>
@@ -274,6 +274,7 @@ b.innerHTML='Someone passed you a station.<br><a href="listen/#'+id+'">▶ Liste
 <details><summary>Who can see what I listen to?</summary><p>Very little, by design. Phones never tell the network what they hear. Counts are made from anonymous tokens that change every hour. A browser reaches the network through a relay, so the stations it plays from never see its address. The relay sees the address and nothing of what passes. Each visit to the Listen page also starts under a fresh identity.</p></details>
 <details><summary>Can a station be taken down?</summary><p>Not from any one place. Every station's log and sound are copied across the phones and Lanterns that carry it, and any one of them can hand it on. Only its keeper can end it, by striking its colours with the station's key.</p></details>
 <details><summary>Who decides what is on the air?</summary><p>Whoever holds a station's key decides what that station plays. HOSTIS keeps no list of stations to refuse, and ranks none. You decide what reaches you: maroon a station and it leaves your Log and your dial. Lists of marooned stations pass from hand to hand, and you take aboard the ones you trust.</p></details>
+<details><summary>Will I come across explicit material?</summary><p>Only if you choose to. Each station says for itself whether it is mature or explicit. Explicit stations stay out of your Log until you switch them on, and you can hide mature ones too. Art from stations you have never kept can stay hidden as well. A station that lies about itself is yours to maroon.</p></details>
 <details><summary>How much data and battery does it use?</summary><p>Music streams at 64 kbit/s, about 29 MB an hour. Talk stations use 24 kbit/s, about 11 MB an hour. On mobile data your phone carries nobody else's traffic. On Wi-Fi it can bring the next six hours of your kept stations aboard ahead of time.</p></details>
 <details><summary>What happens if I lose my phone?</summary><p>If you wrote down your station's twenty-four words, put them into the app on a new phone and the station is yours again. The old phone loses the right to speak for it. Without the words the station cannot be recovered by anyone, HOSTIS included.</p></details>
 <details><summary>Can I put my station on my own website?</summary><p>Yes. Share its link and it plays in any browser. A Lantern started with <code>--http</code> also serves a page of its own stations and an embed line for any site.</p></details>
