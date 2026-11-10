@@ -236,6 +236,7 @@ Any carrier works because the signature is checked: gossip, IPFS, DNS TXT, Nostr
 ## Progress
 
 - **W1 shipped in 0.8.7** (10 November). Found already in place while building it: the plain disguise (a plain icon named Radio, and a lock screen, notifications and car display that say only "Radio") covers 1.21 and part of 2.4, so R5 is settled by it, and it now blanks the recents screen too (1.22). Updates already need two of three release keys (part of 2.9). Encoder settings already match across app and browser (1.13). Clipboard history on Windows keeps its own copy for a time; the ninety-second clear removes it from the clipboard itself.
+- **W2 shipped in 0.8.8.** 3.12 and 3.13 as planned (DECISIONS XXVIII). 3.14: chunks were already split with bounds checks, every packet's length checked against one 20 ms frame before decoding, and bad chunks concealed; libopus is 1.6.1 and its decode path is in the fuzz pass. Moving decoding into an isolated Android process waits for W7, with the other Android work. Counting stays at 20 bits per listener-hour: raising it would split old apps from new ones. Counts can no longer keep a junk station in a full Log, so cheap inflation buys nothing there.
 
 ## Build waves
 

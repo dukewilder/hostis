@@ -195,6 +195,9 @@ struct Tuned {
     playhead: Option<u64>,
 }
 
+/// The most station cards a node's Log holds.
+const LOG_CARDS: usize = 5_000;
+
 pub struct Inner {
     cfg: Config,
     endpoint: Endpoint,
@@ -219,6 +222,8 @@ pub struct Inner {
     tuned: Mutex<Option<Tuned>>,
     jobs: Mutex<HashMap<u64, String>>,
     pow: Mutex<HashMap<StationId, u64>>,
+    /// Where each own station's search for more work picks up.
+    pow_cursor: Mutex<HashMap<StationId, u64>>,
     #[cfg(feature = "playback")]
     queue: player::SharedQueue,
     #[cfg(feature = "playback")]
@@ -606,11 +611,27 @@ impl Inner {
                 if fresh && now.saturating_sub(a.at_ms) < 60_000 {
                     clockfix::sample(a.station.0, a.at_ms, raw_now_ms());
                 }
-                // The Log keeps at most 5,000 cards: past that, a new station must outdo the weakest.
-                if log.len() >= 5_000 && !log.contains_key(&a.station) {
-                    let weakest = log.iter().min_by_key(|(_, l)| (l.aboard(now), l.announce.as_ref().map(|x| x.at_ms).unwrap_or(0))).map(|(k, _)| *k);
-                    if let Some(w) = weakest {
-                        log.remove(&w);
+                // The Log keeps at most 5,000 cards. Past that, a newcomer comes in only by showing
+                // more work than the weakest card a stranger holds there (its own stations and the
+                // ones it keeps are never at stake), so each further junk station costs twice the
+                // last, while a real one's node keeps working and climbs past the junk in minutes.
+                // Counts aboard only break ties: they are cheap to inflate, and work is not.
+                if log.len() >= LOG_CARDS && !log.contains_key(&a.station) {
+                    let (own, pinned) = {
+                        let s = self.store.lock().unwrap();
+                        (s.keys.keys().copied().collect::<std::collections::HashSet<_>>(), s.pinned.clone())
+                    };
+                    let bits = |l: &Listing| l.announce.as_ref().map(|x| net::pow_bits(&x.station, x.pow)).unwrap_or(0);
+                    let weakest = log
+                        .iter()
+                        .filter(|(k, _)| !own.contains(*k) && !pinned.contains(*k) && !self.is_pocket(k))
+                        .min_by_key(|(_, l)| (bits(l), l.aboard(now), l.announce.as_ref().map(|x| x.at_ms).unwrap_or(0)))
+                        .map(|(k, l)| (*k, bits(l)));
+                    match weakest {
+                        Some((w, wb)) if net::pow_bits(&a.station, a.pow) > wb => {
+                            log.remove(&w);
+                        }
+                        _ => return None,
                     }
                 }
                 let l = log.entry(a.station).or_default();
@@ -700,6 +721,27 @@ impl Inner {
     }
 
     /// Every twenty seconds: fly our colours, say what we carry, count who is aboard.
+    /// With the Log near full, our own stations' work climbs a little each tick, off the async
+    /// threads, so they outwork any flood of cheap cards. Nothing is spent when there is room.
+    fn pow_climb(self: &Arc<Self>, own: &[StationId]) {
+        if self.log.lock().unwrap().len() < LOG_CARDS * 9 / 10 {
+            return;
+        }
+        for id in own.iter().copied() {
+            let inner = self.clone();
+            tokio::task::spawn_blocking(move || {
+                let have = inner.pow_for(&id);
+                let start = inner.pow_cursor.lock().unwrap().get(&id).copied().unwrap_or(have.saturating_add(1));
+                const SPAN: u64 = 1 << 21;
+                inner.pow_cursor.lock().unwrap().insert(id, start.saturating_add(SPAN));
+                if let Some(n) = net::pow_improve(&id, have, start, SPAN) {
+                    let _ = inner.hold.write_note(&inner.cfg.dir, &format!("pow/{}", id.to_hex()), n.to_string().as_bytes());
+                    inner.pow.lock().unwrap().insert(id, n);
+                }
+            });
+        }
+    }
+
     async fn tick(self: &Arc<Self>) {
         let now = now_ms();
         let hour = now / 3_600_000;
@@ -709,6 +751,7 @@ impl Inner {
             let s = self.store.lock().unwrap();
             (s.own(), s.logs.iter().filter(|(_, a)| !a.is_struck()).map(|(id, a)| (*id, a.len())).collect())
         };
+        self.pow_climb(&own);
         for id in own {
             let pow = self.pow_for(&id);
             let a = {
@@ -1419,6 +1462,7 @@ impl Node {
             tuned: Mutex::new(None),
             jobs: Mutex::new(HashMap::new()),
             pow: Mutex::new(HashMap::new()),
+            pow_cursor: Mutex::new(HashMap::new()),
             #[cfg(feature = "playback")]
             queue: queue.clone(),
             #[cfg(feature = "playback")]
