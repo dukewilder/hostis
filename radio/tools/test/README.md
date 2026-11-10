@@ -17,3 +17,4 @@ serve it (`python3 -m http.server <port>`), then rebuild the public page with pl
 - `live_page.py <url>`: loads the deployed page and checks the wasm starts, after every deploy.
 - `browser_ui.py <port>`: quiet console, chatter join and leave, passed-on links that never name the serving address.
 - `lantern_page.py`: a Lantern started with `--http 127.0.0.1:8383` serves a page whose script runs under its policy.
+- `lantern_stream.py`: plays a station from that Lantern page, breaks the stream, and checks the page reconnects.
