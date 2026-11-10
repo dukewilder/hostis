@@ -148,3 +148,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - Pictures come out upright with a stable accent, films keep their dialogue when folded to stereo and silent files are refused, the device's own sample format is used, the page is built in one pass, the keeper hears when a time-zone table runs out, and the clean turn of the week is ruled.
 - SCUTTLE: one press makes everything the radio keeps on a phone unreadable at once and closes the app; a Lantern has --scuttle. App 0.8.3 (build 16) carries it with everything since 0.8.2, waiting on Dylan's Android key.
 - Distribution: an update is checked against its signed hash every time before it is offered, and a release needs two different keys however the key list is written.
+- App 0.8.4 (build 17): everything above, the update check included; it supersedes 0.8.3 and waits on Dylan's Android key.
