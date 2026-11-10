@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -1616,35 +1617,59 @@ Future<String?> addAndWait(String station, String path, String title, String sou
   return hit?['hash'] as String?;
 }
 
-/// Writes 16-bit mono PCM as a WAV file.
-Future<void> writeWav(String path, List<int> pcm, int rate) async {
-  final b = BytesBuilder();
-  void u32(int v) => b.add([v & 255, v >> 8 & 255, v >> 16 & 255, v >> 24 & 255]);
-  void u16(int v) => b.add([v & 255, v >> 8 & 255]);
-  b.add('RIFF'.codeUnits); u32(36 + pcm.length * 2); b.add('WAVEfmt '.codeUnits); u32(16); u16(1); u16(1); u32(rate); u32(rate * 2); u16(2); u16(16);
-  b.add('data'.codeUnits); u32(pcm.length * 2);
-  for (final v in pcm) u16(v & 0xffff);
-  await File(path).writeAsBytes(b.toBytes());
+/// Writes 16-bit mono PCM as a WAV file, all at once from typed memory.
+void writeWav(String path, Int16List pcm, int rate) {
+  final h = ByteData(44);
+  void tag(int o, String t) {
+    for (var i = 0; i < 4; i++) {
+      h.setUint8(o + i, t.codeUnitAt(i));
+    }
+  }
+  tag(0, 'RIFF');
+  h.setUint32(4, 36 + pcm.length * 2, Endian.little);
+  tag(8, 'WAVE');
+  tag(12, 'fmt ');
+  h.setUint32(16, 16, Endian.little);
+  h.setUint16(20, 1, Endian.little);
+  h.setUint16(22, 1, Endian.little);
+  h.setUint32(24, rate, Endian.little);
+  h.setUint32(28, rate * 2, Endian.little);
+  h.setUint16(32, 2, Endian.little);
+  h.setUint16(34, 16, Endian.little);
+  tag(36, 'data');
+  h.setUint32(40, pcm.length * 2, Endian.little);
+  final f = File(path).openSync(mode: FileMode.write);
+  try {
+    f.writeFromSync(h.buffer.asUint8List());
+    final body = ByteData(pcm.length * 2);
+    for (var i = 0; i < pcm.length; i++) {
+      body.setInt16(i * 2, pcm[i], Endian.little);
+    }
+    f.writeFromSync(body.buffer.asUint8List());
+  } finally {
+    f.closeSync();
+  }
 }
 
-/// The 16-bit mono samples and rate of a plain WAV file, as the phone's voice writes them.
-(List<int>, int)? readWav(String path) {
+/// The 16-bit mono samples and rate of a plain WAV file, as the phone's voice writes them
+/// (the first channel, if it has more).
+(Int16List, int)? readWav(String path) {
   final d = File(path).readAsBytesSync();
   if (d.length < 44 || String.fromCharCodes(d.sublist(0, 4)) != 'RIFF') return null;
-  int u16(int o) => d[o] | d[o + 1] << 8;
-  int u32(int o) => u16(o) | u16(o + 2) << 16;
+  final v = ByteData.sublistView(d);
   var o = 12, rate = 0, ch = 1, bits = 16;
   while (o + 8 <= d.length) {
-    final id = String.fromCharCodes(d.sublist(o, o + 4)), n = u32(o + 4);
-    if (id == 'fmt ') {
-      ch = u16(o + 10);
-      rate = u32(o + 12);
-      bits = u16(o + 22);
+    final id = String.fromCharCodes(d.sublist(o, o + 4)), n = v.getUint32(o + 4, Endian.little);
+    if (id == 'fmt ' && o + 24 <= d.length) {
+      ch = math.max(1, v.getUint16(o + 10, Endian.little));
+      rate = v.getUint32(o + 12, Endian.little);
+      bits = v.getUint16(o + 22, Endian.little);
     } else if (id == 'data' && bits == 16) {
-      final out = <int>[];
-      for (var i = o + 8; i + 1 < o + 8 + n && i + 1 < d.length; i += 2 * ch) {
-        final v = u16(i);
-        out.add(v >= 32768 ? v - 65536 : v);
+      final end = math.min(o + 8 + n, d.length);
+      final count = (end - (o + 8)) ~/ (2 * ch);
+      final out = Int16List(count);
+      for (var k = 0; k < count; k++) {
+        out[k] = v.getInt16(o + 8 + k * 2 * ch, Endian.little);
       }
       return (out, rate);
     }
@@ -1652,6 +1677,20 @@ Future<void> writeWav(String path, List<int> pcm, int rate) async {
   }
   return null;
 }
+
+/// The spoken message with the interval signal before it, made off the screen's thread.
+/// The new file's path, or null if the voice's file could not be read.
+Future<String?> withSignal(String spoken) => Isolate.run(() {
+      final w = readWav(spoken);
+      if (w == null || w.$2 <= 0) return null;
+      final sig = intervalSignal(w.$2);
+      final all = Int16List(sig.length + w.$1.length)
+        ..setAll(0, sig)
+        ..setAll(sig.length, w.$1);
+      final path = spoken.replaceAll('.wav', '-signal.wav');
+      writeWav(path, all, w.$2);
+      return path;
+    });
 
 /// A numbers station's interval signal: three soft notes, twice, then quiet.
 List<int> intervalSignal(int rate) {
@@ -1698,13 +1737,13 @@ class _NumbersKitState extends State<NumbersKit> {
         if (mounted) toast(context, 'This phone has no voice to speak with. Install a text-to-speech voice in the phone\'s settings.');
         return;
       }
-      final w = readWav(spoken);
       var path = spoken;
-      if (w != null) {
-        path = spoken.replaceAll('.wav', '-signal.wav');
-        await writeWav(path, [...intervalSignal(w.$2), ...w.$1], w.$2);
+      final signed = await withSignal(spoken);
+      if (signed != null) {
+        path = signed;
         unawaited(File(spoken).delete().then((_) {}, onError: (_) {}));
       }
+      if (!mounted) return;
       setState(() => busy = 'Setting message $m on the clock');
       await addAndWait(widget.station, path, 'Message ${m.toString().padLeft(2, '0')}', 'numbers kit');
     }
