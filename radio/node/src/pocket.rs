@@ -40,6 +40,11 @@ impl Inner {
         self.pockets.lock().unwrap().get(st).map(|p| p.key)
     }
 
+    /// The hosts a pocket's invitation named, to meet its members through.
+    pub(crate) fn pocket_hosts(&self, st: &StationId) -> Vec<EndpointId> {
+        self.pockets.lock().unwrap().get(st).map(|p| p.hosts.clone()).unwrap_or_default()
+    }
+
     pub(crate) fn is_pocket(&self, st: &StationId) -> bool {
         self.pockets.lock().unwrap().contains_key(st)
     }

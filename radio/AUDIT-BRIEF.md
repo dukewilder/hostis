@@ -1,6 +1,6 @@
 # Pyrate Radio: handoff and audit brief
 
-For a fresh session picking this up cold. Read this whole file first, then `DECISIONS.md` (the Ship's Articles) and `SHIPS-LOG.md`. The mandate at the end is a full audit of every feature and every privacy and decentralisation property.
+For a fresh session picking this up cold. Read this whole file first, then `DECISIONS.md` (the Ship's Articles) and `SHIPS-LOG.md`. The mandate in section 7 is a full audit of every feature and every privacy and decentralisation property. Section 10 is how the work is done: every change is committed, pushed and taken live as soon as it is built and tested. Section 11 sets up a fresh container.
 
 ---
 
@@ -37,7 +37,7 @@ The one line that genuinely matters is not the architecture, it is specific inte
 
 - **Repo:** github.com/dukewilder/hostis. The whole hostis.black site, with the radio under `radio/`.
 - **Remotes:** `origin` only. Branches on origin: `main` (what GitHub Pages serves) and `radio` (the code).
-- **Worktrees in this environment:**
+- **Worktrees in this environment** (a fresh container has neither; section 11 makes them):
   - `/home/claude/hostis` on branch `radio` (the code; `radio/` is the subproject root at `/home/claude/hostis/radio`).
   - `/home/claude/main-wt` on local branch `site-pyrateradio`, which is pushed to `origin main` to deploy. Its `pyrateradio/` folder is the live subsite.
 - **Deploy topology:** build the landing into `radio/landing/out`, copy it into `main-wt/pyrateradio/`, commit on `site-pyrateradio`, then `git push origin site-pyrateradio:main`. Push code with `git push origin radio` from `/home/claude/hostis`. `local` branch `main` is stale and diverged; ignore it, `origin/main` is the deploy source.
@@ -61,7 +61,7 @@ Rust workspace (`radio/Cargo.toml`, members core, node, ffi, spike, browser; edi
   - `store.rs` on-disk store, including sealed logs at rest.
   - `chat.rs`, `flock.rs`, `pocket.rs` node sides of those features.
   - `hop.rs` relayed fetch. `trust.rs` Lantern duties. `page.rs` keeper commands. `player.rs` playback. `web.rs` + `web/` the Lantern's web listener, podcast feeds, episode cache, and the `/player/` mirror. `art.rs`, `clockfix.rs`.
-  - `bin/lantern.rs` the Lantern daemon. `bin/voyage_test.rs` (16-check end-to-end), `flock_test.rs`, `pocket_test.rs`, `onair_test.rs`, `art_test.rs`, `probe.rs`. `bin/release/` signing helpers.
+  - `bin/lantern.rs` the Lantern daemon. `bin/voyage_test.rs` (18-check end-to-end), `flock_test.rs`, `pocket_test.rs`, `onair_test.rs`, `art_test.rs`, `probe.rs`. `bin/release/` signing helpers.
 - `ffi/src/lib.rs` the C FFI the app calls.
 - `browser/src/lib.rs` the wasm node. Built by `browser/build.sh` into `browser/www/pkg`, pages assembled by `browser/build.py` into `browser/www/dist`.
 
@@ -85,24 +85,23 @@ Docs: `DECISIONS.md` (the Ship's Articles, sections I to XXII), `SHIPS-LOG.md`, 
 
 ## 6. How to build and test
 
-- **Rust checks and tests:** `cargo check`, `cargo test` from `radio/`. End-to-end harnesses: `cargo run -p pyrate-node --bin voyage_test` (16 checks), and `flock_test`, `pocket_test`, `onair_test`, `art_test`.
+- **Rust checks and tests:** `cargo check`, `cargo test` from `radio/`. End-to-end harnesses: `cargo run -p pyrate-node --bin voyage_test` (18 checks), and `flock_test`, `pocket_test`, `onair_test`, `art_test`.
 - **A private test network:** set `PYRATE_RELAYS` to a local relay and run several lanterns/nodes; browser tabs tested two at a time against a local build. Do not point the public build at test relays.
 - **Lantern:** `cargo run -p pyrate-node --bin lantern -- --seed <folder> --http --relay [--carry-own] --quota-gb <N>`. Env knobs: `PYRATE_DARK`, `PYRATE_PROXY`, `PYRATE_RELAYS`, `PYRATE_PLAYER`, `PYRATE_HAILS`.
 - **Browser (public):** `bash browser/build.sh` with no `PYRATE_HARBOUR`/`PYRATE_RELAYS` set (harbour then comes from `app/assets/bootstrap.txt`).
 - **App:** `flutter` is at `/opt/flutter/bin/flutter`, not on PATH. `app/build_native.sh` builds the Android FFI and copies the `.so`, then calls bare `flutter` and fails; after it runs, do `cd app && /opt/flutter/bin/flutter build apk --release --target-platform android-arm64`. Analyze with `/opt/flutter/bin/flutter analyze`. APK is debug-signed in this workspace (consistent with the deployed ones); the real Android release key stays on Dylan's PC.
 - **Landing:** `python3 landing/build.py <apk path> <version>` into `landing/out`, then deploy as in section 4.
 
-**Tested so far:** sealed carrying and playback, sealed logs surviving a restart, chatter with backlog, a hail reaching a Lantern, a dark Lantern carrying and mirroring the player, pocket seen by a member and invisible to an outsider, a flock within about a millisecond, the voyage_test 16 checks. **Needs real devices:** a flock across several phones in a room, the drawer Lantern over days, iPhone lock-screen playback, and the two-identity dukewilder rebuild.
+**Tested so far:** sealed carrying and playback, sealed logs surviving a restart, chatter with backlog, a hail reaching a Lantern, a dark Lantern carrying and mirroring the player, pocket seen by a member and invisible to an outsider, a flock within about a millisecond, the voyage_test 18 checks, and the pocket test with a browser tab as a member. **Needs real devices:** a flock across several phones in a room, the drawer Lantern over days, iPhone lock-screen playback, and the two-identity dukewilder rebuild.
 
 **Environment notes:** disk is tight, `target/debug` is regenerable and safe to clear, only delete your own build outputs and ask before anything else. Outbound HTTPS is allowlisted (npm, pip, github fine; arbitrary sites refused; do not probe the proxy). `gh` auth fails but `git push` works.
-
 ## 7. The audit mandate
 
 Do a full, line-by-line audit of the whole project, in two tracks, and keep the product-first principle throughout: this must end up a genuinely excellent, feature-rich, unique radio app that also happens to be the most hardened one that has existed.
 
 **Track A, the product.** Read every feature's code and confirm it works and is as good as it can be. Correctness (the clock and programme maths, the log linking and verification, chunk fetch and playout seams, the FFI boundary, the wasm paths). Completeness and polish (is the experience seamless, is anything half-wired, do the editors and sheets all function, is the design true to hostis.black). Feature-richness (what would make it a better radio app, in line with the philosophy). Propose and, where you can, build improvements.
 
-**Track B, privacy, anonymity and decentralisation.** Audit every surface for leaks and holes that could compromise a listener, a node runner or a broadcaster from any angle. Go through: the network layer (address publishing, relay metadata, direct paths, DNS, the proxy path, dark mode), identity (daily rotation, the seed, token unlinkability, the chat voice), the sealed-at-rest store and the blind-carry paths (can a node ever be made to reveal or serve plaintext it should not), pocket stations (can an outsider ever detect or reach one), hail and flock, the browser (fresh key, no storage leaks, the harbour memory), and distribution. For each, state the threat, whether it holds, and the fix. Harden and make it more resilient wherever you can, strictly within the HOSTIS philosophy: no central control, no chokepoint, no ranking, no imposed moderation, accountability only in the individual and the decentralisation.
+**Track B, privacy, anonymity and decentralisation.** Audit every surface for leaks and holes that could compromise a listener, a node runner or a broadcaster from any angle. Go through: the network layer (address publishing, relay metadata, direct paths, DNS, the proxy path, dark mode), identity (daily rotation, the seed, token unlinkability, the chat voice), the sealed-at-rest store and the blind-carry paths (can a node ever be made to reveal or serve plaintext it should not), pocket stations (can an outsider ever detect or reach one), hail and flock, the browser (fresh key, no storage leaks, the harbour memory), and distribution. For each, state the threat, whether it holds, and the fix. Harden and make it more resilient wherever you can, strictly within the HOSTIS philosophy: no central control, no chokepoint, no ranking, no imposed moderation, accountability only in the individual and the decentralisation. If there is a specific thing you cannot do because it hits a boundary, that is one thing, but do not brush off an entire scope of work to avoid it. That is unacceptable. Build each thing individually until you hit the actual specific wall and then you can tell me. There should be no issues here. Mapping a boundary is not a way to get around it. It is so I can know the boundary and avoid it. Do everything that doesn't cross the boundary and when you get to the boundary you don't do it. 
 
 Also weigh new features or improvements that would strengthen either track while staying in line with HOSTIS, and read the site first to be sure of that line.
 
@@ -127,3 +126,31 @@ Known now:
 - Lanterns carry the whole Log by default.
 - Writing and docs: British English, no em dashes, no comma-tag constructions (a noun then a comma then a modifying fragment), no announcing sentences, no stacked negations, colons used sparingly, tight. Any text Dylan will paste elsewhere must be under 20,000 characters per message.
 - Ask before deleting files; delete only your own regenerable build outputs.
+
+## 10. Ship as you go
+
+Two sessions in a row lost everything they did. The first kept its 55 findings and an uncommitted diff in the container, and both went when the container was cleared. The second planned to push at the end, and the session ended first. Work that waits is work that can be lost, so these rules come before everything else in this brief.
+
+- **One change at a time.** Build it, test it, commit it, push it, then start the next. Never hold more than the one change in progress uncommitted, and never end a reply with uncommitted work.
+- **Push after every commit:** `git push origin radio` from `/home/claude/hostis`. Before the first push of a session, run `git fetch origin radio main` so the push sends a thin pack.
+- **A change and its words travel together.** The Articles, the ship's log, `radio/AUDIT.md` and this brief are updated in the same commit as the code they describe.
+- **Findings live in the repo.** Each finding goes into `radio/AUDIT.md` as it is fixed (what it was, whether it held, the fix and the commit), committed with the fix. Nothing lives only in `/home/claude`, `/tmp` or the chat.
+- **Live as it lands.** When a change touches what listeners use (the browser radio, the landing page or the APK), rebuild and deploy the subsite as soon as its tests pass, by the topology in section 4, then load the live page to check it. A change that breaks the live page is reverted and redeployed at once.
+- **Node and Lantern code goes live when Dylan rebuilds dukewilder and installs the new APK** (section 8). Until he does, every change must keep the live 0.8.0 app and the current dukewilder Lantern working: new wire variants go at the end of their enums, and the old requests keep being answered.
+- **One line to Dylan at each push:** what landed and its commit.
+- **If a reply is cut off or the session ends,** the last push is the state of the work. The next session starts from `git log` on `radio` and from `radio/AUDIT.md`.
+
+## 11. A fresh container
+
+The container is cleared between sessions, so expect none of the following to exist. Each step is worth doing once, at the start, while the first change is being read.
+
+- **The repo.** Attach `dukewilder/hostis` with push access, then `git clone --depth 1 --no-single-branch https://github.com/dukewilder/hostis /home/claude/hostis` (allow ten minutes), `git checkout -b radio origin/radio`, and `git worktree add /home/claude/main-wt -B site-pyrateradio origin/main` for deploys. Base it on `origin/main`: the `site-pyrateradio` branch on origin is stale.
+- **System packages:** `apt-get install -y libasound2-dev pkg-config cmake clang` (the workspace build needs ALSA headers; the wasm build needs clang).
+- **Rust targets and tools:** `rustup target add wasm32-unknown-unknown aarch64-linux-android` and `cargo install wasm-bindgen-cli --version 0.2.130 --locked` (the version must match `Cargo.lock`). For `wasm-opt`, `npm i -g binaryen`: Ubuntu's binaryen is too old, and its output breaks the externref table so the tab says it cannot run the radio.
+- **Flutter:** the current stable tarball from `storage.googleapis.com/flutter_infra_release/releases/` (its path is in `releases_linux.json`), unpacked to `/opt/flutter`. Run `git config --global --add safe.directory /opt/flutter` and `flutter config --no-analytics`.
+- **Android:** NDK r28c (`dl.google.com/android/repository/android-ndk-r28c-linux.zip`) unpacked to `/opt/android-ndk-r28c`, the command-line tools to `/opt/android-sdk/cmdline-tools/latest`, then `sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"` and `flutter config --android-sdk /opt/android-sdk`. Set `ANDROID_HOME`, `ANDROID_SDK_ROOT` and `ANDROID_NDK_HOME` before `app/build_native.sh`.
+- **Disk.** With all of the above and one debug build there is about 11 GB left. `target/debug` is the first thing to clear.
+- **The private test network.** Start a relay first: `PYRATE_RELAYS=http://127.0.0.1:3340 lantern --dir /tmp/relaynode --relay 127.0.0.1:3340 --carry-own`, and set the same `PYRATE_RELAYS` for every harness. Nodes in this container cannot reach number0's address lookup, so a node can dial only the peers whose relay it already knows. A harness that cannot find its peers is a fault in the test network, not in the code.
+- **The browser radio** can be tested headless: Playwright's Chromium is in `/opt/pw-browsers`, and Python's `playwright` package is installed. Serve `browser/www/dist` on localhost and drive the page.
+
+The audit restarted from the code on 10 November 2026. Its findings, open and fixed, are in `radio/AUDIT.md`; start from there and from `git log` on `radio`.

@@ -33,6 +33,9 @@ pub enum Request {
     Flock { code: [u8; 8] },
     /// A pocket station's log, sealed, asked for by the tag its key draws: never by its id.
     PocketLog { tag: Hash, from: u64 },
+    /// The last lines of a pocket's chatter, sealed, asked for by its tag. Answered with
+    /// `Response::Chatter`. Older nodes do not know this request and answer nothing.
+    PocketChatter { tag: Hash },
 }
 
 #[derive(Debug, Serialize, Deserialize)]

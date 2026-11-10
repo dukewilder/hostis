@@ -18,7 +18,7 @@ use iroh_gossip::{
     proto::TopicId,
 };
 use pyrate_core::chat::{self, Say, Signed};
-use pyrate_core::{StationId, StationKey};
+use pyrate_core::{StationId, StationKey, pocket};
 use serde_json::{Value, json};
 
 use crate::{Inner, describe_track, hex, now_ms, say, unhex};
@@ -90,7 +90,10 @@ impl Inner {
         if self.chats.lock().unwrap().contains_key(&st) {
             return Ok(());
         }
-        let mut peers: Vec<EndpointId> = self.cfg.bootstrap.clone();
+        // A pocket's room is its members' alone: a topic drawn from its key, met through its
+        // hosts, every line sealed with the key.
+        let key = self.pocket_key(&st);
+        let mut peers: Vec<EndpointId> = if key.is_some() { self.pocket_hosts(&st) } else { self.cfg.bootstrap.clone() };
         if let Some(l) = self.log.lock().unwrap().get(&st) {
             peers.extend(l.carriers.keys().filter_map(|n| EndpointId::from_bytes(n).ok()));
         }
@@ -98,14 +101,19 @@ impl Inner {
         peers.sort();
         peers.dedup();
         peers.truncate(12);
-        let sub = self.gossip.subscribe(TopicId::from_bytes(chat::topic(&st)), peers.clone()).await.map_err(|e| anyhow!("{e}"))?;
+        let topic = key.map(|k| pocket::chat_topic(&k)).unwrap_or_else(|| chat::topic(&st));
+        let sub = self.gossip.subscribe(TopicId::from_bytes(topic), peers.clone()).await.map_err(|e| anyhow!("{e}"))?;
         let (tx, mut rx) = sub.split();
         let me = self.clone();
         let task = self.handle.spawn(async move {
             while let Some(ev) = rx.next().await {
                 match ev {
                     Ok(Event::Received(m)) => {
-                        if let Ok(s) = postcard::from_bytes::<Signed>(&m.content) {
+                        let bytes = match &key {
+                            Some(k) => pocket::open(k, &m.content),
+                            None => Some(m.content.to_vec()),
+                        };
+                        if let Some(s) = bytes.and_then(|b| postcard::from_bytes::<Signed>(&b).ok()) {
                             me.hear(st, s);
                         }
                     }
@@ -127,11 +135,19 @@ impl Inner {
         // What was said before we came: a carrier that sat in the room holds the last lines.
         let me = self.clone();
         self.handle.spawn(async move {
+            let ask = match &key {
+                Some(k) => crate::net::Request::PocketChatter { tag: pocket::tag(k) },
+                None => crate::net::Request::Chatter { station: st },
+            };
             for p in peers.into_iter().take(3) {
-                if let Ok(crate::net::Response::Chatter(lines)) = me.ask(p, &crate::net::Request::Chatter { station: st }).await {
+                if let Ok(crate::net::Response::Chatter(lines)) = me.ask(p, &ask).await {
                     let mut got = 0;
                     for b in lines.iter().take(KEEP) {
-                        if let Ok(s) = postcard::from_bytes::<Signed>(b) {
+                        let b = match &key {
+                            Some(k) => match pocket::open(k, b) { Some(b) => b, None => continue },
+                            None => b.clone(),
+                        };
+                        if let Ok(s) = postcard::from_bytes::<Signed>(&b) {
                             got += me.hear(st, s) as usize;
                         }
                     }
@@ -150,10 +166,24 @@ impl Inner {
 
     /// The last lines a room holds, for a node that has just come in.
     pub(crate) fn chatter_for(&self, st: &StationId) -> Vec<Vec<u8>> {
+        // A pocket's lines go only to whoever knows its tag, and sealed.
+        if self.is_pocket(st) {
+            return vec![];
+        }
         let rooms = self.chats.lock().unwrap();
         let Some(r) = rooms.get(st) else { return vec![] };
         let open: Vec<&Signed> = r.lines.iter().filter(|s| !matches!(s.line.say, Say::Hail { .. })).collect();
         open[open.len().saturating_sub(60)..].iter().filter_map(|s| postcard::to_allocvec(s).ok()).collect()
+    }
+
+    /// The last lines of a pocket's room, sealed, for a member who asks by its tag.
+    pub(crate) fn pocket_chatter(&self, tag: &[u8; 32]) -> Vec<Vec<u8>> {
+        let found = self.pockets.lock().unwrap().iter().find(|(_, p)| pocket::tag(&p.key) == *tag).map(|(st, p)| (*st, p.key));
+        let Some((st, key)) = found else { return vec![] };
+        let rooms = self.chats.lock().unwrap();
+        let Some(r) = rooms.get(&st) else { return vec![] };
+        let open: Vec<&Signed> = r.lines.iter().filter(|s| !matches!(s.line.say, Say::Hail { .. })).collect();
+        open[open.len().saturating_sub(60)..].iter().filter_map(|s| postcard::to_allocvec(s).ok()).map(|b| pocket::seal(&key, &b)).collect()
     }
 
     fn line_json(&self, st: &StationId, s: &Signed, me: &[u8; 32]) -> Value {
@@ -233,7 +263,10 @@ impl Inner {
                 let (key, _) = self.speaker(&st);
                 let name = req["name"].as_str().unwrap_or("").to_string();
                 let s = chat::speak(&key, &st, &name, now_ms(), say);
-                let bytes = postcard::to_allocvec(&s)?;
+                let mut bytes = postcard::to_allocvec(&s)?;
+                if let Some(k) = self.pocket_key(&st) {
+                    bytes = pocket::seal(&k, &bytes);
+                }
                 let tx = self.chats.lock().unwrap().get(&st).map(|r| r.tx.clone()).context("join the chatter first")?;
                 self.hear(st, s);
                 self.handle.block_on(async move { tx.broadcast(bytes.into()).await }).map_err(|e| anyhow!("{e}"))?;

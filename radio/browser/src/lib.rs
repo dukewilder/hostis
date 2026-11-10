@@ -144,6 +144,8 @@ struct Ship {
     flock_station: Mutex<Option<StationId>>,
     /// Pocket stations this tab was invited to: their keys and the hosts to start from.
     pockets: Mutex<HashMap<StationId, ([u8; 32], Vec<EndpointId>)>>,
+    /// Each pocket's own topic, for telling its members only that this tab is aboard.
+    pocket_tx: Mutex<HashMap<StationId, GossipSender>>,
     rooms: Mutex<HashMap<StationId, Room>>,
     harbour: Vec<EndpointId>,
     tx: Mutex<Option<GossipSender>>,
@@ -202,9 +204,18 @@ impl Ship {
             Request::Flock { .. } => Response::Flock { now_ms: 0, station: None },
             Request::PocketLog { .. } => Response::Entries(vec![]),
             Request::Hop(_) => Response::Hop(vec![]),
+            // A pocket's lines go only to whoever asks by its tag, and sealed.
+            Request::Chatter { station } if self.pockets.lock().unwrap().contains_key(&station) => Response::Chatter(vec![]),
             Request::Chatter { station } => Response::Chatter(
                 self.rooms.lock().unwrap().get(&station).map(|r| r.lines.iter().rev().take(60).rev().filter_map(|l| postcard::to_allocvec(l).ok()).collect()).unwrap_or_default(),
             ),
+            Request::PocketChatter { tag } => {
+                let found = self.pockets.lock().unwrap().iter().find(|(_, (k, _))| pyrate_core::pocket::tag(k) == tag).map(|(st, (k, _))| (*st, *k));
+                let Some((st, key)) = found else { return Response::Chatter(vec![]) };
+                Response::Chatter(
+                    self.rooms.lock().unwrap().get(&st).map(|r| r.lines.iter().rev().take(60).rev().filter_map(|l| postcard::to_allocvec(l).ok()).map(|b| pyrate_core::pocket::seal(&key, &b)).collect()).unwrap_or_default(),
+                )
+            }
         }
     }
 
@@ -236,7 +247,11 @@ impl Ship {
         if self.rooms.lock().unwrap().contains_key(&st) {
             return Ok(());
         }
-        let mut peers = self.harbour.clone();
+        // A pocket's room is its members' alone: a topic drawn from its key, met through its
+        // hosts, every line sealed with the key.
+        let pocket = self.pockets.lock().unwrap().get(&st).cloned();
+        let key = pocket.as_ref().map(|p| p.0);
+        let mut peers = match &pocket { Some((_, hosts)) => hosts.clone(), None => self.harbour.clone() };
         if let Some(l) = self.log.lock().unwrap().get(&st) {
             peers.extend(l.carriers.keys().filter_map(|n| EndpointId::from_bytes(n).ok()));
         }
@@ -244,7 +259,8 @@ impl Ship {
         peers.sort();
         peers.dedup();
         peers.truncate(12);
-        let sub = self.gossip.subscribe(TopicId::from_bytes(pyrate_core::chat::topic(&st)), peers.clone()).await.map_err(|e| anyhow!("{e}"))?;
+        let topic = key.map(|k| pyrate_core::pocket::chat_topic(&k)).unwrap_or_else(|| pyrate_core::chat::topic(&st));
+        let sub = self.gossip.subscribe(TopicId::from_bytes(topic), peers.clone()).await.map_err(|e| anyhow!("{e}"))?;
         let (tx, mut rx) = sub.split();
         self.rooms.lock().unwrap().insert(st, Room { tx, lines: VecDeque::new(), seen: HashSet::new(), neighbours: 0 });
         let me = self.clone();
@@ -252,7 +268,11 @@ impl Ship {
             while let Some(ev) = rx.next().await {
                 match ev {
                     Ok(Event::Received(m)) => {
-                        if let Ok(l) = postcard::from_bytes(&m.content) {
+                        let bytes = match &key {
+                            Some(k) => pyrate_core::pocket::open(k, &m.content),
+                            None => Some(m.content.to_vec()),
+                        };
+                        if let Some(l) = bytes.and_then(|b| postcard::from_bytes(&b).ok()) {
                             me.hear(st, l);
                         }
                     }
@@ -275,9 +295,18 @@ impl Ship {
         });
         let me = self.clone();
         spawn(async move {
+            let ask = match &key {
+                Some(k) => Request::PocketChatter { tag: pyrate_core::pocket::tag(k) },
+                None => Request::Chatter { station: st },
+            };
             for p in peers.into_iter().take(3) {
-                if let Ok(Response::Chatter(lines)) = me.ask(p, &Request::Chatter { station: st }).await {
-                    let got = lines.iter().filter_map(|b| postcard::from_bytes::<pyrate_core::chat::Signed>(b).ok()).filter(|l| me.hear(st, l.clone())).count();
+                if let Ok(Response::Chatter(lines)) = me.ask(p, &ask).await {
+                    let got = lines
+                        .iter()
+                        .filter_map(|b| match &key { Some(k) => pyrate_core::pocket::open(k, b), None => Some(b.clone()) })
+                        .filter_map(|b| postcard::from_bytes::<pyrate_core::chat::Signed>(&b).ok())
+                        .filter(|l| me.hear(st, l.clone()))
+                        .count();
                     if got > 0 {
                         break;
                     }
@@ -285,6 +314,14 @@ impl Ship {
             }
         });
         Ok(())
+    }
+
+    /// A line as it goes out: sealed with the key in a pocket's room, as it is elsewhere.
+    fn room_bytes(&self, st: &StationId, bytes: Vec<u8>) -> Vec<u8> {
+        match self.pockets.lock().unwrap().get(st) {
+            Some((key, _)) => pyrate_core::pocket::seal(key, &bytes),
+            None => bytes,
+        }
     }
 
     async fn conn(&self, node: EndpointId) -> Result<Connection> {
@@ -324,8 +361,9 @@ impl Ship {
     }
 
     /// Who to ask for a station: its carriers, freshest first, then the harbour Lanterns,
-    /// which carry everything they hear of.
+    /// which carry everything they hear of. A pocket is asked of its own circle only.
     fn carriers(&self, station: &StationId) -> Vec<EndpointId> {
+        let pocket = self.pockets.lock().unwrap().contains_key(station);
         let me = *self.ep.id().as_bytes();
         let mut v: Vec<([u8; 32], u64, u64)> = self
             .log
@@ -336,6 +374,9 @@ impl Ship {
             .unwrap_or_default();
         v.sort_by(|a, b| b.1.cmp(&a.1).then(b.2.cmp(&a.2)));
         let mut out: Vec<EndpointId> = v.into_iter().filter_map(|(n, _, _)| EndpointId::from_bytes(&n).ok()).collect();
+        if pocket {
+            return out;
+        }
         for h in &self.harbour {
             if !out.contains(h) {
                 out.push(*h);
@@ -539,7 +580,18 @@ impl Ship {
             sleep(Duration::from_millis(1)).await;
         }
         self.accept_token(station, hour, token, nonce);
-        self.broadcast(&Gossip::Aboard { station, hour, tokens: vec![(token, nonce)] }).await;
+        let g = Gossip::Aboard { station, hour, tokens: vec![(token, nonce)] };
+        // A pocket's listeners are counted among its members only: a token on the public Log
+        // would name the station to everyone.
+        let pocket = self.pockets.lock().unwrap().get(&station).map(|p| p.0);
+        if let Some(key) = pocket {
+            let tx = self.pocket_tx.lock().unwrap().get(&station).cloned();
+            if let (Some(tx), Ok(bytes)) = (tx, postcard::to_stdvec(&g)) {
+                let _ = tx.broadcast(pyrate_core::pocket::seal(&key, &bytes).into()).await;
+            }
+            return;
+        }
+        self.broadcast(&g).await;
     }
 
     fn sync_soon(self: &Arc<Self>, station: StationId) {
@@ -723,6 +775,7 @@ impl Radio {
             flock_off: std::sync::atomic::AtomicI64::new(0),
             flock_station: Mutex::new(None),
             pockets: Mutex::new(HashMap::new()),
+            pocket_tx: Mutex::new(HashMap::new()),
             rooms: Mutex::new(HashMap::new()),
             harbour: harbour.clone(),
             tx: Mutex::new(None),
@@ -914,7 +967,7 @@ impl Radio {
         }
         let say = pyrate_core::chat::hail(&to, audio, mime).ok_or_else(|| JsValue::from_str("a hail is twenty seconds at most"))?;
         let l = pyrate_core::chat::speak(&self.ship.voice(&st), &st, name, self.ship.now(), say);
-        let bytes = postcard::to_allocvec(&l).map_err(|e| js(anyhow!("{e}")))?;
+        let bytes = self.ship.room_bytes(&st, postcard::to_allocvec(&l).map_err(|e| js(anyhow!("{e}")))?);
         let tx = self.ship.rooms.lock().unwrap().get(&st).map(|r| r.tx.clone()).ok_or_else(|| JsValue::from_str("join the chatter first"))?;
         Ok(wasm_bindgen_futures::future_to_promise(async move {
             tx.broadcast(bytes.into()).await.map_err(|e| js(anyhow!("{e}")))?;
@@ -932,7 +985,7 @@ impl Radio {
             _ => pyrate_core::chat::Say::Text(text.into()),
         };
         let l = pyrate_core::chat::speak(&self.ship.voice(&st), &st, name, self.ship.now(), say);
-        let bytes = postcard::to_allocvec(&l).map_err(|e| js(anyhow!("{e}")))?;
+        let bytes = self.ship.room_bytes(&st, postcard::to_allocvec(&l).map_err(|e| js(anyhow!("{e}")))?);
         let tx = self.ship.rooms.lock().unwrap().get(&st).map(|r| r.tx.clone()).ok_or_else(|| JsValue::from_str("join the chatter first"))?;
         self.ship.hear(st, l);
         Ok(wasm_bindgen_futures::future_to_promise(async move {
@@ -994,10 +1047,10 @@ impl Radio {
         let s = self.ship.clone();
         Ok(wasm_bindgen_futures::future_to_promise(async move {
             let sub = s.gossip.subscribe(TopicId::from_bytes(pyrate_core::pocket::topic(&key)), hosts.clone()).await.map_err(|e| js(anyhow!("{e}")))?;
-            let (_tx, mut rx) = sub.split();
+            let (tx, mut rx) = sub.split();
+            s.pocket_tx.lock().unwrap().insert(st, tx);
             let s2 = s.clone();
             spawn(async move {
-                let _keep = _tx;
                 while let Some(ev) = rx.next().await {
                     let Ok(Event::Received(m)) = ev else { continue };
                     let Some(plain) = pyrate_core::pocket::open(&key, &m.content) else { continue };
@@ -1005,7 +1058,7 @@ impl Radio {
                     let ok = match &g {
                         Gossip::Station(a) => a.station == st,
                         Gossip::Carrier { station, .. } => *station == st,
-                        _ => false,
+                        Gossip::Aboard { station, .. } => *station == st,
                     };
                     if ok {
                         s2.on_gossip(g);

@@ -37,6 +37,15 @@ fn main() -> anyhow::Result<()> {
     std::thread::sleep(Duration::from_secs(8));
     let link = keeper.call(&serde_json::json!({ "cmd": "pocket_invite", "station": st }))["link"].as_str().unwrap_or_default().to_string();
     println!("invitation {}…", &link[..90.min(link.len())]);
+    // A browser can come aboard too: the invitation goes to a file and the test waits for it.
+    if let Ok(path) = std::env::var("PYRATE_BROWSER_INVITE") {
+        keeper.call(&serde_json::json!({ "cmd": "chat_join", "station": st }));
+        std::fs::write(&path, &link)?;
+        let wait: u64 = std::env::var("PYRATE_BROWSER_WAIT").ok().and_then(|w| w.parse().ok()).unwrap_or(90);
+        std::thread::sleep(Duration::from_secs(wait));
+        let lines = keeper.call(&serde_json::json!({ "cmd": "chat_read", "station": st }));
+        check(lines["lines"].as_array().into_iter().flatten().any(|l| l["text"] == "Ahoy from the browser"), &format!("the keeper hears the browser in the pocket's room ({})", lines["lines"]));
+    }
     println!("join {}", member.call(&serde_json::json!({ "cmd": "pocket_join", "link": link })));
     std::thread::sleep(Duration::from_secs(5));
     println!("tune {}", member.call(&serde_json::json!({ "cmd": "tune", "station": st })));
@@ -48,6 +57,20 @@ fn main() -> anyhow::Result<()> {
     check(lib.as_array().is_some_and(|l| !l.is_empty()), &format!("the member holds its library ({lib})"));
     let now = member.call(&serde_json::json!({ "cmd": "now_for", "stations": [st] }));
     check(now[&st]["title"].is_string(), &format!("the member works out what is on ({now})"));
+    // The pocket's room: sealed on its own topic, heard by the keeper, never by the outsider.
+    for n in [&member, &keeper, &outsider] {
+        n.call(&serde_json::json!({ "cmd": "chat_join", "station": st }));
+    }
+    std::thread::sleep(Duration::from_secs(8));
+    println!("say {}", member.call(&serde_json::json!({ "cmd": "chat_send", "station": st, "text": "The back room speaks", "name": "Gull" })));
+    let said = |n: &Node| n.call(&serde_json::json!({ "cmd": "chat_read", "station": st }))["lines"].as_array().into_iter().flatten().any(|l| l["text"] == "The back room speaks");
+    let mut heard = false;
+    for _ in 0..10 {
+        std::thread::sleep(Duration::from_secs(2));
+        if said(&keeper) { heard = true; break; }
+    }
+    check(heard, "the keeper hears the member in the pocket's room");
+    check(!said(&outsider), "the outsider, joining by the station's id, hears nothing");
     // The keeper goes on the air: on a phone this would go down the stem.
     println!("live {}", keeper.call(&serde_json::json!({ "cmd": "go_live", "station": st, "file": audio })));
     std::thread::sleep(Duration::from_secs(30));
