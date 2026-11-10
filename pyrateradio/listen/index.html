@@ -581,6 +581,12 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 </div>
 <div class="open-only studio" id="studio">
 <div class="sechead gap"><h2>Raise Colours</h2><span class="cap">a station of your own &#183; from this browser</span></div>
+<div id="st-lock" hidden>
+<p class="fine">The stations raised in this browser are sealed under a passphrase.</p>
+<label class="field"><span>Passphrase</span><input id="st-pass" type="password" autocomplete="current-password"></label>
+<p class="centre"><button id="st-open" class="btn">Open them</button></p>
+<p id="st-locknote2" class="fine" role="status"></p>
+</div>
 <div id="st-new">
 <p class="fine">Name it, drop recordings in, and it plays all day and all night, carried by every listener. The station is a key made in this tab. Nobody can take it from you, and nobody can give it back if you lose its twenty-four words.</p>
 <label class="field"><span>Name</span><input id="st-name" maxlength="40" autocomplete="off" placeholder="The name on the dial"></label>
@@ -594,7 +600,7 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 </div>
 <div id="st-show" class="st-show" hidden>
 <p class="boxhead">Write these down</p>
-<p class="fine">These twenty-four words are the station. Whoever holds them can speak for it, strike it or take it to another device. They are shown once, never sent anywhere and never kept here. Write them on paper, in order.</p>
+<p class="fine">These twenty-four words are the station. Whoever holds them can speak for it, strike it or take it to another device. They are shown once, never sent anywhere and never kept here. Write them on paper, in order. Nobody from Pyrate Radio or HOSTIS will ever ask for them.</p>
 <ol id="st-wordlist" class="wordlist"></ol>
 <div class="switches"><label><input type="checkbox" id="st-written"><span>I have written them down, in order</span></label></div>
 <p class="centre"><button id="st-done" class="btn" disabled>On to the station</button></p>
@@ -609,6 +615,7 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 <label class="field"><span>Where they came from</span><input id="st-source" maxlength="280" autocomplete="off" placeholder="And why they are free to air, in your words"></label>
 <div id="st-queue" class="st-queue"></div>
 <p class="fine">Keep this tab open while recordings sail. Once the network carries them they play whether or not this tab is open, and whether or not anyone is listening.</p>
+<details class="fold" id="st-safer"><summary>Keep the key in this browser safer</summary><div><p>This browser holds the key that broadcasts for the station. Seal it under a passphrase, so a copy of this browser gives nothing away, or let the tab forget it when it closes. The 24 words bring it back either way.</p><label class="field"><span>Passphrase</span><input id="st-newpass" type="password" autocomplete="new-password"></label><p class="centre"><button id="st-lockit" class="btn">Seal it</button></p><div class="switches"><label><input type="checkbox" id="st-tabonly"><span>Forget the key when this tab closes</span></label></div><p id="st-locknote" class="fine" role="status"></p></div></details>
 <div class="row-btns"><button id="st-another" class="btn quiet">Raise another</button></div>
 </div>
 </div>
@@ -636,6 +643,6 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 <p class="f-copy">no rights reserved &#183; all copies welcome</p>
 <p class="f-source"><a href="https://github.com/dukewilder/hostis" target="_blank" rel="noopener noreferrer">source code</a></p>
 </footer>
-<script type="module" src="app.js?v=23deb908f0"></script>
+<script type="module" src="app.js?v=07448379e7"></script>
 </body>
 </html>
