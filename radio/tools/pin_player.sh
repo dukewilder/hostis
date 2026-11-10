@@ -6,12 +6,14 @@
 # more place the player lives. A CAR is checked by IPFS itself: its blocks must hash to its name.
 set -e
 BASE=${BASE:-https://hostis.black/pyrateradio/ipfs}
-LIST=$(curl -fsS "$BASE/players.txt")
+# curl if there is one, wget if not (the kubo image has only wget).
+get() { if command -v curl >/dev/null 2>&1; then curl -fsS -o "$2" "$1"; else wget -q -O "$2" "$1"; fi; }
+LIST=$(get "$BASE/players.txt" - )
 for cid in $LIST; do
   case "$cid" in bafy*) ;; *) continue ;; esac
   if ipfs pin ls --type=recursive "$cid" >/dev/null 2>&1; then continue; fi
   tmp=$(mktemp)
-  if curl -fsS -o "$tmp" "$BASE/$cid.car"; then
+  if get "$BASE/$cid.car" "$tmp"; then
     ipfs dag import --pin-roots "$tmp" >/dev/null && echo "pinned $cid"
   else
     # An old CAR may have left the site; ask the network for it instead.
