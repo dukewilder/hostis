@@ -197,6 +197,7 @@ impl Ship {
             Request::Chunk { .. } => Response::Chunk(None),
             Request::SealedChunk { name } => Response::Sealed(self.hold.lock().unwrap().sealed(&name)),
             Request::Flock { .. } => Response::Flock { now_ms: 0, station: None },
+            Request::PocketLog { .. } => Response::Entries(vec![]),
             Request::Hop(_) => Response::Hop(vec![]),
             Request::Chatter { station } => Response::Chatter(
                 self.rooms.lock().unwrap().get(&station).map(|r| r.lines.iter().rev().take(60).rev().filter_map(|l| postcard::to_allocvec(l).ok()).collect()).unwrap_or_default(),

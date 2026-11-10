@@ -6,6 +6,7 @@
 pub mod art;
 mod chat;
 mod flock;
+mod pocket;
 pub mod hop;
 pub mod trust;
 pub mod clockfix;
@@ -195,6 +196,8 @@ pub struct Inner {
     flock_offset: std::sync::atomic::AtomicI64,
     flock_trim: std::sync::atomic::AtomicI64,
     flock_rtt: std::sync::atomic::AtomicU64,
+    /// Pocket stations this node keeps or was invited to: their keys and their own topics.
+    pockets: Mutex<pocket::Pockets>,
     tuned: Mutex<Option<Tuned>>,
     jobs: Mutex<HashMap<u64, String>>,
     pow: Mutex<HashMap<StationId, u64>>,
@@ -265,8 +268,14 @@ impl std::fmt::Debug for Inner {
 
 impl Inner {
     fn serve(&self, req: Request) -> Response {
+        if let Request::PocketLog { tag, from } = &req {
+            return Response::Entries(self.pocket_entries(tag, *from));
+        }
+        let pocket = matches!(&req, Request::Log { station, .. } if self.is_pocket(station));
         let mut store = self.store.lock().unwrap();
         match req {
+            // A pocket station's log is never handed out by its id, sealed or not.
+            Request::Log { .. } if pocket => Response::Entries(vec![]),
             Request::Log { station, from } if !self.refused_quick(&station) => {
                 store.open_log(&station);
                 let out = store
@@ -287,6 +296,7 @@ impl Inner {
             }
             Request::SealedChunk { name } => Response::Sealed(store.get_sealed(&name)),
             Request::Flock { code } => self.flock_answer(&code),
+            Request::PocketLog { .. } => Response::Entries(vec![]),
             Request::Hop(_) => Response::Hop(vec![]),
             Request::Chatter { station } => Response::Chatter(self.chatter_for(&station)),
         }
@@ -430,6 +440,9 @@ impl Inner {
     pub async fn sync_log(&self, station: StationId) -> Result<usize> {
         if self.is_own(&station) {
             return self.sync_own(station).await;
+        }
+        if let Some(k) = self.pocket_key(&station) {
+            return self.pocket_sync(station, k).await;
         }
         if self.cfg.private {
             if let Ok(n) = self.private_log(station).await {
@@ -646,6 +659,11 @@ impl Inner {
                 net::Card { station: id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof, cover, accent, kinds, mature, tip, explicit }
                     .sign(key)
             };
+            // A pocket station's card goes only to its members, sealed, on its own topic.
+            if self.is_pocket(&id) {
+                self.pocket_card(id, a).await;
+                continue;
+            }
             if self.cfg.private && !self.direct.lock().unwrap().contains(&id) {
                 // Never show the network our own station first: send it down the stem.
                 if self.stem_push(id, Some(a.clone())).await {
@@ -672,6 +690,13 @@ impl Inner {
         }
         let own_set: std::collections::HashSet<StationId> = self.store.lock().unwrap().own().into_iter().collect();
         for (station, head) in carried {
+            // A pocket's carriers say so only to its members.
+            if self.is_pocket(&station) {
+                let g = Gossip::Carrier { station, node: me, head };
+                self.on_gossip(g.clone());
+                self.pocket_say(station, &g).await;
+                continue;
+            }
             // A phone never says what it listened to: it announces only its ballast,
             // which the hash chose for it.
             let direct = self.direct.lock().unwrap().contains(&station);
@@ -924,6 +949,7 @@ impl Inner {
                     "id": hex, "call_sign": id.call_sign(), "name": a.name, "about": a.about,
                     "port": a.port, "live": a.live, "aboard": aboard, "kept": is_kept, "marooned": is_marooned, "since": a.since,
                     "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),
+                    "pocket": self.is_pocket(id),
                 })))
             })
             .collect();
@@ -1051,7 +1077,7 @@ impl Inner {
     async fn ballast(self: &Arc<Self>) {
         const PER_STATION: u64 = 300_000_000;
         let me = blake3::derive_key("pyrate/ballast-seat/v1", &self.seed);
-        let mut stations: Vec<StationId> = self.log.lock().unwrap().iter().filter(|(_, l)| l.announce.is_some()).map(|(s, _)| *s).collect();
+        let mut stations: Vec<StationId> = self.log.lock().unwrap().iter().filter(|(s, l)| l.announce.is_some() && !self.is_pocket(s)).map(|(s, _)| *s).collect();
         stations.sort_by_key(|s| {
             let mut h = blake3::Hasher::new();
             h.update(b"pyrate/ballast/v1");
@@ -1208,6 +1234,7 @@ impl Node {
             flock_offset: std::sync::atomic::AtomicI64::new(0),
             flock_trim: std::sync::atomic::AtomicI64::new(0),
             flock_rtt: std::sync::atomic::AtomicU64::new(0),
+            pockets: Mutex::new(HashMap::new()),
             tuned: Mutex::new(None),
             jobs: Mutex::new(HashMap::new()),
             pow: Mutex::new(HashMap::new()),
@@ -1229,6 +1256,10 @@ impl Node {
             relay_ok: std::sync::atomic::AtomicBool::new(!cfg.private),
         });
         *proto.0.lock().unwrap() = Some(inner.clone());
+        {
+            let i2 = inner.clone();
+            rt.spawn(async move { i2.open_pockets().await });
+        }
 
         // The Log.
         let topic = TopicId::from_bytes(net::log_topic());
@@ -1296,6 +1327,15 @@ impl Node {
                     i2.drop_refused();
                     if i2.cfg.lantern {
                         i2.lantern_duties().await;
+                    }
+                }
+                // Pockets this node was invited to: their logs, from their members, each minute.
+                if n % 6 == 4 {
+                    let pockets: Vec<(StationId, [u8; 32])> = i2.pockets.lock().unwrap().iter().map(|(st, p)| (*st, p.key)).collect();
+                    for (st, k) in pockets {
+                        if !i2.is_own(&st) {
+                            let _ = i2.pocket_sync(st, k).await;
+                        }
                     }
                 }
                 if i2.cfg.lantern && n % 3 == 1 {
@@ -1464,6 +1504,7 @@ impl Node {
         let inner = &self.inner;
         match cmd {
             "flock_host" | "flock_join" | "flock_leave" | "flock_trim" | "flock_status" => inner.flock_call(cmd, req),
+            "pocket_invite" | "pocket_join" | "pocket_leave" => inner.pocket_call(cmd, req),
             "chat_join" | "chat_leave" | "chat_read" | "chat_send" | "chat_hail_open" => {
                 let st = station()?;
                 inner.chat_call(cmd, st, req)
@@ -1806,6 +1847,10 @@ impl Node {
                     anyhow::bail!("a station needs a name");
                 }
                 let (id, words) = self.raise_with(name, req["about"].as_str().unwrap_or(""), req["port"].as_str().map(String::from), false)?;
+                // A pocket station: for invited listeners only, never on the public Log.
+                if req["pocket"].as_bool() == Some(true) {
+                    inner.pocket_new(id)?;
+                }
                 Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "words": words }))
             }
             "add_track" => {

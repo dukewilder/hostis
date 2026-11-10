@@ -31,6 +31,8 @@ pub enum Request {
     SealedChunk { name: Hash },
     /// A flock's host's clock and station, for a phone holding the flock's code.
     Flock { code: [u8; 8] },
+    /// A pocket station's log, sealed, asked for by the tag its key draws: never by its id.
+    PocketLog { tag: Hash, from: u64 },
 }
 
 #[derive(Debug, Serialize, Deserialize)]

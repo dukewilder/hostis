@@ -17,6 +17,7 @@ pub mod clock;
 pub mod ingest;
 pub mod keys;
 pub mod page;
+pub mod pocket;
 pub mod programme;
 pub mod seal;
 pub mod tape;
