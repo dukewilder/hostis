@@ -1144,7 +1144,9 @@ class _ShipPapersState extends State<ShipPapers> {
       ),
     );
     if (ok != true || pin.text.length < 4) return;
-    Native.call({'cmd': 'pin_set', 'pin': pin.text});
+    await Native.callAway({'cmd': 'pin_set', 'pin': pin.text});
+    pin.clear();
+    if (!mounted) return;
     setState(() => pinSet = true);
   }
 
@@ -1308,8 +1310,10 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
     );
   }
 
-  void check() {
-    final ok = (Native.call({'cmd': 'pin_check', 'pin': pin.text}) as Map?)?['ok'] == true;
+  Future<void> check() async {
+    // The PIN is kept under a deliberately slow hash: worked out off the screen's thread.
+    final ok = (await Native.callAway({'cmd': 'pin_check', 'pin': pin.text}) as Map?)?['ok'] == true;
+    if (!mounted) return;
     setState(() {
       open = ok;
       wrong = ok ? null : 'Not that one.';

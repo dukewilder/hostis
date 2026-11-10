@@ -1942,20 +1942,35 @@ impl Node {
             "pin_set" => {
                 let p = inner.cfg.dir.join("pin");
                 match req["pin"].as_str().filter(|s| s.len() >= 4) {
-                    Some(pin) => {
-                        let salt: [u8; 16] = rand::random();
-                        let h = blake3::keyed_hash(blake3::hash(&salt).as_bytes(), pin.as_bytes());
-                        std::fs::write(&p, [salt.as_slice(), h.as_bytes()].concat())?;
+                    Some(pin) => std::fs::write(&p, pin_hash(pin, &rand::random())?)?,
+                    None => {
+                        let _ = std::fs::remove_file(&p);
                     }
-                    None => { let _ = std::fs::remove_file(&p); }
                 }
                 Ok(json!({ "ok": true }))
             }
             "pin_check" => {
-                let Ok(b) = std::fs::read(inner.cfg.dir.join("pin")) else { return Ok(json!({ "ok": true, "set": false })) };
-                let (salt, want) = b.split_at(16.min(b.len()));
-                let h = blake3::keyed_hash(blake3::hash(salt).as_bytes(), req["pin"].as_str().unwrap_or("").as_bytes());
-                Ok(json!({ "ok": req["pin"].is_string() && h.as_bytes().as_slice() == want, "set": true }))
+                let p = inner.cfg.dir.join("pin");
+                let Ok(b) = std::fs::read(&p) else { return Ok(json!({ "ok": true, "set": false })) };
+                let pin = req["pin"].as_str().unwrap_or("");
+                // Asking only whether a PIN is set costs nothing.
+                if pin.is_empty() {
+                    return Ok(json!({ "ok": false, "set": true }));
+                }
+                let ok = match b.strip_prefix(PIN_V2) {
+                    Some(rest) if rest.len() == 48 => pin_hash(pin, rest[..16].try_into()?)? == b,
+                    // A PIN from before, under a fast hash: checked once that way, and kept
+                    // under the slow one from then on.
+                    _ => {
+                        let (salt, want) = b.split_at(16.min(b.len()));
+                        let ok = blake3::keyed_hash(blake3::hash(salt).as_bytes(), pin.as_bytes()).as_bytes().as_slice() == want;
+                        if ok {
+                            std::fs::write(&p, pin_hash(pin, &rand::random())?)?;
+                        }
+                        ok
+                    }
+                };
+                Ok(json!({ "ok": req["pin"].is_string() && ok, "set": true }))
             }
             "qr" => {
                 let code = qrcode::QrCode::new(req["text"].as_str().context("text")?.as_bytes())?;
@@ -2149,6 +2164,20 @@ impl Node {
             other => Err(anyhow!("unknown command {other}")),
         }
     }
+}
+
+/// A stored PIN: a marker, the salt, and Argon2id over the PIN. Memory-hard, so a copy of the
+/// file costs a seizer real time per guess rather than none, and a PIN shared with the lock
+/// screen does not fall out of it in a second.
+const PIN_V2: &[u8] = b"argon2id/v1\0";
+
+fn pin_hash(pin: &str, salt: &[u8; 16]) -> Result<Vec<u8>> {
+    let params = argon2::Params::new(32 * 1024, 3, 1, Some(32)).map_err(|e| anyhow!("{e}"))?;
+    let mut out = [0u8; 32];
+    argon2::Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params)
+        .hash_password_into(pin.as_bytes(), salt, &mut out)
+        .map_err(|e| anyhow!("{e}"))?;
+    Ok([PIN_V2, salt.as_slice(), out.as_slice()].concat())
 }
 
 pub fn hex(h: &[u8]) -> String {
@@ -2368,5 +2397,20 @@ mod playout {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod pin_tests {
+    #[test]
+    fn a_pin_is_kept_under_a_slow_hash() {
+        let salt = [3u8; 16];
+        let t = std::time::Instant::now();
+        let a = super::pin_hash("1234", &salt).unwrap();
+        let spent = t.elapsed();
+        assert_eq!(a, super::pin_hash("1234", &salt).unwrap());
+        assert_ne!(a, super::pin_hash("1235", &salt).unwrap());
+        assert!(a.starts_with(super::PIN_V2) && a.len() == super::PIN_V2.len() + 48);
+        println!("one guess costs {spent:?}");
     }
 }
