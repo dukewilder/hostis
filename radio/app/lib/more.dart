@@ -218,7 +218,7 @@ class _LogPageState extends State<LogPage> {
               pyrateSheet(context, WatchBill(station: s));
             },
           ),
-          ListTile(
+          if (s['pocket'] != true) ListTile(
             title: Text('PASS THE STATION ON', style: carved(12)),
             subtitle: Text('A link that opens it in Pyrate Radio.', style: serif(13, color: boneFaint, italic: true)),
             onTap: () {
@@ -226,6 +226,16 @@ class _LogPageState extends State<LogPage> {
               shareStation(s);
             },
           ),
+          if (s['pocket'] == true && id != widget.radio.mine?['id'])
+            ListTile(
+              title: Text('LEAVE THIS POCKET', style: carved(12, color: bloodBright)),
+              subtitle: Text('Its key, its log and its sound go from this phone. Only a fresh invitation brings it back.', style: serif(13, color: boneFaint, italic: true)),
+              onTap: () {
+                Native.callAway({'cmd': 'pocket_leave', 'station': id});
+                if (widget.radio.tuned == id) widget.radio.stop();
+                Navigator.pop(context);
+              },
+            ),
           ListTile(
             title: Text('MAROON', style: carved(12, color: bloodBright)),
             subtitle: Text('Gone from your Log and your dial, and dropped from your hold. Undo it under Colours.', style: serif(13, color: boneFaint, italic: true)),
@@ -487,6 +497,7 @@ Future<void> tapeIt(BuildContext context) async {
 }
 
 void shareStation(Map s) {
+  if (s['pocket'] == true) return;
   ship.invokeMethod('share_text', {
     'text': 'Tune in to ${s['name']} on Pyrate Radio: https://hostis.black/pyrateradio/listen/#${s['id']}',
   });

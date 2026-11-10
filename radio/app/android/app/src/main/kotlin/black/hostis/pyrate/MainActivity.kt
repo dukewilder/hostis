@@ -27,14 +27,20 @@ class MainActivity : FlutterActivity() {
     /** A station link (pyrate://station/<id>, hostis.black/radio/#<id>, or hostis.black/pyrateradio/listen/#<id>) or a bell's tap. */
     private fun takeLink(i: Intent?) {
         if (i == null) return
-        i.getStringExtra("station")?.let { if (i.action == "tune") { pendingLink = it; return } }
+        // A bell's tap carries the app's own key and tunes at once; anything else asks first.
+        i.getStringExtra("station")?.let {
+            if (i.action == "tune" && it.matches(Regex("[0-9a-f]{64}"))) {
+                pendingLink = if (i.getStringExtra("key") == Bells.bellKey(this)) "tune=$it" else it
+                return
+            }
+        }
         val u = i.data ?: return
         val id = when (u.scheme) {
             "pyrate" -> u.lastPathSegment
             else -> u.fragment ?: u.getQueryParameter("s")
         }
         if (id != null && id.matches(Regex("[0-9a-f]{64}"))) pendingLink = id
-        // A flock's link: this phone joins the flock and plays in step with its host.
+        // A flock's or a pocket's link: joined only once the owner says yes on the dial.
         u.fragment?.takeIf { it.startsWith("flock=") || it.startsWith("pocket=") }?.let { pendingLink = it }
     }
 

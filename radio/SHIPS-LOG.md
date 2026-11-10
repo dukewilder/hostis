@@ -117,3 +117,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - A browser tab is counted only while it plays, through two hops as a phone is, and answers nobody about what it holds.
 - The Colours PIN is kept under a slow, memory-hard hash.
 - The playback service leaves the foreground when a broadcast ends, keeps one claim on the speaker, and in the plain disguise names nothing on the lock screen, the bells or the Lantern.
+- A link from outside waits on the dial for a yes before anything plays or joins. Pocket stations offer no public link or poster, chatter and pockets can be left, muted voices heard again, and only the very first open plays on its own.

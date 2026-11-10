@@ -77,17 +77,13 @@ Reported by a reader of the code; each is checked against the code before it is 
 - **P14** (medium) Temporary audio, pictures and APK copies are left on disk. `Ship.kt:22-42`
 - **P17** (medium) Blocking native calls on the UI thread, in Dart and in the service. `PlaybackService.kt:53-58`
 - **P18** (medium) The dial's PageView follows list position, not the station. `main.dart:203-214`
-- **P19** (medium) Links join pockets, flocks and stations without asking. `main.dart:178-197; MainActivity.kt:28-39`
 - **P20** (medium) Microphone permission dead-ends and the messages mislead. `MainActivity.kt:69-75`
 - **P21** (medium) RECORD A SEGMENT leaves the microphone open if the panel is closed. `more.dart:700-703`
 - **P22** (medium) The programme editor treats a failed load as loaded and can overwrite the real programme. `station.dart:536-547`
 - **P23** (medium) A hosted flock loses its code when the sheet is closed. `station.dart:1688`
-- **P24** (medium) Joined chatter and joined pockets cannot be left; muted voices cannot be unmuted. `station.dart:1212`
-- **P25** (medium) Pocket stations are offered a public share link, poster and QR. `station.dart:199-201`
 - **P26** (low) Bell ids differ between screens, depend on `String.hashCode`, and notifications are not checked. `station.dart:290 vs more.dart:373`
 - **P27** (medium) The numbers kit decodes and rewrites WAV files sample by sample on the UI isolate. `station.dart:1562-1596`
 - **P28** (low) Direct fixes to misplaced results: CLEAR THE HOLD, strike and restore all write the same `error` field. `main.dart:903-906`
-- **P30** (low) Opening the app always autoplays. `main.dart:70`
 - **P31** (low) Android App Links are not verified, so scanned posters open the browser. `AndroidManifest.xml:43-54`
 - **P32** (low) `pyrate_start` is not safe against two starters, and a failed start is invisible. `ffi/src/lib.rs:38-68; main.dart:58-60; Native.kt:21-31`
 - **P33** (low) Feed and URL fetch code writes unsolicited temp files and the downloads can be stranded. `station.dart:952-975`
@@ -202,8 +198,16 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **B9. The PIN falls to a fast hash.** The Colours PIN is stored as a salted BLAKE3 hash, so a seized disk gives up a four-digit PIN at once, and with it any lock-screen PIN that matches. Holds only against a casual look. Fixed: the PIN is kept under Argon2id (32 MiB, three passes), so each guess against a copy of the file costs real time, and a PIN from before is moved to it the first time it is entered right. The app checks and sets it off the screen's thread, and asking only whether one is set costs nothing. Unit tested. (1245195)
 
-**P15. After END BROADCAST the "ON AIR" notification, foreground state and both locks stay.** (medium) Fixed: ending a broadcast now leaves the foreground (and its locks) when nothing is tuned, or puts the station back on the notification when something is; ON AIR shows only while live. (pending)
+**P15. After END BROADCAST the "ON AIR" notification, foreground state and both locks stay.** (medium) Fixed: ending a broadcast now leaves the foreground (and its locks) when nothing is tuned, or puts the station back on the notification when something is; ON AIR shows only while live. (650c233)
 
-**P16. Every tune stacks a new audio-focus request.** (medium) Fixed: the service keeps one request for the speaker for its whole life and asks with it again, so no stale listener answers later focus changes. (pending)
+**P16. Every tune stacks a new audio-focus request.** (medium) Fixed: the service keeps one request for the speaker for its whole life and asks with it again, so no stale listener answers later focus changes. (650c233)
 
-**P11. The "plain" disguise leaks the station name and the app name.** (medium) Fixed: in the plain disguise the playback notification is private with a public face that says only Radio, the app's station title no longer overrides it, ON AIR is not shown, and bells and the Lantern notification say only Radio. What remains: the system still names the app in the notification header, which no app can change. (pending)
+**P11. The "plain" disguise leaks the station name and the app name.** (medium) Fixed: in the plain disguise the playback notification is private with a public face that says only Radio, the app's station title no longer overrides it, ON AIR is not shown, and bells and the Lantern notification say only Radio. What remains: the system still names the app in the notification header, which no app can change. (650c233)
+
+**P19. Links join pockets, flocks and stations without asking.** (medium) Fixed: A link from outside waits on the dial for a yes: LISTEN or JOIN, or NO. Nothing is played or joined before it. A bell's own tap carries a private key held in the app's preferences and still tunes at once; a forged tap from another app asks like any link. (pending)
+
+**P24. Joined chatter and joined pockets cannot be left; muted voices cannot be unmuted.** (medium) Fixed: The chatter has LEAVE THE CHATTER and a MUTED list where each voice can be heard again. A joined pocket has LEAVE THIS POCKET in the Log, which drops its key, log and sound from the phone. (pending)
+
+**P25. Pocket stations are offered a public share link, poster and QR.** (medium) Fixed: Pocket stations offer no PASS IT ON, no poster and no public link anywhere in the app; shareStation refuses a pocket as a backstop. (pending)
+
+**P30. Opening the app always autoplays.** (low) Fixed: The first open plays the busiest earned station once in the phone's life, kept in the sealed prefs; later opens stay silent until the owner tunes. (pending)
