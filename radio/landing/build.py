@@ -16,10 +16,13 @@ if apk:
     data = open(apk, "rb").read()
     sha, size = hashlib.sha256(data).hexdigest(), f"{len(data)/1e6:.0f}"
     shutil.copy(apk, f"{out}/pyrate-radio-{version}.apk")
+    # The app by BitTorrent too: a torrent with this site as a web seed, and its magnet link.
+    magnet = subprocess.run([sys.executable, f"{R}/tools/torrent.py", f"{out}/pyrate-radio-{version}.apk", f"{out}/pyrate-radio-{version}.apk.torrent",
+                             f"https://hostis.black/pyrateradio/pyrate-radio-{version}.apk"], capture_output=True, text=True, check=True).stdout.strip()
     
 else:
-    sha, size = "(build pending)", "?"
-page = page.replace("{{VERSION}}", version).replace("{{SHA}}", sha).replace("{{SIZE}}", size)
+    sha, size, magnet = "(build pending)", "?", "#"
+page = page.replace("{{VERSION}}", version).replace("{{SHA}}", sha).replace("{{SIZE}}", size).replace("{{MAGNET}}", magnet.replace("&", "&amp;"))
 open(f"{out}/index.html", "w", encoding="utf-8").write(page)
 shutil.copytree(f"{R}/browser/www/dist", f"{out}/listen")
 for f in ["wordmark.png", "mark.png"]:

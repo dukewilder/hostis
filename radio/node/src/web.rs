@@ -59,6 +59,8 @@ pub async fn serve(inner: Arc<Inner>, addr: SocketAddr, every_station: bool) -> 
         .route("/art/{hash}", get(art))
         .route("/brand/{name}", get(brand))
         .route("/feed/{id}", get(feed))
+        .route("/player/", get(|| async { player(String::from("index.html")).await }))
+        .route("/player/{*path}", get(|Path(p): Path<String>| async move { player(p).await }))
         .route("/episode/{id}/{track}", get(episode))
         .with_state(web);
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -261,6 +263,28 @@ async fn episode(State(w): State<Web>, Path((id, track)): Path<(String, String)>
             .into_response(),
         None => ([(header::CONTENT_TYPE, "audio/mpeg"), (header::ACCEPT_RANGES, "bytes")], bytes).into_response(),
     }
+}
+
+/// The browser player, served from PYRATE_PLAYER (a folder holding a copy of
+/// hostis.black/pyrateradio/listen/). Any Lantern that serves it is one more door to the
+/// network that no one can close by closing a domain.
+async fn player(path: String) -> Response {
+    let Some(dir) = std::env::var_os("PYRATE_PLAYER") else { return StatusCode::NOT_FOUND.into_response() };
+    let path = if path.is_empty() || path.ends_with('/') { format!("{path}index.html") } else { path };
+    if path.split('/').any(|p| p == ".." || p.starts_with('.')) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let Ok(bytes) = tokio::fs::read(std::path::Path::new(&dir).join(&path)).await else { return StatusCode::NOT_FOUND.into_response() };
+    let kind = match path.rsplit('.').next().unwrap_or("") {
+        "html" => "text/html; charset=utf-8",
+        "js" => "text/javascript; charset=utf-8",
+        "wasm" => "application/wasm",
+        "json" => "application/json",
+        "png" => "image/png",
+        "css" => "text/css",
+        _ => "application/octet-stream",
+    };
+    ([(header::CONTENT_TYPE, kind), (header::CACHE_CONTROL, "max-age=600")], bytes).into_response()
 }
 
 const WORDMARK: &[u8] = include_bytes!("web/wordmark.png");
