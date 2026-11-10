@@ -299,6 +299,8 @@ impl Inner {
                 let own = store.own().iter().any(|id| store.logs.get(id).is_some_and(|a| a.art_hashes().contains(&hash))) || store.own().iter().any(|id| store.chunks_of(id).contains(&hash));
                 Response::Chunk(if own { store.get_chunk(&hash) } else { None }.or_else(|| self.art_mem.lock().unwrap().get(&hash)))
             }
+            // On mobile data a phone serves strangers nothing: it is the owner's data plan.
+            Request::SealedChunk { .. } if !self.cfg.lantern && !self.relay_ok.load(std::sync::atomic::Ordering::Relaxed) => Response::Sealed(None),
             Request::SealedChunk { name } => Response::Sealed(store.get_sealed(&name)),
             Request::Flock { code } => self.flock_answer(&code),
             Request::PocketLog { .. } => Response::Entries(vec![]),
@@ -713,11 +715,16 @@ impl Inner {
                 self.pocket_say(station, &g).await;
                 continue;
             }
-            // A phone never says what it listened to: it announces only its ballast,
-            // which the hash chose for it.
+            // A phone never says what it listened to: it announces only its ballast, which
+            // the hash chose for it, and only while it is on Wi-Fi and charging. Away from the
+            // charger it serves nobody, and its ballast set, which would tie one day's fresh id
+            // to the next and one network to another, goes unsaid.
             let direct = self.direct.lock().unwrap().contains(&station);
-            if self.cfg.private && !direct && (own_set.contains(&station) || !self.store.lock().unwrap().pinned.contains(&station)) {
-                continue;
+            if self.cfg.private && !direct {
+                let ballast = !own_set.contains(&station) && self.store.lock().unwrap().pinned.contains(&station);
+                if !ballast || !self.ballast_ok.load(std::sync::atomic::Ordering::Relaxed) {
+                    continue;
+                }
             }
             let g = Gossip::Carrier { station, node: me, head };
             self.on_gossip(g.clone());
@@ -979,6 +986,42 @@ impl Inner {
         json!(v.into_iter().map(|x| x.1).collect::<Vec<_>>())
     }
 
+    /// Whether this node takes a stranger's station aboard for the fleet. Never one its owner
+    /// marooned; and on a phone, never an explicit station while the owner keeps them hidden,
+    /// nor a mature one while they hide those. Lanterns carry the whole Log unless their keeper
+    /// maroons. `entries` are a stem's cargo, read for the station's word on itself when no
+    /// card has said it.
+    pub(crate) fn will_carry(&self, st: &StationId, cargo: Option<(&Option<Announce>, &[Vec<u8>])>) -> bool {
+        if self.refused().contains(st) {
+            return false;
+        }
+        if self.cfg.lantern || self.is_own(st) {
+            return true;
+        }
+        let prefs = std::fs::read(self.cfg.dir.join("prefs.json")).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()).unwrap_or(Value::Null);
+        let (show_explicit, hide_mature) = (prefs["show_explicit"] == json!(true), prefs["hide_mature"] == json!(true));
+        if show_explicit && !hide_mature {
+            return true;
+        }
+        // The station's own word: its card, else its log here, else the cargo itself.
+        let card = cargo.and_then(|(a, _)| a.clone()).or_else(|| self.log.lock().unwrap().get(st).and_then(|l| l.announce.clone()));
+        let (explicit, mature) = match card {
+            Some(c) => (c.explicit, c.mature),
+            None => {
+                let mut a = self.store.lock().unwrap().logs.get(st).cloned().unwrap_or_else(|| Archive::new(*st));
+                for b in cargo.map(|(_, e)| e).unwrap_or_default() {
+                    if let Ok(e) = SignedEntry::from_bytes(b) {
+                        if e.entry.seq >= a.len() {
+                            let _ = a.append(e);
+                        }
+                    }
+                }
+                (a.explicit(), a.details().is_some_and(|d| d.1))
+            }
+        };
+        !((explicit && !show_explicit) || (hide_mature && (mature || explicit)))
+    }
+
     /// Counts a token once, if its work is real and its hour current. Returns whether it was new.
     pub fn accept_token(&self, station: StationId, hour: u64, token: [u8; 32], nonce: u64, vouch: bool) -> bool {
         let now_hour = now_ms() / 3_600_000;
@@ -1112,7 +1155,7 @@ impl Inner {
         let mut budget = self.ballast_bytes.load(std::sync::atomic::Ordering::Relaxed);
         let mut pinned = std::collections::HashSet::new();
         for st in stations {
-            if budget < 10_000_000 || self.is_own(&st) || self.refused().contains(&st) {
+            if budget < 10_000_000 || self.is_own(&st) || !self.will_carry(&st, None) {
                 continue;
             }
             let _ = self.sync_log_direct(st).await;
@@ -1514,6 +1557,11 @@ impl Node {
             Body::Track { title, .. } => Some(title.clone()),
             _ => None,
         }).collect()).unwrap_or_default()
+    }
+
+    /// Whether this node would take the station aboard for the fleet, by its owner's choices.
+    pub fn will_carry(&self, id: &pyrate_core::StationId) -> bool {
+        self.inner.will_carry(id, None)
     }
 
     /// Whether this node has heard of a station at all: a card, a carrier, a listener token or

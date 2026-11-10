@@ -141,6 +141,22 @@ fn main() -> anyhow::Result<()> {
     }
     check(carried >= 2, &format!("the Lantern carries the station and its art ({carried} files)"));
 
+    // A listener's own switches: an explicit station is not carried while they are hidden.
+    // (The first listener is now a hand, and a hand carries its own station whatever it says.)
+    let third = Node::start(cfg("third", false, boot.clone()))?;
+    s.call(&json!({ "cmd": "details_set", "station": id, "kinds": ["talk"], "mature": true, "explicit": true }));
+    let mut heard = false;
+    for _ in 0..40 {
+        std::thread::sleep(Duration::from_secs(3));
+        if third.call(&json!({ "cmd": "stations", "marooned": true })).as_array().is_some_and(|v| v.is_empty()) && third.heard_of(&sid) && !third.will_carry(&sid) {
+            heard = true;
+            break;
+        }
+    }
+    check(heard, "an explicit station stays off a listener's Log, and is not carried, while explicit is hidden");
+    third.call(&json!({ "cmd": "pref", "key": "show_explicit", "value": true }));
+    check(third.will_carry(&sid), "and is carried once the listener shows explicit stations");
+
     // A maroon list, shared and taken aboard.
     l.call(&json!({ "cmd": "maroon", "station": id, "value": true }));
     let list = l.call(&json!({ "cmd": "maroon_export" }));
