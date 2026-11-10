@@ -198,7 +198,7 @@ class _LogPageState extends State<LogPage> {
             title: Text(s['kept'] == true ? 'STOP KEEPING' : 'KEEP', style: carved(12)),
             subtitle: Text('Kept stations sit at the top of the Log and the dial, and come aboard ahead of time on Wi-Fi.', style: serif(13, color: boneFaint, italic: true)),
             onTap: () {
-              Native.call({'cmd': 'keep', 'station': id, 'value': s['kept'] != true});
+              Native.callAway({'cmd': 'keep', 'station': id, 'value': s['kept'] != true});
               Navigator.pop(context);
             },
           ),
@@ -240,7 +240,7 @@ class _LogPageState extends State<LogPage> {
             title: Text('MAROON', style: carved(12)),
             subtitle: Text('Gone from your Log and your dial, and dropped from your hold. Undo it under Colours.', style: serif(13, color: boneFaint, italic: true)),
             onTap: () {
-              Native.call({'cmd': 'maroon', 'station': id, 'value': true});
+              Native.callAway({'cmd': 'maroon', 'station': id, 'value': true});
               if (widget.radio.tuned == id) widget.radio.stop();
               Navigator.pop(context);
             },
@@ -523,7 +523,7 @@ Future<void> tapeIt(BuildContext context) async {
   final share = Directory('${dir.path}/share');
   if (!share.existsSync()) share.createSync(recursive: true);
   final tmp = '${share.path}/tape-${DateTime.now().millisecondsSinceEpoch}.ogg';
-  final r = Native.call({'cmd': 'tape', 'seconds': 120, 'path': tmp});
+  final r = await Native.callAway({'cmd': 'tape', 'seconds': 120, 'path': tmp});
   if (r is! Map || r['error'] != null) {
     if (context.mounted) toast(context, 'Nothing to tape yet. Let it play a moment.');
     return;
@@ -1357,7 +1357,8 @@ class _ShipPapersState extends State<ShipPapers> {
       ),
     );
     if (ok != true) return;
-    final r = Native.call({'cmd': 'maroon_import', 'text': text.text});
+    final r = await Native.callAway({'cmd': 'maroon_import', 'text': text.text});
+    if (!mounted) return;
     setState(() => msg = r is Map && r['added'] != null ? '${r['added']} stations marooned.' : 'That list would not read.');
   }
 

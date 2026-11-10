@@ -1811,9 +1811,9 @@ class _FlockSheetState extends State<FlockSheet> {
             const SizedBox(height: 12),
             TextField(controller: paste, style: mono(11, color: bone), decoration: pyrateField('Or paste a flock link')),
             const SizedBox(height: 8),
-            pyrateButton('JOIN', () {
-              final r = Native.call({'cmd': 'flock_join', 'link': paste.text.trim()});
-              if (r is Map && r['error'] != null) toast(context, r['error']);
+            pyrateButton('JOIN', () async {
+              final r = await Native.callAway({'cmd': 'flock_join', 'link': paste.text.trim()});
+              if (r is Map && r['error'] != null && context.mounted) toast(context, r['error']);
             }),
           ],
           const SizedBox(height: 18),
