@@ -71,12 +71,9 @@ Reported by a reader of the code; each is checked against the code before it is 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
 
 - **P10** (medium) Drawer Lantern: the service restarts with no node, and the charging and Wi-Fi gate lives only in the Dart UI. `LanternService.kt:27-52`
-- **P14** (medium) Temporary audio, pictures and APK copies are left on disk. `Ship.kt:22-42`
 - **P17** (medium) Blocking native calls on the UI thread, in Dart and in the service. `PlaybackService.kt:53-58`
 - **P18** (medium) The dial's PageView follows list position, not the station. `main.dart:203-214`
 - **P20** (medium) Microphone permission dead-ends and the messages mislead. `MainActivity.kt:69-75`
-- **P21** (medium) RECORD A SEGMENT leaves the microphone open if the panel is closed. `more.dart:700-703`
-- **P22** (medium) The programme editor treats a failed load as loaded and can overwrite the real programme. `station.dart:536-547`
 - **P23** (medium) A hosted flock loses its code when the sheet is closed. `station.dart:1688`
 - **P26** (low) Bell ids differ between screens, depend on `String.hashCode`, and notifications are not checked. `station.dart:290 vs more.dart:373`
 - **P27** (medium) The numbers kit decodes and rewrites WAV files sample by sample on the UI isolate. `station.dart:1562-1596`
@@ -208,10 +205,16 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **P30. Opening the app always autoplays.** (low) Fixed: The first open plays the busiest earned station once in the phone's life, kept in the sealed prefs; later opens stay silent until the owner tunes. (e9bbfaf)
 
-**P7. Podcast feeds and "cover from a link" call the network straight from the phone, outside the node.** (medium) Fixed: The fetches stay on the phone, since the node would leave from the same address, but all of them now go through one guarded helper: a plain client name in place of Dart's own, timeouts on connecting and on every gap, a size cap, a client that is always closed. The feed screens say plainly that the feed's host sees this phone's address as it would any podcast app's. (pending)
+**P7. Podcast feeds and "cover from a link" call the network straight from the phone, outside the node.** (medium) Fixed: The fetches stay on the phone, since the node would leave from the same address, but all of them now go through one guarded helper: a plain client name in place of Dart's own, timeouts on connecting and on every gap, a size cap, a client that is always closed. The feed screens say plainly that the feed's host sees this phone's address as it would any podcast app's. (0702d98)
 
-**P8. Feed "keep the newest N" downloads the whole back catalogue, and the feed list can be overwritten.** (medium) Fixed: A feed's first reading takes its newest few and passes over the back catalogue for good; after that only episodes newer than the last one taken come aboard. Each feed's memory is written back alone, so a feed added or removed during a reading stays that way, and the memory is trimmed to what the feed still lists. (pending)
+**P8. Feed "keep the newest N" downloads the whole back catalogue, and the feed list can be overwritten.** (medium) Fixed: A feed's first reading takes its newest few and passes over the back catalogue for good; after that only episodes newer than the last one taken come aboard. Each feed's memory is written back alone, so a feed added or removed during a reading stays that way, and the memory is trimmed to what the feed still lists. (0702d98)
 
-**P9. Podcast feeds are never refreshed on their own.** (medium) Fixed: The app reads its feeds every three hours, on Wi-Fi only, while it is open. (pending)
+**P9. Podcast feeds are never refreshed on their own.** (medium) Fixed: The app reads its feeds every three hours, on Wi-Fi only, while it is open. (0702d98)
 
-**P33. Feed and URL fetch code writes unsolicited temp files and the downloads can be stranded.** (low) Fixed: A fetch writes a .part file that takes its name only when whole and is deleted on any failure; the art and the episodes are deleted once set; and each start sweeps the cache of anything older than six hours that an earlier run left behind. (pending)
+**P33. Feed and URL fetch code writes unsolicited temp files and the downloads can be stranded.** (low) Fixed: A fetch writes a .part file that takes its name only when whole and is deleted on any failure; the art and the episodes are deleted once set; and each start sweeps the cache of anything older than six hours that an earlier run left behind. (0702d98)
+
+**P14. Temporary audio, pictures and APK copies are left on disk.** (medium) Fixed: Takes, picked files, pictures and fetches are dropped from the cache once set or discarded, through one helper that only ever deletes inside the app's own cache; each start sweeps anything an earlier run left there for more than six hours, the shared tapes and the APK copy included. Recordings are set one after another rather than all at once. (pending)
+
+**P21. RECORD A SEGMENT leaves the microphone open if the panel is closed.** (medium) Fixed: Closing the panel stops the microphone at once and drops the take; DISCARD deletes it; the hail recorder does the same when its sheet closes. (pending)
+
+**P22. The programme editor treats a failed load as loaded and can overwrite the real programme.** (medium) Fixed: Only a whole answer counts as read. A failed read keeps SET THE PROGRAMME shut, says what went wrong and offers TRY AGAIN, so a blank editor can never be saved over the programme on the air. (pending)

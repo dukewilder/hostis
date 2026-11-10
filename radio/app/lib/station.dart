@@ -533,13 +533,26 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
   bool loaded = false;
   String? speaking;
 
+  String? loadError;
+
   @override
   void initState() {
     super.initState();
+    load();
+  }
+
+  /// Only a whole answer counts as read: a failed read leaves SET THE PROGRAMME shut, so
+  /// a blank editor can never be saved over the programme already on the air.
+  void load() {
+    setState(() => loadError = null);
     Native.callAway({'cmd': 'programme', 'station': widget.station}).then((r) {
-      if (!mounted || r is! Map) return;
+      if (!mounted) return;
+      if (r is! Map || r['error'] != null || r['library'] is! List) {
+        setState(() => loadError = (r is Map ? r['error'] : null)?.toString() ?? 'no answer');
+        return;
+      }
       setState(() {
-        library = (r['library'] as List?) ?? [];
+        library = r['library'] as List;
         hands = (r['hands'] as List?) ?? [];
         if (r['programme'] is Map) p = Map<String, dynamic>.from(r['programme']);
         loaded = true;
@@ -555,6 +568,7 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
     p['zone'] = zoneOffsets();
     p['zone_name'] = DateTime.now().timeZoneName;
     final r = await Native.callAway({'cmd': 'programme_set', 'station': widget.station, 'programme': p});
+    if (!mounted) return;
     setState(() => saved = r is Map && r['error'] != null ? r['error'] : 'Set. Every listener\'s clock follows it within a minute.');
   }
 
@@ -565,7 +579,16 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
     return ListView(padding: const EdgeInsets.fromLTRB(24, 8, 24, 48), children: [
       Text('THE PROGRAMME', style: carved(20)),
       note('How your station fills the day, in your own time (${zoneLabel()}). It keeps doing this for as long as anyone carries it, whether or not you ever open the app again.'),
-      if (!loaded) Padding(padding: const EdgeInsets.only(top: 16), child: note('Reading the log')),
+      if (!loaded && loadError == null) Padding(padding: const EdgeInsets.only(top: 16), child: note('Reading the log')),
+      if (loadError != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            note('The programme on the air could not be read ($loadError), so nothing here can be set until it is.'),
+            const SizedBox(height: 8),
+            pyrateButton('TRY AGAIN', load),
+          ]),
+        ),
       const SizedBox(height: 18),
       heading('HOW IT PLAYS'),
       Wrap(children: [
@@ -1197,7 +1220,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
   void dispose() {
     tick?.cancel();
     hailStop?.cancel();
-    if (hailing) ship.invokeMethod('record_stop').catchError((_) => null);
+    if (hailing) ship.invokeMethod<Map>('record_stop').then((r) => dropCopy(r?['path'] as String?)).catchError((_) {});
     super.dispose();
   }
 
