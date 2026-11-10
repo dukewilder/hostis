@@ -409,3 +409,25 @@ fn a_premiere_of_a_recording_added_moments_ago_airs_and_one_with_nothing_is_not_
     assert!(l.iter().any(|l| l.title == "Premiere"));
     assert!(!l.iter().any(|l| l.title == "Gone"), "a show with nothing to play is not promised");
 }
+
+#[test]
+fn a_span_must_name_a_day() {
+    use pyrate_core::page::programme_from;
+    let with = |days: u64| programme_from(&serde_json::json!({ "mode": { "kind": "shuffle" }, "hours": [{ "days": days, "start_min": 60, "len_min": 120 }] }));
+    assert!(with(0).is_err(), "no day at all");
+    assert!(with(256).is_err(), "a day beyond Sunday is no day, not Monday");
+    assert_eq!(with(0x81).unwrap().hours[0].days, 1, "Monday, and nothing past Sunday");
+}
+
+#[test]
+fn a_library_in_order_is_heard_in_order_across_its_hours() {
+    let k = StationKey::from_seed([46; 32]);
+    let (mut a, h, t) = station(&k);
+    let z = chicago();
+    // Three 20-minute recordings in order, on the air twenty minutes a day from 01:00.
+    a.write(&k, t, Body::Programme(Programme { zone: z.clone(), mode: Mode::InOrder, hours: vec![Span::every_day(60, 20)], ..Default::default() })).unwrap();
+    let c = Clock::new(&a).unwrap();
+    let heard: Vec<[u8; 32]> = (0..4).map(|d| c.now(at(&z, NEAR, d, 65)).unwrap().track).collect();
+    assert_eq!(heard, vec![h[0], h[1], h[2], h[0]], "one a day, in order, and round again");
+    assert!(c.now(at(&z, NEAR, 1, 90)).is_none(), "off the air outside its hours");
+}

@@ -12,11 +12,6 @@ Each entry gives the threat, whether the wall held, and the fix.
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down. The reader's full notes, with each failure worked through, are in `audit-notes/clock.md`.
 
-- **A9** (medium) Call signs carry ~35 bits, so a lookalike can be ground out for a target. `core/src/callsign.rs:9-23`
-- **A11** (low) `ChunkDecoder::decode` trusts the chunk's packet count and sizes. `core/src/audio.rs:166-174; archive.rs `Chunk::check``
-- **A12** (low) Ogg writer can overflow the lacing byte and drops bad chunks silently. `core/src/tape.rs:26-45`
-- **A14** (low) `span_from` truncates `days` and accepts a span that never runs. `core/src/page.rs:56`
-- **A15** (low) Hours plus a continuous mode silently skips what plays off the air. `core/src/clock.rs:422-453`
 - **A17** (low) `art::accent` depends on HashMap iteration order for ties. `core/src/art.rs:81`
 - **A18** (low) `art::prepare` ignores EXIF orientation. `core/src/art.rs:49-54`
 - **A19** (low) Ingest folds multichannel files badly. `core/src/ingest.rs:33-43`
@@ -271,4 +266,14 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **A6. `upcoming()` (watch bill and the page's "next") ignores every cut.** (medium) Fixed: The watch bill now cuts each recording wherever the air changes hands: at every show, slot and on-air run boundary, every tape restart and every turn of the week, and the old rota's blocks; a recording that resumes after a cut is listed from where it resumes, and one that carries on across a cut that changed nothing stays one piece. Tested: every piece of a bill with a slot and on-air hours is what the air plays at its middle, pieces never overlap, the slot and the resumed recording are listed at their real times, and nothing runs past the end of the hours (the test fails on the old clock). (2d07732)
 
-**A8. A show premiering before its track was added never airs, and the listing still promises it.** (medium) Fixed: A show's recordings are judged on the air as of its start or the moment it was put on the bill, whichever is later, the same in its length and in its walk; a premiere set for this minute of a recording added seconds ago airs it, and a show with nothing it can play and no live part is not listed. Tested (the test fails on the old clock). (pending)
+**A8. A show premiering before its track was added never airs, and the listing still promises it.** (medium) Fixed: A show's recordings are judged on the air as of its start or the moment it was put on the bill, whichever is later, the same in its length and in its walk; a premiere set for this minute of a recording added seconds ago airs it, and a show with nothing it can play and no live part is not listed. Tested (the test fails on the old clock). (8060919)
+
+**A9. Call signs carry ~35 bits, so a lookalike can be ground out for a target.** (medium) Fixed: Call signs stay as drawn, since changing the draw would rename every station on the air, but they are no longer claimed as proof: the code and the Articles say a forger can grind out a lookalike, and each station's page, in the app and the tab, now shows its key in groups of four, selectable, beside the call sign. (pending)
+
+**A11. `ChunkDecoder::decode` trusts the chunk's packet count and sizes. `core/src/audio.rs:166-174; archive.rs `Chunk::check** (low) Fixed: Each packet is played as one 20 ms frame: one that is empty, or holds more or less than a frame, stands as 20 ms of concealment, in the node and in the tab; and where a chunk's frame count is known (the phone's player, the Lantern's tower and episodes) a chunk whose packets do not number its frames is concealed for its length. A chunk always plays exactly as long as its station's clock says. (pending)
+
+**A12. Ogg writer can overflow the lacing byte and drops bad chunks silently.** (low) Fixed: The tape writer fills each Ogg page by lacing segments, never past 255; it refuses, with a plain reason, a channel count other than one or two, a chunk that will not read, a packet that is not one 20 ms frame, and an empty tape, instead of writing a file that will not play. Tested, with ffprobe reading the file when it is installed. (pending)
+
+**A14. `span_from` truncates `days` and accepts a span that never runs.** (low) Fixed: A span's days are masked before they are narrowed, and a span that names no day is refused with a word, so a station cannot be left dark by an hours list that never runs. Tested. (pending)
+
+**A15. Hours plus a continuous mode silently skips what plays off the air.** (low) Fixed: With set hours, Shuffle, In order and Newest first now keep their clock running only while the station is on the air, so a library in order is heard in order across the days and nothing plays unheard while the station is off. Tested: twenty minutes a day of three twenty-minute recordings plays one a day, in order (the test fails on the old clock). (pending)

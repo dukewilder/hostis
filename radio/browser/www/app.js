@@ -60,6 +60,17 @@ function forgetPics() { for (const p of pics.values()) p.then(u => u && URL.revo
 // ---- Decoding ------------------------------------------------------------------------
 // A chunk is its Opus frames, each after its length as a big-endian u16.
 function packets(b) { const out = []; let at = 0; while (at + 2 <= b.length) { const n = (b[at] << 8) | b[at + 1]; at += 2; if (at + n > b.length) break; out.push(b.subarray(at, at + n)); at += n } return out }
+// Whether an Opus packet is one 20 ms frame, read from its table-of-contents byte (RFC 6716).
+// A chunk is timed in 20 ms frames; a packet of any other length stands as 20 ms of quiet,
+// so no chunk plays longer or shorter than its station says.
+function oneFrame(p) {
+  if (!p.length) return false;
+  const cfg = p[0] >> 3, c = p[0] & 3, ms = cfg < 12 ? [10, 20, 40, 60][cfg & 3] : cfg < 16 ? [10, 20][cfg & 1] : [2.5, 5, 10, 20][cfg & 3];
+  const n = c === 0 ? 1 : c < 3 ? 2 : p.length > 1 ? p[1] & 0x3f : 0;
+  return n * ms === 20;
+}
+// Planar channels made exactly `n` samples long.
+function fit(chs, n) { return chs.map(a => { if (a.length === n) return a; const b = new Float32Array(n); b.set(a.subarray(0, n)); return b }) }
 
 // ?decoder=wasm forces the portable decoder, for testing the path older browsers take.
 let webcodecs = /[?&]decoder=wasm/.test(location.search) ? false : null;
@@ -87,7 +98,7 @@ class Decoder {
   }
   // Planar 48 kHz samples for one chunk.
   async decode(bytes) {
-    const ps = packets(bytes);
+    const all = packets(bytes), ps = all.filter(oneFrame), want = all.length * 960;
     if (this.wc) {
       // No flush between chunks: a flush starts the decoder cold, and the seam would show.
       // Wait instead for every frame of the chunk to come out, and flush only if it stalls.
@@ -98,9 +109,10 @@ class Decoder {
       this.done = null;
       const n = this.out.reduce((s, x) => s + x[0].length, 0), chs = [];
       for (let c = 0; c < this.out[0]?.length || 0; c++) { const a = new Float32Array(n); let at = 0; for (const x of this.out) { a.set(x[c], at); at += x[c].length } chs.push(a) }
-      return chs;
+      return chs.length ? fit(chs, want) : chs;
     }
-    return this.od.decodeFrames(ps).channelData;
+    const chs = ps.length ? this.od.decodeFrames(ps).channelData : [];
+    return chs.length ? fit(chs, want) : chs;
   }
   close() { try { this.wc?.close() } catch (e) { } try { this.od?.free() } catch (e) { } }
 }
@@ -264,7 +276,8 @@ async function play(id, g) {
       }
       let bytes;
       try { bytes = await radio.fetch(id, chunk); misses = 0; trouble = null } catch (e) {
-        if (++misses > 2) trouble = 'No carrier answered yet';
+        // Said only once the queue is nearly dry: a miss with seconds still queued is not heard.
+        if (++misses > 2 && queued < 4000) trouble = 'No carrier answered yet';
         await sleep(1500); continue;
       }
       if (g !== gen) return;
@@ -352,6 +365,7 @@ function page(force) {
   $('nexth').hidden = !next.length;
   $('next').innerHTML = next.map(n => '<div class="li"><span class="t">' + hm(n.start_ms) + '</span><span class="w">' + esc(n.title) + (n.by ? ' <em>' + esc(n.by) + '</em>' : '') + '</span></div>').join('');
   $('how').textContent = (!v.now && v.back_at ? offAir(v.back_at) + ' ' : '') + howItPlays(v.programme);
+  $('key').textContent = 'Key  ' + cur.id.match(/.{1,4}/g).join(' ');
   const now = radio.now(); let last = null, h = '', days = 0;
   const ls = (v.listings || []).filter(l => l.kind !== 'hours');
   for (const [i, l] of ls.entries()) {

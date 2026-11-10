@@ -149,6 +149,21 @@ pub fn packets(bytes: &[u8]) -> Result<Vec<&[u8]>> {
     Ok(out)
 }
 
+/// Whether an Opus packet is one 20 ms frame, by its table-of-contents byte (RFC 6716): the
+/// only packet a chunk's timing counts.
+pub fn one_frame(p: &[u8]) -> bool {
+    let Some(&toc) = p.first() else { return false };
+    let (cfg, code) = (toc >> 3, toc & 3);
+    // Frame lengths in tenths of a millisecond.
+    let tenths: u32 = if cfg < 12 { [100, 200, 400, 600][(cfg & 3) as usize] } else if cfg < 16 { [100, 200][(cfg & 1) as usize] } else { [25, 50, 100, 200][(cfg & 3) as usize] };
+    let frames: u32 = match code {
+        0 => 1,
+        1 | 2 => 2,
+        _ => p.get(1).map(|b| (b & 0x3f) as u32).unwrap_or(0),
+    };
+    frames * tenths == 200 && p.len() <= 1275 * 2
+}
+
 #[cfg(feature = "codec")]
 /// Keeps decoder state across chunks, so a stream plays without seams.
 pub struct ChunkDecoder {
@@ -162,15 +177,34 @@ impl ChunkDecoder {
         Ok(Self { dec: opus::Decoder::new(SAMPLE_RATE, opus_channels(channels)?)?, channels: channels as usize })
     }
 
-    /// Interleaved 48 kHz PCM for one chunk.
+    /// Interleaved 48 kHz PCM for one chunk. Every packet is one 20 ms frame, as the clock
+    /// counts them: one that is empty, or that holds more or less than a frame (a chunk
+    /// from somewhere other than this encoder), stands as 20 ms of Opus's own concealment,
+    /// so a chunk always plays for as long as its station says and no longer.
     pub fn decode(&mut self, bytes: &[u8]) -> Result<Vec<i16>> {
         let mut out = Vec::new();
-        let mut buf = vec![0i16; FRAME * self.channels * 6];
+        let mut buf = vec![0i16; FRAME * self.channels];
         for p in packets(bytes)? {
-            let n = self.dec.decode(p, &mut buf, false)?;
-            out.extend_from_slice(&buf[..n * self.channels]);
+            let one = !p.is_empty() && opus::packet::get_nb_samples(p, SAMPLE_RATE).ok() == Some(FRAME);
+            let n = self.dec.decode(if one { p } else { &[] }, &mut buf, false)?;
+            out.extend_from_slice(&buf[..n.min(FRAME) * self.channels]);
         }
         Ok(out)
+    }
+
+    /// As [`decode`](Self::decode), for a chunk said to hold `frames` frames: a chunk whose
+    /// packets do not number its frames is refused, so its sound cannot outrun its timing.
+    pub fn decode_frames(&mut self, bytes: &[u8], frames: u16) -> Result<Vec<i16>> {
+        if packets(bytes)?.len() != frames as usize {
+            return Err(Error::Chunk);
+        }
+        self.decode(bytes)
+    }
+
+    /// A chunk's sound, always as long as its frames say: one that will not decode, or whose
+    /// packets do not number its frames, is concealed for its length instead.
+    pub fn decode_as(&mut self, bytes: &[u8], frames: u16) -> Vec<i16> {
+        self.decode_frames(bytes, frames).or_else(|_| self.conceal(frames)).unwrap_or_default()
     }
 
     /// Fills a lost chunk with Opus's own concealment, so a gap is a soft dip.
