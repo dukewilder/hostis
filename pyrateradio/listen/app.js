@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=18cc9b7cb6';
+import init, { Radio } from './pkg/pyrate_browser.js?v=827b00f847';
 
 const HARBOUR = 'a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442';
 const RELAYS = '';
@@ -16,6 +16,9 @@ const pics = new Map();
 function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v) } catch (e) { return null } }
 function marooned() { try { return new Set(JSON.parse(store('pyrate.maroon') || '[]')) } catch (e) { return new Set() } }
 function setMarooned(s) { store('pyrate.maroon', JSON.stringify([...s])) }
+// The listener's own switches. Explicit stays off and art stays on until they say otherwise.
+const sw = { mature: () => store('pyrate.hide_mature') === '1', explicit: () => store('pyrate.show_explicit') === '1', art: () => store('pyrate.hide_art') !== '1' };
+function allowed(s) { return !((s.explicit && !sw.explicit()) || (sw.mature() && (s.mature || s.explicit))) }
 
 // The flag every station flies until it raises a picture: its key, drawn.
 function bits(id) { const b = []; for (const c of id) { const v = parseInt(c, 16); for (let i = 3; i >= 0; i--) b.push((v >> i) & 1) } return b }
@@ -23,7 +26,7 @@ function flag(el, id, live) { const b = bits(id); let h = ''; for (let r = 0; r 
 
 // Pictures come over the network like chunks, checked against their fingerprints.
 async function pic(station, hash) {
-  if (!hash) return null;
+  if (!hash || !sw.art()) return null;
   if (pics.has(hash)) return pics.get(hash);
   const p = radio.fetch(station, hash).then(b => URL.createObjectURL(new Blob([b], { type: 'image/jpeg' }))).catch(() => { pics.delete(hash); return null });
   pics.set(hash, p);
@@ -199,7 +202,7 @@ function stop() { gen++; stopAll(); playing = false; $('go').textContent = '▶ 
 
 function rows() {
   const m = marooned();
-  const shown = stations.filter(s => !m.has(s.id));
+  const shown = stations.filter(s => !m.has(s.id) && allowed(s));
   const box = $('rows'); box.innerHTML = '';
   if (!shown.length) { box.innerHTML = '<p>Listening for station cards. The first come in within a minute.</p>'; return }
   for (const s of shown) {
@@ -207,7 +210,7 @@ function rows() {
     r.innerHTML = '<div class="mini"></div><div class="meta"><div class="name"></div><div class="cs"></div><div class="about"></div></div><div class="count"></div>';
     const mini = r.querySelector('.mini');
     if (s.cover) { mini.classList.add('pic'); pic(s.id, s.cover).then(u => { if (u) mini.innerHTML = '<img alt="" src="' + u + '">'; else flag(mini, s.id, s.live) }) } else flag(mini, s.id, s.live);
-    r.querySelector('.name').textContent = s.name + (s.live ? '  · ON AIR' : '');
+    r.querySelector('.name').textContent = s.name + (s.live ? '  · ON AIR' : '') + (s.explicit ? '  · EXPLICIT' : s.mature ? '  · MATURE' : '');
     r.querySelector('.cs').textContent = s.call_sign; r.querySelector('.about').textContent = s.about || '';
     r.querySelector('.count').innerHTML = s.aboard + '<small>ABOARD</small>';
     r.classList.toggle('on', cur?.id === s.id);
@@ -223,7 +226,7 @@ function refresh() {
   $('signal').textContent = n ? n + (n === 1 ? ' neighbour' : ' neighbours') + ' · ' + stations.length + ' on the air' : 'Coming aboard';
   rows();
   if (cur) { const u = stations.find(x => x.id === cur.id); if (u) { const pic0 = cur.cover, ban0 = cur.banner; cur = u; $('cs').textContent = u.call_sign + ' · ' + u.aboard + ' aboard'; $('name').textContent = u.name; if (u.cover !== pic0 || u.banner !== ban0) show(u) } }
-  else { const id = location.hash.slice(1); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations[0]); if (s) show(s) }
+  else { const id = location.hash.slice(1); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations.find(x => allowed(x) && !marooned().has(x.id))); if (s) show(s) }
 }
 
 // A station link (#<id>) works before the station's card arrives: the harbour carries it.
@@ -255,6 +258,10 @@ $('mtake').onclick = () => {
   for (const line of $('mtext').value.split('\n')) { const t = (line.trim().split(/\s+/)[0] || '').toLowerCase(); if (/^[0-9a-f]{64}$/.test(t) && !m.has(t)) { m.add(t); n++ } }
   setMarooned(m); $('mnote').textContent = n + ' taken aboard.'; refresh();
 };
+for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-explicit', 'pyrate.show_explicit', '1'], ['sw-art', 'pyrate.hide_art', '0']]) {
+  const el = $(id); el.checked = on === '1' ? store(key) === '1' : store(key) !== '1';
+  el.onchange = () => { store(key, (el.checked ? on : (on === '1' ? '0' : '1'))); pics.clear(); refresh(); if (cur) show(cur) };
+}
 $('mclear').onclick = () => { setMarooned(new Set()); $('mnote').textContent = 'Every station is back in the Log.'; refresh() };
 
 async function boot() {
