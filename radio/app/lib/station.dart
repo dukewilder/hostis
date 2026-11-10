@@ -142,7 +142,7 @@ class _StationPageState extends State<StationPage> {
       } else {
         error = (r is Map ? r['error'] : null) ?? 'This station\'s log has not arrived yet.';
       }
-      bells = (jsonDecode(b) as List).map((x) => (x['id'] as num).toInt()).toSet();
+      bells = bellIds(b);
     });
   }
 
@@ -288,7 +288,7 @@ class _StationPageState extends State<StationPage> {
                 final start = (l['start_ms'] as num).toInt();
                 final end = (l['end_ms'] as num).toInt();
                 final onNow = start <= now && now < end;
-                final id2 = bellId('${l['title']}${l['kind']}', start);
+                final id2 = bellId(id, start);
                 final ringing = bells.contains(id2);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 6),
@@ -320,11 +320,11 @@ class _StationPageState extends State<StationPage> {
                         icon: Icon(ringing ? Icons.notifications_active : Icons.notifications_none, size: 18, color: ringing ? brass : boneGhost),
                         onPressed: () async {
                           if (ringing) {
-                            await ship.invokeMethod('bell_cancel', {'id': id2});
+                            await ship.invokeMethod('bell_cancel', {'id': id2, 'station': id, 'at': start});
                             setState(() => bells.remove(id2));
                           } else {
-                            await ship.invokeMethod('bell_set', {'id': id2, 'at': start, 'title': l['title'] ?? 'A show', 'station': id, 'name': s['name']});
-                            setState(() => bells.add(id2));
+                            await ringAt(context, id: id2, at: start, title: (l['title'] ?? 'A show').toString(), station: id, name: (s['name'] ?? '').toString());
+                            if (mounted) setState(() => bells.add(id2));
                           }
                         },
                       ),

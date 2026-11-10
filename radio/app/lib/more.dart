@@ -380,7 +380,44 @@ class _LogPageState extends State<LogPage> {
 // ---------------------------------------------------------------------------------------
 // The watch bill and its bells
 
-int bellId(String track, int start) => (track.hashCode ^ (start ~/ 1000)) & 0x7fffffff;
+/// A bell's id: the same for a show on every screen and in every build, from the station
+/// and the minute it starts (FNV-1a, not the toolkit's hash, which may change between builds).
+int bellId(String station, int start) {
+  var h = 0x811c9dc5;
+  for (final b in utf8.encode('$station@${start ~/ 60000}')) {
+    h = ((h ^ b) * 0x01000193) & 0xffffffff;
+  }
+  return h & 0x7fffffff;
+}
+
+/// The ids of the bells already set, worked out afresh from what each is for.
+Set<int> bellIds(String json) {
+  try {
+    return (jsonDecode(json) as List).map((x) => bellId((x['station'] ?? '').toString(), (x['at'] as num).toInt())).toSet();
+  } catch (_) {
+    return {};
+  }
+}
+
+/// Sets a bell, and says so at once if the phone would never show it.
+Future<void> ringAt(BuildContext context, {required int id, required int at, required String title, required String station, required String name}) async {
+  final ok = await ship.invokeMethod<bool>('bell_set', {'id': id, 'at': at, 'title': title, 'station': station, 'name': name}).catchError((_) => true) ?? true;
+  if (ok || !context.mounted) return;
+  final go = await showDialog<bool>(
+    context: context,
+    builder: (c) => AlertDialog(
+      backgroundColor: panel,
+      shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+      title: Text('The bell is set, but it cannot ring', style: serif(20)),
+      content: Text('Notifications are off for the app or for its bells. Turn them on in its settings and the bell rings when the show starts.', style: serif(14, color: boneFaint, italic: true)),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(c, false), child: Text('NOT NOW', style: carved(11, color: boneFaint))),
+        TextButton(onPressed: () => Navigator.pop(c, true), child: Text('OPEN SETTINGS', style: carved(11))),
+      ],
+    ),
+  );
+  if (go == true) ship.invokeMethod('app_settings').catchError((_) {});
+}
 
 class WatchBill extends StatefulWidget {
   final Map<String, dynamic> station;
@@ -411,7 +448,7 @@ class _WatchBillState extends State<WatchBill> {
       } else {
         error = (r is Map ? r['error'] : null) ?? 'The watch bill has not arrived yet.';
       }
-      bells = (jsonDecode(b) as List).map((x) => (x['id'] as num).toInt()).toSet();
+      bells = bellIds(b);
     });
   }
 
@@ -440,7 +477,7 @@ class _WatchBillState extends State<WatchBill> {
               }),
             Builder(builder: (_) {
               final start = (item['start_ms'] as num).toInt();
-              final id = bellId(item['track'] as String, start);
+              final id = bellId(s['id'] as String, start);
               final ringing = bells.contains(id);
               final past = start < DateTime.now().millisecondsSinceEpoch;
               return Row(children: [
@@ -457,11 +494,11 @@ class _WatchBillState extends State<WatchBill> {
                     icon: Icon(ringing ? Icons.notifications_active : Icons.notifications_none, size: 18, color: ringing ? brass : boneGhost),
                     onPressed: () async {
                       if (ringing) {
-                        await ship.invokeMethod('bell_cancel', {'id': id});
+                        await ship.invokeMethod('bell_cancel', {'id': id, 'station': s['id'], 'at': start});
                         setState(() => bells.remove(id));
                       } else {
-                        await ship.invokeMethod('bell_set', {'id': id, 'at': start, 'title': item['title'] ?? 'A show', 'station': s['id'], 'name': s['name']});
-                        setState(() => bells.add(id));
+                        await ringAt(context, id: id, at: start, title: (item['title'] ?? 'A show').toString(), station: s['id'] as String, name: (s['name'] ?? '').toString());
+                        if (mounted) setState(() => bells.add(id));
                       }
                     },
                   )

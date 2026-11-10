@@ -153,9 +153,12 @@ class MainActivity : FlutterActivity() {
                 "bell_set" -> {
                     Bells.setBell(this, call.argument<Int>("id") ?: 0, (call.argument<Number>("at") ?: 0).toLong(),
                         call.argument<String>("title") ?: "", call.argument<String>("station") ?: "", call.argument<String>("name") ?: "")
+                    result.success(Bells.canRing(this))
+                }
+                "bell_cancel" -> {
+                    Bells.cancelBell(this, call.argument<Int>("id") ?: 0, call.argument<String>("station"), (call.argument<Number>("at") ?: 0).toLong())
                     result.success(null)
                 }
-                "bell_cancel" -> { Bells.cancelBell(this, call.argument<Int>("id") ?: 0); result.success(null) }
                 "bells" -> result.success(Bells.bells(this))
                 "wake_set" -> {
                     Bells.setWake(this, call.argument<Boolean>("on") == true, call.argument<Int>("hour") ?: 7, call.argument<Int>("minute") ?: 0,

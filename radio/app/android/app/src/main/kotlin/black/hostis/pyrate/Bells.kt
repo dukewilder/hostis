@@ -24,11 +24,18 @@ object Bells {
     private fun pending(c: Context, code: Int, i: Intent) =
         PendingIntent.getBroadcast(c, code, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
+    /** The same show on the same station, whatever id an older build gave its bell. */
+    private fun same(b: JSONObject, station: String, at: Long) = b.optString("station") == station && b.optLong("at") / 60_000 == at / 60_000
+
     fun setBell(c: Context, id: Int, at: Long, title: String, station: String, name: String) {
         val list = JSONArray(prefs(c).getString("bells", "[]"))
         val keep = JSONArray()
         for (k in 0 until list.length()) {
             val b = list.getJSONObject(k)
+            if (b.optInt("id") != id && same(b, station, at)) {
+                alarms(c).cancel(pending(c, b.optInt("id"), Intent(c, AlarmReceiver::class.java).setAction("bell")))
+                continue
+            }
             if (b.optInt("id") != id && b.optLong("at") > System.currentTimeMillis()) keep.put(b)
         }
         keep.put(JSONObject().put("id", id).put("at", at).put("title", title).put("station", station).put("name", name))
@@ -43,12 +50,31 @@ object Bells {
         alarms(c).setWindow(AlarmManager.RTC_WAKEUP, at - 60_000, 120_000, pending(c, id, i))
     }
 
-    fun cancelBell(c: Context, id: Int) {
+    fun cancelBell(c: Context, id: Int, station: String? = null, at: Long = 0) {
         alarms(c).cancel(pending(c, id, Intent(c, AlarmReceiver::class.java).setAction("bell")))
         val list = JSONArray(prefs(c).getString("bells", "[]"))
         val keep = JSONArray()
-        for (k in 0 until list.length()) if (list.getJSONObject(k).optInt("id") != id) keep.put(list.getJSONObject(k))
+        for (k in 0 until list.length()) {
+            val b = list.getJSONObject(k)
+            if (b.optInt("id") == id) continue
+            if (station != null && same(b, station, at)) {
+                alarms(c).cancel(pending(c, b.optInt("id"), Intent(c, AlarmReceiver::class.java).setAction("bell")))
+                continue
+            }
+            keep.put(b)
+        }
         prefs(c).edit().putString("bells", keep.toString()).apply()
+    }
+
+    /** Whether a bell can show at all: notifications on for the app and for its bells. */
+    fun canRing(c: Context): Boolean {
+        val nm = c.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (!nm.areNotificationsEnabled()) return false
+        if (Build.VERSION.SDK_INT >= 26) {
+            val ch = nm.getNotificationChannel("bells")
+            if (ch != null && ch.importance == NotificationManager.IMPORTANCE_NONE) return false
+        }
+        return true
     }
 
     fun bells(c: Context): String = prefs(c).getString("bells", "[]") ?: "[]"
