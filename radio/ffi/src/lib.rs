@@ -9,6 +9,10 @@ use std::{
 use pyrate_node::{Config, Node};
 
 static NODE: OnceLock<Node> = OnceLock::new();
+/// Held while a node starts, so the screen and a service starting at once make one node, not two.
+static STARTING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+/// Why the last start failed, for the screen to say rather than search for ever.
+static START_ERROR: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 static RELEASE_KEYS: std::sync::Mutex<Vec<[u8; 32]>> = std::sync::Mutex::new(Vec::new());
 
 fn release_keys() -> Vec<[u8; 32]> {
@@ -31,7 +35,7 @@ fn answer(req: &str) -> String {
     guard(serde_json::json!({ "error": "the node stumbled on that; try again" }).to_string(), || {
         match (NODE.get(), serde_json::from_str::<serde_json::Value>(req)) {
             (Some(n), Ok(v)) => n.call(&v),
-            (None, _) => serde_json::json!({ "error": "node not started" }),
+            (None, _) => serde_json::json!({ "error": "node not started", "start_error": START_ERROR.lock().map(|e| e.clone()).unwrap_or(None) }),
             (_, Err(e)) => serde_json::json!({ "error": e.to_string() }),
         }
         .to_string()
@@ -72,6 +76,7 @@ pub extern "C" fn pyrate_start(dir: *const c_char, bootstrap: *const c_char) -> 
 }
 
 fn start(dir: *const c_char, bootstrap: *const c_char) -> i32 {
+    let _one = STARTING.lock().unwrap_or_else(|e| e.into_inner());
     if NODE.get().is_some() {
         return 1;
     }
@@ -98,6 +103,9 @@ fn start(dir: *const c_char, bootstrap: *const c_char) -> i32 {
         }
         Err(e) => {
             eprintln!("pyrate: {e:#}");
+            if let Ok(mut last) = START_ERROR.lock() {
+                *last = Some(format!("{e:#}"));
+            }
             -1
         }
     }

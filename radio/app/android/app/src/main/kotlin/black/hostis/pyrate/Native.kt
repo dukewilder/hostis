@@ -29,8 +29,8 @@ object Native {
             } catch (e: Exception) { "" }
             setReleaseKeys(asset("release_keys.txt"))
             Hold.key(ctx)?.let { setHoldKey(it) }
-            start(File(ctx.filesDir, "node").path, asset("bootstrap.txt").trim())
-            started = true
+            // 0 started, 1 already running (the screen got there first): either way it is up.
+            started = start(File(ctx.filesDir, "node").path, asset("bootstrap.txt").trim()) >= 0
         }
     }
 

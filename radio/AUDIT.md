@@ -70,11 +70,9 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
 
-- **P10** (medium) Drawer Lantern: the service restarts with no node, and the charging and Wi-Fi gate lives only in the Dart UI. `LanternService.kt:27-52`
 - **P17** (medium) Blocking native calls on the UI thread, in Dart and in the service. `PlaybackService.kt:53-58`
 - **P27** (medium) The numbers kit decodes and rewrites WAV files sample by sample on the UI isolate. `station.dart:1562-1596`
 - **P31** (low) Android App Links are not verified, so scanned posters open the browser. `AndroidManifest.xml:43-54`
-- **P32** (low) `pyrate_start` is not safe against two starters, and a failed start is invisible. `ffi/src/lib.rs:38-68; main.dart:58-60; Native.kt:21-31`
 - **P34** (medium) Brass (amber) is used throughout. `main.dart:25`
 - **P35** (low) Red is used beyond ON AIR, and there are two reds; M3 defaults bring rounded pickers and Roboto. `main.dart:23 vs 24`
 - **P36** (low) The window behind Flutter is white in light mode. `app/android/app/src/main/res/values/styles.xml`
@@ -222,4 +220,8 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **P20. Microphone permission dead-ends and the messages mislead.** (medium) Fixed: Every microphone ask goes through one path that waits for the owner's answer rather than replying before the dialog shows. A refusal says to press again; a phone that will no longer ask says so and offers OPEN SETTINGS, straight to the app's own page; a microphone that would not start says another app may have it. (ca5bf40)
 
-**P26. Bell ids differ between screens, depend on `String.hashCode`, and notifications are not checked.** (low) Fixed: A bell's id now comes from the station and the minute the show starts, by FNV-1a rather than the toolkit's hash, so the page and the watch bill agree and every build agrees. Setting or silencing a bell also clears any older bell for the same show, whatever id it was given, and a bell set while notifications are off for the app or its bells says so at once and offers OPEN SETTINGS. (pending)
+**P26. Bell ids differ between screens, depend on `String.hashCode`, and notifications are not checked.** (low) Fixed: A bell's id now comes from the station and the minute the show starts, by FNV-1a rather than the toolkit's hash, so the page and the watch bill agree and every build agrees. Setting or silencing a bell also clears any older bell for the same show, whatever id it was given, and a bell set while notifications are off for the app or its bells says so at once and offers OPEN SETTINGS. (a0d9777)
+
+**P10. Drawer Lantern: the service restarts with no node, and the charging and Wi-Fi gate lives only in the Dart UI.** (medium) Fixed: The Lantern service starts the node itself when Android restarts it with no screen and reads its size back, and it keeps its own charger-and-Wi-Fi gate: power and network changes and a minute's check set it, and switching the Lantern off shuts it. A phone left as a Lantern comes back on after a reboot. (pending)
+
+**P32. `pyrate_start` is not safe against two starters, and a failed start is invisible.** (low) Fixed: Starting is held under one lock, so the screen and a service starting at once make one node; the Kotlin side counts an already-running node as started; and a failed start is kept and shown on the dial in place of an endless search. (pending)

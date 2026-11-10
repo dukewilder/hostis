@@ -129,11 +129,8 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "conditions" -> {
-                    val bm = getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
-                    val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-                    val caps = cm.getNetworkCapabilities(cm.activeNetwork)
-                    val unmetered = caps?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true
-                    result.success(mapOf("charging" to bm.isCharging, "unmetered" to unmetered))
+                    val (charging, unmetered) = Conditions.read(this)
+                    result.success(mapOf("charging" to charging, "unmetered" to unmetered))
                 }
                 "install" -> {
                     val f = java.io.File(call.argument<String>("path") ?: "")
