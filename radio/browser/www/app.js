@@ -882,6 +882,33 @@ async function airFiles(list) {
   for (const [i, f] of files.entries()) { airing++; try { await airFile(f, rows[i]) } finally { airing-- } }
   studioStatus();
 }
+// Live from the tab: the microphone, nothing else, only while the button is held on.
+let live = null;
+$('st-live').onmouseenter = () => { $('st-livenote').hidden = false };
+$('st-live').onclick = async () => {
+  if (live) return endLive();
+  if (!mineCur || !adopted.has(mineCur)) return;
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }) }
+  catch (e) { $('st-livenote').hidden = false; $('st-livenote').textContent = window !== parent ? 'A page holding the radio cannot lend it the microphone. Open the open player itself.' : 'The microphone was not allowed. Your browser’s site settings can allow it.'; return }
+  const w = new Worker('encode-worker.js'), id = mineCur;
+  const ac = new AudioContext({ sampleRate: 48000 }), src = ac.createMediaStreamSource(stream), proc = ac.createScriptProcessor(4096, 1, 1), mute = ac.createGain();
+  mute.gain.value = 0; src.connect(proc); proc.connect(mute); mute.connect(ac.destination);
+  w.onmessage = e => { if (e.data.live || (e.data.out && e.data.frames !== undefined)) { try { if (e.data.out?.length) radio.live_chunk(id, e.data.out, 1, 24000) } catch (err) { console.warn(err) } } if (e.data.out && !e.data.live) w.terminate() };
+  w.postMessage({ id: 0, kind: 'begin', channels: 1, bitrate: 24000, talk: true, live: true });
+  proc.onaudioprocess = ev => { const f = ev.inputBuffer.getChannelData(0), pcm = new Int16Array(f.length); for (let i = 0; i < f.length; i++) pcm[i] = Math.max(-1, Math.min(1, f[i])) * 32767; w.postMessage({ id: 0, kind: 'feed', pcm }, [pcm.buffer]) };
+  const t0 = Date.now();
+  live = { stream, ac, proc, w, timer: setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); $('st-livetime').textContent = 'ON AIR ' + String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0') }, 500) };
+  $('st-live').classList.add('on'); $('st-live').querySelector('.lbl').textContent = 'End the broadcast';
+};
+function endLive() {
+  const l = live; live = null; if (!l) return;
+  l.stream.getTracks().forEach(t => t.stop()); l.proc.disconnect(); l.ac.close();
+  // What is left of the last six seconds goes out too.
+  l.w.postMessage({ id: 1, kind: 'end' });
+  clearInterval(l.timer); $('st-livetime').textContent = '';
+  $('st-live').classList.remove('on'); $('st-live').querySelector('.lbl').textContent = 'Go live';
+}
 $('st-files').onchange = e => { airFiles(e.target.files); e.target.value = '' };
 const drop = $('st-drop');
 drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over') });

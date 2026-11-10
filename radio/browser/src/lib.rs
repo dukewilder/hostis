@@ -1446,6 +1446,43 @@ impl Radio {
         Ok(hex(&track))
     }
 
+    /// Live from the tab's microphone: one six-second chunk of 20 ms Opus packets (framed as for
+    /// `add_track`), signed into the log as it is, and sent along the stem at once.
+    pub fn live_chunk(&self, id: &str, frames: &[u8], channels: u8, bitrate: u32) -> Result<(), JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let key = self.ship.mine.lock().unwrap().get(&st).map(|m| pyrate_core::StationKey::from_seed(m.key.seed())).ok_or_else(|| js(anyhow!("not a station this browser keeps")))?;
+        let (mut n, mut at) = (0u16, 0usize);
+        while at + 2 <= frames.len() {
+            let len = u16::from_be_bytes([frames[at], frames[at + 1]]) as usize;
+            if len == 0 || at + 2 + len > frames.len() {
+                return Err(js(anyhow!("a broken frame")));
+            }
+            at += 2 + len;
+            n += 1;
+        }
+        if n == 0 || n > pyrate_core::audio::FRAMES_PER_CHUNK {
+            return Err(js(anyhow!("not a chunk")));
+        }
+        let c = pyrate_core::Chunk::of(frames, n);
+        {
+            let mut archives = self.ship.archives.lock().unwrap();
+            let a = archives.get_mut(&st).ok_or_else(|| js(anyhow!("the station's log is not aboard yet")))?;
+            let at = raw_now().max(a.entries().last().map(|e| e.entry.at_ms + 1).unwrap_or(0));
+            let body = Body::Live { chunk: c.clone(), channels: channels.clamp(1, 2), bitrate };
+            let body = if key.id() == st { body } else { Body::Deputed { by: key.id().0, body: Box::new(body) } };
+            a.write(&key, at, body).map_err(|e| js(anyhow!("{e}")))?;
+        }
+        self.ship.clocks.lock().unwrap().remove(&st);
+        self.ship.hold.lock().unwrap().put(c.hash, frames.to_vec());
+        if let Some(m) = self.ship.mine.lock().unwrap().get_mut(&st) {
+            m.chunks.insert(c.hash, frames.to_vec());
+            // The air comes first: a live chunk goes ahead of any recording still sailing.
+            m.unsent.push_front(c.hash);
+        }
+        self.ship.sail_on();
+        Ok(())
+    }
+
     /// The stations this tab keeps, with what is still to sail and whether the network has them.
     pub fn mine(&self) -> String {
         let now = self.ship.now();
