@@ -4,10 +4,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 
 import 'art.dart';
@@ -209,7 +212,7 @@ class _StationPageState extends State<StationPage> {
                 load();
               }),
               pyrateButton('PROGRAMME', () async {
-                await Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(backgroundColor: black, appBar: AppBar(backgroundColor: black), body: ProgrammeEditor(station: id))));
+                await Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(backgroundColor: black, appBar: AppBar(backgroundColor: black), body: ProgrammeEditor(station: id, name: (s['name'] ?? '').toString()))));
                 load();
               }),
             ]),
@@ -515,7 +518,8 @@ Map<String, dynamic> freshProgramme() => {
 
 class ProgrammeEditor extends StatefulWidget {
   final String station;
-  const ProgrammeEditor({super.key, required this.station});
+  final String name;
+  const ProgrammeEditor({super.key, required this.station, this.name = ''});
   @override
   State<ProgrammeEditor> createState() => _ProgrammeEditorState();
 }
@@ -526,6 +530,7 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
   List hands = [];
   String? saved;
   bool loaded = false;
+  String? speaking;
 
   @override
   void initState() {
@@ -655,6 +660,32 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
       ),
       if (p['ident'] != null)
         Wrap(children: [for (final m in [15, 30, 60]) chip('Every $m minutes', (p['ident_every_min'] as num?)?.toInt() == m, () => setState(() => p['ident_every_min'] = m))]),
+      const SizedBox(height: 6),
+      pyrateButton(speaking ?? 'SPEAK AN IDENT', speaking != null ? null : () async {
+        final text = await askText(context, 'A SPOKEN IDENT', 'What the voice says', 'You\'re listening to ${widget.name.isEmpty ? 'Pyrate Radio' : widget.name}, ${frequency(widget.station).toStringAsFixed(1)} on the dial.');
+        if (text == null || text.trim().isEmpty) return;
+        setState(() => speaking = 'SPEAKING');
+        final path = await speakToFile(text.trim());
+        if (path == null) {
+          setState(() => speaking = null);
+          if (context.mounted) toast(context, 'This phone has no voice to speak with. Install a text-to-speech voice in the phone\'s settings.');
+          return;
+        }
+        setState(() => speaking = 'SETTING IT');
+        final title = 'Ident: ${text.trim().length > 40 ? '${text.trim().substring(0, 40)}…' : text.trim()}';
+        final hash = await addAndWait(widget.station, path, title, 'spoken ident');
+        final r = await Native.callAway({'cmd': 'programme', 'station': widget.station});
+        if (!mounted) return;
+        setState(() {
+          speaking = null;
+          if (r is Map) library = (r['library'] as List?) ?? library;
+          if (hash != null) {
+            p['ident'] = hash;
+            p['ident_every_min'] = (p['ident_every_min'] as num?)?.toInt() ?? 30;
+          }
+        });
+      }),
+      note('The phone\'s own voice reads it, here on the phone. Set the programme to keep it.'),
       const SizedBox(height: 24),
       pyrateButton('SET THE PROGRAMME', loaded ? save : null),
       if (saved != null) Padding(padding: const EdgeInsets.only(top: 10), child: note(saved!)),
@@ -1283,4 +1314,319 @@ class _ChatterPanelState extends State<ChatterPanel> {
       if (err != null) note(err!),
     ]);
   }
+}
+
+// ---------------------------------------------------------------------------------------
+// The chart of the seas: every station that names a home port, where the port is. The
+// world and its places are Natural Earth's, in the public domain, and ride in the app.
+
+class Chart {
+  final List<List<Offset>> land;
+  final List places;
+  Chart(this.land, this.places);
+  static Chart? _c;
+  static Future<Chart> load() async {
+    if (_c != null) return _c!;
+    final j = jsonDecode(await rootBundle.loadString('assets/chart.json')) as Map;
+    final land = <List<Offset>>[];
+    for (final ring in (j['land'] as String).split('M').where((r) => r.isNotEmpty)) {
+      final n = ring.replaceAll('Z', '').trim().split(' ').map(double.parse).toList();
+      land.add([for (var i = 0; i + 1 < n.length; i += 2) Offset(n[i], n[i + 1])]);
+    }
+    return _c = Chart(land, j['places'] as List);
+  }
+
+  final _hits = <String, Offset?>{};
+  static String norm(String s) => s.toLowerCase().trim();
+
+  /// "Austin" or "Austin, Texas": the most populous place that fits, in chart units.
+  Offset? place(String port) => _hits.putIfAbsent(port, () {
+        final parts = port.split(',').map(norm).toList();
+        final n = parts.first, q = parts.skip(1).join(' ').trim();
+        if (n.isEmpty) return null;
+        for (final p in places) {
+          if ((norm(p[0]) == n || norm(p[1]) == n) && (q.isEmpty || norm(p[2]).startsWith(q) || norm(p[3]).startsWith(q) || norm(p[4]) == q)) {
+            return Offset(((p[6] as num) + 180) * 2, (90 - (p[5] as num)) * 2);
+          }
+        }
+        return null;
+      });
+}
+
+class ChartPainter extends CustomPainter {
+  final Chart chart;
+  final List<(Offset, Map)> dots;
+  final String? tuned;
+  ChartPainter(this.chart, this.dots, this.tuned);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final k = size.width / 720;
+    canvas.translate(0, -20 * k);
+    canvas.scale(k);
+    final fill = Paint()..color = const Color(0x12EDE4CE);
+    final edge = Paint()
+      ..color = boneGhost
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.5;
+    for (final ring in chart.land) {
+      final path = Path()..addPolygon(ring, true);
+      canvas.drawPath(path, fill);
+      canvas.drawPath(path, edge);
+    }
+    for (final (o, s) in dots) {
+      final on = s['id'] == tuned;
+      canvas.drawCircle(o, on ? 5 : 3.4, Paint()..color = black);
+      canvas.drawCircle(o, on ? 4 : 2.6, Paint()..color = s['live'] == true ? bloodBright : bone);
+      if (on) {
+        canvas.drawCircle(o, 6.5, Paint()
+          ..color = bloodBright
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant ChartPainter old) => true;
+}
+
+class ChartPage extends StatefulWidget {
+  final Tuner radio;
+  final VoidCallback onTune;
+  const ChartPage({super.key, required this.radio, required this.onTune});
+  @override
+  State<ChartPage> createState() => _ChartPageState();
+}
+
+class _ChartPageState extends State<ChartPage> {
+  Chart? chart;
+
+  @override
+  void initState() {
+    super.initState();
+    Chart.load().then((c) => mounted ? setState(() => chart = c) : null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = chart;
+    final hideMature = pref('hide_mature') == true, showExplicit = pref('show_explicit') == true;
+    final dots = <(Offset, Map)>[];
+    if (c != null) {
+      for (final s in widget.radio.stations) {
+        if ((s['explicit'] == true && !showExplicit) || (hideMature && (s['mature'] == true || s['explicit'] == true))) continue;
+        final port = (s['port'] ?? '').toString();
+        final o = port.isEmpty ? null : c.place(port);
+        if (o == null) continue;
+        final j = int.parse((s['id'] as String).substring(0, 4), radix: 16);
+        dots.add((o + Offset((j % 7 - 3) * .6, ((j >> 3) % 7 - 3) * .6), s));
+      }
+    }
+    return Scaffold(
+      backgroundColor: black,
+      appBar: AppBar(backgroundColor: black, title: Text('THE CHART OF THE SEAS', style: carved(13))),
+      body: c == null
+          ? Center(child: note('Unrolling the chart'))
+          : ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
+              note(dots.isEmpty ? 'No station on the air has named a home port yet.' : '${dots.length} ${dots.length == 1 ? 'station names' : 'stations name'} a home port. Tap one to tune; pinch to look closer.'),
+              const SizedBox(height: 12),
+              LayoutBuilder(builder: (context, box) {
+                final w = box.maxWidth, k = w / 720;
+                return Container(
+                  decoration: BoxDecoration(border: Border.all(color: boneGhost, width: 0.5)),
+                  child: InteractiveViewer(
+                    maxScale: 8,
+                    child: GestureDetector(
+                      onTapUp: (d) {
+                        final at = Offset(d.localPosition.dx / k, d.localPosition.dy / k + 20);
+                        (Offset, Map)? best;
+                        for (final dot in dots) {
+                          if (best == null || (dot.$1 - at).distance < (best.$1 - at).distance) best = dot;
+                        }
+                        if (best != null && (best.$1 - at).distance < 14) {
+                          widget.radio.tune(best.$2['id'] as String);
+                          widget.onTune();
+                          Navigator.pop(context);
+                        }
+                      },
+                      child: CustomPaint(size: Size(w, 290 * k), painter: ChartPainter(c, dots, widget.radio.tuned)),
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 16),
+              for (final (_, s) in dots)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(s['name'] ?? '', style: serif(17)),
+                  subtitle: Text((s['port'] ?? '').toString().toUpperCase(), style: carved(9, color: boneFaint, spacing: 0.25)),
+                  trailing: Text('${s['aboard'] ?? 0}', style: mono(13, color: boneDim, weight: FontWeight.w700)),
+                  onTap: () {
+                    widget.radio.tune(s['id'] as String);
+                    widget.onTune();
+                    Navigator.pop(context);
+                  },
+                ),
+            ]),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------------------
+// The phone's voice: idents, announcements and numbers, spoken here and set like any
+// recording.
+
+Future<String?> askText(BuildContext context, String title, String label, String initial) {
+  final c = TextEditingController(text: initial);
+  return showDialog<String>(
+    context: context,
+    builder: (d) => AlertDialog(
+      backgroundColor: panel,
+      shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+      title: Text(title, style: carved(13)),
+      content: TextField(controller: c, maxLines: 4, maxLength: 400, autofocus: true, style: serif(16), decoration: pyrateField(label)),
+      actions: [TextButton(onPressed: () => Navigator.pop(d, c.text), child: Text('SPEAK IT', style: carved(11)))],
+    ),
+  );
+}
+
+/// Speaks text into a WAV file in the phone's temporary folder. Null if the phone has no voice.
+Future<String?> speakToFile(String text, {double rate = 0.95, double pitch = 1.0}) async {
+  final dir = await getTemporaryDirectory();
+  final path = '${dir.path}/voice-${DateTime.now().microsecondsSinceEpoch}.wav';
+  final ok = await ship.invokeMethod<bool>('speak', {'text': text, 'path': path, 'rate': rate, 'pitch': pitch}).catchError((_) => false) ?? false;
+  return ok && File(path).existsSync() && File(path).lengthSync() > 1000 ? path : null;
+}
+
+/// Sets a recording on a station and waits until it is on the clock. Its entry hash, or null.
+Future<String?> addAndWait(String station, String path, String title, String source) async {
+  final r = await Native.callAway({'cmd': 'add_track', 'station': station, 'path': path, 'title': title, 'by': '', 'source': source, 'talk': true});
+  final job = r is Map ? r['job'] : null;
+  for (var i = 0; job != null && i < 120; i++) {
+    await Future.delayed(const Duration(milliseconds: 700));
+    final st = Native.call({'cmd': 'status'});
+    final j = st is Map ? ((st['jobs'] as List?) ?? []).firstWhere((x) => x['id'] == job, orElse: () => null) : null;
+    if (j == null || !(j['state'] as String).startsWith('Setting')) break;
+  }
+  unawaited(File(path).delete().then((_) {}, onError: (_) {}));
+  final lib = await Native.callAway({'cmd': 'library', 'station': station});
+  if (lib is! List) return null;
+  final hit = lib.lastWhere((t) => t['title'] == title, orElse: () => null);
+  return hit?['hash'] as String?;
+}
+
+/// Writes 16-bit mono PCM as a WAV file.
+Future<void> writeWav(String path, List<int> pcm, int rate) async {
+  final b = BytesBuilder();
+  void u32(int v) => b.add([v & 255, v >> 8 & 255, v >> 16 & 255, v >> 24 & 255]);
+  void u16(int v) => b.add([v & 255, v >> 8 & 255]);
+  b.add('RIFF'.codeUnits); u32(36 + pcm.length * 2); b.add('WAVEfmt '.codeUnits); u32(16); u16(1); u16(1); u32(rate); u32(rate * 2); u16(2); u16(16);
+  b.add('data'.codeUnits); u32(pcm.length * 2);
+  for (final v in pcm) u16(v & 0xffff);
+  await File(path).writeAsBytes(b.toBytes());
+}
+
+/// The 16-bit mono samples and rate of a plain WAV file, as the phone's voice writes them.
+(List<int>, int)? readWav(String path) {
+  final d = File(path).readAsBytesSync();
+  if (d.length < 44 || String.fromCharCodes(d.sublist(0, 4)) != 'RIFF') return null;
+  int u16(int o) => d[o] | d[o + 1] << 8;
+  int u32(int o) => u16(o) | u16(o + 2) << 16;
+  var o = 12, rate = 0, ch = 1, bits = 16;
+  while (o + 8 <= d.length) {
+    final id = String.fromCharCodes(d.sublist(o, o + 4)), n = u32(o + 4);
+    if (id == 'fmt ') {
+      ch = u16(o + 10);
+      rate = u32(o + 12);
+      bits = u16(o + 22);
+    } else if (id == 'data' && bits == 16) {
+      final out = <int>[];
+      for (var i = o + 8; i + 1 < o + 8 + n && i + 1 < d.length; i += 2 * ch) {
+        final v = u16(i);
+        out.add(v >= 32768 ? v - 65536 : v);
+      }
+      return (out, rate);
+    }
+    o += 8 + n + (n & 1);
+  }
+  return null;
+}
+
+/// A numbers station's interval signal: three soft notes, twice, then quiet.
+List<int> intervalSignal(int rate) {
+  final out = <int>[];
+  for (var round = 0; round < 2; round++) {
+    for (final f in [660.0, 880.0, 660.0]) {
+      final n = (rate * 0.32).round();
+      for (var i = 0; i < n; i++) {
+        final env = (i < 400 ? i / 400 : 1.0) * (i > n - 1200 ? (n - i) / 1200 : 1.0);
+        out.add((math.sin(2 * math.pi * f * i / rate) * 9000 * env).round());
+      }
+    }
+    out.addAll(List.filled((rate * 0.6).round(), 0));
+  }
+  return out;
+}
+
+const _digits = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+
+/// The numbers station kit: messages of five-figure groups in the phone's voice, each
+/// after the interval signal. They go on the station's clock in order.
+class NumbersKit extends StatefulWidget {
+  final String station;
+  const NumbersKit({super.key, required this.station});
+  @override
+  State<NumbersKit> createState() => _NumbersKitState();
+}
+
+class _NumbersKitState extends State<NumbersKit> {
+  int messages = 3, groups = 8;
+  String? busy;
+
+  Future<void> make() async {
+    final rnd = math.Random.secure();
+    for (var m = 1; m <= messages; m++) {
+      setState(() => busy = 'Reading message $m of $messages');
+      final gs = [for (var g = 0; g < groups; g++) [for (var k = 0; k < 5; k++) rnd.nextInt(10)]];
+      final text = 'Ready. Ready. Message ${_digits[m % 10]}. '
+          '${gs.map((g) => g.map((d) => _digits[d]).join(', ')).join('. ')}. '
+          'Again. ${gs.map((g) => g.map((d) => _digits[d]).join(', ')).join('. ')}. End of message.';
+      final spoken = await speakToFile(text, rate: 0.8, pitch: 0.9);
+      if (spoken == null) {
+        setState(() => busy = null);
+        if (mounted) toast(context, 'This phone has no voice to speak with. Install a text-to-speech voice in the phone\'s settings.');
+        return;
+      }
+      final w = readWav(spoken);
+      var path = spoken;
+      if (w != null) {
+        path = spoken.replaceAll('.wav', '-signal.wav');
+        await writeWav(path, [...intervalSignal(w.$2), ...w.$1], w.$2);
+        unawaited(File(spoken).delete().then((_) {}, onError: (_) {}));
+      }
+      setState(() => busy = 'Setting message $m on the clock');
+      await addAndWait(widget.station, path, 'Message ${m.toString().padLeft(2, '0')}', 'numbers kit');
+    }
+    if (!mounted) return;
+    setState(() => busy = null);
+    toast(context, '$messages messages are on the clock.');
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          heading('A NUMBERS STATION'),
+          note('Messages of five-figure groups, read twice in the phone\'s own voice after an interval signal, the way the shortwave stations did. The figures are drawn at random on this phone and mean whatever you say they mean.'),
+          const SizedBox(height: 10),
+          Text('MESSAGES', style: carved(10, color: boneFaint)),
+          Wrap(children: [for (final n in [1, 3, 6, 12]) chip('$n', messages == n, () => setState(() => messages = n))]),
+          Text('GROUPS IN EACH', style: carved(10, color: boneFaint)),
+          Wrap(children: [for (final n in [5, 8, 12, 20]) chip('$n', groups == n, () => setState(() => groups = n))]),
+          const SizedBox(height: 10),
+          pyrateButton(busy ?? 'MAKE THEM', busy == null ? make : null),
+        ]),
+      );
 }

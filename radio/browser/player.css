@@ -139,3 +139,10 @@ html.embed .set{margin:0}
 .sayrow input{flex:1 1 10rem}
 #clipbox video{flex:0 0 auto;width:min(200px,46vw);aspect-ratio:9/16;background:var(--black);border:1px solid var(--bone-ghost)}
 a.plain{text-decoration:none}
+.views{display:flex;gap:.5rem;margin:0 0 1rem}button.plain.on{background:var(--bone);color:var(--black);border-color:var(--bone)}
+.chart svg{display:block;width:100%;height:auto;border:1px solid var(--bone-ghost);background:var(--black)}
+.chart .land{fill:rgba(237,228,206,.07);stroke:var(--bone-ghost);stroke-width:.4}
+.chart .dot{cursor:pointer}.chart .dot circle{fill:var(--bone);stroke:var(--black);stroke-width:1}
+.chart .dot.live circle{fill:var(--blood-bright)}.chart .dot.on circle{r:5;fill:var(--bone);stroke:var(--blood-bright);stroke-width:1.5}
+.chart .dot:hover circle,.chart .dot:focus-visible circle{r:5}
+.chart p{margin-top:.6rem}

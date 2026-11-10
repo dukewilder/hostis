@@ -264,6 +264,11 @@ class _LogPageState extends State<LogPage> {
             Row(children: [
               Expanded(child: TextField(controller: search, style: serif(17), decoration: pyrateField('Search the Log'))),
               const SizedBox(width: 12),
+              IconButton(
+                tooltip: 'The chart of the seas',
+                icon: const Icon(Icons.public, size: 20, color: boneFaint),
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChartPage(radio: radio, onTune: widget.onTune))),
+              ),
               pyrateButton('SPIN THE DIAL', () {
                 final pool = filtered().where((s) => s['id'] != radio.tuned).toList();
                 if (pool.isEmpty) return;

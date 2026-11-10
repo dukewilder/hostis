@@ -334,7 +334,7 @@ function rows() {
   const m = marooned();
   const shown = stations.filter(s => !m.has(s.id) && allowed(s));
   const box = $('rows'); box.innerHTML = '';
-  dial(shown);
+  dial(shown); if (!$('chart').hidden) chart();
   if (!shown.length) { box.innerHTML = '<p class="fine">Listening for station cards. The first come in within a minute.</p>'; return }
   for (const s of shown) {
     const r = document.createElement('div'); r.className = 'row'; r.dataset.id = s.id;
@@ -373,6 +373,30 @@ $('spin').onclick = () => {
   const m = marooned(), pool = stations.filter(s => !m.has(s.id) && allowed(s) && s.id !== cur?.id);
   if (pool.length) { listen(pool[Math.floor(Math.random() * pool.length)]); scrollTo({ top: 0, behavior: 'smooth' }) }
 };
+// ---- The chart of the seas: stations by the home port they name ------------------------
+let chartData = null; const ports = new Map();
+const norm = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+// "Austin" or "Austin, Texas" or "Paris, France": the most populous place that fits.
+function place(port) {
+  if (ports.has(port)) return ports.get(port);
+  const [n, ...rest] = port.split(',').map(norm), q = rest.join(' ').trim();
+  const hit = n && chartData.places.find(p => (norm(p[0]) === n || norm(p[1]) === n) && (!q || norm(p[2]).startsWith(q) || norm(p[3]).startsWith(q) || norm(p[4]) === q));
+  const r = hit ? [hit[5], hit[6]] : null; ports.set(port, r); return r;
+}
+async function chart() {
+  if (!chartData) { try { chartData = await (await fetch('chart.json')).json() } catch (e) { $('chart').innerHTML = '<p class="fine">The chart did not load. The list still works.</p>'; return } }
+  const m = marooned(); let dots = '', n = 0;
+  for (const s of stations.filter(s => !m.has(s.id) && allowed(s) && s.port)) {
+    const p = place(s.port); if (!p) continue; n++;
+    const j = parseInt(s.id.slice(0, 4), 16), x = (p[1] + 180) * 2 + (j % 7 - 3) * .6, y = (90 - p[0]) * 2 + ((j >> 3) % 7 - 3) * .6;
+    dots += '<g class="dot' + (s.live ? ' live' : '') + (cur?.id === s.id ? ' on' : '') + '" data-id="' + s.id + '" tabindex="0" role="button" aria-label="' + esc(s.name + ', ' + s.port) + '"><circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3.4"/><title>' + esc(s.name + ', ' + s.port) + '</title></g>';
+  }
+  $('chart').innerHTML = '<svg viewBox="0 20 720 290" role="img" aria-label="The chart of the seas"><path class="land" d="' + chartData.land + '"/>' + dots + '</svg><p class="fine">' + (n ? n + (n === 1 ? ' station names' : ' stations name') + ' a home port. The rest sail under no port.' : 'No station on the air has named a home port yet.') + '</p>';
+  $('chart').querySelectorAll('.dot').forEach(d => { const go = () => { const s = stations.find(x => x.id === d.dataset.id); if (s) { tuneTo(s); scrollTo({ top: 0, behavior: 'smooth' }) } }; d.onclick = go; d.onkeydown = e => e.key === 'Enter' && go() });
+}
+function view(c) { $('chart').hidden = !c; $('rows').hidden = c; $('vchart').classList.toggle('on', c); $('vlist').classList.toggle('on', !c); $('vchart').setAttribute('aria-pressed', c); $('vlist').setAttribute('aria-pressed', !c); if (c) chart() }
+$('vlist').onclick = () => view(false); $('vchart').onclick = () => view(true);
+
 // ---- Chatter: talk in the station's room, kept by nobody --------------------------------
 const myName = () => store('pyrate.name') || '';
 function chatter() {

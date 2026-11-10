@@ -23,6 +23,7 @@ open(f"{dist}/app.js", "w", encoding="utf-8").write(out_js.replace("./pkg/pyrate
 for f in ["pyrate_browser.js", "pyrate_browser_bg.wasm"]:
     shutil.copy(f"{W}/pkg/{f}", f"{dist}/pkg/{f}")
 shutil.copy(f"{W}/opus-decoder.min.js", dist)
+shutil.copy(f"{W}/chart.json", dist)
 shutil.copy(f"{R}/node/src/web/wordmark.png", dist)
 shutil.copy(f"{R}/node/src/web/mark.png", dist)
 print("built", v)
