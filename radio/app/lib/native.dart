@@ -10,6 +10,13 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/services.dart' show MethodChannel;
+
+const _shell = MethodChannel('pyrate/service');
+
+/// While the 24 words or a PIN are on screen: no screenshot, no recents thumbnail, no
+/// screen recording.
+Future<void> secure(bool on) => _shell.invokeMethod('secure', {'on': on}).catchError((_) {});
 
 typedef _StartC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>);
 typedef _StartD = int Function(Pointer<Utf8>, Pointer<Utf8>);

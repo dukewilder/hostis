@@ -74,6 +74,13 @@ class MainActivity : FlutterActivity() {
                         result.success(false)
                     }
                 }
+                "secure" -> {
+                    // While the 24 words or a PIN are on screen: no screenshots, no recents
+                    // thumbnail, no screen recording.
+                    val flag = android.view.WindowManager.LayoutParams.FLAG_SECURE
+                    if (call.argument<Boolean>("on") == true) window.addFlags(flag) else window.clearFlags(flag)
+                    result.success(null)
+                }
                 "live" -> {
                     val i = Intent(this, PlaybackService::class.java)
                         .putExtra("title", "ON AIR")

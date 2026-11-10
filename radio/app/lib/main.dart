@@ -55,8 +55,8 @@ void main() async {
       .where((l) => RegExp(r'^[0-9a-f]{64}$').hasMatch(l))
       .toList();
   Native.setReleaseKeys(await rootBundle.loadString('assets/release_keys.txt'));
-  final started = Native.start('${dir.path}${Platform.pathSeparator}node', boot);
-  print('pyrate: node start $started');
+  // Nothing about the node, the stations or the listener goes to the phone's log.
+  Native.start('${dir.path}${Platform.pathSeparator}node', boot);
   runApp(const PyrateApp());
 }
 
@@ -233,7 +233,6 @@ class Tuner extends ChangeNotifier {
   String? pendingLink;
 
   void tune(String id) {
-    print('pyrate: tune $id');
     tuned = id;
     playing = true;
     _tunedAt = DateTime.now().millisecondsSinceEpoch;
@@ -649,33 +648,63 @@ class _ColoursPageState extends State<ColoursPage> {
       error = null;
     });
     final r = await Native.callAway({'cmd': 'raise', 'name': name.text, 'about': about.text, 'pocket': pocket});
-    if (r is Map && r['id'] is String) await shape.apply(r['id']);
-    setState(() {
-      raising = false;
-      if (r is Map && r['error'] != null) error = r['error'];
-    });
+    // The words first: they are shown once, so nothing that can fail comes before them, and
+    // neither the back gesture nor a stray tap closes them before the keeper says so.
     if (r is Map && r['words'] is String && mounted) {
+      var written = false;
+      await secure(true);
+      if (!mounted) return;
       await showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (c) => AlertDialog(
-          backgroundColor: panel,
-          shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
-          title: Text('Write these down', style: serif(24)),
-          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('These 24 words are the station. This phone keeps only a deputy key, which can broadcast but cannot strike. If the phone is lost or taken, the words take the station back and shut the deputy out. They are shown once and kept nowhere.',
-                style: serif(15, color: boneFaint, italic: true)),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: black, border: Border.all(color: boneGhost, width: 0.5)),
-              child: SelectableText(r['words'], style: mono(13, color: bone)),
+        builder: (c) => PopScope(
+          canPop: false,
+          child: StatefulBuilder(
+            builder: (c, set) => AlertDialog(
+              backgroundColor: panel,
+              shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+              title: Text('Write these down', style: serif(24)),
+              content: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('These 24 words are the station. This phone keeps only a deputy key, which can broadcast but cannot strike. If the phone is lost or taken, the words take the station back and shut the deputy out. They are shown once and kept nowhere.',
+                      style: serif(15, color: boneFaint, italic: true)),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: black, border: Border.all(color: boneGhost, width: 0.5)),
+                    child: SelectableText(r['words'], style: mono(13, color: bone)),
+                  ),
+                  CheckboxListTile(
+                    value: written,
+                    onChanged: (v) => set(() => written = v == true),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: Text('I have written all 24 down, on paper', style: serif(15)),
+                  ),
+                ]),
+              ),
+              actions: [TextButton(onPressed: written ? () => Navigator.pop(c) : null, child: Text('THEY ARE WRITTEN DOWN', style: carved(11, color: written ? bone : boneGhost)))],
             ),
-          ]),
-          actions: [TextButton(onPressed: () => Navigator.pop(c), child: Text('THEY ARE WRITTEN DOWN', style: carved(11)))],
+          ),
         ),
       );
+      await secure(false);
     }
+    String? shaped;
+    if (r is Map && r['id'] is String) {
+      try {
+        await shape.apply(r['id']);
+      } catch (e) {
+        shaped = 'The station is up, but its first settings did not take: $e';
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      raising = false;
+      if (r is Map && r['error'] != null) error = r['error'];
+      if (r is Map && r['pocket_error'] != null) error = 'The station is private, but its topic did not open yet: ${r['pocket_error']}';
+      if (shaped != null) error = shaped;
+    });
   }
 
   String? artNote;
@@ -822,11 +851,14 @@ class _ColoursPageState extends State<ColoursPage> {
         const SizedBox(height: 8),
         Text('Lost the phone, or had it taken? The 24 words bring the station to this phone and shut the old one out.',
             style: serif(14, color: boneFaint, italic: true)),
-        TextField(controller: restoreWords, style: mono(12, color: bone), maxLines: 3, decoration: field('The 24 words')),
+        TextField(controller: restoreWords, style: mono(12, color: bone), maxLines: 3, decoration: field('The 24 words'),
+            enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, keyboardType: TextInputType.visiblePassword),
         const SizedBox(height: 12),
         Row(children: [
           button('TAKE IT BACK', () async {
-            final r = await Native.callAway({'cmd': 'restore', 'phrase': restoreWords.text});
+            final phrase = restoreWords.text;
+            restoreWords.clear();
+            final r = await Native.callAway({'cmd': 'restore', 'phrase': phrase});
             setState(() => error = (r is Map && r['error'] != null) ? r['error'] : null);
           }),
         ]),
@@ -1078,6 +1110,8 @@ class _ColoursPageState extends State<ColoursPage> {
       Row(children: [
         button('STRIKE COLOURS', () async {
           final words = TextEditingController();
+          await secure(true);
+          if (!context.mounted) return;
           final ok = await showDialog<bool>(
             context: context,
             builder: (c) => AlertDialog(
@@ -1095,6 +1129,7 @@ class _ColoursPageState extends State<ColoursPage> {
               ],
             ),
           );
+          await secure(false);
           final phrase = words.text;
           words.clear();
           words.dispose();

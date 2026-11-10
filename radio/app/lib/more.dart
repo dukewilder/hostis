@@ -883,6 +883,8 @@ class _HandsPanelState extends State<HandsPanel> {
     final words = TextEditingController();
     final code = TextEditingController();
     final label = TextEditingController();
+    await secure(true);
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
@@ -894,14 +896,19 @@ class _HandsPanelState extends State<HandsPanel> {
             note('Your co-host opens Colours, presses JOIN A CREW and sends you the code it shows. Their phone can then broadcast for this station. Your words can take it back at any time.'),
             TextField(controller: code, style: mono(12, color: bone), decoration: pyrateField('Their code')),
             TextField(controller: label, style: serif(16), decoration: pyrateField('Their name, for your own record')),
-            TextField(controller: words, style: mono(12, color: bone), maxLines: 3, decoration: pyrateField('Your 24 words')),
+            TextField(controller: words, style: mono(12, color: bone), maxLines: 3, decoration: pyrateField('Your 24 words'),
+                enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, keyboardType: TextInputType.visiblePassword),
           ]),
         ),
         actions: [TextButton(onPressed: () => Navigator.pop(c, true), child: Text('APPOINT', style: carved(11)))],
       ),
     );
+    await secure(false);
+    final phrase = words.text;
+    words.clear();
     if (ok != true) return;
-    final r = await Native.callAway({'cmd': 'hand_appoint', 'station': widget.station, 'words': words.text, 'code': code.text, 'label': label.text});
+    final r = await Native.callAway({'cmd': 'hand_appoint', 'station': widget.station, 'words': phrase, 'code': code.text, 'label': label.text});
+    if (!mounted) return;
     setState(() => msg = r is Map && r['error'] != null ? r['error'] : 'Appointed. Tell them your station\'s call sign and id.');
   }
 
@@ -1132,7 +1139,7 @@ class _ShipPapersState extends State<ShipPapers> {
         backgroundColor: panel,
         shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
         title: Text('LOCK COLOURS', style: carved(13)),
-        content: TextField(controller: pin, autofocus: true, keyboardType: TextInputType.number, obscureText: true, style: mono(16, color: bone), decoration: pyrateField('Four or more digits')),
+        content: TextField(controller: pin, autofocus: true, keyboardType: TextInputType.number, obscureText: true, enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, style: mono(16, color: bone), decoration: pyrateField('Four or more digits')),
         actions: [TextButton(onPressed: () => Navigator.pop(c, true), child: Text('LOCK', style: carved(11)))],
       ),
     );
@@ -1284,6 +1291,9 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
             controller: pin,
             autofocus: true,
             obscureText: true,
+            enableSuggestions: false,
+            autocorrect: false,
+            enableIMEPersonalizedLearning: false,
             keyboardType: TextInputType.number,
             textAlign: TextAlign.center,
             style: mono(20, color: bone),
