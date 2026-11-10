@@ -44,13 +44,16 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="pyrate" android:host="station"/>
             </intent-filter>
-            <intent-filter>
+            <!-- Verified once hostis.black serves /.well-known/assetlinks.json naming this
+                 app's signing certificate (tools/assetlinks.py makes it); until then the
+                 links open in the browser, as they always have. -->
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="https" android:host="hostis.black" android:pathPrefix="/radio"/>
             </intent-filter>
-            <intent-filter>
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
