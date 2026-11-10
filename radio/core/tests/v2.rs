@@ -198,3 +198,16 @@ fn a_films_centre_channel_survives_the_fold_and_silence_is_refused() {
     assert!(ingest(&p, Profile::Music).is_err(), "a silent file is no recording");
     let _ = std::fs::remove_file(&p);
 }
+
+#[test]
+fn a_release_needs_two_different_keys() {
+    use pyrate_core::{archive::release_message, release_trusted};
+    let (a, b) = (StationKey::generate().unwrap(), StationKey::generate().unwrap());
+    let sha = [7u8; 32];
+    let msg = release_message(42, &sha);
+    let (sa, sb) = (a.sign(&msg).to_vec(), b.sign(&msg).to_vec());
+    let keys = [a.id().0, a.id().0, b.id().0];
+    assert!(!release_trusted(&keys, 42, &sha, &[(0, sa.clone()), (1, sa.clone())]), "one key named twice is still one key");
+    assert!(release_trusted(&keys, 42, &sha, &[(0, sa.clone()), (2, sb.clone())]));
+    assert!(!release_trusted(&keys, 43, &sha, &[(0, sa), (2, sb)]), "signed for another build");
+}

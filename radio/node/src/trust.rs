@@ -108,15 +108,38 @@ impl Inner {
         let dir = self.cfg.dir.join("updates");
         std::fs::create_dir_all(&dir)?;
         let path: PathBuf = dir.join(format!("pyrate-{code}.apk"));
-        if !path.exists() {
-            let mut apk = Vec::new();
-            for c in &chunks {
-                apk.extend(self.chunk(&st, &c.hash).await?);
+        // A file already there is checked again before it is offered: one cut short, or
+        // changed, is fetched afresh rather than handed to the installer.
+        let whole = |p: &std::path::Path| -> bool {
+            let Ok(mut f) = std::fs::File::open(p) else { return false };
+            let mut h = Sha256::new();
+            std::io::copy(&mut f, &mut h).is_ok() && h.finalize().as_slice() == sha
+        };
+        if !whole(&path) {
+            // Written piece by piece while it is hashed, and named only once it matches.
+            let part = path.with_extension("part");
+            let mut h = Sha256::new();
+            {
+                use std::io::Write;
+                let mut f = std::io::BufWriter::new(std::fs::File::create(&part)?);
+                for c in &chunks {
+                    let b = self.chunk(&st, &c.hash).await?;
+                    h.update(&b);
+                    f.write_all(&b)?;
+                }
+                f.flush()?;
             }
-            if Sha256::digest(&apk).as_slice() != sha {
+            if h.finalize().as_slice() != sha {
+                let _ = std::fs::remove_file(&part);
                 return Err(anyhow!("the assembled release does not match its signed hash"));
             }
-            std::fs::write(&path, apk)?;
+            std::fs::rename(&part, &path)?;
+            // Older releases fetched here are no use once a newer one is aboard.
+            for e in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+                if e.path() != path {
+                    let _ = std::fs::remove_file(e.path());
+                }
+            }
             say(&format!("release {version} aboard and checked"));
         }
         Ok(json!({ "available": true, "version": version, "code": code, "notes": notes, "path": path.to_string_lossy() }))
