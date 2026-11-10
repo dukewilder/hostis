@@ -86,40 +86,69 @@ object Ship {
 
     private var server: ServerSocket? = null
 
-    /** Pass it on by QR: this phone serves the app over the local network while the screen is open. */
+    /**
+     * Pass it on by QR: this phone serves the app over the local network while the screen is
+     * open, and for fifteen minutes at most. It listens only on its own local address, answers
+     * only under a path nobody can guess (so a scan of the room's Wi-Fi finds nothing that says
+     * Pyrate Radio), serves a few at a time, and drops anyone slow to ask.
+     */
     fun passStart(c: Context): String? {
         passStop()
         val file = apk(c)
         val ip = NetworkInterface.getNetworkInterfaces().toList().filter { it.isUp && !it.isLoopback }
-            .flatMap { it.inetAddresses.toList() }.firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress ?: return null
-        val s = ServerSocket(0)
+            .flatMap { it.inetAddresses.toList() }.firstOrNull { it is Inet4Address && it.isSiteLocalAddress } ?: return null
+        val token = ByteArray(9).also { java.security.SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
+        val s = ServerSocket(0, 8, ip)
         server = s
+        val open = java.util.concurrent.atomic.AtomicInteger(0)
+        val ends = System.currentTimeMillis() + 15 * 60_000
         thread(isDaemon = true) {
             while (!s.isClosed) {
                 val sock = try { s.accept() } catch (e: Exception) { break }
+                if (System.currentTimeMillis() > ends) {
+                    try { sock.close() } catch (e: Exception) {}
+                    passStop()
+                    break
+                }
+                if (open.incrementAndGet() > 4) {
+                    open.decrementAndGet()
+                    try { sock.close() } catch (e: Exception) {}
+                    continue
+                }
                 thread(isDaemon = true) {
-                    sock.use { k ->
-                        val line = k.getInputStream().bufferedReader().readLine() ?: ""
-                        val out = k.getOutputStream()
-                        if (line.contains("/PyrateRadio.apk")) {
-                            out.write(("HTTP/1.1 200 OK\r\nContent-Type: application/vnd.android.package-archive\r\nContent-Length: ${file.length()}\r\n" +
-                                "Content-Disposition: attachment; filename=\"Pyrate Radio.apk\"\r\nConnection: close\r\n\r\n").toByteArray())
-                            file.inputStream().use { it.copyTo(out) }
-                        } else {
-                            val page = "<!doctype html><meta name=viewport content='width=device-width'><body style='background:#030303;color:#ede4ce;font-family:serif;text-align:center;padding:3em 1em'>" +
-                                "<h1 style='letter-spacing:.2em'>PYRATE RADIO</h1><p>Passed on by hand. No store, no account.</p>" +
-                                "<p><a style='color:#ede4ce;font-size:1.3em' href='/PyrateRadio.apk'>Take the set</a></p>" +
-                                "<p style='opacity:.6'>Android asks once to allow installs from your browser.</p></body>"
-                            val b = page.toByteArray()
-                            out.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${b.size}\r\nConnection: close\r\n\r\n".toByteArray())
-                            out.write(b)
+                    try {
+                        sock.use { k ->
+                            k.soTimeout = 15_000
+                            val line = k.getInputStream().bufferedReader().readLine() ?: ""
+                            val path = line.split(' ').getOrNull(1) ?: ""
+                            val out = k.getOutputStream()
+                            when (path) {
+                                "/$token/PyrateRadio.apk" -> {
+                                    out.write(("HTTP/1.1 200 OK\r\nContent-Type: application/vnd.android.package-archive\r\nContent-Length: ${file.length()}\r\n" +
+                                        "Content-Disposition: attachment; filename=\"Pyrate Radio.apk\"\r\nConnection: close\r\n\r\n").toByteArray())
+                                    file.inputStream().use { it.copyTo(out) }
+                                }
+                                "/$token/" -> {
+                                    val page = "<!doctype html><meta name=viewport content='width=device-width'><body style='background:#030303;color:#ede4ce;font-family:serif;text-align:center;padding:3em 1em'>" +
+                                        "<h1 style='letter-spacing:.2em'>PYRATE RADIO</h1><p>Passed on by hand. No store, no account.</p>" +
+                                        "<p><a style='color:#ede4ce;font-size:1.3em' href='/$token/PyrateRadio.apk'>Take the set</a></p>" +
+                                        "<p style='opacity:.6'>Android asks once to allow installs from your browser.</p></body>"
+                                    val b = page.toByteArray()
+                                    out.write("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${b.size}\r\nConnection: close\r\n\r\n".toByteArray())
+                                    out.write(b)
+                                }
+                                else -> out.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+                            }
+                            out.flush()
                         }
-                        out.flush()
+                    } catch (e: Exception) {
+                    } finally {
+                        open.decrementAndGet()
                     }
                 }
             }
         }
-        return "http://$ip:${s.localPort}/"
+        return "http://${ip.hostAddress}:${s.localPort}/$token/"
     }
 
     fun passStop() {

@@ -127,3 +127,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - A drawer Lantern starts its own node when Android restarts it, keeps its own charger-and-Wi-Fi gate, comes back after a reboot, and a radio that cannot start says so.
 - The phone's own notes outside the node (its bells, its wake-up station, the last station tuned) are sealed under its hardware key like everything else it keeps.
 - The app keeps to the site's sheet: no amber anywhere, one red kept for the open air, square hairline dialogs and sheets in Fell, and a black window even on a phone set to light.
+- Passing the app on by QR serves it under a secret path on one address for fifteen minutes, and selected text is never offered to other apps.
