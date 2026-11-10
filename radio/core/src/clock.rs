@@ -471,8 +471,7 @@ impl Clock {
         let ident = self.ident_index(p.ident).map(|i| (i, p.ident_every_min.max(1) as u64 * 60_000));
         let not_ident = |i: &usize| Some(self.tracks[*i].hash) != p.ident;
         for (n, slot) in p.slots.iter().enumerate() {
-            let Some(run) = slot.span.run_start(lm) else { continue };
-            let start = p.zone.utc_ms(run);
+            let Some((start, run)) = p.zone.run_at(&slot.span, t) else { continue };
             let seed = |tag: &[u8]| -> Vec<u8> {
                 let mut s = self.station.to_vec();
                 s.extend_from_slice(tag);
@@ -511,10 +510,11 @@ impl Clock {
             // A slot with nothing to play falls back to the station's own mode.
             break;
         }
-        if !p.on_air(lm) {
+        if !p.on_air_at(t) {
             return None;
         }
-        let week_origin = Zone::week_origin(lm);
+        // Each tape's anchor, chosen in UTC: the latest of its local starts to have come.
+        let week_origin = p.zone.anchor_at(Zone::week_origin(lm), 7 * 1440, t);
         let lib: Vec<usize> = self.library_order().into_iter().filter(not_ident).collect();
         let (anchor_lm, mut src) = match &p.mode {
             Mode::Shuffle => {
@@ -532,24 +532,14 @@ impl Clock {
             Mode::Daily { start_min } => {
                 let s = *start_min as i64;
                 let day_start = (lm - s).div_euclid(1440) * 1440 + s;
-                (day_start, Source::Cycle { order: lib, at: 0 })
+                (p.zone.anchor_at(day_start, 1440, t), Source::Cycle { order: lib, at: 0 })
             }
             Mode::Weekly { day, start_min } => {
-                let mut s = week_origin + (*day as i64 % 7) * 1440 + *start_min as i64;
-                if s > lm {
-                    s -= 7 * 1440;
-                }
-                (s, Source::Cycle { order: lib, at: 0 })
+                let s = Zone::week_origin(lm) + (*day as i64 % 7) * 1440 + *start_min as i64;
+                (p.zone.anchor_at(s, 7 * 1440, t), Source::Cycle { order: lib, at: 0 })
             }
         };
-        // A tape whose start the clocks have only just reached (the hour that came twice) began
-        // a day (or a week) before.
-        let mut start = p.zone.utc_ms(anchor_lm);
-        if start > t {
-            let back = if matches!(p.mode, Mode::Weekly { .. }) { 7 * 1440 } else { 1440 };
-            start = p.zone.utc_ms(anchor_lm - back);
-        }
-        self.walk(start, &mut src, t, ident)
+        self.walk(p.zone.utc_ms(anchor_lm), &mut src, t, ident)
     }
 
     /// The schedule between two moments, for a station's page: shows, slots and on-air hours.
@@ -575,7 +565,7 @@ impl Clock {
                 for run in slot.span.starts_between(lf, lu) {
                     out.push(Listing {
                         start_ms: p.zone.utc_ms(run),
-                        end_ms: p.zone.utc_ms(run + slot.span.len_min as i64),
+                        end_ms: p.zone.utc_ms(run) + slot.span.len_min as u64 * 60_000,
                         title: slot.title.clone(),
                         about: slot.about.clone(),
                         kind: "slot",
@@ -588,7 +578,7 @@ impl Clock {
                 for run in h.starts_between(lf, lu) {
                     out.push(Listing {
                         start_ms: p.zone.utc_ms(run),
-                        end_ms: p.zone.utc_ms(run + h.len_min as i64),
+                        end_ms: p.zone.utc_ms(run) + h.len_min as u64 * 60_000,
                         title: "On the air".into(),
                         about: String::new(),
                         kind: "hours",

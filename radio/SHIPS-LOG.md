@@ -141,3 +141,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - The browser set says what it keeps and can forget all of it in one press.
 - Browser playback holds up on iPads and through interruptions, a hidden tab keeps a minute and more queued, and the chart, harbour memory and debug hook are tidied.
 - The clock crosses a week of short recordings in a few steps, so a station of jingles plays to the end of Sunday and every listener's clock does less work.
+- The hour the clocks repeat in autumn neither rewinds a daily or weekly tape nor cuts a slot short, and the page lists slots as they air.

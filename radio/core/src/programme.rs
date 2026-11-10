@@ -64,6 +64,33 @@ impl Zone {
         self.offsets.iter().map(|(from, _)| *from).find(|f| *f > lo && *f <= hi).unwrap_or(hi)
     }
 
+    /// The run of `span` in force at `t`: when it began, in UTC, and its local start. A run
+    /// lasts its length in real minutes from the first time its local start comes round, so
+    /// the hour the clocks repeat neither cuts it short nor plays it twice, and the page and
+    /// the air agree on it.
+    pub fn run_at(&self, span: &Span, t: u64) -> Option<(u64, i64)> {
+        if span.len_min == 0 {
+            return None;
+        }
+        let lm = self.local_min(t);
+        let len = span.len_min as i64;
+        let mut best: Option<(u64, i64)> = None;
+        for s in span.starts_between(lm - len - 2 * DAY_MIN, lm + 2 * DAY_MIN) {
+            let u = self.utc_ms(s);
+            if u <= t && t < u.saturating_add(len as u64 * 60_000) && best.is_none_or(|b| u > b.0) {
+                best = Some((u, s));
+            }
+        }
+        best
+    }
+
+    /// Of the local anchors `base` and one `step` either side, the latest whose moment has
+    /// come by `t`: where a tape that restarts every day or week stands, read in UTC so a
+    /// repeated hour does not rewind it.
+    pub fn anchor_at(&self, base: i64, step: i64, t: u64) -> i64 {
+        [base + step, base, base - step, base - 2 * step].into_iter().find(|a| self.utc_ms(*a) <= t).unwrap_or(base - 2 * step)
+    }
+
     /// The local minute at which the week holding `lm` began: Monday 00:00.
     pub fn week_origin(lm: i64) -> i64 {
         // 1970-01-01 was a Thursday, day 3 of a Monday week.
@@ -191,6 +218,11 @@ impl Default for Programme {
 }
 
 impl Programme {
+    /// Whether the station is on the air at `t`, by its hours or a slot, each run read in UTC.
+    pub fn on_air_at(&self, t: u64) -> bool {
+        self.hours.is_empty() || self.hours.iter().chain(self.slots.iter().map(|s| &s.span)).any(|h| self.zone.run_at(h, t).is_some())
+    }
+
     /// Whether the station is on the air at local minute `lm`, by its hours or a slot.
     pub fn on_air(&self, lm: i64) -> bool {
         self.hours.is_empty() || self.hours.iter().any(|h| h.run_start(lm).is_some()) || self.slots.iter().any(|s| s.span.run_start(lm).is_some())
