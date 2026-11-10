@@ -133,6 +133,8 @@ impl Hold {
 /// A station's chatter as this tab holds it: the room's sender and the last lines.
 struct Room {
     tx: GossipSender,
+    /// When the tab joined, so the oldest room goes first when there are too many.
+    since: u64,
     lines: VecDeque<pyrate_core::chat::Signed>,
     seen: pyrate_core::chat::Seen,
     neighbours: usize,
@@ -171,6 +173,13 @@ struct Ship {
     listening: std::sync::atomic::AtomicBool,
     /// The first hop of this visit's private route.
     first_hop: Mutex<Option<EndpointId>>,
+    /// Each station's clock, rebuilt only when its log grows: the player asks every second.
+    clocks: Mutex<HashMap<StationId, (u64, Clock)>>,
+    /// When each log was last played or synced, so the least used go first when trimming.
+    touched: Mutex<HashMap<StationId, u64>>,
+    /// Stations that struck their colours: never searched for, listed or played again.
+    struck: Mutex<HashSet<StationId>>,
+    last_trim: std::sync::atomic::AtomicU64,
 }
 
 /// A number below `n` from the browser's own randomness.
@@ -265,7 +274,15 @@ impl Ship {
         let topic = key.map(|k| pyrate_core::pocket::chat_topic(&k)).unwrap_or_else(|| pyrate_core::chat::topic(&st));
         let sub = self.gossip.subscribe(TopicId::from_bytes(topic), peers.clone()).await.map_err(|e| anyhow!("{e}"))?;
         let (tx, mut rx) = sub.split();
-        self.rooms.lock().unwrap().insert(st, Room { tx, lines: VecDeque::new(), seen: Default::default(), neighbours: 0 });
+        {
+            // A tab keeps at most three rooms open; joining a fourth leaves the oldest.
+            let mut rooms = self.rooms.lock().unwrap();
+            while rooms.len() >= 3 {
+                let Some(old) = rooms.iter().filter(|(k, _)| **k != st).min_by_key(|(_, r)| r.since).map(|(k, _)| *k) else { break };
+                rooms.remove(&old);
+            }
+            rooms.insert(st, Room { tx, since: raw_now(), lines: VecDeque::new(), seen: Default::default(), neighbours: 0 });
+        }
         let me = self.clone();
         spawn(async move {
             while let Some(ev) = rx.next().await {
@@ -432,6 +449,10 @@ impl Ship {
                 }
                 if a.is_struck() {
                     archives.remove(&station);
+                    drop(archives);
+                    self.struck.lock().unwrap().insert(station);
+                    self.log.lock().unwrap().remove(&station);
+                    self.clocks.lock().unwrap().remove(&station);
                     return Ok(added);
                 }
                 if got < 2000 {
@@ -478,24 +499,75 @@ impl Ship {
         if let Some(b) = self.hold.lock().unwrap().get(hash) {
             return Ok(b);
         }
-        let name = pyrate_core::seal::name(hash);
-        for node in self.carriers(station) {
-            if let Ok(Response::Sealed(Some(s))) = self.ask(node, &Request::SealedChunk { name }).await {
-                if let Some(b) = pyrate_core::seal::unseal(hash, &s) {
+        // Carriers that failed lately go to the back; the rest are asked two at a time, so
+        // one dead carrier costs a chunk no more than the other's answer takes.
+        let now = self.now();
+        let failed = self.failed.lock().unwrap().clone();
+        let (fresh, stale): (Vec<EndpointId>, Vec<EndpointId>) = self
+            .carriers(station)
+            .into_iter()
+            .partition(|n| !failed.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < net::FAILED_MS));
+        let order: Vec<EndpointId> = fresh.into_iter().chain(stale).take(8).collect();
+        for pair in order.chunks(2) {
+            let mut tries: n0_future::FuturesUnordered<_> = pair.iter().map(|n| Box::pin(self.fetch_from(*n, hash))).collect();
+            while let Some(r) = n0_future::StreamExt::next(&mut tries).await {
+                if let Ok(b) = r {
                     self.hold.lock().unwrap().put(*hash, b.clone());
                     return Ok(b);
                 }
             }
-            // A keeper's own node hands out its station's sound in the clear.
-            if let Ok(Response::Chunk(Some(b))) = self.ask(node, &Request::Chunk { hash: *hash }).await {
-                if blake3::hash(&b).as_bytes() != hash {
-                    continue;
-                }
-                self.hold.lock().unwrap().put(*hash, b.clone());
+        }
+        Err(anyhow!("no carrier answered for that chunk"))
+    }
+
+    async fn fetch_from(&self, node: EndpointId, hash: &Hash) -> Result<Vec<u8>> {
+        let name = pyrate_core::seal::name(hash);
+        if let Ok(Response::Sealed(Some(s))) = self.ask(node, &Request::SealedChunk { name }).await {
+            if let Some(b) = pyrate_core::seal::unseal(hash, &s) {
                 return Ok(b);
             }
         }
-        Err(anyhow!("no carrier answered for that chunk"))
+        // A keeper's own node hands out its station's sound in the clear.
+        if let Ok(Response::Chunk(Some(b))) = self.ask(node, &Request::Chunk { hash: *hash }).await {
+            if blake3::hash(&b).as_bytes() == hash {
+                return Ok(b);
+            }
+        }
+        Err(anyhow!("not from {}", node.fmt_short()))
+    }
+
+    /// Once a minute: what a long-open tab has gathered and no longer needs goes. Cards
+    /// gone quiet for six hours, logs beyond the eight last played (the tuned station and
+    /// pockets always stay), and connections that have closed.
+    fn trim(&self) {
+        let now = raw_now();
+        if now.saturating_sub(self.last_trim.load(std::sync::atomic::Ordering::Relaxed)) < 60_000 {
+            return;
+        }
+        self.last_trim.store(now, std::sync::atomic::Ordering::Relaxed);
+        let keep: HashSet<StationId> = self.pockets.lock().unwrap().keys().copied().chain(*self.tuned.lock().unwrap()).collect();
+        let net_now = self.now();
+        self.log.lock().unwrap().retain(|id, l| {
+            keep.contains(id)
+                || l.fresh(net_now)
+                || l.announce.as_ref().is_some_and(|a| net_now.saturating_sub(a.at_ms) < 6 * 3_600_000)
+        });
+        let touched = self.touched.lock().unwrap().clone();
+        let mut archives = self.archives.lock().unwrap();
+        if archives.len() > 8 {
+            let mut by: Vec<(u64, StationId)> = archives.keys().filter(|k| !keep.contains(k)).map(|k| (touched.get(k).copied().unwrap_or(0), *k)).collect();
+            by.sort();
+            let extra = archives.len().saturating_sub(8);
+            for (_, k) in by.into_iter().take(extra) {
+                archives.remove(&k);
+            }
+        }
+        let live: HashSet<StationId> = archives.keys().copied().collect();
+        drop(archives);
+        self.clocks.lock().unwrap().retain(|k, _| live.contains(k));
+        self.touched.lock().unwrap().retain(|k, _| live.contains(k));
+        self.conns.lock().unwrap().retain(|_, c| c.close_reason().is_none());
+        self.tokens_sent.lock().unwrap().retain(|k, _| live.contains(k) || keep.contains(k));
     }
 
     async fn broadcast(&self, g: &Gossip) {
@@ -538,6 +610,9 @@ impl Ship {
                             }
                         }
                     }
+                }
+                if self.struck.lock().unwrap().contains(&a.station) {
+                    return None;
                 }
                 let mut log = self.log.lock().unwrap();
                 let l = log.entry(a.station).or_default();
@@ -692,6 +767,10 @@ impl Ship {
 
     /// What a station plays at `at`: the chunk, where it starts, and what it belongs to.
     fn plan(&self, station: &StationId, at: u64) -> Value {
+        if self.struck.lock().unwrap().contains(station) {
+            return json!({ "kind": "struck" });
+        }
+        self.touched.lock().unwrap().insert(*station, raw_now());
         let archives = self.archives.lock().unwrap();
         let Some(a) = archives.get(station) else { return json!({ "kind": "searching" }) };
         if let Some(last) = a.entries().last() {
@@ -710,7 +789,20 @@ impl Ship {
                 return json!({ "kind": "live", "tail": tail[start..] });
             }
         }
-        let Ok(clock) = Clock::new(a) else { return json!({ "kind": "dead air" }) };
+        let len = a.len() as u64;
+        let mut clocks = self.clocks.lock().unwrap();
+        if !matches!(clocks.get(station), Some((n, _)) if *n == len) {
+            match Clock::new(a) {
+                Ok(c) => {
+                    clocks.insert(*station, (len, c));
+                }
+                Err(_) => {
+                    clocks.remove(station);
+                    return json!({ "kind": "dead air" });
+                }
+            }
+        }
+        let clock = &clocks.get(station).expect("just set").1;
         let Some(np) = clock.now(at) else {
             // Off the air until its next spell, or nothing yet to play.
             return match clock.upcoming(at, at + 7 * 86_400_000).first() {
@@ -731,6 +823,7 @@ impl Ship {
     }
 
     fn stations(&self) -> Value {
+        self.trim();
         let now = self.now();
         let banners: HashMap<StationId, String> = self
             .archives
@@ -872,6 +965,10 @@ impl Radio {
             failed: Mutex::new(HashMap::new()),
             listening: std::sync::atomic::AtomicBool::new(false),
             first_hop: Mutex::new(None),
+            clocks: Mutex::new(HashMap::new()),
+            touched: Mutex::new(HashMap::new()),
+            struck: Mutex::new(HashSet::new()),
+            last_trim: std::sync::atomic::AtomicU64::new(0),
         });
         *proto.0.lock().unwrap() = Some(ship.clone());
 

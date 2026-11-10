@@ -35,26 +35,18 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 - **C12** (low) Lantern page and tower have no recovery when the stream ends. `node/src/web.rs:442-449`
 - **C13** (low) /player/ mirror: broken home links, no redirect, no hardening headers. `node/src/web.rs:62-63`
-- **C16** (medium) Chunk fetch is serial, has no failure memory, and retries dead peers every time. `browser/src/lib.rs:296-322`
-- **C20** (medium) Unbounded growth: cards, listings, archives, rooms, connections, seen set. `browser/src/lib.rs:472-502`
-- **C21** (medium) plan() re-hashes the whole log on every call. `browser/src/lib.rs:556-563`
-- **C22** (low) Struck station leaves the tab stuck "Searching the Log" and hammering carriers. `browser/src/lib.rs:378-381`
 - **C23** (low) Flock: no way to leave, relay URL taken from the link without checks. `browser/src/lib.rs:944-982`
 - **C24** (low) Chat: the keeper label can be imitated, and bidi controls are not stripped. `browser/www/app.js:453; core/src/chat.rs:166-168`
 - **C25** (low) Wasm traps are unrecoverable. `Cargo.toml `[profile.web] panic = "abort"`; browser/www/app.js:608-611`
 - **C26** (low) Console logs identify the fresh node and the station being synced. `browser/src/lib.rs:49-51`
 - **C28** (medium) No CSP, no Referrer-Policy, inline script in head. `node/src/web/listen.html:1-9`
 - **C29** (medium) Storage and URL inventory (what ties a visit to the next, and what stays in history). `browser/www/app.js:22-35`
-- **C31** (medium) Playback loop can die silently (exception, empty decode, missing decoder script). `browser/www/app.js:205-256`
-- **C32** (medium) Going live after a track leaves silence and extra latency. `browser/www/app.js:206-207`
-- **C33** (low) The "No carrier answered yet" message is overwritten within a second. `browser/www/app.js:232`
 - **C34** (medium) Background and Safari playback: iPad detection, interruptions, meter, hidden tab buffer. `browser/www/app.js:100-111`
 - **C35** (medium) Hail: wrong target after switching station, stale stop timer, mic left on. `browser/www/app.js:472-486`
 - **C36** (medium) Chatter and rows are re-rendered wholesale on a timer. `browser/www/app.js:369-377`
 - **C37** (medium) Cover art is fetched for every listed station, retried every 4 s, with no size cap. `browser/www/app.js:43-49`
 - **C38** (low) Object URLs and animation work never released. `browser/www/app.js:46`
 - **C39** (low) Second tap on Listen while booting starts a second node (embed). `browser/www/app.js:407-412`
-- **C40** (medium) No relay or no stations is a dead end with no message. `browser/www/app.js:597-607`
 - **C41** (low) ICS export can be injected with a bare CR in a title or about text. `browser/www/app.js:285-291`
 - **C42** (low) Pass-it-on, clip QR and ICS links are hard-wired to hostis.black. `browser/www/app.js:494`
 - **C43** (low) Station chart, harbour merge and debug hook small defects. `browser/www/app.js:26-31`
@@ -235,3 +227,19 @@ Reported by a reader of the code; each is checked against the code before it is 
 **P39. `setState` after await without `mounted`, and controllers that are never disposed.** (low) Fixed: Every setState that follows an await, twenty-three of them found by a scan of the three screens, now checks the screen is still there first, and the eighteen text controllers that screens own are disposed with them. (f3125f9)
 
 **P31. Android App Links are not verified, so scanned posters open the browser.** (low) Fixed: The app now asks Android to verify both hostis.black link filters, and tools/assetlinks.py writes the site file from the Android certificate. Until hostis.black serves it, links open in the browser as before, so nothing regresses. What remains is Dylan's: the certificate and a yes to a file at the domain root (brief, section 8). (c9f3dae)
+
+**C16. Chunk fetch is serial, has no failure memory, and retries dead peers every time.** (medium) Fixed: A chunk is asked of two carriers at once and the first good answer wins; carriers that failed lately are asked only after the rest, and at most eight are tried. (pending)
+
+**C20. Unbounded growth: cards, listings, archives, rooms, connections, seen set.** (medium) Fixed: Once a minute a tab trims what it no longer needs: cards quiet for six hours, logs beyond the eight last played (the tuned station and pockets stay), their clocks, closed connections and old token marks. At most three chatter rooms stay open; joining a fourth leaves the oldest. (pending)
+
+**C21. plan() re-hashes the whole log on every call.** (medium) Fixed: Each station's clock is kept and rebuilt only when its log grows, instead of on every one of the player's calls. (pending)
+
+**C22. Struck station leaves the tab stuck "Searching the Log" and hammering carriers.** (low) Fixed: A struck station is remembered as struck: its card and log go, its cards are ignored from then on, and the set says the station has ended and stops asking for it. A log not found yet is looked for less often, up to every fifteen seconds. (pending)
+
+**C31. Playback loop can die silently (exception, empty decode, missing decoder script).** (medium) Fixed: Every step of the player loop is caught: a stumble resets and starts again with a word on the set, a chunk that decodes to nothing is skipped like a missing one, and only after six stumbles in a row does the set stop and say this browser could not play the station. Played in Chromium through both decoders. (pending)
+
+**C32. Going live after a track leaves silence and extra latency.** (medium) Fixed: Going from a track to live clears what was queued ahead, the end of the queue included, so the broadcast starts at once rather than after the track's twelve seconds of lead. (pending)
+
+**C33. The "No carrier answered yet" message is overwritten within a second.** (low) Fixed: A trouble (no carrier answered, a stumble) stays on the set until it clears, instead of being overwritten by the title within a second. (pending)
+
+**C40. No relay or no stations is a dead end with no message.** (medium) Fixed: A relay that does not answer is tried again, more slowly each time, with a line saying the network may block the radio; after ninety seconds with no station the list says whether the network is there but quiet or nothing has answered at all. (pending)
