@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=8cfd94caa5';
+import init, { Radio } from './pkg/pyrate_browser.js?v=070aa47ff6';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -171,7 +171,8 @@ function dial(list) {
   const ids = list.map(s => s.id + (s.live ? '*' : '')).join();
   if (ids === dialIds) return;
   dialIds = ids; order = [...list].sort((a, b) => fq(a.id) - fq(b.id));
-  $('track').style.width = Math.max($('glass').clientWidth, order.length * 92) + 'px';
+  // The track stands in from the glass's ends (player.css), so a name at 88 or 108 is never cut.
+  $('track').style.width = Math.max($('glass').clientWidth - 72, order.length * 92) + 'px';
   $('names').innerHTML = '';
   order.forEach((s, i) => {
     const b = document.createElement('button'); b.textContent = s.name || s.call_sign; b.dataset.id = s.id; b.title = fq(s.id).toFixed(1) + '  ' + (s.name || '');
@@ -184,7 +185,7 @@ function dial(list) {
 function needle(id, smooth = true) {
   $('needle').style.left = at(fq(id)) + '%';
   document.querySelectorAll('#names button').forEach(b => { const on = b.dataset.id === id; b.classList.toggle('on', on); b.setAttribute('aria-selected', on) });
-  const g = $('glass'), x = $('track').clientWidth * at(fq(id)) / 100;
+  const g = $('glass'), x = $('track').offsetLeft + $('track').clientWidth * at(fq(id)) / 100;
   if (g.scrollWidth > g.clientWidth) g.scrollTo({ left: x - g.clientWidth / 2, behavior: smooth ? 'smooth' : 'auto' });
   $('freq').textContent = fq(id).toFixed(1);
 }
@@ -769,7 +770,8 @@ function dormant(s) {
 }
 // Inside the landing page, the set tells its host how tall it is.
 if (document.documentElement.classList.contains('embed') && parent !== window) {
-  const tell = () => parent.postMessage({ pyrate: 'height', h: document.documentElement.scrollHeight }, location.origin);
+  // The body's own height, not the document's: a document is never shorter than its frame, so it could grow the frame but never let it shrink back.
+  const tell = () => parent.postMessage({ pyrate: 'height', h: Math.ceil(document.body.getBoundingClientRect().height) }, location.origin);
   new ResizeObserver(tell).observe(document.body); addEventListener('load', tell);
 }
 if (EMBED) { scale(); const p = passedId(); dormant(p ? { id: p, name: 'A passed-on station', call_sign: '' } : HARBOUR_STATIONS[0]); $('signal').textContent = '' }
