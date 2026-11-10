@@ -212,6 +212,33 @@ pub enum Gossip {
     Aboard { station: StationId, hour: u64, tokens: Vec<([u8; 32], u64)> },
 }
 
+/// Carriers a station's listing keeps: the freshest claims, the oldest giving way.
+pub const MAX_CARRIERS: usize = 64;
+/// How long a carrier that failed to answer is tried only after the others.
+pub const FAILED_MS: u64 = 10 * 60_000;
+
+/// Takes in a carrier's claim. Anyone can say they carry anything, so a claim never reaches
+/// past the station's own card, and a listing keeps only the freshest few.
+pub fn note_carrier(carriers: &mut std::collections::HashMap<[u8; 32], (u64, u64)>, node: [u8; 32], head: u64, card_head: Option<u64>, now: u64) {
+    carriers.insert(node, (card_head.map_or(head, |c| head.min(c)), now));
+    while carriers.len() > MAX_CARRIERS {
+        let Some(oldest) = carriers.iter().min_by_key(|(_, (_, seen))| *seen).map(|(n, _)| *n) else { break };
+        carriers.remove(&oldest);
+    }
+}
+
+/// Carriers in the order to ask them: the furthest copy of the log first (no claim counting
+/// past the card), the freshest word next, and any that failed lately last.
+pub fn rank_carriers(carriers: &std::collections::HashMap<[u8; 32], (u64, u64)>, me: &[u8; 32], card_head: Option<u64>, failed: impl Fn(&[u8; 32]) -> bool) -> Vec<[u8; 32]> {
+    let mut v: Vec<(bool, u64, u64, [u8; 32])> = carriers
+        .iter()
+        .filter(|(n, _)| *n != me)
+        .map(|(n, (h, s))| (failed(n), card_head.map_or(*h, |c| (*h).min(c)), *s, *n))
+        .collect();
+    v.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)).then(b.2.cmp(&a.2)));
+    v.into_iter().map(|x| x.3).collect()
+}
+
 /// HyperLogLog with 256 registers. 256 bytes on the wire, about 6.5 percent error.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Sketch(pub [u8; 256]);
@@ -277,6 +304,23 @@ mod serde_bytes64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_false_claim_jumps_no_queue_and_a_flood_grows_nothing() {
+        let mut c = std::collections::HashMap::new();
+        note_carrier(&mut c, [1; 32], 10, Some(10), 1_000);
+        note_carrier(&mut c, [2; 32], u64::MAX, Some(10), 2_000);
+        let order = rank_carriers(&c, &[0; 32], Some(10), |_| false);
+        assert_eq!(order, vec![[2; 32], [1; 32]], "a claim past the card counts as the card, and the fresher word goes first");
+        let order = rank_carriers(&c, &[0; 32], Some(10), |n| *n == [2; 32]);
+        assert_eq!(order[0], [1; 32], "a carrier that failed lately goes last");
+        for i in 0..1_000u32 {
+            let mut n = [9u8; 32];
+            n[..4].copy_from_slice(&i.to_le_bytes());
+            note_carrier(&mut c, n, 10, Some(10), 3_000 + i as u64);
+        }
+        assert_eq!(c.len(), MAX_CARRIERS);
+    }
 
     #[test]
     fn sketch_counts_roughly() {

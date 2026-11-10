@@ -281,15 +281,16 @@ impl Inner {
                 }
             }
         }
+        // The card first, so whoever hears the carrier already knows the station.
+        if let Some(a) = announce {
+            self.on_gossip(Gossip::Station(a.clone()));
+            self.broadcast(&Gossip::Station(a)).await;
+        }
         let head = self.store.lock().unwrap().logs.get(&station).map(|a| a.len()).unwrap_or(0);
         let me = *self.endpoint.id().as_bytes();
         let carrier = Gossip::Carrier { station, node: me, head };
         self.on_gossip(carrier.clone());
         self.broadcast(&carrier).await;
-        if let Some(a) = announce {
-            self.on_gossip(Gossip::Station(a.clone()));
-            self.broadcast(&Gossip::Station(a)).await;
-        }
     }
 
     /// The guard: the first hop of every stem, kept for weeks so an attacker cannot wait for a lucky draw.

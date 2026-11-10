@@ -107,3 +107,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - The network clock takes one vote a station and needs five to agree, so no single station can set every listener's clock wrong.
 - The clock cannot be stopped, hung or overflowed by anything a station signs: daylight saving east and west, nonsense minutes, twenty-millisecond tracks and shows at the end of time all have tests.
 - The Lantern's gangway holds under load: bounded listeners, towers, guest counting and episode making, ranges served from disk, and feeds that no Host header or stray character can break.
+- A false carrier claim jumps no queue and a flood of them grows nothing; peers that fail to answer are asked last.

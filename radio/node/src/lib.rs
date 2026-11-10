@@ -226,6 +226,8 @@ pub struct Inner {
     stem_misses: Mutex<HashMap<StationId, u32>>,
     /// Stem cargo relayed lately, by fingerprint: a stem that comes round again spreads.
     pub(crate) stem_seen: Mutex<std::collections::VecDeque<Hash>>,
+    /// Nodes that failed to answer lately, and when: asked only after the others.
+    pub(crate) failed: Mutex<HashMap<[u8; 32], u64>>,
     /// On mobile data a phone listens and broadcasts, and carries nobody else's traffic.
     relay_ok: std::sync::atomic::AtomicBool,
 }
@@ -325,7 +327,15 @@ impl Inner {
     }
 
     async fn ask(&self, node: EndpointId, req: &Request) -> Result<Response> {
-        let c = self.conn(node).await?;
+        let c = match self.conn(node).await {
+            Ok(c) => c,
+            Err(e) => {
+                let mut f = self.failed.lock().unwrap();
+                f.retain(|_, t| now_ms().saturating_sub(*t) < net::FAILED_MS);
+                f.insert(*node.as_bytes(), now_ms());
+                return Err(e);
+            }
+        };
         let fut = async {
             let (mut send, mut recv) = c.open_bi().await?;
             send.write_all(&postcard::to_stdvec(req)?).await?;
@@ -341,6 +351,7 @@ impl Inner {
             }
             Err(_) => {
                 self.conns.lock().unwrap().remove(&node);
+                self.failed.lock().unwrap().insert(*node.as_bytes(), now_ms());
                 Err(anyhow!("request timed out"))
             }
         }
@@ -348,13 +359,15 @@ impl Inner {
 
     fn carriers(&self, station: &StationId) -> Vec<EndpointId> {
         let me = *self.endpoint.id().as_bytes();
+        let now = now_ms();
+        let failed = self.failed.lock().unwrap().clone();
         let log = self.log.lock().unwrap();
-        let mut v: Vec<([u8; 32], u64, u64)> = log
-            .get(station)
-            .map(|l| l.carriers.iter().filter(|(n, _)| **n != me).map(|(n, (h, s))| (*n, *h, *s)).collect())
-            .unwrap_or_default();
-        v.sort_by(|a, b| b.1.cmp(&a.1).then(b.2.cmp(&a.2)));
-        v.into_iter().filter_map(|(n, _, _)| EndpointId::from_bytes(&n).ok()).collect()
+        let Some(l) = log.get(station) else { return vec![] };
+        let card = l.announce.as_ref().map(|a| a.head);
+        net::rank_carriers(&l.carriers, &me, card, |n| failed.get(n).is_some_and(|t| now.saturating_sub(*t) < net::FAILED_MS))
+            .into_iter()
+            .filter_map(|n| EndpointId::from_bytes(&n).ok())
+            .collect()
     }
 
     /// One of our own stations, which another phone (a hand, or the captain) may also write.
@@ -590,7 +603,14 @@ impl Inner {
                 }
             }
             Gossip::Carrier { station, node, head } => {
-                log.entry(station).or_default().carriers.insert(node, (head, now));
+                // A claim for a station with no card here is a claim about nothing: dropped,
+                // so junk ids cannot grow the Log. A pocket's card may come after its carriers.
+                if !log.contains_key(&station) && !self.is_pocket(&station) {
+                    return None;
+                }
+                let l = log.entry(station).or_default();
+                let card = l.announce.as_ref().map(|a| a.head);
+                net::note_carrier(&mut l.carriers, node, head, card, now);
                 let ours = self.store.lock().unwrap().logs.get(&station).map(|x| x.len()).unwrap_or(0);
                 if head > ours {
                     return Some(station);
@@ -726,13 +746,14 @@ impl Inner {
                     continue;
                 }
             }
-            let g = Gossip::Carrier { station, node: me, head };
-            self.on_gossip(g.clone());
-            self.broadcast(&g).await;
+            // The card first, so whoever hears the carrier already knows the station.
             let a = self.log.lock().unwrap().get(&station).and_then(|l| l.announce.clone());
             if let Some(a) = a {
                 self.broadcast(&Gossip::Station(a)).await;
             }
+            let g = Gossip::Carrier { station, node: me, head };
+            self.on_gossip(g.clone());
+            self.broadcast(&g).await;
         }
         let tuned = self.tuned.lock().unwrap().as_ref().map(|t| t.station);
         if let Some(station) = tuned {
@@ -1029,6 +1050,10 @@ impl Inner {
             return false;
         }
         let mut log = self.log.lock().unwrap();
+        // Tokens for a station with no card here count for nothing, and grow nothing.
+        if !log.contains_key(&station) {
+            return false;
+        }
         let l = log.entry(station).or_default();
         l.heard.retain(|h, _| h + 2 >= now_hour);
         l.sketches.retain(|h, _| h + 2 >= now_hour);
@@ -1339,6 +1364,7 @@ impl Node {
             strict: std::sync::atomic::AtomicBool::new(cfg.dir.join("strict").exists()),
             stem_misses: Mutex::new(HashMap::new()),
             stem_seen: Mutex::new(std::collections::VecDeque::new()),
+            failed: Mutex::new(HashMap::new()),
             relay_ok: std::sync::atomic::AtomicBool::new(!cfg.private),
         });
         *proto.0.lock().unwrap() = Some(inner.clone());

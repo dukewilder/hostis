@@ -153,6 +153,8 @@ struct Ship {
     tokens_sent: Mutex<HashMap<StationId, u64>>,
     syncing: Mutex<HashSet<StationId>>,
     drift: Mutex<pyrate_core::drift::Drift>,
+    /// Nodes that failed to answer lately, and when: asked only after the others.
+    failed: Mutex<HashMap<[u8; 32], u64>>,
 }
 
 fn raw_now() -> u64 {
@@ -323,7 +325,16 @@ impl Ship {
     }
 
     async fn ask(&self, node: EndpointId, req: &Request) -> Result<Response> {
-        let c = self.conn(node).await?;
+        let c = match self.conn(node).await {
+            Ok(c) => c,
+            Err(e) => {
+                let now = self.now();
+                let mut f = self.failed.lock().unwrap();
+                f.retain(|_, t| now.saturating_sub(*t) < net::FAILED_MS);
+                f.insert(*node.as_bytes(), now);
+                return Err(e);
+            }
+        };
         let fut = async {
             let (mut send, mut recv) = c.open_bi().await?;
             send.write_all(&postcard::to_stdvec(req)?).await?;
@@ -339,6 +350,7 @@ impl Ship {
             }
             Err(_) => {
                 self.conns.lock().unwrap().remove(&node);
+                self.failed.lock().unwrap().insert(*node.as_bytes(), self.now());
                 Err(anyhow!("request timed out"))
             }
         }
@@ -349,15 +361,16 @@ impl Ship {
     fn carriers(&self, station: &StationId) -> Vec<EndpointId> {
         let pocket = self.pockets.lock().unwrap().contains_key(station);
         let me = *self.ep.id().as_bytes();
-        let mut v: Vec<([u8; 32], u64, u64)> = self
+        let now = self.now();
+        let failed = self.failed.lock().unwrap().clone();
+        let ranked = self
             .log
             .lock()
             .unwrap()
             .get(station)
-            .map(|l| l.carriers.iter().filter(|(n, _)| **n != me).map(|(n, (h, s))| (*n, *h, *s)).collect())
+            .map(|l| net::rank_carriers(&l.carriers, &me, l.announce.as_ref().map(|a| a.head), |n| failed.get(n).is_some_and(|t| now.saturating_sub(*t) < net::FAILED_MS)))
             .unwrap_or_default();
-        v.sort_by(|a, b| b.1.cmp(&a.1).then(b.2.cmp(&a.2)));
-        let mut out: Vec<EndpointId> = v.into_iter().filter_map(|(n, _, _)| EndpointId::from_bytes(&n).ok()).collect();
+        let mut out: Vec<EndpointId> = ranked.into_iter().filter_map(|n| EndpointId::from_bytes(&n).ok()).collect();
         if pocket {
             return out;
         }
@@ -481,6 +494,9 @@ impl Ship {
             return;
         }
         let mut log = self.log.lock().unwrap();
+        if !log.contains_key(&station) {
+            return;
+        }
         let l = log.entry(station).or_default();
         l.heard.retain(|h, _| h + 2 >= now_hour);
         l.sketches.retain(|h, _| h + 2 >= now_hour);
@@ -522,7 +538,16 @@ impl Ship {
                 (head > ours).then_some(s)
             }
             Gossip::Carrier { station, node, head } => {
-                self.log.lock().unwrap().entry(station).or_default().carriers.insert(node, (head, now));
+                // A claim for a station with no card here is dropped: junk ids grow nothing.
+                let pocket = self.pockets.lock().unwrap().contains_key(&station);
+                let mut log = self.log.lock().unwrap();
+                if !log.contains_key(&station) && !pocket {
+                    return None;
+                }
+                let l = log.entry(station).or_default();
+                let card = l.announce.as_ref().map(|a| a.head);
+                net::note_carrier(&mut l.carriers, node, head, card, now);
+                drop(log);
                 let ours = self.archives.lock().unwrap().get(&station).map(|x| x.len()).unwrap_or(0);
                 (head > ours).then_some(station)
             }
@@ -769,6 +794,7 @@ impl Radio {
             tokens_sent: Mutex::new(HashMap::new()),
             syncing: Mutex::new(HashSet::new()),
             drift: Mutex::new(pyrate_core::drift::Drift::new()),
+            failed: Mutex::new(HashMap::new()),
         });
         *proto.0.lock().unwrap() = Some(ship.clone());
 
