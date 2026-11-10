@@ -1,21 +1,21 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=c68dbe76d5';
+import init, { Radio } from './pkg/pyrate_browser.js?v=7b5fe9d7a8';
 
-const HARBOUR = 'a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442';
+const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
 // and nothing else, and it joins the network only when the visitor presses Listen.
 const HARBOUR_STATIONS = [{"id": "f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "name": "The Public Domain", "call_sign": "GAHAGU·3695"}, {"id": "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a", "name": "Readings", "call_sign": "DEVAKA·F42C"}];
 const EMBED = document.documentElement.classList.contains('embed');
 const passedId = () => { const id = location.hash.slice(1); return /^[0-9a-f]{64}$/.test(id) ? id : null };
 const inSet = s => !EMBED || HARBOUR_STATIONS.some(h => h.id === s.id) || s.id === passedId();
-const RELAYS = '';
+const RELAYS = "";
 const AHEAD_MS = 12000;
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-let radio = null, stations = [], cur = null, playing = false, gen = 0, bootAt = 0;
+let radio = null, stations = [], cur = null, playing = false, gen = 0, bootAt = 0, booting = null;
 let ctx = null, gain = null, sources = [], meter = null;
 const pics = new Map();
 
@@ -39,14 +39,21 @@ function allowed(s) { return !((s.explicit && !sw.explicit()) || (sw.mature() &&
 function bits(id) { const b = []; for (const c of id) { const v = parseInt(c, 16); for (let i = 3; i >= 0; i--) b.push((v >> i) & 1) } return b }
 function flag(el, id, live) { const b = bits(id); let h = ''; for (let r = 0; r < 6; r++) for (let c = 0; c < 9; c++) { const half = c < 5 ? c : 8 - c; h += b[(r * 5 + half) % b.length] ? '<b>1</b>' : '<span>0</span>' } el.innerHTML = h; el.classList.toggle('live', !!live) }
 
-// Pictures come over the network like chunks, checked against their fingerprints.
+// Pictures come over the network like chunks, checked against their fingerprints. One that
+// will not come is not asked for again for two minutes, none over 2 MB is shown, and the
+// tab keeps the last two hundred, letting the rest go.
+const picFailed = new Map();
 async function pic(station, hash) {
-  if (!hash || !sw.art()) return null;
-  if (pics.has(hash)) return pics.get(hash);
-  const p = radio.fetch(station, hash).then(b => URL.createObjectURL(new Blob([b], { type: 'image/jpeg' }))).catch(() => { pics.delete(hash); return null });
+  if (!hash || !sw.art() || !radio) return null;
+  if (pics.has(hash)) { const p = pics.get(hash); pics.delete(hash); pics.set(hash, p); return p }
+  if (Date.now() - (picFailed.get(hash) || 0) < 120000) return null;
+  const p = radio.fetch(station, hash).then(b => { if (b.length > 2000000) throw 'too large'; return URL.createObjectURL(new Blob([b], { type: 'image/jpeg' })) })
+    .catch(() => { pics.delete(hash); picFailed.set(hash, Date.now()); return null });
   pics.set(hash, p);
+  while (pics.size > 200) { const [k, old] = pics.entries().next().value; pics.delete(k); old.then(u => u && u !== $('cover').src && URL.revokeObjectURL(u)) }
   return p;
 }
+function forgetPics() { for (const p of pics.values()) p.then(u => u && URL.revokeObjectURL(u)); pics.clear(); picFailed.clear() }
 
 // ---- Decoding ------------------------------------------------------------------------
 // A chunk is its Opus frames, each after its length as a big-endian u16.
@@ -176,8 +183,11 @@ $('glass').addEventListener('keydown', e => {
 });
 function lamps(live) { $('lamp').classList.toggle('on', !!live); $('air').classList.toggle('on', !!live); $('rx').classList.toggle('on', playing && sources.length > 0) }
 // The meter follows the sound, with a needle's weight.
-let vuAngle = -48;
+// It rests once nothing plays and the needle has fallen, and wakes when the radio does.
+let vuAngle = -48, vuOn = false;
 function vu() {
+  if (vuOn || !meter) return;
+  vuOn = true;
   const buf = new Float32Array(meter.fftSize);
   const step = () => {
     let rms = 0;
@@ -185,7 +195,7 @@ function vu() {
     const want = -48 + Math.min(96, Math.max(0, (20 * Math.log10(rms + 1e-6) + 42) / 42 * 96));
     vuAngle += (want - vuAngle) * (want > vuAngle ? 0.35 : 0.08);
     $('vun').style.transform = 'rotate(' + vuAngle.toFixed(1) + 'deg)';
-    requestAnimationFrame(step);
+    if (playing || vuAngle > -47.5) requestAnimationFrame(step); else vuOn = false;
   };
   requestAnimationFrame(step);
 }
@@ -201,6 +211,14 @@ function dayOf(ms) {
 }
 const when = ms => { const d = dayOf(ms); return d === 'Today' || d === 'Tomorrow' ? d.toLowerCase() : 'on ' + d };
 const offAir = back => back ? 'Off the air. Back ' + when(back) + ' at ' + hm(back) + '.' : 'Off the air';
+// Where a passed-on link points: this copy of the radio if it is a public one on its own
+// HTTPS name, so links still work if hostis.black is gone; otherwise hostis.black. A copy
+// reached by a bare address, on plain HTTP or at a private name is never named in a link,
+// since that address may be someone's house.
+const shareBase = () => {
+  const h = location.hostname, pub = location.protocol === 'https:' && !/^[\d.]+$|^\[|^localhost$|\.local$|\.lan$|\.home$|\.internal$/.test(h);
+  return pub && !EMBED ? location.origin + location.pathname : 'https://hostis.black/pyrateradio/listen/';
+};
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 // Fills twelve seconds ahead and keeps to the station's clock, the way the app does. Any
@@ -304,9 +322,11 @@ function howItPlays(p) {
 // A show for the listener's own calendar: a small .ics, made here, sent nowhere.
 function ics(l, name) {
   const f = ms => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
-  const t = s => String(s || '').replace(/[\\;,]/g, c => '\\' + c).replace(/\n/g, '\\n');
+  // Every line break, a bare CR included, becomes the calendar's own escape: nothing in a
+  // title can start a line of its own in the file.
+  const t = s => String(s || '').replace(/[\\;,]/g, c => '\\' + c).replace(/\r\n|\r|\n/g, '\\n');
   const body = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Pyrate Radio//EN', 'BEGIN:VEVENT', 'UID:' + l.start_ms + '-' + cur.id.slice(0, 16) + '@pyrateradio', 'DTSTAMP:' + f(Date.now()), 'DTSTART:' + f(l.start_ms), 'DTEND:' + f(l.end_ms),
-    'SUMMARY:' + t(l.title + ' on ' + name), 'DESCRIPTION:' + t((l.about ? l.about + '\n' : '') + location.origin + location.pathname + '#' + cur.id), 'URL:' + location.origin + location.pathname + '#' + cur.id, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+    'SUMMARY:' + t(l.title + ' on ' + name), 'DESCRIPTION:' + t((l.about ? l.about + '\n' : '') + shareBase() + '#' + cur.id), 'URL:' + shareBase() + '#' + cur.id, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([body], { type: 'text/calendar' })); a.download = (l.title || 'show').replace(/[^\w ]+/g, '').trim().slice(0, 40) + '.ics'; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
@@ -344,6 +364,7 @@ function page(force) {
 function art(url) { const c = $('cover'); if (url) { if (c.src !== url) c.src = url; c.hidden = false; $('flag').hidden = true } else { c.hidden = true; $('flag').hidden = false } }
 
 async function show(s) {
+  if (hailFor && hailFor !== s.id) dropHail();
   cur = s;
   flag($('flag'), s.id, s.live); art(await pic(s.id, s.cover));
   const b = await pic(s.id, s.banner); $('banner').style.backgroundImage = b ? 'url(' + b + ')' : '';
@@ -361,7 +382,7 @@ async function show(s) {
 
 function listen(s) {
   audio(); ctx.resume();
-  const g = ++gen; stopAll(); playing = true; show(s); power();
+  const g = ++gen; stopAll(); playing = true; show(s); power(); vu();
   radio.listening(true);
   play(s.id, g);
 }
@@ -369,11 +390,22 @@ function listen(s) {
 function stop() { gen++; stopAll(); playing = false; trouble = null; power(); lamps(false); ctx?.suspend(); radio?.listening(false) }
 function power() { $('clip').hidden = !(playing && clipType()) || isPocket(cur); const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■' : '▶'; g.querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen' }
 
+// A row's cover is fetched only once the row comes into view.
+const lazy = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => {
+  if (!e.isIntersecting) return; lazy.unobserve(e.target);
+  const mini = e.target.querySelector('.mini'), s = stations.find(x => x.id === e.target.dataset.id);
+  if (s?.cover) pic(s.id, s.cover).then(u => { if (u) mini.innerHTML = '<img alt="" src="' + u + '">' });
+}), { rootMargin: '200px' }) : null;
+let rowsKey = '';
 function rows() {
   const m = marooned();
   const shown = stations.filter(s => !m.has(s.id) && allowed(s) && inSet(s));
-  const box = $('rows'); box.innerHTML = '';
+  const box = $('rows');
   dial(shown); if (!$('chart').hidden) chart();
+  // The list is rebuilt only when something in it changed, not on every refresh.
+  const key = shown.map(s => [s.id, s.name, s.live, s.aboard, s.cover, s.pocket, s.explicit, s.mature, s.about].join('|')).join('\n') + '#' + (cur?.id || '') + '#' + (shown.length ? '' : Math.floor(Date.now() / 30000));
+  if (key === rowsKey) return;
+  rowsKey = key; box.innerHTML = '';
   if (!shown.length) {
     const long = bootAt && Date.now() - bootAt > 90000;
     box.innerHTML = '<p class="fine">' + (long ? 'No station has reached this tab yet. ' + (radio?.neighbours() ? 'The network is here but quiet; stations may be hidden by your switches below.' : 'Nothing on this network has answered: it may block peer-to-peer traffic. Another network, or the app, may get through.') : 'Listening for station cards. The first come in within a minute.') + '</p>';
@@ -383,7 +415,8 @@ function rows() {
     const r = document.createElement('div'); r.className = 'row'; r.dataset.id = s.id;
     r.innerHTML = '<div class="mini"></div><div class="meta"><div class="name"></div><div class="cs"></div><div class="about"></div></div><div class="count"></div>';
     const mini = r.querySelector('.mini');
-    if (s.cover) { mini.classList.add('pic'); pic(s.id, s.cover).then(u => { if (u) mini.innerHTML = '<img alt="" src="' + u + '">'; else flag(mini, s.id, s.live) }) } else flag(mini, s.id, s.live);
+    flag(mini, s.id, s.live);
+    if (s.cover) { mini.classList.add('pic'); if (lazy) lazy.observe(r); else pic(s.id, s.cover).then(u => { if (u) mini.innerHTML = '<img alt="" src="' + u + '">' }) }
     r.querySelector('.name').textContent = s.name + (s.live ? '  ON AIR' : '') + (s.pocket ? '  PRIVATE' : '') + (s.explicit ? '  EXPLICIT' : s.mature ? '  MATURE' : '');
     r.querySelector('.cs').textContent = s.call_sign; r.querySelector('.about').textContent = s.about || '';
     r.querySelector('.count').innerHTML = s.aboard + '<small>ABOARD</small><span class="fq">' + fq(s.id).toFixed(1) + '</span>';
@@ -397,7 +430,8 @@ function refresh() {
   if (!radio) return;
   stations = JSON.parse(radio.stations());
   const n = radio.neighbours();
-  $('signal').textContent = n ? n + (n === 1 ? ' neighbour' : ' neighbours') + ' · ' + stations.length + ' on the air' : 'Coming aboard';
+  $('signal').textContent = (flocking ? 'In a flock, in step with its host · ' : '') + (n ? n + (n === 1 ? ' neighbour' : ' neighbours') + ' · ' + stations.length + ' on the air' : 'Coming aboard');
+  $('flockleave').hidden = !flocking;
   rows();
   if (cur) { const u = stations.find(x => x.id === cur.id); if (u) { const pic0 = cur.cover, ban0 = cur.banner; cur = u; $('cs').textContent = u.call_sign + '  ' + u.aboard + ' aboard'; $('name').textContent = u.name; if (u.cover !== pic0 || u.banner !== ban0) show(u) } }
   else { const id = wanted || location.hash.slice(1); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations.find(x => allowed(x) && inSet(x) && !marooned().has(x.id))); if (s) show(s) }
@@ -408,10 +442,12 @@ function flockFollow() {
   const h = location.hash; if (!radio || !h.includes('flock=')) return false;
   try { radio.flock_join(h) } catch (e) { return false }
   history.replaceState(null, '', location.pathname);
-  $('signal').textContent = 'In a flock: playing in step with its host';
-  setInterval(() => { const id = radio.flock_station(); if (id && cur?.id !== id) { const s = stations.find(x => x.id === id) || { id, call_sign: '', name: 'The flock\'s station' }; playing ? listen(s) : show(s) } }, 3000);
+  flocking = setInterval(() => { const id = radio.flock_station(); if (id && cur?.id !== id) { const s = stations.find(x => x.id === id) || { id, call_sign: '', name: 'The flock\'s station' }; playing ? listen(s) : show(s) } }, 3000);
+  refresh();
   return true;
 }
+let flocking = null;
+$('flockleave').onclick = () => { clearInterval(flocking); flocking = null; radio?.flock_leave(); refresh() };
 
 // A pocket station's invitation (#pocket=...): the tab joins, keeps the invitation in this
 // browser only, and clears the key from the address bar.
@@ -439,7 +475,7 @@ function followLink() {
 $('go').onclick = async () => {
   if (playing) return stop();
   if (!cur) return;
-  if (!radio) { audio(); ctx.resume(); $('np').textContent = 'Coming aboard'; await boot(); cur = stations.find(x => x.id === cur.id) || cur }
+  if (!radio) { audio(); ctx.resume(); $('np').textContent = 'Coming aboard'; await (booting ??= boot()); if (!radio) return; cur = stations.find(x => x.id === cur.id) || cur }
   listen(cur);
 };
 $('spin').onclick = () => {
@@ -473,6 +509,7 @@ $('vlist').onclick = () => view(false); $('vchart').onclick = () => view(true);
 
 // ---- Chatter: talk in the station's room, kept by nobody --------------------------------
 const myName = () => store('pyrate.name') || '';
+let chatKey = '';
 function chatter() {
   if (!cur || !radio) return;
   const c = JSON.parse(radio.chat_read(cur.id));
@@ -482,10 +519,13 @@ function chatter() {
   $('chatwho').textContent = 'You speak here as ' + (myName() || c.voice) + '. ' + (c.neighbours ? 'Linked to ' + c.neighbours + ' in the room.' : 'Looking for others in the room.');
   const box = $('lines'), atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
   const shown = c.lines.filter(l => !mutes.has(l.voice));
+  const key = cur.id + shown.map(l => l.id).join() + '#' + [...mutes].join();
+  if (key === chatKey) return;
+  chatKey = key;
   box.innerHTML = shown.map(l => '<div class="line' + (l.keeper ? ' keeper' : '') + (l.mine ? ' mine' : '') + '"><button class="who" data-v="' + esc(l.voice) + '" title="' + esc(l.voice) + '">' + esc(l.name || l.voice) + (l.keeper ? ' (the station)' : '') + '</button><small>' + hm(l.at_ms) + '</small><div class="said">' +
     (l.kind === 'cheer' ? '<span class="cheer">Cheers to what is on</span>' : l.kind === 'request' ? '<span class="req">Asks for ' + esc(l.title || 'a recording') + '</span>' + (l.text ? ', <em>' + esc(l.text) + '</em>' : '') : esc(l.text)) + '</div></div>').join('') || '<p class="fine">Nobody has said anything yet.</p>';
   if (atEnd) box.scrollTop = box.scrollHeight;
-  box.querySelectorAll('.who').forEach(w => w.onclick = () => { if (!w.closest('.mine') && confirm('Mute ' + w.textContent + '? Only you stop hearing them, in this browser.')) { mutes.add(w.dataset.v); store('pyrate.mutes', JSON.stringify([...mutes])); chatter() } });
+  box.querySelectorAll('.who').forEach(w => w.onclick = () => { if (!w.closest('.mine') && confirm('Mute ' + w.textContent + '? Only you stop hearing them, in this browser.')) { mutes.add(w.dataset.v); store('pyrate.mutes', JSON.stringify([...mutes])); chatKey = ''; chatter() } });
 }
 const speak = (kind, text, track) => radio.chat_send(cur.id, kind, text || '', track || '', myName()).then(chatter, e => { $('chatwho').textContent = String(e) });
 $('chatgo').onclick = async () => { $('chatgo').textContent = 'Joining'; try { await radio.chat_join(cur.id) } catch (e) { $('chatgo').textContent = 'Join the chatter'; return } chatter() };
@@ -501,21 +541,30 @@ $('asksend').onclick = () => { speak('request', $('asknote').value.trim(), $('as
 setInterval(() => { if (!$('chatroom').hidden || !$('chatjoin').hidden) chatter() }, 2000);
 // A hail: up to twenty seconds of the listener's voice, sealed in this tab so that only the
 // station's own keys open it. It passes through the room live and nobody keeps it.
-let hailRec = null;
+// A hail goes to the station it was started for. Switching station mid-hail drops it, and the
+// microphone is let go however the hail ends.
+let hailRec = null, hailFor = null, hailDrop = false;
+function dropHail() { if (hailRec) { hailDrop = true; hailRec.stop() } }
 $('hail').onclick = async () => {
   if (hailRec) { hailRec.stop(); return }
+  if (!window.MediaRecorder || !navigator.mediaDevices) { $('chatwho').textContent = 'This browser cannot record a hail. The app can.'; return }
   let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }) } catch (e) { $('chatwho').textContent = 'Allow the microphone, then press again.'; return }
   const type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find(t => MediaRecorder.isTypeSupported(t)) || '';
-  const parts = []; hailRec = new MediaRecorder(stream, { mimeType: type, audioBitsPerSecond: 24000 });
-  hailRec.ondataavailable = e => e.data.size && parts.push(e.data);
-  hailRec.onstop = async () => {
-    stream.getTracks().forEach(t => t.stop()); hailRec = null; $('hail').textContent = 'Hail the keeper';
-    const blob = new Blob(parts, { type: type.split(';')[0] }), bytes = new Uint8Array(await blob.arrayBuffer());
-    try { await radio.chat_hail(cur.id, bytes, blob.type, myName()); $('chatwho').textContent = 'Your hail is on its way. Only the keeper can hear it, and nobody keeps it.' }
+  const parts = [], to = cur.id; let rec;
+  try { rec = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 24000 } : { audioBitsPerSecond: 24000 }) } catch (e) { stream.getTracks().forEach(t => t.stop()); $('chatwho').textContent = 'This browser cannot record a hail. The app can.'; return }
+  hailRec = rec; hailFor = to; hailDrop = false;
+  rec.ondataavailable = e => e.data.size && parts.push(e.data);
+  rec.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    const dropped = hailDrop; hailRec = null; hailFor = null; hailDrop = false; $('hail').textContent = 'Hail the keeper';
+    if (dropped) return;
+    const blob = new Blob(parts, { type: (rec.mimeType || type).split(';')[0] }), bytes = new Uint8Array(await blob.arrayBuffer());
+    try { await radio.chat_hail(to, bytes, blob.type, myName()); $('chatwho').textContent = 'Your hail is on its way. Only the keeper can hear it, and nobody keeps it.' }
     catch (e) { $('chatwho').textContent = String(e) }
   };
-  hailRec.start(); $('hail').textContent = 'Send the hail'; setTimeout(() => hailRec && hailRec.state === 'recording' && hailRec.stop(), 20000);
+  rec.start(); $('hail').textContent = 'Send the hail'; setTimeout(() => rec.state === 'recording' && rec.stop(), 20000);
 };
+$('chatleave').onclick = () => { if (cur) radio.chat_leave(cur.id); chatKey = ''; chatter() };
 
 // ---- Clip it: twenty seconds of the station as a video to post anywhere ----------------
 const CLIP_S = 20;
@@ -523,7 +572,7 @@ function clipType() { for (const t of ['video/mp4;codecs=avc1.42E01E,mp4a.40.2',
 async function clipIt() {
   const type = clipType(); if (!type || !playing || !cur) return;
   const W = 720, H = 1280, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
-  const st = cur, url = 'https://hostis.black/pyrateradio/listen/#' + st.id, q = JSON.parse(radio.qr(url));
+  const st = cur, url = shareBase() + '#' + st.id, q = JSON.parse(radio.qr(url));
   const coverUrl = await pic(st.id, st.cover); let img = null;
   if (coverUrl) { img = new Image(); img.src = coverUrl; await img.decode().catch(() => { img = null }) }
   const dest = ctx.createMediaStreamDestination(); gain.connect(dest);
@@ -557,7 +606,7 @@ async function clipIt() {
     const n = q.size, QS = 150, cell = QS / (n + 8), qx = W / 2 - QS / 2, qy = 1010;
     g.fillStyle = '#fbf8f1'; g.fillRect(qx, qy, QS, QS); g.fillStyle = '#0a0a0a';
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.bits[y * n + x] === '1') g.fillRect(qx + (x + 4) * cell, qy + (y + 4) * cell, cell + .3, cell + .3);
-    g.fillStyle = faint; g.font = '22px "JetBrains Mono"'; g.fillText('hostis.black/pyrateradio', W / 2, 1200);
+    g.fillStyle = faint; g.font = '22px "JetBrains Mono"'; g.fillText(url.replace(/^https:\/\//, '').replace(/\/listen\/#.*$/, '').replace(/#.*$/, ''), W / 2, 1200);
     g.fillStyle = blood; g.fillRect(40, H - 46, (W - 80) * Math.min(1, el / CLIP_S), 4);
     if (el < CLIP_S && rec.state === 'recording') requestAnimationFrame(draw); else if (rec.state === 'recording') rec.stop();
   };
@@ -597,7 +646,7 @@ $('tipclose').onclick = () => { $('tipbox').hidden = true; $('tipcopy').textCont
 
 // Pass it on: the station's code to scan, its link to copy or share.
 $('pass').onclick = () => {
-  const url = 'https://hostis.black/pyrateradio/listen/#' + cur.id, q = JSON.parse(radio.qr(url)), n = q.size;
+  const url = shareBase() + '#' + cur.id, q = JSON.parse(radio.qr(url)), n = q.size;
   let d = ''; for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.bits[y * n + x] === '1') d += 'M' + (x + 4) + ' ' + (y + 4) + 'h1v1h-1z';
   $('qr').innerHTML = '<svg viewBox="0 0 ' + (n + 8) + ' ' + (n + 8) + '" role="img" aria-label="QR code for this station"><rect width="100%" height="100%" fill="#fbf8f1"/><path d="' + d + '" fill="#0a0a0a"/></svg>';
   $('plink').textContent = url; $('passbox').hidden = false; $('passbox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -622,7 +671,7 @@ $('mtake').onclick = () => {
 };
 for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-explicit', 'pyrate.show_explicit', '1'], ['sw-art', 'pyrate.hide_art', '0']]) {
   const el = $(id); el.checked = on === '1' ? store(key) === '1' : store(key) !== '1';
-  el.onchange = () => { store(key, (el.checked ? on : (on === '1' ? '0' : '1'))); pics.clear(); refresh(); if (cur) show(cur) };
+  el.onchange = () => { store(key, (el.checked ? on : (on === '1' ? '0' : '1'))); forgetPics(); rowsKey = ''; refresh(); if (cur) show(cur) };
 }
 $('mclear').onclick = () => { setMarooned(new Set()); $('mnote').textContent = 'Every station is back in the Log.'; refresh() };
 
@@ -669,4 +718,4 @@ if (document.documentElement.classList.contains('embed') && parent !== window) {
   new ResizeObserver(tell).observe(document.body); addEventListener('load', tell);
 }
 if (EMBED) { scale(); const p = passedId(); dormant(p ? { id: p, name: 'A passed-on station', call_sign: '' } : HARBOUR_STATIONS[0]); $('signal').textContent = '' }
-else boot();
+else booting = boot();
