@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'art.dart';
 import 'main.dart';
 import 'native.dart';
+import 'station.dart';
 
 const ship = MethodChannel('pyrate/service');
 
@@ -130,6 +131,7 @@ class _LogPageState extends State<LogPage> {
   String? kind;
   String? port;
   bool hideMature = pref('hide_mature') == true;
+  bool onNow = false;
   Map nowOn = {};
   int _nowTick = 0;
 
@@ -145,6 +147,7 @@ class _LogPageState extends State<LogPage> {
       if (hideMature && (s['mature'] == true || s['explicit'] == true)) return false;
       if (kind != null && !((s['kinds'] as List?) ?? []).contains(kind)) return false;
       if (port != null && (s['port'] ?? '') != port) return false;
+      if (onNow && s['live'] != true && ((nowOn[s['id']] as Map?)?['slot'] ?? '').toString().isEmpty) return false;
       if (q.isEmpty) return true;
       return [s['name'], s['about'], s['call_sign'], s['port']].any((v) => (v ?? '').toString().toLowerCase().contains(q));
     }).toList();
@@ -165,7 +168,8 @@ class _LogPageState extends State<LogPage> {
 
   void refreshNow(List<Map<String, dynamic>> st) {
     if (_nowTick++ % 8 != 0) return;
-    final ids = st.take(60).map((s) => s['id']).toList();
+    // On now looks across the whole Log; otherwise the stations in view are enough.
+    final ids = (onNow ? widget.radio.stations : st).take(onNow ? 200 : 60).map((s) => s['id']).toList();
     final r = Native.call({'cmd': 'now_for', 'stations': ids});
     if (r is Map) nowOn = r;
   }
@@ -196,6 +200,14 @@ class _LogPageState extends State<LogPage> {
             onTap: () {
               Native.call({'cmd': 'keep', 'station': id, 'value': s['kept'] != true});
               Navigator.pop(context);
+            },
+          ),
+          ListTile(
+            title: Text('THE PAGE', style: carved(12)),
+            subtitle: Text('Notices, what is on now and next, and the week\'s shows.', style: serif(13, color: boneFaint, italic: true)),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => StationPage(station: s, radio: widget.radio)));
             },
           ),
           ListTile(
@@ -249,7 +261,17 @@ class _LogPageState extends State<LogPage> {
                 child: Text('Your ballast keeps ${radio.carrying} ${radio.carrying == 1 ? 'station' : 'stations'} afloat for the fleet.', style: mono(11, color: boneFaint)),
               ),
             const SizedBox(height: 10),
-            TextField(controller: search, style: serif(17), decoration: pyrateField('Search the Log')),
+            Row(children: [
+              Expanded(child: TextField(controller: search, style: serif(17), decoration: pyrateField('Search the Log'))),
+              const SizedBox(width: 12),
+              pyrateButton('SPIN THE DIAL', () {
+                final pool = filtered().where((s) => s['id'] != radio.tuned).toList();
+                if (pool.isEmpty) return;
+                final s = pool[DateTime.now().microsecondsSinceEpoch % pool.length];
+                radio.tune(s['id'] as String);
+                widget.onTune();
+              }),
+            ]),
             const SizedBox(height: 12),
             Wrap(children: [
               for (final (k, label) in [('aboard', 'Most aboard'), ('longest', 'Longest on air'), ('newest', 'Newest'), ('carried', 'Most carried')])
@@ -259,6 +281,10 @@ class _LogPageState extends State<LogPage> {
                     })),
             ]),
             Wrap(children: [
+              chip('on now', onNow, () => setState(() {
+                    onNow = !onNow;
+                    _nowTick = 0;
+                  })),
               for (final k in stationKinds) chip(k, kind == k, () => setState(() => kind = kind == k ? null : k)),
               chip('hide mature', hideMature, () => setState(() {
                     hideMature = !hideMature;
@@ -278,7 +304,7 @@ class _LogPageState extends State<LogPage> {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text(radio.stations.isEmpty ? 'Searching the Log' : 'No station answers to that.', style: serif(16, color: boneFaint, italic: true)),
+            child: Text(radio.stations.isEmpty ? 'Searching the Log' : onNow ? 'No shows and no one live at this minute. Spin the dial.' : 'No station answers to that.', style: serif(16, color: boneFaint, italic: true)),
           ),
         ),
       SliverList.separated(
@@ -311,6 +337,8 @@ class _LogPageState extends State<LogPage> {
                     ]),
                     const SizedBox(height: 2),
                     Text(s['call_sign'] ?? '', style: mono(10, color: boneGhost)),
+                    if (on != null && (on['slot'] ?? '').toString().isNotEmpty)
+                      Text((on['slot'] as String).toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: carved(9, color: bloodBright, spacing: 0.25)),
                     if (on != null && (on['title'] ?? '').toString().isNotEmpty)
                       Text('Now: ${on['title']}${(on['by'] ?? '').toString().isNotEmpty ? ' · ${on['by']}' : ''}',
                           maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(13, color: boneDim, italic: true))

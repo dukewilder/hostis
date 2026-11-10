@@ -3387,6 +3387,7 @@ dependencies = [
  "n0-future",
  "postcard",
  "pyrate-core",
+ "qrcode",
  "serde",
  "serde_json",
  "wasm-bindgen",

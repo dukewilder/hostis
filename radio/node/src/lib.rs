@@ -1462,7 +1462,7 @@ impl Node {
                     let Some(a) = s.logs.get(&st) else { continue };
                     let Some(np) = pyrate_core::clock::Clock::new(a).ok().and_then(|c| c.now(now)) else { continue };
                     let (title, by) = describe_track(a, &np.track);
-                    out.insert(id.to_string(), json!({ "title": title, "by": by }));
+                    out.insert(id.to_string(), json!({ "title": title, "by": by, "slot": np.slot }));
                 }
                 Ok(Value::Object(out))
             }

@@ -20,26 +20,33 @@ main{max-width:var(--measure);margin:0 auto;padding:clamp(2.5rem,8vh,5rem) var(-
 .wordmark{display:block;width:min(440px,86vw);margin:0 auto .6rem}
 .eyebrow{font-family:var(--carved);font-size:.72rem;letter-spacing:.4em;color:var(--bone-faint);text-transform:uppercase}
 .eyebrow a{color:inherit;text-decoration:none}
-h2{font-family:var(--carved);font-weight:400;font-size:.95rem;letter-spacing:.3em;text-transform:uppercase;margin:3.5rem 0 1rem;color:var(--bone)}
+h2{font-family:var(--serif);font-weight:400;font-size:1.8rem;line-height:1.15;margin:4rem 0 1rem;color:var(--bone)}
 .lead{font-style:italic;font-size:1.35rem;color:var(--bone-dim);margin:1.6rem auto 0;max-width:34em}
 p{margin:0 0 1rem}.faint{color:var(--bone-faint);font-style:italic}
 a{color:var(--bone)}
 hr{border:0;border-top:.5px solid var(--bone-ghost);margin:3rem 0}
-.doors{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--bone-ghost);border:.5px solid var(--bone-ghost);margin:2.6rem 0 0;text-align:left}
-.doors a{display:block;background:var(--black);padding:1.3rem 1.2rem;color:var(--bone);text-decoration:none}
-.doors a:hover,.doors a:focus-visible{background:var(--panel);outline:none}
-.doors a.first{grid-column:1/-1;text-align:center;padding:1.6rem 1.2rem}
-.doors a.first .what{font-size:1.05rem;letter-spacing:.35em}
+.setframe{width:min(1000px,calc(100vw - 1rem));margin:2.2rem 0 0 50%;transform:translateX(-50%)}
+.setframe iframe{display:block;width:100%;height:640px;border:0;background:transparent;color-scheme:dark}
+.under{text-align:center;color:var(--bone-faint);font-style:italic;font-size:1rem;margin:.9rem auto 0;max-width:36em}
+.doors{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;width:min(1000px,calc(100vw - 2rem));margin:2.4rem 0 0 50%;transform:translateX(-50%);text-align:left}
+.doors a{display:block;padding:1.2rem 1.2rem 1.3rem;color:var(--bone);text-decoration:none;border:1px solid rgba(201,164,92,.35);border-radius:10px;background:linear-gradient(180deg,#0d0c0a,#050505)}
+.doors a:hover,.doors a:focus-visible{border-color:#c9a45c;outline:none}
 .what{font-family:var(--carved);font-size:.85rem;letter-spacing:.25em;text-transform:uppercase;display:block}
 .how{display:block;color:var(--bone-faint);font-style:italic;font-size:1rem;margin-top:.3rem}
-@media (max-width:560px){.doors{grid-template-columns:1fr}}
+@media (max-width:760px){.doors{grid-template-columns:1fr}.setframe iframe{height:900px}}
 .passed{border:.5px solid var(--bone-dim);padding:1.2rem 1.3rem;margin:0 0 2.2rem;font-style:italic;text-align:center}
 .passed a{font-family:var(--carved);font-style:normal;font-size:.75rem;letter-spacing:.22em;text-transform:uppercase;display:inline-block;margin:.9rem .6rem 0}
 code,.mono{font-family:var(--mono);font-size:.78rem;color:var(--bone-faint);word-break:break-all}
 ol{padding-left:1.3rem}li{margin-bottom:.5rem}
-.station{padding:.9rem 0;border-bottom:.5px solid var(--bone-ghost)}
-.station b{font-weight:400;font-size:1.25rem}.station .cs{font-family:var(--mono);font-size:.72rem;color:var(--bone-ghost);display:block}
-.station i{color:var(--bone-faint);display:block;font-size:.98rem}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:.9rem}
+@media (max-width:560px){.cards{grid-template-columns:1fr}}
+.station{display:block;position:relative;padding:1.1rem 1.1rem 1.2rem;border:1px solid rgba(201,164,92,.3);border-radius:10px;color:var(--bone);text-decoration:none;background:#070706}
+.station:hover,.station:focus-visible{border-color:#c9a45c;outline:none}
+.station .flag{display:inline-grid;grid-template-columns:repeat(9,1fr);gap:0 .3em;font-family:var(--mono);font-size:.5rem;line-height:1.1;padding:.45rem .55rem;border:.5px solid var(--bone-ghost);margin-bottom:.8rem}
+.station .flag span{color:rgba(237,228,206,.12)}.station .flag b{color:var(--bone);font-size:inherit}
+.station .fq{position:absolute;top:1.1rem;right:1.1rem;font-family:var(--mono);font-size:.85rem;color:#c9a45c}
+.station b{font-weight:400;font-size:1.3rem;display:block}.station .cs{font-family:var(--mono);font-size:.72rem;color:var(--bone-ghost);display:block}
+.station i{color:var(--bone-faint);display:block;font-size:.98rem;margin-top:.4rem}
 .articles p{padding-left:1.2rem;border-left:.5px solid var(--bone-ghost)}
 details{border-top:.5px solid var(--bone-ghost);padding:.2rem 0}
 details:last-of-type{border-bottom:.5px solid var(--bone-ghost)}
@@ -58,24 +65,29 @@ footer a{color:inherit}
 <body>
 <main>
 <div id="passed" class="passed" hidden></div>
-<script>
-// A station link: hostis.black/pyrateradio/#<station id>. It plays here in the browser, or in the app.
-(function(){var id=(location.hash||'').slice(1).toLowerCase();if(!/^[0-9a-f]{64}$/.test(id))return;var b=document.getElementById('passed');
-var app=/Android/.test(navigator.userAgent)?' <a href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url='+encodeURIComponent(location.origin+'/listen/#'+id)+';end">Open in the app</a>':'';
-b.innerHTML='Someone passed you a station.<br><a href="listen/#'+id+'">▶ Listen here</a>'+app;b.hidden=false})();
-</script>
 
 <section class="hero">
 <img class="wordmark" src="wordmark.png" alt="Pyrate Radio">
 <div class="eyebrow"><a href="https://hostis.black">Under HOSTIS colours</a></div>
 <p class="lead">Radio that plays all day and all night, that anyone can raise, that every listener carries, and that answers to no server, no store and no account.</p>
+</section>
+
+<div class="setframe"><iframe id="radio" src="listen/?embed" title="Pyrate Radio, playing in this page" allow="autoplay; clipboard-write; web-share"></iframe>
+<p class="under">Press the round button and it plays, in this page, from whoever carries the station. Sweep the dial for the rest of the Log.</p></div>
+<script>
+// A station link: hostis.black/pyrateradio/#<station id>. It plays here in the browser, or in the app.
+(function(){var id=(location.hash||'').slice(1).toLowerCase();if(!/^[0-9a-f]{64}$/.test(id))return;var b=document.getElementById('passed');
+var app=/Android/.test(navigator.userAgent)?' <a href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url='+encodeURIComponent(location.origin+'/listen/#'+id)+';end">Open in the app</a>':'';
+document.getElementById('radio').src='listen/?embed#'+id;
+b.innerHTML='Someone passed you a station. It is on the dial below.'+(app?'<br>'+app:'');b.hidden=false})();
+</script>
+
 <nav class="doors">
-<a class="first" href="listen/"><span class="what">▶ Listen now</span><span class="how">In this browser, on any phone or computer. Nothing to install.</span></a>
-<a href="#set"><span class="what">Take the set</span><span class="how">The app for Android {{VERSION}}. Plays with the screen off.</span></a>
-<a href="#colours"><span class="what">Raise colours</span><span class="how">Your own station, from your phone, on the air in a minute.</span></a>
+<a href="listen/"><span class="what">The full player</span><span class="how">Every station, its week of shows, and your own switches. Any phone or computer, nothing to install.</span></a>
+<a href="#set"><span class="what">Take the set</span><span class="how">The app for Android {{VERSION}}. Plays with the screen off and keeps the stations you love.</span></a>
+<a href="#colours"><span class="what">Raise colours</span><span class="how">Your own station from your phone: a loop, a schedule, a podcast or live, on the air in a minute.</span></a>
 </nav>
 <div class="toc"><a href="#how">How it works</a> <a href="#air">On the air</a> <a href="#lantern">Keep a Lantern</a> <a href="#faq">Questions</a></div>
-</section>
 
 <h2 id="how">Turn it on</h2>
 <p>Open it and it plays. Within seconds you are hearing the station with the most aboard, and a swipe takes you to the next.</p>
@@ -83,8 +95,10 @@ b.innerHTML='Someone passed you a station.<br><a href="listen/#'+id+'">▶ Liste
 <p>Every phone carries. On Wi-Fi while it charges, each phone keeps a share of the fleet, drawn by lot, and hands it on to whoever asks. Every station is carried in many places whether or not anyone is listening, and none of them is the one to shut.</p>
 
 <h2 id="air">On the air</h2>
-<div class="station"><b>The Public Domain</b><span class="cs">GAHAGU·3695</span><i>Recordings published in 1925 or earlier, free in the United States since 1 January 2026. Every January the fence moves back another year.</i></div>
-<div class="station"><b>Readings</b><span class="cs">DEVAKA·F42C</span><i>LibriVox recordings, every one in the public domain, read aloud around the clock. Johnson's General History of the Pyrates first.</i></div>
+<div class="cards">
+<a class="station" href="listen/#f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f" data-id="f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f"><span class="flag"></span><span class="fq"></span><b>The Public Domain</b><span class="cs">GAHAGU·3695</span><i>Recordings published in 1925 or earlier, free in the United States since 1 January 2026. Every January the fence moves back another year.</i></a>
+<a class="station" href="listen/#110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a" data-id="110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"><span class="flag"></span><span class="fq"></span><b>Readings</b><span class="cs">DEVAKA·F42C</span><i>LibriVox recordings, every one in the public domain, read aloud around the clock. Johnson's General History of the Pyrates first.</i></a>
+</div>
 <p class="faint" style="margin-top:1rem">These are the stations HOSTIS raises. Every other station on the Log belongs to whoever holds its key. HOSTIS ranks none of them. The Log sorts by how many are aboard, and the listeners decide.</p>
 
 <h2 id="set">Take the set</h2>
@@ -142,5 +156,13 @@ b.innerHTML='Someone passed you a station.<br><a href="listen/#'+id+'">▶ Liste
 <p class="faint" style="text-align:center">The site will be taken down. The radio is built so that when it is, nothing on the air goes quiet.</p>
 </main>
 <footer><a href="https://hostis.black">hostis.black</a> · <a href="listen/">listen</a> · <a href="https://github.com/dukewilder/hostis/tree/radio/radio">source</a> · no rights reserved</footer>
+<script>
+// Each station's flag is its key, drawn; its frequency is the same on every dial.
+document.querySelectorAll('.station[data-id]').forEach(function(a){var id=a.dataset.id,b=[];for(var k=0;k<id.length;k++){var v=parseInt(id[k],16);for(var i=3;i>=0;i--)b.push((v>>i)&1)}
+var h='';for(var r=0;r<6;r++)for(var c=0;c<9;c++){var half=c<5?c:8-c;h+=b[(r*5+half)%b.length]?'<b>1</b>':'<span>0</span>'}a.querySelector('.flag').innerHTML=h;
+a.querySelector('.fq').textContent=((875+parseInt(id.slice(0,6),16)%206)/10).toFixed(1)});
+// The set in the hero tells this page how tall it has grown.
+addEventListener('message',function(e){if(e.origin===location.origin&&e.data&&e.data.pyrate==='height')document.getElementById('radio').style.height=e.data.h+'px'});
+</script>
 </body>
 </html>

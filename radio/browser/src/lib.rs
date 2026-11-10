@@ -687,6 +687,13 @@ impl Radio {
         }))
     }
 
+    /// A QR code for a link, as JSON: its width in modules and a string of 1s and 0s.
+    pub fn qr(&self, text: &str) -> Result<String, JsValue> {
+        let code = qrcode::QrCode::new(text.as_bytes()).map_err(|e| js(anyhow!("{e}")))?;
+        let bits: String = code.to_colors().iter().map(|c| if *c == qrcode::Color::Dark { '1' } else { '0' }).collect();
+        Ok(json!({ "size": code.width(), "bits": bits }).to_string())
+    }
+
     /// A station's page as JSON: on now, up next, the week's schedule and its notices,
     /// worked out in this tab from the station's own log. Times are network milliseconds.
     pub fn page(&self, id: &str, days: u32) -> Result<String, JsValue> {
