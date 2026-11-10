@@ -160,6 +160,27 @@ fn worked(d: &[u8; 32], nonce: u64) -> bool {
     zeros(h.finalize().as_bytes()) >= WORK_BITS
 }
 
+/// A stranger's words as they are shown: no control characters, no marks that turn text
+/// round or hide it (bidi overrides and isolates, zero-width joins), so a line cannot run
+/// backwards over its neighbours or pass for something else.
+pub fn shown(s: &str) -> String {
+    s.chars()
+        .filter(|c| (!c.is_control() || *c == '\n') && !matches!(*c, '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{2069}' | '\u{061c}' | '\u{feff}'))
+        .collect()
+}
+
+/// A speaker's name as shown: as [`shown`], and never wearing the station's own mark, which
+/// only the keeper's key earns.
+pub fn shown_name(s: &str) -> String {
+    let mut n = shown(s).replace('\n', " ");
+    loop {
+        let low = n.to_lowercase();
+        let Some(at) = low.find("(the station)") else { break };
+        n.replace_range(at..at + "(the station)".len(), "");
+    }
+    n.trim().to_string()
+}
+
 fn trim(s: &str, n: usize) -> String {
     s.trim().chars().filter(|c| !c.is_control() || *c == '\n').take(n).collect()
 }
@@ -239,6 +260,13 @@ pub fn id(s: &Signed) -> Hash {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn names_cannot_wear_the_station_mark_or_turn_text_round() {
+        assert_eq!(super::shown_name("Gangway (THE STATION)"), "Gangway");
+        assert_eq!(super::shown_name("a\u{202e}b\u{2066}c"), "abc");
+        assert_eq!(super::shown("one\ntwo\u{200b}"), "one\ntwo");
+    }
+
     use super::*;
 
     #[test]

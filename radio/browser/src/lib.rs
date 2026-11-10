@@ -46,8 +46,15 @@ const CREW_RELAYS: &[&str] = &["https://relay.hostis.black"];
 /// Chunks kept in memory: about forty minutes of music.
 const HOLD_BYTES: usize = 24 * 1024 * 1024;
 
+/// The tab's own notes, kept out of the console unless the page is opened with `?debug`:
+/// they name this visit's node and the stations it syncs, which nothing else on the
+/// machine needs to read.
 fn say(msg: &str) {
-    web_sys::console::log_1(&format!("pyrate: {msg}").into());
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let on = *ON.get_or_init(|| web_sys::window().and_then(|w| w.location().search().ok()).is_some_and(|q| q.contains("debug")));
+    if on {
+        web_sys::console::log_1(&format!("pyrate: {msg}").into());
+    }
 }
 
 fn hex(b: &[u8]) -> String {
@@ -180,6 +187,15 @@ struct Ship {
     /// Stations that struck their colours: never searched for, listed or played again.
     struck: Mutex<HashSet<StationId>>,
     last_trim: std::sync::atomic::AtomicU64,
+}
+
+/// A relay named in a link someone passed on: HTTPS only, so a link cannot send the tab's
+/// traffic through a plain-text relay (a loopback relay is allowed, for testing).
+fn relay_from_link(s: &str) -> Option<iroh::RelayUrl> {
+    let url: iroh::RelayUrl = s.parse().ok()?;
+    let t = url.to_string();
+    let local = ["http://127.0.0.1:", "http://127.0.0.1/", "http://localhost:", "http://localhost/", "http://[::1]"].iter().any(|p| t.starts_with(p));
+    (t.starts_with("https://") || local).then_some(url)
 }
 
 /// A number below `n` from the browser's own randomness.
@@ -1137,12 +1153,12 @@ impl Radio {
         let lines: Vec<Value> = r.lines.iter().map(|l| {
             let keeper = l.line.from == st.0 || a.is_some_and(|a| a.deputies().contains(&l.line.from));
             let (kind, text, track, title) = match &l.line.say {
-                pyrate_core::chat::Say::Text(t) => ("text", t.clone(), None, None),
+                pyrate_core::chat::Say::Text(t) => ("text", pyrate_core::chat::shown(t), None, None),
                 pyrate_core::chat::Say::Cheer => ("cheer", String::new(), None, None),
-                pyrate_core::chat::Say::Request { track, note } => ("request", note.clone(), Some(hex(track)), a.map(|a| pyrate_core::page::describe_track(a, track).0).filter(|t| !t.is_empty())),
+                pyrate_core::chat::Say::Request { track, note } => ("request", pyrate_core::chat::shown(note), Some(hex(track)), a.map(|a| pyrate_core::page::describe_track(a, track).0).filter(|t| !t.is_empty())),
                 pyrate_core::chat::Say::Hail { .. } => ("hail", String::new(), None, None),
             };
-            json!({ "id": hex(&pyrate_core::chat::id(l)), "voice": StationId(l.line.from).call_sign(), "name": l.line.name, "at_ms": l.line.at_ms,
+            json!({ "id": hex(&pyrate_core::chat::id(l)), "voice": StationId(l.line.from).call_sign(), "name": pyrate_core::chat::shown_name(&l.line.name), "at_ms": l.line.at_ms,
                     "kind": kind, "text": text, "track": track, "title": title, "keeper": keeper, "mine": l.line.from == me })
         }).collect();
         Ok(json!({ "joined": true, "neighbours": r.neighbours, "voice": StationId(me).call_sign(), "lines": lines }).to_string())
@@ -1193,7 +1209,7 @@ impl Radio {
         let host: EndpointId = id.parse().map_err(|_| JsValue::from_str("not a flock link"))?;
         let mut code = [0u8; 8];
         pyrate_core::unhex_into(code_hex, &mut code).ok_or_else(|| JsValue::from_str("bad code"))?;
-        if let Ok(url) = relay.parse() {
+        if let Some(url) = relay_from_link(relay) {
             self.ship.book.add_endpoint_info(iroh::EndpointAddr { id: host, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
         }
         *self.ship.flock.lock().unwrap() = Some((host, code));
@@ -1209,7 +1225,9 @@ impl Radio {
                         break;
                     }
                     let rtt = t1.saturating_sub(t0);
-                    let off = h as i64 + rtt as i64 / 2 - t1 as i64;
+                    // A host is trusted with the room's timing, not with the date: five
+                    // minutes either way at most, as the network's own clock allows.
+                    let off = (h as i64 + rtt as i64 / 2 - t1 as i64).clamp(-300_000, 300_000);
                     if best.as_ref().is_none_or(|b| rtt < b.0) {
                         best = Some((rtt, off, station));
                     }
@@ -1225,13 +1243,20 @@ impl Radio {
         Ok(())
     }
 
+    /// Leaves the flock: the tab goes back to the network's own clock and its own station.
+    pub fn flock_leave(&self) {
+        *self.ship.flock.lock().unwrap() = None;
+        self.ship.flock_off.store(0, std::sync::atomic::Ordering::Relaxed);
+        *self.ship.flock_station.lock().unwrap() = None;
+    }
+
     /// Joins a pocket station from its invitation (#pocket=...). Resolves to the station's id.
     pub fn pocket_join(&self, link: &str) -> Result<js_sys::Promise, JsValue> {
         let (st, key, host) = pyrate_core::pocket::read_invitation(link).ok_or_else(|| JsValue::from_str("not an invitation"))?;
         let st = StationId(st);
         let (id, relay) = host.split_once('@').unwrap_or((host.as_str(), ""));
         let hosts: Vec<EndpointId> = id.parse().ok().into_iter().collect();
-        if let (Some(h), Ok(url)) = (hosts.first(), relay.parse()) {
+        if let (Some(h), Some(url)) = (hosts.first(), relay_from_link(relay)) {
             self.ship.book.add_endpoint_info(iroh::EndpointAddr { id: *h, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
         }
         self.ship.pockets.lock().unwrap().insert(st, (key, hosts.clone()));
@@ -1265,11 +1290,6 @@ impl Radio {
     /// The flock host's station, as hex, or empty.
     pub fn flock_station(&self) -> String {
         self.ship.flock_station.lock().unwrap().map(|s| s.to_hex()).unwrap_or_default()
-    }
-
-    pub fn flock_leave(&self) {
-        *self.ship.flock.lock().unwrap() = None;
-        self.ship.flock_off.store(0, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// The station's whole log as JSON lines of what aired: for the station page.

@@ -15,3 +15,4 @@ PYRATE_RELAYS=http://127.0.0.1:3340 python3 browser/build.py`, copy `browser/www
 serve it (`python3 -m http.server <port>`), then rebuild the public page with plain
 `python3 browser/build.py`. Playwright's Chromium: `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`.
 - `live_page.py <url>`: loads the deployed page and checks the wasm starts, after every deploy.
+- `browser_ui.py <port>`: quiet console, chatter join and leave, passed-on links that never name the serving address.
