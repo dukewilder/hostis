@@ -26,6 +26,9 @@ pub enum Request {
     Hop(Vec<u8>),
     /// The last lines of a station's chatter that a node in the room still holds.
     Chatter { station: StationId },
+    /// A chunk, sealed, by the name it is filed under. The carrier never learns its address
+    /// and never opens it. See pyrate_core::seal.
+    SealedChunk { name: Hash },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -34,6 +37,7 @@ pub enum Response {
     Chunk(Option<Vec<u8>>),
     Hop(Vec<u8>),
     Chatter(Vec<Vec<u8>>),
+    Sealed(Option<Vec<u8>>),
 }
 
 /// The signed face of a station's card. Fields are only ever added at the end: an older

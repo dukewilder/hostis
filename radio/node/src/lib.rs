@@ -254,9 +254,10 @@ impl std::fmt::Debug for Inner {
 
 impl Inner {
     fn serve(&self, req: Request) -> Response {
-        let store = self.store.lock().unwrap();
+        let mut store = self.store.lock().unwrap();
         match req {
             Request::Log { station, from } if !self.refused_quick(&station) => {
+                store.open_log(&station);
                 let out = store
                     .logs
                     .get(&station)
@@ -267,7 +268,13 @@ impl Inner {
                 Response::Entries(out)
             }
             Request::Log { .. } => Response::Entries(vec![]),
-            Request::Chunk { hash } => Response::Chunk(store.get_chunk(&hash).or_else(|| self.art_mem.lock().unwrap().get(&hash))),
+            // In the clear, a node hands out only its own stations' sound, and art it is showing.
+            // Everything it carries for others goes out sealed, by name, unopened.
+            Request::Chunk { hash } => {
+                let own = store.own().iter().any(|id| store.logs.get(id).is_some_and(|a| a.art_hashes().contains(&hash))) || store.own().iter().any(|id| store.chunks_of(id).contains(&hash));
+                Response::Chunk(if own { store.get_chunk(&hash) } else { None }.or_else(|| self.art_mem.lock().unwrap().get(&hash)))
+            }
+            Request::SealedChunk { name } => Response::Sealed(store.get_sealed(&name)),
             Request::Hop(_) => Response::Hop(vec![]),
             Request::Chatter { station } => Response::Chatter(self.chatter_for(&station)),
         }
@@ -448,7 +455,16 @@ impl Inner {
         if let Some(b) = self.store.lock().unwrap().get_chunk(hash) {
             return Ok(b);
         }
+        let name = pyrate_core::seal::name(hash);
         for node in self.carriers(station) {
+            // Sealed first: the carrier hands on bytes it never opened.
+            if let Ok(Response::Sealed(Some(s))) = self.ask(node, &Request::SealedChunk { name }).await {
+                let Some(b) = pyrate_core::seal::unseal(hash, &s) else { continue };
+                if !keep || self.store.lock().unwrap().put_sealed(hash, &s).is_ok() {
+                    return Ok(b);
+                }
+            }
+            // A keeper hands out its own station's sound in the clear.
             if let Ok(Response::Chunk(Some(b))) = self.ask(node, &Request::Chunk { hash: *hash }).await {
                 if blake3::hash(&b).as_bytes() != hash {
                     continue;
@@ -456,6 +472,20 @@ impl Inner {
                 if !keep || self.store.lock().unwrap().put_chunk(hash, &b).is_ok() {
                     return Ok(b);
                 }
+            }
+        }
+        Err(anyhow!("no carrier has that chunk"))
+    }
+
+    /// Sealed bytes by name, from this disk or a carrier, passed on unopened. An exit fetches
+    /// this way for a listener on a private route: it never learns the chunk's address.
+    pub async fn sealed_direct(&self, station: &StationId, name: &Hash) -> Result<Vec<u8>> {
+        if let Some(b) = self.store.lock().unwrap().get_sealed(name) {
+            return Ok(b);
+        }
+        for node in self.carriers(station) {
+            if let Ok(Response::Sealed(Some(s))) = self.ask(node, &Request::SealedChunk { name: *name }).await {
+                return Ok(s);
             }
         }
         Err(anyhow!("no carrier has that chunk"))
@@ -487,6 +517,7 @@ impl Inner {
                         }
                     }
                 }
+                self.store.lock().unwrap().open_log(&a.station);
                 let fresh = log.get(&a.station).and_then(|l| l.announce.as_ref()).is_none_or(|old| a.at_ms > old.at_ms);
                 if fresh && now.saturating_sub(a.at_ms) < 60_000 {
                     clockfix::sample(a.at_ms, raw_now_ms());
@@ -500,7 +531,10 @@ impl Inner {
                 }
                 let l = log.entry(a.station).or_default();
                 if l.announce.is_none() {
-                    say(&format!("in the Log: {} {}", a.station.call_sign(), a.name));
+                    // A node keeps no record of what passes through it: only its own stations are named.
+                    if self.store.lock().unwrap().keys.contains_key(&a.station) {
+                        say(&format!("in the Log: {} {}", a.station.call_sign(), a.name));
+                    }
                 }
                 if l.announce.as_ref().is_none_or(|old| a.at_ms > old.at_ms) {
                     let s = a.station;
@@ -758,7 +792,7 @@ impl Inner {
         let now = now_ms();
         for st in own {
             let aboard = self.log.lock().unwrap().get(&st).map(|l| l.aboard(now)).unwrap_or(0);
-            let p = self.cfg.dir.join(format!("aboard-{}", st.to_hex()));
+            let p = self.cfg.dir.join(format!("aboard-{}", store::filed_as(&st)));
             let mut text = std::fs::read_to_string(&p).unwrap_or_default();
             text.push_str(&format!("{now} {aboard}\n"));
             let lines: Vec<&str> = text.lines().collect();
@@ -1577,7 +1611,7 @@ impl Node {
             }
             "aboard_history" => {
                 let st = station()?;
-                let text = std::fs::read_to_string(inner.cfg.dir.join(format!("aboard-{}", st.to_hex()))).unwrap_or_default();
+                let text = std::fs::read_to_string(inner.cfg.dir.join(format!("aboard-{}", store::filed_as(&st)))).unwrap_or_default();
                 let pts: Vec<Value> = text.lines().filter_map(|l| {
                     let (t, c) = l.split_once(' ')?;
                     Some(json!([t.parse::<u64>().ok()?, c.parse::<u64>().ok()?]))
