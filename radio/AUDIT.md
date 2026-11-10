@@ -72,7 +72,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 - **P10** (medium) Drawer Lantern: the service restarts with no node, and the charging and Wi-Fi gate lives only in the Dart UI. `LanternService.kt:27-52`
 - **P17** (medium) Blocking native calls on the UI thread, in Dart and in the service. `PlaybackService.kt:53-58`
-- **P18** (medium) The dial's PageView follows list position, not the station. `main.dart:203-214`
 - **P20** (medium) Microphone permission dead-ends and the messages mislead. `MainActivity.kt:69-75`
 - **P23** (medium) A hosted flock loses its code when the sheet is closed. `station.dart:1688`
 - **P26** (low) Bell ids differ between screens, depend on `String.hashCode`, and notifications are not checked. `station.dart:290 vs more.dart:373`
@@ -213,8 +212,10 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **P33. Feed and URL fetch code writes unsolicited temp files and the downloads can be stranded.** (low) Fixed: A fetch writes a .part file that takes its name only when whole and is deleted on any failure; the art and the episodes are deleted once set; and each start sweeps the cache of anything older than six hours that an earlier run left behind. (0702d98)
 
-**P14. Temporary audio, pictures and APK copies are left on disk.** (medium) Fixed: Takes, picked files, pictures and fetches are dropped from the cache once set or discarded, through one helper that only ever deletes inside the app's own cache; each start sweeps anything an earlier run left there for more than six hours, the shared tapes and the APK copy included. Recordings are set one after another rather than all at once. (pending)
+**P14. Temporary audio, pictures and APK copies are left on disk.** (medium) Fixed: Takes, picked files, pictures and fetches are dropped from the cache once set or discarded, through one helper that only ever deletes inside the app's own cache; each start sweeps anything an earlier run left there for more than six hours, the shared tapes and the APK copy included. Recordings are set one after another rather than all at once. (dd9d820)
 
-**P21. RECORD A SEGMENT leaves the microphone open if the panel is closed.** (medium) Fixed: Closing the panel stops the microphone at once and drops the take; DISCARD deletes it; the hail recorder does the same when its sheet closes. (pending)
+**P21. RECORD A SEGMENT leaves the microphone open if the panel is closed.** (medium) Fixed: Closing the panel stops the microphone at once and drops the take; DISCARD deletes it; the hail recorder does the same when its sheet closes. (dd9d820)
 
-**P22. The programme editor treats a failed load as loaded and can overwrite the real programme.** (medium) Fixed: Only a whole answer counts as read. A failed read keeps SET THE PROGRAMME shut, says what went wrong and offers TRY AGAIN, so a blank editor can never be saved over the programme on the air. (pending)
+**P22. The programme editor treats a failed load as loaded and can overwrite the real programme.** (medium) Fixed: Only a whole answer counts as read. A failed read keeps SET THE PROGRAMME shut, says what went wrong and offers TRY AGAIN, so a blank editor can never be saved over the programme on the air. (dd9d820)
+
+**P18. The dial's PageView follows list position, not the station.** (medium) Fixed: The dial follows the station rather than its place in the list: when the Log reorders or shrinks, the face turns back to the tuned or shown station. Any turn the app makes itself goes through one path that tunes nothing, which also closes a hole in P19, where turning the dial to an invited station tuned it through the page listener before the owner said yes. (pending)

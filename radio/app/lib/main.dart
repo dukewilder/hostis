@@ -187,8 +187,7 @@ class Tuner extends ChangeNotifier {
       } else if (nodeTuned != null && nodeTuned != tuned) {
         tuned = nodeTuned;
         playing = true;
-        final i = stations.indexWhere((s) => s['id'] == nodeTuned);
-        if (i >= 0 && pages.hasClients && pages.page?.round() != i) pages.jumpToPage(i);
+        face(nodeTuned);
       } else if (nodeTuned != null && !playing) {
         playing = true;
       }
@@ -215,10 +214,7 @@ class Tuner extends ChangeNotifier {
         // Anything from outside waits for a yes: a station is not played, a pocket or
         // a flock is not joined, until the owner says so on the dial.
         invite = id;
-        if (!id.contains('=')) {
-          final i = stations.indexWhere((s) => s['id'] == id);
-          if (i >= 0 && pages.hasClients) pages.jumpToPage(i);
-        }
+        if (!id.contains('=')) face(id);
         notifyListeners();
       }).catchError((_) {});
     }
@@ -230,7 +226,18 @@ class Tuner extends ChangeNotifier {
     if (_ticks % 3 == 1 || stations.isEmpty) {
       final list = Native.call({'cmd': 'stations'});
       if (list is List) {
+        final at = pages.hasClients ? (pages.page ?? 0).round() : -1;
+        final shown = at >= 0 && at < stations.length ? stations[at]['id'] as String? : null;
+        final before = stations.map((s) => s['id']).join();
         stations = list.cast<Map<String, dynamic>>();
+        // The dial follows the station, not its place in the list: when the Log reorders
+        // or shrinks, the face turns back to what was tuned or shown, and tunes nothing.
+        if (stations.map((s) => s['id']).join() != before) quiet = true;
+        final want = tuned ?? shown;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          face(want);
+          WidgetsBinding.instance.addPostFrameCallback((_) => quiet = false);
+        });
         for (final s in stations) {
           if (harbour.contains(s['id'])) harbourNames.add((s['name'] ?? '').toString().trim().toLowerCase());
         }
@@ -290,11 +297,20 @@ class Tuner extends ChangeNotifier {
     Native.call({'cmd': 'tune', 'station': id});
     final name = station(id)?['name'] ?? 'Pyrate Radio';
     _service.invokeMethod('start', {'title': name}).catchError((_) {});
-    final i = stations.indexWhere((s) => s['id'] == id);
-    if (i >= 0 && pages.hasClients && pages.page?.round() != i) {
-      pages.jumpToPage(i);
-    }
+    face(id);
     notifyListeners();
+  }
+
+  /// While true the dial is being turned by the app, not by a hand, and turning it tunes nothing.
+  bool quiet = false;
+
+  /// Turns the dial to a station without tuning it.
+  void face(String? id) {
+    final i = stations.indexWhere((s) => s['id'] == id);
+    if (i < 0 || !pages.hasClients || pages.page?.round() == i || pages.position.isScrollingNotifier.value) return;
+    quiet = true;
+    pages.jumpToPage(i);
+    WidgetsBinding.instance.addPostFrameCallback((_) => quiet = false);
   }
 
   void stop() {
@@ -524,6 +540,7 @@ class Dial extends StatelessWidget {
                   controller: radio.pages,
                   itemCount: stations.length,
                   onPageChanged: (i) {
+                    if (radio.quiet || i >= stations.length) return;
                     final id = stations[i]['id'] as String;
                     if (id != radio.tuned) radio.tune(id);
                   },

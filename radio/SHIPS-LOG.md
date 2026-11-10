@@ -120,3 +120,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - A link from outside waits on the dial for a yes before anything plays or joins. Pocket stations offer no public link or poster, chatter and pockets can be left, muted voices heard again, and only the very first open plays on its own.
 - Podcast feeds bring aboard their newest few and then only new episodes, read themselves every few hours on Wi-Fi, and every fetch from the open web goes out under a plain name with timeouts and a size cap and leaves nothing behind.
 - Closing the segment recorder stops the microphone, takes and copies leave the phone once set, recordings are set one at a time, and the programme editor will not save over a programme it failed to read.
+- The dial keeps its station when the Log reorders, and turning it from a link no longer tunes in before the owner says yes.
