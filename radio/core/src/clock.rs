@@ -20,6 +20,11 @@ const FIRST_MONDAY_MS: u64 = 4 * 24 * 3600 * 1000;
 const DAY_MIN: u16 = 24 * 60;
 /// A walk never takes more steps than this, however short the tracks.
 const MAX_STEPS: usize = 400_000;
+/// Steps the watch bill may spend in all, so a long window of short tracks stays quick.
+const BILL_STEPS: usize = 4_000_000;
+/// A recording shorter than this is not played: a second is the shortest thing worth airing,
+/// and it keeps a week's walk within its steps whatever a station signs.
+pub const MIN_TRACK_MS: u64 = 1_000;
 
 /// A span of the day, in UTC minutes, given to a chosen set of tracks.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -99,7 +104,7 @@ struct Track {
 
 impl Track {
     fn on_air(&self, t: u64) -> bool {
-        self.added_ms <= t && self.withdrawn_ms.is_none_or(|w| t < w) && self.duration_ms > 0
+        self.added_ms <= t && self.withdrawn_ms.is_none_or(|w| t < w) && self.duration_ms >= MIN_TRACK_MS
     }
 }
 
@@ -220,7 +225,11 @@ pub struct Clock {
     rota: Rota,
     programme: Option<Programme>,
     tracks: Vec<Track>,
+    /// Each track's place in `tracks`, by its entry hash.
+    index: std::collections::HashMap<Hash, usize>,
     shows: Vec<Show>,
+    /// Steps walked since the counter was last set, for the watch bill's budget.
+    steps: std::cell::Cell<usize>,
 }
 
 impl Clock {
@@ -245,13 +254,14 @@ impl Clock {
                     });
                 }
                 Body::Withdraw { track } => {
-                    if let Some(t) = tracks.iter_mut().find(|t| &t.hash == track) {
+                    if let Some(t) = tracks.iter_mut().rev().find(|t| &t.hash == track) {
                         t.withdrawn_ms.get_or_insert(e.entry.at_ms);
                     }
                 }
                 _ => {}
             }
         }
+        let index: std::collections::HashMap<Hash, usize> = tracks.iter().enumerate().map(|(i, t)| (t.hash, i)).collect();
         let shows = archive
             .shows()
             .into_iter()
@@ -261,13 +271,32 @@ impl Clock {
                     title: title.clone(),
                     about: about.clone(),
                     at_ms: *at_ms,
-                    tracks: list.iter().filter_map(|h| tracks.iter().position(|t| &t.hash == h)).collect(),
+                    tracks: list.iter().filter_map(|h| index.get(h).copied()).collect(),
                     live_ms: *live_min as u64 * 60_000,
                 }),
                 _ => None,
             })
             .collect();
-        Ok(Self { station, rota: archive.rota(), programme: archive.programme(), tracks, shows })
+        let programme = archive.programme().map(|mut p| {
+            // The station's word, made sane: whatever a log says, a day is a day and a week a week.
+            for (_, o) in p.zone.offsets.iter_mut() {
+                *o = (*o).clamp(-14 * 60, 14 * 60);
+            }
+            p.zone.offsets.sort_by_key(|o| o.0);
+            p.zone.offsets.dedup_by_key(|o| o.0);
+            for s in p.slots.iter_mut().map(|s| &mut s.span).chain(p.hours.iter_mut()) {
+                s.start_min %= DAY_MIN;
+                s.len_min = s.len_min.min(7 * DAY_MIN);
+            }
+            if let Mode::Daily { start_min } | Mode::Weekly { start_min, .. } = &mut p.mode {
+                *start_min %= DAY_MIN;
+            }
+            if let Mode::Weekly { day, .. } = &mut p.mode {
+                *day %= 7;
+            }
+            p
+        });
+        Ok(Self { station, rota: archive.rota(), programme, tracks, index, shows, steps: std::cell::Cell::new(0) })
     }
 
     /// What plays between two moments: each track's start, its entry hash and its length.
@@ -275,7 +304,8 @@ impl Clock {
     pub fn upcoming(&self, from: u64, until: u64) -> Vec<(u64, Hash, u64)> {
         let mut out = Vec::new();
         let mut t = from;
-        while t < until && out.len() < 2000 {
+        self.steps.set(0);
+        while t < until && out.len() < 2000 && self.steps.get() < BILL_STEPS {
             // A quiet minute (nothing yet added, off the air, a gap between blocks): step past it.
             let Some(np) = self.now(t) else {
                 t = (t / 60_000 + 1) * 60_000;
@@ -311,23 +341,28 @@ impl Clock {
     }
 
     fn show_len(&self, s: &Show) -> u64 {
-        s.tracks.iter().filter(|&&i| self.tracks[i].on_air(s.at_ms)).map(|&i| self.tracks[i].duration_ms).sum::<u64>() + s.live_ms
+        s.tracks.iter().filter(|&&i| self.tracks[i].on_air(s.at_ms)).map(|&i| self.tracks[i].duration_ms).sum::<u64>().saturating_add(s.live_ms)
     }
 
     /// The show on the air at `t`: the latest to have started, if it has not ended.
     fn show_at(&self, t: u64) -> Option<&Show> {
-        self.shows.iter().filter(|s| s.at_ms <= t && t < s.at_ms + self.show_len(s)).max_by_key(|s| s.at_ms)
+        self.shows.iter().filter(|s| s.at_ms <= t && t < s.at_ms.saturating_add(self.show_len(s))).max_by_key(|s| s.at_ms)
     }
 
     fn ident_index(&self, ident: Option<Hash>) -> Option<usize> {
-        ident.and_then(|h| self.tracks.iter().position(|tr| tr.hash == h))
+        ident.and_then(|h| self.index.get(&h).copied())
     }
 
     /// Plays tracks back to back from `start`, the ident on the bell, and says what is on at `t`.
     fn walk(&self, start: u64, src: &mut Source, t: u64, ident: Option<(usize, u64)>) -> Option<NowPlaying> {
+        // A run that begins after `t` has nothing on at `t`.
+        if start > t {
+            return None;
+        }
         let mut cursor = start;
         let mut last_ident: Option<u64> = None;
         for _ in 0..MAX_STEPS {
+            self.steps.set(self.steps.get() + 1);
             let pick = match ident {
                 Some((i, bell)) if self.tracks[i].on_air(cursor) && last_ident.is_none_or(|l| cursor - l >= bell) => {
                     last_ident = Some(cursor);
@@ -391,7 +426,7 @@ impl Clock {
             let mut src = match &slot.fill {
                 Fill::Library => Source::Rounds { pool: self.library_order().into_iter().filter(not_ident).collect(), shuffle: Some(seed(b"slot")), round: 0, order: vec![], at: 0 },
                 Fill::Tracks { tracks, shuffle } => {
-                    let order: Vec<usize> = tracks.iter().filter_map(|h| self.tracks.iter().position(|x| &x.hash == h)).collect();
+                    let order: Vec<usize> = tracks.iter().filter_map(|h| self.index.get(h).copied()).collect();
                     if *shuffle {
                         Source::Rounds { pool: order, shuffle: Some(seed(b"slot")), round: 0, order: vec![], at: 0 }
                     } else {
@@ -450,14 +485,21 @@ impl Clock {
                 (s, Source::Cycle { order: lib, at: 0 })
             }
         };
-        self.walk(p.zone.utc_ms(anchor_lm), &mut src, t, ident)
+        // A tape whose start the clocks have only just reached (the hour that came twice) began
+        // a day (or a week) before.
+        let mut start = p.zone.utc_ms(anchor_lm);
+        if start > t {
+            let back = if matches!(p.mode, Mode::Weekly { .. }) { 7 * 1440 } else { 1440 };
+            start = p.zone.utc_ms(anchor_lm - back);
+        }
+        self.walk(start, &mut src, t, ident)
     }
 
     /// The schedule between two moments, for a station's page: shows, slots and on-air hours.
     pub fn listings(&self, from: u64, until: u64) -> Vec<Listing> {
         let mut out = Vec::new();
         for s in &self.shows {
-            let end = s.at_ms + self.show_len(s).max(60_000);
+            let end = s.at_ms.saturating_add(self.show_len(s).max(60_000));
             if end > from && s.at_ms < until {
                 out.push(Listing {
                     start_ms: s.at_ms,
@@ -557,10 +599,11 @@ impl Clock {
         let mut cursor = FIRST_MONDAY_MS + week * WEEK_MS;
         let mut decks: Vec<Option<Deck>> = (0..=self.rota.blocks.len()).map(|_| None).collect();
         let mut last_ident: Option<u64> = None;
-        let ident = self.rota.ident.and_then(|h| self.tracks.iter().position(|tr| tr.hash == h));
+        let ident = self.ident_index(self.rota.ident);
         let bell = self.rota.ident_every_min.max(1) as u64 * 60_000;
 
-        loop {
+        for _ in 0..MAX_STEPS {
+            self.steps.set(self.steps.get() + 1);
             // An empty stretch: skip ahead a minute and look again.
             let pick = if let Some(i) = ident.filter(|&i| {
                 self.tracks[i].on_air(cursor) && last_ident.is_none_or(|l| cursor - l >= bell)
@@ -601,5 +644,6 @@ impl Clock {
             }
             cursor += tr.duration_ms;
         }
+        None
     }
 }

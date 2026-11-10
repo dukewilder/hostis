@@ -223,3 +223,63 @@ fn the_page_says_when_an_off_air_station_comes_back_and_what_is_on_the_bill() {
     let j = pyrate_core::page::programme_json(&a.programme().unwrap());
     assert_eq!(pyrate_core::page::programme_from(&j).unwrap(), a.programme().unwrap());
 }
+
+// ---- What a hostile or careless log cannot do ---------------------------------------
+
+fn berlin() -> Zone {
+    // Central European Time, summer time from 01:00 UTC on 28 March 2027.
+    Zone { name: "Test/Berlin".into(), offsets: vec![(0, 60), (1_806_195_600_000, 120)] }
+}
+
+#[test]
+fn the_hour_lost_in_spring_does_not_stop_the_clock_east_of_utc() {
+    let k = StationKey::generate().unwrap();
+    let (mut a, _h, t) = station(&k);
+    let slot = Slot { title: "Night".into(), about: "".into(), span: Span::every_day(150, 120), fill: Fill::Library, live: false };
+    a.write(&k, t, Body::Programme(Programme { zone: berlin(), slots: vec![slot], ..Default::default() })).unwrap();
+    let c = Clock::new(&a).unwrap();
+    // 03:10 summer time on the day of the change: 01:10 UTC.
+    let t = 1_806_195_600_000 + 10 * MIN;
+    assert!(c.now(t).is_some(), "plays on through the change");
+    // 02:30 local did not exist that night: it begins when the clocks changed.
+    let z = berlin();
+    let lm = z.local_min(1_806_195_600_000);
+    assert_eq!(z.utc_ms(lm - 30), 1_806_195_600_000, "a skipped minute begins at the change");
+    assert_eq!(z.utc_ms(lm), 1_806_195_600_000);
+}
+
+#[test]
+fn a_weekly_tape_signed_with_a_nonsense_minute_still_plays() {
+    let k = StationKey::generate().unwrap();
+    let (mut a, _h, t) = station(&k);
+    a.write(&k, t, Body::Programme(Programme { mode: Mode::Weekly { day: 200, start_min: 65_535 }, ..Default::default() })).unwrap();
+    let c = Clock::new(&a).unwrap();
+    assert!(c.now(NEAR).is_some());
+}
+
+#[test]
+fn recordings_of_a_moment_are_not_played_and_cannot_hang_the_clock() {
+    let k = StationKey::generate().unwrap();
+    let mut a = Archive::new(k.id());
+    let t0 = 1_790_000_000_000u64;
+    a.write(&k, t0, Body::Colours { name: "P".into(), about: "".into(), port: None, tip: None }).unwrap();
+    let blip = Chunk { hash: [7; 32], len: 3, frames: 1 };
+    a.write(&k, t0 + 1, Body::Track { title: "blip".into(), by: "".into(), source: "".into(), channels: 1, bitrate: 24_000, chunks: vec![blip] }).unwrap();
+    let c = Clock::new(&a).unwrap();
+    let started = std::time::Instant::now();
+    // Late on a Sunday, the far end of the week's walk.
+    let sunday = at(&Zone::utc(), NEAR, 6, 23 * 60);
+    assert!(c.now(sunday).is_none(), "twenty milliseconds is not a recording");
+    assert!(c.upcoming(sunday, sunday + 6 * 3_600_000).is_empty());
+    assert!(started.elapsed() < std::time::Duration::from_secs(5), "and the clock stays quick ({:?})", started.elapsed());
+}
+
+#[test]
+fn a_show_dated_at_the_end_of_time_breaks_nothing() {
+    let k = StationKey::generate().unwrap();
+    let (mut a, h, t) = station(&k);
+    a.write(&k, t, Body::Show { title: "Never".into(), about: "".into(), at_ms: u64::MAX - 1, tracks: vec![h[0]], live_min: 30 }).unwrap();
+    let c = Clock::new(&a).unwrap();
+    assert!(c.now(NEAR).is_some());
+    let _ = c.listings(NEAR, NEAR + 7 * 86_400_000);
+}

@@ -22,25 +22,20 @@ Each entry gives the threat, whether the wall held, and the fix.
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
 
-- **A2** (high) `t - cursor` underflow in `walk` when a run's computed start is after `t` (panic in debug, garbage in release). `core/src/clock.rs:351`
-- **A3** (high) Rota walk has no step cap: a track of a few milliseconds hangs the lookup. `core/src/clock.rs:555-604`
 - **A4** (medium) `walk` gives up after 400,000 steps, so short tracks mean dead air late in the week. `core/src/clock.rs:22`
 - **A5** (medium) Fall-back hour: Daily and Weekly tapes rewind, slots drop out. `core/src/clock.rs:440-451`
 - **A6** (medium) `upcoming()` (watch bill and the page's "next") ignores every cut. `core/src/clock.rs:275-291`
-- **A7** (medium) `at_ms + show_len` overflows for a signed Show with a huge `at_ms`. `core/src/clock.rs:319`
 - **A8** (medium) A show premiering before its track was added never airs, and the listing still promises it. `core/src/clock.rs:313-315`
 - **A9** (medium) Call signs carry ~35 bits, so a lookalike can be ground out for a target. `core/src/callsign.rs:9-23`
 - **A11** (low) `ChunkDecoder::decode` trusts the chunk's packet count and sizes. `core/src/audio.rs:166-174; archive.rs `Chunk::check``
 - **A12** (low) Ogg writer can overflow the lacing byte and drops bad chunks silently. `core/src/tape.rs:26-45`
 - **A14** (low) `span_from` truncates `days` and accepts a span that never runs. `core/src/page.rs:56`
 - **A15** (low) Hours plus a continuous mode silently skips what plays off the air. `core/src/clock.rs:422-453`
-- **A16** (low) Spans and tables read from the log are not validated, so `now` and `listings` can disagree and costs are unbounded. `core/src/programme.rs:82-121`
 - **A17** (low) `art::accent` depends on HashMap iteration order for ties. `core/src/art.rs:81`
 - **A18** (low) `art::prepare` ignores EXIF orientation. `core/src/art.rs:49-54`
 - **A19** (low) Ingest folds multichannel files badly. `core/src/ingest.rs:33-43`
 - **A20** (low) Hard seams at the week boundary (and at every anchor). `core/src/clock.rs:425-453`
 - **A21** (low) Offset table ends: time zone freezes after the last entry. `core/src/programme.rs:32-42; page.rs:88-95`
-- **A22** (low) Spring-forward gap and `utc_ms` are inconsistent between east and west zones. `core/src/programme.rs:50-55`
 - **A23** (low) Output and input streams ignore the device's sample format. `node/src/player.rs:41-43`
 - **A24** (low) `page_of` days overflow and repeated full-log hashing. `core/src/page.rs:39-47`
 
@@ -173,8 +168,18 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **C1. /player/ serves any file on disk via an absolute path.** (high) Fixed: the mirror builds the file's path from plain segments only (no empty, dotted, backslashed or colon segments) and serves it only if, links followed, it still lies inside the player folder. It also sends nosniff, no-referrer and frame-ancestors 'self', and knows the svg, ico, woff2 and txt types. A unit test tries absolute, doubled-slash, dotted and linked paths, and a live Lantern answers 404 to /player//etc/passwd. (ac1a5e3)
 
-**A1. One hostile station can move every listener's clock by up to five minutes.** (high) Fixed: the network clock now lives in the core (drift.rs), shared by phones, Lanterns and tabs: each station gets one vote (its latest gap), nothing moves until five stations agree, the median is applied only past 2.5 seconds and eases off below one, and anything past five minutes is not trusted. Unit tests show a hundred cards from one station moving nothing. (pending)
+**A1. One hostile station can move every listener's clock by up to five minutes.** (high) Fixed: the network clock now lives in the core (drift.rs), shared by phones, Lanterns and tabs: each station gets one vote (its latest gap), nothing moves until five stations agree, the median is applied only past 2.5 seconds and eases off below one, and anything past five minutes is not trusted. Unit tests show a hundred cards from one station moving nothing. (417040b)
 
-**C14. One station can set every tab's clock wrong.** (high) Fixed: the tab uses the same core drift as the app (see A1). (pending)
+**C14. One station can set every tab's clock wrong.** (high) Fixed: the tab uses the same core drift as the app (see A1). (417040b)
 
-**A10. Clock correction jumps from 0 to 2 s instead of easing in.** (low) Fixed: the correction turns on past 2.5 seconds and off below one (see A1). (pending)
+**A10. Clock correction jumps from 0 to 2 s instead of easing in.** (low) Fixed: the correction turns on past 2.5 seconds and off below one (see A1). (417040b)
+
+**A2. `t - cursor` underflow in `walk` when a run's computed start is after `t` (panic in debug, garbage in release).** (high) Fixed: every walk now refuses a start after the moment asked about, a tape whose start the clocks have only just reached begins a day or a week earlier, and a programme read from a log is made sane (offsets clamped to fourteen hours and sorted, minutes taken within the day, lengths within the week, days within seven). Regression tests: Berlin's spring change and a weekly tape at minute 65,535. (pending)
+
+**A22. Spring-forward gap and `utc_ms` are inconsistent between east and west zones.** (low) Fixed: a local minute that was skipped begins when the clocks changed, and one that came twice begins the first time, by the same rule east and west of UTC. Tested at Berlin's spring change. (pending)
+
+**A3. Rota walk has no step cap: a track of a few milliseconds hangs the lookup.** (high) Fixed: a recording under a second is not played (an Article ruling), the rota's walk has the same step cap as the programme's, and the watch bill has a budget of steps across all its lookups. A regression test signs a twenty-millisecond track and finds the clock quick and silent. (pending)
+
+**A7. `at_ms + show_len` overflows for a signed Show with a huge `at_ms`.** (medium) Fixed: show ends are added with saturation. Tested with a show dated at u64::MAX. (pending)
+
+**A16. Spans and tables read from the log are not validated, so `now` and `listings` can disagree and costs are unbounded.** (low) Fixed: the clock builds one index of tracks by hash and normalises the programme once, in Clock::new (see A2). (pending)

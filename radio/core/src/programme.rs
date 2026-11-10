@@ -46,12 +46,22 @@ impl Zone {
         (t_ms / 60_000) as i64 + self.offset_min(t_ms)
     }
 
-    /// The moment a local minute begins.
+    /// The moment a local minute begins. A minute the clocks skipped (the hour lost in spring)
+    /// begins when the clocks changed; a minute that came twice (the hour gained in autumn)
+    /// begins the first time. The same rule east and west of UTC.
     pub fn utc_ms(&self, local_min: i64) -> u64 {
-        let naive = (local_min.max(0) as u64) * 60_000;
-        let guess = (local_min - self.offset_min(naive)).max(0) as u64 * 60_000;
-        let off = self.offset_min(guess);
-        (local_min - off).max(0) as u64 * 60_000
+        let at = |m: i64| (m.max(0) as u64).saturating_mul(60_000);
+        // Every offset in force within a day either side is a candidate.
+        let mut offs: Vec<i64> = [-24 * 60i64, 0, 24 * 60].iter().map(|d| self.offset_min(at(local_min + d))).collect();
+        offs.sort_unstable();
+        offs.dedup();
+        let cands: Vec<u64> = offs.iter().map(|o| at(local_min - o)).collect();
+        if let Some(first) = cands.iter().copied().filter(|u| self.local_min(*u) == local_min).min() {
+            return first;
+        }
+        // Skipped: the change itself, the first table entry between the candidates.
+        let (lo, hi) = (cands.iter().copied().min().unwrap_or(0), cands.iter().copied().max().unwrap_or(0));
+        self.offsets.iter().map(|(from, _)| *from).find(|f| *f > lo && *f <= hi).unwrap_or(hi)
     }
 
     /// The local minute at which the week holding `lm` began: Monday 00:00.
