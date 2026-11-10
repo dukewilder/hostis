@@ -72,7 +72,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 - **P10** (medium) Drawer Lantern: the service restarts with no node, and the charging and Wi-Fi gate lives only in the Dart UI. `LanternService.kt:27-52`
 - **P17** (medium) Blocking native calls on the UI thread, in Dart and in the service. `PlaybackService.kt:53-58`
-- **P26** (low) Bell ids differ between screens, depend on `String.hashCode`, and notifications are not checked. `station.dart:290 vs more.dart:373`
 - **P27** (medium) The numbers kit decodes and rewrites WAV files sample by sample on the UI isolate. `station.dart:1562-1596`
 - **P31** (low) Android App Links are not verified, so scanned posters open the browser. `AndroidManifest.xml:43-54`
 - **P32** (low) `pyrate_start` is not safe against two starters, and a failed start is invisible. `ffi/src/lib.rs:38-68; main.dart:58-60; Native.kt:21-31`
@@ -221,4 +220,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **P28. Direct fixes to misplaced results: CLEAR THE HOLD, strike and restore all write the same `error` field.** (low) Fixed: CLEAR THE HOLD and TAKE IT BACK each answer with their own word on the spot, success or failure, as the strike already does; neither writes the shared error line any more, and the hold is cleared off the UI thread. (36d90c2)
 
-**P20. Microphone permission dead-ends and the messages mislead.** (medium) Fixed: Every microphone ask goes through one path that waits for the owner's answer rather than replying before the dialog shows. A refusal says to press again; a phone that will no longer ask says so and offers OPEN SETTINGS, straight to the app's own page; a microphone that would not start says another app may have it. (pending)
+**P20. Microphone permission dead-ends and the messages mislead.** (medium) Fixed: Every microphone ask goes through one path that waits for the owner's answer rather than replying before the dialog shows. A refusal says to press again; a phone that will no longer ask says so and offers OPEN SETTINGS, straight to the app's own page; a microphone that would not start says another app may have it. (ca5bf40)
+
+**P26. Bell ids differ between screens, depend on `String.hashCode`, and notifications are not checked.** (low) Fixed: A bell's id now comes from the station and the minute the show starts, by FNV-1a rather than the toolkit's hash, so the page and the watch bill agree and every build agrees. Setting or silencing a bell also clears any older bell for the same show, whatever id it was given, and a bell set while notifications are off for the app or its bells says so at once and offers OPEN SETTINGS. (pending)
