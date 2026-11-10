@@ -125,3 +125,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - Asking for the microphone waits for the answer, and a phone that will not ask again offers its settings instead of the same dead message.
 - A bell is the same bell on every screen and in every build, and one set while notifications are off says so at once.
 - A drawer Lantern starts its own node when Android restarts it, keeps its own charger-and-Wi-Fi gate, comes back after a reboot, and a radio that cannot start says so.
+- The phone's own notes outside the node (its bells, its wake-up station, the last station tuned) are sealed under its hardware key like everything else it keeps.

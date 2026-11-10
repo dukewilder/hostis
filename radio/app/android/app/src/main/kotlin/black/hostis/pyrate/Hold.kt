@@ -21,22 +21,62 @@ object Hold {
     private const val ALIAS = "pyrate-hold"
     @Volatile private var cached: String? = null
 
+    private fun wrapKey(): SecretKey {
+        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        return (ks.getKey(ALIAS, null) as? SecretKey) ?: KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").run {
+            init(
+                KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                    .setKeySize(256)
+                    .build()
+            )
+            generateKey()
+        }
+    }
+
+    /**
+     * The Android side's own few notes (the bells, the wake-up station, the last station
+     * tuned) are sealed under the same hardware key, so the phone's storage says nothing of
+     * what its owner listens to. A note written before this, in the clear, is read once and
+     * sealed when next written.
+     */
+    fun getS(ctx: Context, key: String): String? {
+        val v = ctx.getSharedPreferences("pyrate", Context.MODE_PRIVATE).getString(key, null) ?: return null
+        if (!v.startsWith("s1:")) return v
+        return try {
+            val b = android.util.Base64.decode(v.substring(3), android.util.Base64.NO_WRAP)
+            String(Cipher.getInstance("AES/GCM/NoPadding").run {
+                init(Cipher.DECRYPT_MODE, wrapKey(), GCMParameterSpec(128, b, 0, 12))
+                doFinal(b, 12, b.size - 12)
+            })
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun putS(ctx: Context, key: String, value: String?) {
+        val e = ctx.getSharedPreferences("pyrate", Context.MODE_PRIVATE).edit()
+        if (value == null) {
+            e.remove(key).apply()
+            return
+        }
+        val sealed = try {
+            val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, wrapKey()) }
+            "s1:" + android.util.Base64.encodeToString(c.iv + c.doFinal(value.toByteArray()), android.util.Base64.NO_WRAP)
+        } catch (x: Exception) {
+            // Without the hardware the note is kept as the node keeps its own: beside it.
+            value
+        }
+        e.putString(key, sealed).apply()
+    }
+
     fun key(ctx: Context): String? {
         cached?.let { return it }
         synchronized(this) {
             cached?.let { return it }
             return try {
-                val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-                val wrap = (ks.getKey(ALIAS, null) as? SecretKey) ?: KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").run {
-                    init(
-                        KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-                            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                            .setKeySize(256)
-                            .build()
-                    )
-                    generateKey()
-                }
+                val wrap = wrapKey()
                 val f = File(ctx.filesDir, "hold.wrapped")
                 val raw = if (f.exists()) {
                     val b = f.readBytes()

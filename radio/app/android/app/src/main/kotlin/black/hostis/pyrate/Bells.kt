@@ -28,7 +28,7 @@ object Bells {
     private fun same(b: JSONObject, station: String, at: Long) = b.optString("station") == station && b.optLong("at") / 60_000 == at / 60_000
 
     fun setBell(c: Context, id: Int, at: Long, title: String, station: String, name: String) {
-        val list = JSONArray(prefs(c).getString("bells", "[]"))
+        val list = JSONArray(Hold.getS(c, "bells") ?: "[]")
         val keep = JSONArray()
         for (k in 0 until list.length()) {
             val b = list.getJSONObject(k)
@@ -39,7 +39,7 @@ object Bells {
             if (b.optInt("id") != id && b.optLong("at") > System.currentTimeMillis()) keep.put(b)
         }
         keep.put(JSONObject().put("id", id).put("at", at).put("title", title).put("station", station).put("name", name))
-        prefs(c).edit().putString("bells", keep.toString()).apply()
+        Hold.putS(c, "bells", keep.toString())
         register(c, id, at, title, station, name)
     }
 
@@ -52,7 +52,7 @@ object Bells {
 
     fun cancelBell(c: Context, id: Int, station: String? = null, at: Long = 0) {
         alarms(c).cancel(pending(c, id, Intent(c, AlarmReceiver::class.java).setAction("bell")))
-        val list = JSONArray(prefs(c).getString("bells", "[]"))
+        val list = JSONArray(Hold.getS(c, "bells") ?: "[]")
         val keep = JSONArray()
         for (k in 0 until list.length()) {
             val b = list.getJSONObject(k)
@@ -63,7 +63,7 @@ object Bells {
             }
             keep.put(b)
         }
-        prefs(c).edit().putString("bells", keep.toString()).apply()
+        Hold.putS(c, "bells", keep.toString())
     }
 
     /** Whether a bell can show at all: notifications on for the app and for its bells. */
@@ -77,11 +77,12 @@ object Bells {
         return true
     }
 
-    fun bells(c: Context): String = prefs(c).getString("bells", "[]") ?: "[]"
+    fun bells(c: Context): String = Hold.getS(c, "bells") ?: "[]"
 
     fun setWake(c: Context, on: Boolean, hour: Int, minute: Int, station: String?, name: String?) {
-        prefs(c).edit().putBoolean("wake_on", on).putInt("wake_h", hour).putInt("wake_m", minute)
-            .putString("wake_station", station).putString("wake_name", name).apply()
+        prefs(c).edit().putBoolean("wake_on", on).putInt("wake_h", hour).putInt("wake_m", minute).apply()
+        Hold.putS(c, "wake_station", station)
+        Hold.putS(c, "wake_name", name)
         rescheduleWake(c)
     }
 
@@ -89,13 +90,13 @@ object Bells {
         .put("on", prefs(c).getBoolean("wake_on", false))
         .put("hour", prefs(c).getInt("wake_h", 7))
         .put("minute", prefs(c).getInt("wake_m", 0))
-        .put("station", prefs(c).getString("wake_station", null))
-        .put("name", prefs(c).getString("wake_name", null))
+        .put("station", Hold.getS(c, "wake_station"))
+        .put("name", Hold.getS(c, "wake_name"))
 
     /** Sets the next morning's alarm, every day the alarm is on. */
     fun rescheduleWake(c: Context) {
         val p = prefs(c)
-        val i = Intent(c, AlarmReceiver::class.java).setAction("wake").putExtra("station", p.getString("wake_station", null))
+        val i = Intent(c, AlarmReceiver::class.java).setAction("wake").putExtra("station", Hold.getS(c, "wake_station"))
         val pi = pending(c, 9_000_001, i)
         alarms(c).cancel(pi)
         if (!p.getBoolean("wake_on", false)) return
@@ -117,7 +118,7 @@ object Bells {
     }
 
     fun restoreAll(c: Context) {
-        val list = JSONArray(prefs(c).getString("bells", "[]"))
+        val list = JSONArray(Hold.getS(c, "bells") ?: "[]")
         for (k in 0 until list.length()) {
             val b = list.getJSONObject(k)
             if (b.optLong("at") > System.currentTimeMillis()) {
