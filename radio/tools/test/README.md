@@ -3,7 +3,7 @@
 The private test network, as in `AUDIT-BRIEF.md` section 11: a relay Lantern first, then
 `PYRATE_RELAYS=http://127.0.0.1:3340` for everything.
 
-- `cargo run -p pyrate-node --bin voyage_test <dir> <wav> <jpg>`: 20 checks end to end.
+- `cargo run -p pyrate-node --bin voyage_test <dir> <wav> <jpg>`: 22 checks end to end.
 - `cargo run -p pyrate-node --bin pocket_test <lantern id> <wav>`: a pocket station, a member
   and an outsider. With `PYRATE_BROWSER_INVITE=<file>` it writes the invitation there and waits
   `PYRATE_BROWSER_WAIT` seconds for a browser to join and speak.

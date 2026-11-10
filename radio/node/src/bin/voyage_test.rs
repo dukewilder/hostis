@@ -173,6 +173,12 @@ fn main() -> anyhow::Result<()> {
         if files(&work.join("lantern")) == 0 { gone = true; break; }
     }
     check(gone, "maroon.txt empties the Lantern of the station, art included");
+
+    // Striking takes the master, and the phone holds only a deputy: the 24 words do it.
+    let bad = s.call(&json!({ "cmd": "strike", "station": id, "phrase": "abandon abandon" }));
+    check(bad["error"].is_string() && !s.archive(&sid).is_some_and(|a| a.is_struck()), "wrong words strike nothing");
+    let r = s.call(&json!({ "cmd": "strike", "station": id, "phrase": words }));
+    check(r["ok"] == true && s.archive(&sid).is_some_and(|a| a.is_struck()), &format!("the captain strikes colours with the 24 words ({r})"));
     println!("done");
     Ok(())
 }

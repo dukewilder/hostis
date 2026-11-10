@@ -2103,9 +2103,16 @@ impl Node {
                 *inner.live.lock().unwrap() = None;
                 Ok(json!({ "ok": true }))
             }
+            // Striking takes the master: from the 24 words on a phone, which holds only a deputy,
+            // or from the key itself on a Lantern that keeps it.
             "strike" => {
                 let st = station()?;
-                inner.store.lock().unwrap().write(st, now_ms(), Body::Strike)?;
+                match req["phrase"].as_str().filter(|p| !p.trim().is_empty()) {
+                    Some(words) => self.with_master(st, words, "strike")?,
+                    None => {
+                        inner.store.lock().unwrap().write(st, now_ms(), Body::Strike)?;
+                    }
+                }
                 Ok(json!({ "ok": true }))
             }
             other => Err(anyhow!("unknown command {other}")),

@@ -76,7 +76,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
 
-- **P2** (high) STRIKE COLOURS can never complete: the node drops the 24 words and signs with the deputy key. `main.dart:1079-1101; node/src/lib.rs:1957-1960`
 - **P3** (high) Auto Backup is left on: deputy keys, pocket secrets and prefs go to the user's Google account. `AndroidManifest.xml:16-19`
 - **P4** (high) The 24 words can be lost three ways. `main.dart:646-679`
 - **P5** (high) Exported MediaBrowser service hands the station list and control to any app, private pocket stations included. `AndroidManifest.xml:81-88; PlaybackService.kt:272-288`
@@ -194,3 +193,5 @@ Reported by a reader of the code; each is checked against the code before it is 
 **B5. Private fetches have no guard.** Each private fetch draws a fresh first hop, so over a day of listening a hostile pair of nodes (first hop and exit) will eventually both be drawn and can tie a listener to a station. Holds only in part. Fixed: a private fetch now goes through a guard kept as long as it answers (a file beside the stem's guard), passing over the well-known Lanterns, with a fresh exit each time; a guard that fails is dropped and another drawn. Voyage test 20 of 20. This container's test network has a single Lantern to route through, so every private fetch here takes one hop and the guard is not exercised; it needs a network of several carriers. (5a20daf)
 
 **B14. A broadcaster asks carriers for its own station directly.** When the private route fails, a phone syncing its own station asks carriers for the log by id from its own address, which tells them who keeps it. Does not hold. Fixed: a phone asks carriers for its own station directly only once that station is already on the air directly from it. (5a20daf)
+
+**P2. STRIKE COLOURS can never complete: the node drops the 24 words and signs with the deputy key.** (high) Fixed: strike now takes the master from the 24 words through the same path as restore, and still strikes with the key itself on a Lantern that keeps it. The app shows the result beside the act, and the words field learns nothing (no suggestions, autocorrect or keyboard learning) and is cleared after. Two new voyage steps: wrong words strike nothing, the right ones end the station (22 of 22). (pending)
