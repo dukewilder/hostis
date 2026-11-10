@@ -291,7 +291,7 @@ fn make_episode(inner: &Arc<Inner>, handle: &tokio::runtime::Handle, st: Station
     let mut buf = Vec::new();
     for c in chunks {
         let bytes = handle.block_on(inner.chunk(&st, &c.hash)).ok()?;
-        let pcm = dec.decode(&bytes).unwrap_or_default();
+        let pcm = dec.decode_as(&bytes, c.frames);
         // A second at a time. The wrapper writes into the vector's spare room and tells LAME
         // nothing of its size when there is none, so LAME's worst case is reserved first:
         // without it, it writes past the end.
@@ -594,7 +594,7 @@ async fn tower(inner: Arc<Inner>, towers: Towers, st: StationId, tx: broadcast::
             track = None;
             playhead = Some(playhead.unwrap_or(t).max(t) + chunk.duration_ms());
             let Some((_, d)) = decoder.as_mut() else { continue };
-            (d.decode(&bytes).unwrap_or_default(), ch)
+            (d.decode_as(&bytes, chunk.frames), ch)
         } else {
             if live_seq.take().is_some() {
                 playhead = None;
@@ -620,7 +620,7 @@ async fn tower(inner: Arc<Inner>, towers: Towers, st: StationId, tx: broadcast::
                 track = Some(np.track);
             }
             let Some((_, d)) = decoder.as_mut() else { continue };
-            let pcm = d.decode(&bytes).unwrap_or_default();
+            let pcm = d.decode_as(&bytes, chunk.frames);
             let skip = (np.chunk_offset_ms * 48) as usize * *channels as usize;
             playhead = Some(at - np.chunk_offset_ms + chunk.duration_ms());
             (pcm.get(skip..).unwrap_or(&[]).to_vec(), *channels)

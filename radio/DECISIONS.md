@@ -26,7 +26,7 @@ The app speaks the site's tongue. Every term below is used in the interface, the
 | Colours | A station's identity: name, call sign, flag. |
 | Raise colours | Create a station. |
 | Strike colours | End a station. |
-| Call sign | Short name derived from the key, e.g. `NAAMEH·52E1`. Cannot be forged or squatted. |
+| Call sign | Short name derived from the key, e.g. `NAAMEH·52E1`, for saying aloud. Nobody chooses it, but it is not proof: a forger can grind out a lookalike. The key is the station, and the station's page shows it. |
 | The Log | The shared directory of every station on the air. |
 | Aboard | Listeners. "41 aboard." |
 | Carry | Hold and relay a station's audio for others. Every listener carries. |

@@ -1865,7 +1865,7 @@ impl Node {
                 let title = take.last().map(|x| x.title.clone()).unwrap_or_default();
                 let name = inner.log.lock().unwrap().get(&st).and_then(|l| l.announce.as_ref().map(|a| a.name.clone())).unwrap_or_else(|| st.call_sign());
                 let chunks: Vec<Vec<u8>> = take.iter().map(|x| x.bytes.clone()).collect();
-                std::fs::write(&path, pyrate_core::tape::ogg_opus(&chunks, ch, &title, &name))?;
+                std::fs::write(&path, pyrate_core::tape::ogg_opus(&chunks, ch, &title, &name).map_err(|e| anyhow!(e))?)?;
                 Ok(json!({ "path": path, "seconds": chunks.len() * 6, "title": title, "station": name }))
             }
             "hand_request" => {
@@ -2323,10 +2323,9 @@ mod playout {
                         st.decoder = ChunkDecoder::new(ch).ok().map(|d| (ch, d));
                     }
                     let Some((_, dec)) = st.decoder.as_mut() else { break };
-                    if let Ok(pcm) = dec.decode(&bytes) {
-                        push(&inner, &pcm, ch, 0);
-                        keep_heard(&inner, station, ch, &bytes, "Live".into());
-                    }
+                    let pcm = dec.decode_as(&bytes, chunk.frames);
+                    push(&inner, &pcm, ch, 0);
+                    keep_heard(&inner, station, ch, &bytes, "Live".into());
                     if st.live_seq.is_none() {
                         say(&format!("sound: live, entry {seq}"));
                     }
@@ -2356,7 +2355,7 @@ mod playout {
                     st.track = Some(np.track);
                 }
                 let Some((_, dec)) = st.decoder.as_mut() else { break };
-                let Ok(pcm) = dec.decode(&bytes) else { break };
+                let pcm = dec.decode_as(&bytes, chunk.frames);
                 // A first chunk starts where the hour has reached by the time it lands.
                 let skip = if st.playhead.is_none() {
                     np.chunk_offset_ms + inner.play_now().saturating_sub(at.min(inner.play_now()))

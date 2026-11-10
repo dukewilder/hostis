@@ -126,7 +126,10 @@ fn a_tape_is_a_real_ogg_opus_file() {
     if let Some((_, b)) = enc.finish().unwrap() {
         chunks.push(b);
     }
-    let ogg = ogg_opus(&chunks, 1, "Tone", "Test Station");
+    let ogg = ogg_opus(&chunks, 1, "Tone", "Test Station").unwrap();
+    assert!(ogg_opus(&chunks, 3, "Tone", "Test Station").is_err(), "three channels is no tape");
+    assert!(ogg_opus(&[], 1, "Tone", "Test Station").is_err(), "nothing is no tape");
+    assert!(ogg_opus(&[vec![0, 9, 1]], 1, "Tone", "Test Station").is_err(), "a broken chunk is said, not dropped");
     assert!(ogg.starts_with(b"OggS"));
     let p = std::env::temp_dir().join(format!("pyrate-tape-{}.ogg", std::process::id()));
     std::fs::write(&p, &ogg).unwrap();

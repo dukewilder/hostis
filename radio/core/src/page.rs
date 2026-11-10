@@ -46,7 +46,13 @@ fn span_json(s: &Span) -> Value {
 fn span_from(v: &Value) -> Result<Span> {
     let Some(len) = v["len_min"].as_u64() else { return bad("a span needs a length") };
     let len = len.clamp(1, 7 * 1440) as u16;
-    Ok(Span { days: v["days"].as_u64().unwrap_or(0x7f) as u8 & 0x7f, start_min: (v["start_min"].as_u64().unwrap_or(0) % 1440) as u16, len_min: len })
+    // Masked before it is narrowed, and refused if it names no day: a span that never runs
+    // would leave a station dark with no word why.
+    let days = (v["days"].as_u64().unwrap_or(0x7f) & 0x7f) as u8;
+    if days == 0 {
+        return bad("pick at least one day");
+    }
+    Ok(Span { days, start_min: (v["start_min"].as_u64().unwrap_or(0) % 1440) as u16, len_min: len })
 }
 
 pub fn programme_json(p: &Programme) -> Value {

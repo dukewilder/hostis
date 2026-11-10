@@ -191,6 +191,12 @@ class _StationPageState extends State<StationPage> {
             ),
           ]),
           if ((s['about'] ?? '').toString().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 14), child: Text(s['about'], style: serif(16, color: boneDim, italic: true))),
+          // The call sign is a name; the key is the station. Two stations can wear the same
+          // call sign, never the same key.
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: SelectableText('KEY  ${RegExp(r'.{1,4}').allMatches(id).map((m) => m.group(0)).join(' ')}', style: mono(10, color: boneFaint)),
+          ),
           const SizedBox(height: 14),
           Wrap(spacing: 4, runSpacing: 4, children: [
             pyrateButton('▶︎ LISTEN', () {

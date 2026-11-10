@@ -3,7 +3,7 @@
 //!
 //! No rights reserved.
 
-use crate::audio::packets;
+use crate::audio::{one_frame, packets};
 
 fn crc32(data: &[u8]) -> u32 {
     let mut crc = 0u32;
@@ -67,8 +67,24 @@ fn tags(title: &str, artist: &str) -> Vec<u8> {
     t
 }
 
-/// Writes chunks (as stored on the network) into an Ogg Opus file.
-pub fn ogg_opus(chunks: &[Vec<u8>], channels: u8, title: &str, artist: &str) -> Vec<u8> {
+/// Writes chunks (as stored on the network) into an Ogg Opus file. A chunk that will not
+/// read, a packet that is not one 20 ms frame, one or two channels anything else: each is an
+/// error said plainly, never a file that will not play.
+pub fn ogg_opus(chunks: &[Vec<u8>], channels: u8, title: &str, artist: &str) -> Result<Vec<u8>, &'static str> {
+    if !(1..=2).contains(&channels) {
+        return Err("a tape is mono or stereo");
+    }
+    let mut all: Vec<&[u8]> = Vec::new();
+    for c in chunks {
+        let ps = packets(c).map_err(|_| "a chunk of the tape would not read")?;
+        if ps.iter().any(|p| !one_frame(p)) {
+            return Err("a chunk of the tape is not plain Opus frames");
+        }
+        all.extend(ps);
+    }
+    if all.is_empty() {
+        return Err("nothing to tape yet");
+    }
     let mut p = Pages { out: Vec::new(), serial: 0x5079_7261, seq: 0 };
     let mut head = b"OpusHead".to_vec();
     head.push(1);
@@ -80,13 +96,20 @@ pub fn ogg_opus(chunks: &[Vec<u8>], channels: u8, title: &str, artist: &str) -> 
     p.page(&[&head], 0, 0x02);
     let t = tags(title, artist);
     p.page(&[&t], 0, 0);
-    let all: Vec<&[u8]> = chunks.iter().flat_map(|c| packets(c).unwrap_or_default()).collect();
+    // A page holds at most 255 lacing segments: packets go in until the next would overflow.
+    let segs = |q: &[u8]| q.len() / 255 + 1;
     let mut granule = 312u64;
-    let n = all.len();
-    for (i, group) in all.chunks(50).enumerate() {
-        granule += 960 * group.len() as u64;
-        let last = (i + 1) * 50 >= n;
-        p.page(group, granule, if last { 0x04 } else { 0 });
+    let mut at = 0;
+    while at < all.len() {
+        let mut end = at;
+        let mut used = 0;
+        while end < all.len() && end - at < 50 && used + segs(all[end]) <= 255 {
+            used += segs(all[end]);
+            end += 1;
+        }
+        granule += 960 * (end - at) as u64;
+        p.page(&all[at..end], granule, if end == all.len() { 0x04 } else { 0 });
+        at = end;
     }
-    p.out
+    Ok(p.out)
 }

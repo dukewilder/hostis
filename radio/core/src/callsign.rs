@@ -1,5 +1,8 @@
-//! Call signs. Six letters and four hex digits drawn from the key, e.g. `KAROMI·52E1`.
-//! Nobody chooses one, so nobody can squat one, and a forged one is a different key.
+//! Call signs. Six letters and four hex digits drawn from the key, e.g. `KAROMI·52E1`: a
+//! name to say aloud, not a proof. It carries about 35 bits, so a patient forger can grind
+//! out a key with the same call sign in hours; the key itself is the station, and the
+//! station's page shows it. Every call sign stays as it was drawn (the vowels lean slightly
+//! to A), since changing the draw would rename every station on the air.
 
 use crate::StationId;
 

@@ -609,7 +609,42 @@ impl Clock {
                 (p.zone.anchor_at(s, 7 * 1440, t), Source::Cycle { order: lib, at: 0 })
             }
         };
-        self.walk(p.zone.utc_ms(anchor_lm), &mut src, t, ident)
+        let start = p.zone.utc_ms(anchor_lm);
+        // With set hours, a continuous mode's clock runs only while the station is on the air,
+        // so a library in order is heard in order across the days and nothing plays unheard
+        // in the hours it is off.
+        if !p.hours.is_empty() && matches!(p.mode, Mode::Shuffle | Mode::InOrder | Mode::NewestFirst) {
+            let heard = self.on_air_ms(p, start, t);
+            let mut np = self.walk(start, &mut src, start + heard, ident)?;
+            np.started_at_ms = t.saturating_sub(np.offset_ms);
+            return Some(np);
+        }
+        self.walk(start, &mut src, t, ident)
+    }
+
+    /// How long the station's set hours have been on the air between two moments.
+    fn on_air_ms(&self, p: &Programme, from: u64, to: u64) -> u64 {
+        let (lf, lt) = (p.zone.local_min(from), p.zone.local_min(to));
+        let mut runs: Vec<(u64, u64)> = Vec::new();
+        for h in &p.hours {
+            for s in h.starts_between(lf - h.len_min as i64 - 2 * 1440, lt + 1) {
+                let u = p.zone.utc_ms(s);
+                let (a, b) = (u.max(from), (u + h.len_min as u64 * 60_000).min(to));
+                if a < b {
+                    runs.push((a, b));
+                }
+            }
+        }
+        runs.sort_unstable();
+        let (mut total, mut reach) = (0u64, from);
+        for (a, b) in runs {
+            let a = a.max(reach);
+            if b > a {
+                total += b - a;
+                reach = b;
+            }
+        }
+        total
     }
 
     /// The schedule between two moments, for a station's page: shows, slots and on-air hours.
