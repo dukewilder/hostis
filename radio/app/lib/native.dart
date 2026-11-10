@@ -10,6 +10,8 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+
 import 'shell.dart';
 
 const _shell = ShellChannel();
@@ -17,6 +19,13 @@ const _shell = ShellChannel();
 /// While the 24 words or a PIN are on screen: no screenshot, no recents thumbnail, no
 /// screen recording.
 Future<void> secure(bool on) => _shell.invokeMethod('secure', {'on': on}).catchError((_) {});
+
+/// A copy marked sensitive, so keyboards and clipboard previews keep it out of their
+/// history and their cloud. It clears itself after a minute and a half if still there.
+Future<void> copySecret(String text) => _shell.invokeMethod('copy_secret', {'text': text}).catchError((_) => Clipboard.setData(ClipboardData(text: text)));
+
+/// The SHA-256 of the certificate this copy of the app was signed with, or null.
+Future<String?> signer() => _shell.invokeMethod<String>('signer').catchError((_) => null);
 
 typedef _StartC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>);
 typedef _StartD = int Function(Pointer<Utf8>, Pointer<Utf8>);

@@ -30,7 +30,7 @@ impl Inner {
                 let a = s.logs.get(&st).context("no log")?;
                 let lib: Vec<Value> = a.library()?.into_iter().map(|(h, e)| {
                     let by = match &e.entry.body { Body::Deputed { by, .. } => hex(by), _ => st.to_hex() };
-                    json!({ "track": hex(&h), "title": describe_track(a, &h).0, "added_ms": e.entry.at_ms, "added_by": by })
+                    json!({ "track": hex(&h), "title": crate::shown(describe_track(a, &h).0), "added_ms": e.entry.at_ms, "added_by": by })
                 }).collect();
                 let hands: Vec<Value> = a.deputies().iter().map(|k| json!({ "key": hex(k), "label": a.entries().iter().find_map(|e| match e.entry.body() { Body::Deputy { key, label } if key == k => Some(label.clone()), _ => None }) })).collect();
                 Ok(json!({ "programme": a.programme().as_ref().map(programme_json), "library": lib, "hands": hands }))

@@ -356,3 +356,15 @@ Rulings made while reading every line again. The findings themselves are in `AUD
 - **The app runs on computers.** Windows, macOS and Linux run the same app from the same code, with the node in Rust playing, going live and recording through the computer's own sound. A computer has no secure chip the app can reach, so its hold key lives in a file only its user can read. Builds come from the public source on GitHub's machines and are published on the radio's page with checksums and torrents; nothing secret goes into them, and anyone can build the same.
 - **The open player installs to a home screen** as an app of its own, on HOSTIS black.
 
+## XXVII. A device keeps less of what it hears and airs (10 November 2026)
+
+- **The tuned station stays out of the address bar.** The open player tunes a passed link, then takes the id out, so it lands in no history and no synced browser. The tab alone remembers it in session storage for a reload, and forgets it when it closes. On a shared gateway nothing is kept at all.
+- **A tab's deputy can be sealed or forgotten.** A keeper can seal the deputy seed under a passphrase (PBKDF2 with 600,000 rounds, AES-GCM), so a copied browser profile gives nothing away, or keep it in the tab alone. The 24 words bring a station back either way, so neither choice can lose one.
+- **A recorder's date and time never become a title.** Phones name recordings by the moment they were made, which gives away a keeper's day and zone. The stamp and the device's words around it ("VID", "Recording") come out, in the app, on computers and in the browser alike. A bare date stays, since a keeper may mean it.
+- **Strangers' names cannot pass for others.** Direction marks and hidden characters are stripped from every name, title and line a node shows. A name mixing Latin with Greek or Cyrillic letters wears "False colours?", as a name copying a HOSTIS station already did.
+- **The keyboard learns nothing.** Every text field in the app asks for incognito typing. Copies the app makes are marked sensitive, so keyboards and clipboard previews keep them out of their history and cloud, and they leave the clipboard after ninety seconds if nothing has replaced them. The same holds on computers.
+- **The time zone travels only with clock times.** A programme that only shuffles goes out with no zone at all. The editor says that clock times carry the zone where anyone can read it, and the home port and tip fields say what each one shows.
+- **The plain disguise also blanks the recents screen.** With the lock screen saying only "Radio", the app's window shows nothing in recents or screenshots.
+- **The app shows the fingerprint of the key that signed it**, so a copy signed by anyone else can be told apart.
+- **On computers, the radio's files stay its own.** Recordings and shares go to a scratch folder inside the app's own folder, emptied at each start, never the shared temporary folder another account can read. That folder is kept out of Spotlight, Windows Search and Tracker.
+

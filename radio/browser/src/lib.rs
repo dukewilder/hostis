@@ -989,7 +989,7 @@ impl Ship {
         let Some(chunk) = chunks.get(np.chunk) else { return json!({ "kind": "dead air" }) };
         let art = a.track_art(&np.track).map(|r| hex(&r.hash));
         json!({
-            "kind": "track", "track": hex(&np.track), "title": title, "by": by, "art": art,
+            "kind": "track", "track": hex(&np.track), "title": shown(&title), "by": shown(&by), "art": art,
             "index": np.chunk, "chunk": hex(&chunk.hash), "chunk_ms": chunk.duration_ms(),
             "chunk_start": at - np.chunk_offset_ms, "channels": channels,
             "position_ms": np.offset_ms, "duration_ms": np.duration_ms, "slot": np.slot,
@@ -1017,8 +1017,8 @@ impl Ship {
                 let aboard = l.aboard(now);
                 let accent = a.accent.map(|c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]));
                 Some((aboard, json!({
-                    "id": id.to_hex(), "call_sign": id.call_sign(), "name": a.name, "about": a.about,
-                    "port": a.port, "live": a.live, "aboard": aboard, "since": a.since,
+                    "id": id.to_hex(), "call_sign": id.call_sign(), "name": shown(&a.name), "about": pyrate_core::chat::shown(&a.about), "mixed": pyrate_core::chat::mixed_script(&a.name),
+                    "port": a.port.as_deref().map(shown), "live": a.live, "aboard": aboard, "since": a.since,
                     "kinds": a.kinds, "mature": a.mature, "explicit": a.explicit, "tip": a.tip,
                     "cover": a.cover.map(|h| hex(&h)), "banner": banners.get(id), "accent": accent,
                     "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),
@@ -1499,7 +1499,7 @@ impl Radio {
             let tracks = a.and_then(|a| a.library().ok()).map(|l| l.len()).unwrap_or(0);
             let landed = log.get(id).map(|l| l.carriers.iter().filter(|(n, (_, seen))| **n != me && now.saturating_sub(*seen) < 10 * 60_000).map(|(_, (h, _))| *h).max().unwrap_or(0)).unwrap_or(0);
             let carriers = log.get(id).map(|l| l.carriers.iter().filter(|(n, (_, seen))| **n != me && now.saturating_sub(*seen) < 10 * 60_000).count()).unwrap_or(0);
-            json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": name, "entries": len, "tracks": tracks, "landed": landed, "carriers": carriers,
+            json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": shown(&name), "entries": len, "tracks": tracks, "landed": landed, "carriers": carriers,
                     "unsent": m.unsent.len(), "chunks": m.chunks.len(), "pow": m.pow.is_some() })
         }).collect();
         json!(v).to_string()
@@ -1586,7 +1586,7 @@ impl Radio {
                 pyrate_core::chat::Say::Hail { .. } => ("hail", String::new(), None, None),
             };
             json!({ "id": hex(&pyrate_core::chat::id(l)), "voice": StationId(l.line.from).call_sign(), "name": pyrate_core::chat::shown_name(&l.line.name), "at_ms": l.line.at_ms,
-                    "kind": kind, "text": text, "track": track, "title": title, "keeper": keeper, "mine": l.line.from == me })
+                    "kind": kind, "text": text, "track": track, "title": title.map(shown), "keeper": keeper, "mine": l.line.from == me })
         }).collect();
         Ok(json!({ "joined": true, "neighbours": r.neighbours, "voice": StationId(me).call_sign(), "lines": lines }).to_string())
     }
@@ -1729,10 +1729,15 @@ impl Radio {
             .map_err(|e| js(anyhow!("{e}")))?
             .into_iter()
             .filter_map(|(h, e)| match e.entry.body() {
-                Body::Track { title, by, .. } => Some(json!({ "track": hex(&h), "title": title, "by": by, "at": e.entry.at_ms })),
+                Body::Track { title, by, .. } => Some(json!({ "track": hex(&h), "title": shown(title), "by": shown(by), "at": e.entry.at_ms })),
                 _ => None,
             })
             .collect();
         Ok(json!(v).to_string())
     }
+}
+
+/// A stranger's text as shown: no bidi tricks, no hidden marks, one line.
+pub(crate) fn shown<S: AsRef<str>>(s: S) -> String {
+    pyrate_core::chat::shown(s.as_ref()).replace('\n', " ")
 }

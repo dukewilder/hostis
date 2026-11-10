@@ -11,7 +11,8 @@ with sync_playwright() as p:
     b = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
     pg = b.new_page(); errs = []; pg.on("pageerror", lambda e: errs.append(str(e)))
     pg.goto("http://127.0.0.1:8097/#" + other); time.sleep(6)
-    u = pg.evaluate("location.href"); check(u.startswith("http://127.0.0.1:8099/") and u.endswith("#" + other), "a stranger's station goes straight to the open player: " + u)
+    u = pg.evaluate("location.href"); took = u.endswith("#" + other) or pg.evaluate("sessionStorage.getItem('pyrate.cur')") == other
+    check(u.startswith("http://127.0.0.1:8099/") and took, "a stranger's station goes straight to the open player, which tunes it and takes it out of the address bar: " + u)
     pg.goto("http://127.0.0.1:8097/#pocket=xyz"); time.sleep(6)
     u = pg.evaluate("location.href"); check(u.startswith("http://127.0.0.1:8099/"), "an invitation goes to the open player, which takes its key out of the address bar")
     pg.goto("http://127.0.0.1:8097/"); pg.wait_for_selector("#go:not([hidden])", timeout=90000); time.sleep(4)

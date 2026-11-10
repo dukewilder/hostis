@@ -1061,8 +1061,8 @@ impl Inner {
                     "cover": a.cover.filter(|_| show).map(|h| crate::hex(&h)),
                     "banner": banners.get(id).filter(|_| show),
                     "accent": accent,
-                    "id": hex, "call_sign": id.call_sign(), "name": a.name, "about": a.about,
-                    "port": a.port, "live": a.live, "aboard": aboard, "kept": is_kept, "marooned": is_marooned, "since": a.since,
+                    "id": hex, "call_sign": id.call_sign(), "name": shown(&a.name), "about": pyrate_core::chat::shown(&a.about), "mixed": pyrate_core::chat::mixed_script(&a.name),
+                    "port": a.port.as_deref().map(shown), "live": a.live, "aboard": aboard, "kept": is_kept, "marooned": is_marooned, "since": a.since,
                     "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),
                     "pocket": self.is_pocket(id),
                 })))
@@ -1725,7 +1725,7 @@ impl Node {
                     });
                     let tracks = a.map(|a| a.library().map(|l| l.len()).unwrap_or(0)).unwrap_or(0);
                     let art = a.and_then(|a| a.art());
-                    json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": name, "tracks": tracks,
+                    json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": name.as_deref().map(shown), "tracks": tracks,
                         "direct": inner.direct.lock().unwrap().contains(&id),
                         "cover": art.and_then(|x| x.0).map(|r| hex(&r.hash)),
                         "banner": art.and_then(|x| x.1).map(|r| hex(&r.hash)),
@@ -1806,7 +1806,7 @@ impl Node {
                 let now = now_ms();
                 let bill: Vec<Value> = clock.upcoming(now, now + hours * 3_600_000).into_iter().map(|(start, track, dur)| {
                     let (title, by) = describe_track(a, &track);
-                    json!({ "start_ms": start, "duration_ms": dur, "title": title, "by": by, "track": hex(&track), "art": a.track_art(&track).map(|r| hex(&r.hash)) })
+                    json!({ "start_ms": start, "duration_ms": dur, "title": shown(&title), "by": shown(&by), "track": hex(&track), "art": a.track_art(&track).map(|r| hex(&r.hash)) })
                 }).collect();
                 Ok(json!(bill))
             }
@@ -1819,7 +1819,7 @@ impl Node {
                     let Some(a) = s.logs.get(&st) else { continue };
                     let Some(np) = pyrate_core::clock::Clock::new(a).ok().and_then(|c| c.now(now)) else { continue };
                     let (title, by) = describe_track(a, &np.track);
-                    out.insert(id.to_string(), json!({ "title": title, "by": by, "slot": np.slot }));
+                    out.insert(id.to_string(), json!({ "title": shown(&title), "by": shown(&by), "slot": np.slot }));
                 }
                 Ok(Value::Object(out))
             }
@@ -1870,7 +1870,7 @@ impl Node {
                 let name = inner.log.lock().unwrap().get(&st).and_then(|l| l.announce.as_ref().map(|a| a.name.clone())).unwrap_or_else(|| st.call_sign());
                 let chunks: Vec<Vec<u8>> = take.iter().map(|x| x.bytes.clone()).collect();
                 std::fs::write(&path, pyrate_core::tape::ogg_opus(&chunks, ch, &title, &name).map_err(|e| anyhow!(e))?)?;
-                Ok(json!({ "path": path, "seconds": chunks.len() * 6, "title": title, "station": name }))
+                Ok(json!({ "path": path, "seconds": chunks.len() * 6, "title": shown(&title), "station": shown(&name) }))
             }
             "hand_request" => {
                 let key = pyrate_core::StationKey::generate()?;
@@ -2074,6 +2074,8 @@ impl Node {
                 let title = req["title"].as_str().map(String::from).unwrap_or_else(|| {
                     path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()
                 });
+                // A recorder's date and time never become a title.
+                let title = pyrate_core::chat::plain_title(&title).0;
                 let by = req["by"].as_str().unwrap_or("").to_string();
                 let source = req["source"].as_str().unwrap_or("").to_string();
                 let profile = if req["talk"].as_bool().unwrap_or(false) { Profile::Talk } else { Profile::Music };
@@ -2116,7 +2118,7 @@ impl Node {
                 let a = s.logs.get(&st).context("unknown station")?;
                 let v: Vec<Value> = a.library()?.into_iter().filter_map(|(h, e)| match e.entry.body() {
                     Body::Track { title, by, chunks, .. } => Some(json!({
-                        "hash": hex(&h), "title": title, "by": by,
+                        "hash": hex(&h), "title": shown(&title), "by": shown(&by),
                         "duration_ms": chunks.iter().map(|c| c.duration_ms()).sum::<u64>(),
                     })),
                     _ => None,
@@ -2397,7 +2399,7 @@ mod playout {
                     *inner.np.lock().unwrap() = json!({
                         "station": station.to_hex(),
                         "state": if starved { "searching" } else { "playing" },
-                        "title": title, "by": by, "art": pic, "slot": np.slot,
+                        "title": shown(&title), "by": shown(&by), "art": pic, "slot": np.slot,
                         "position_ms": np.offset_ms, "duration_ms": np.duration_ms,
                     });
                     off_air = None;
@@ -2430,4 +2432,9 @@ mod pin_tests {
         assert!(a.starts_with(super::PIN_V2) && a.len() == super::PIN_V2.len() + 48);
         println!("one guess costs {spent:?}");
     }
+}
+
+/// A stranger's text as shown: no bidi tricks, no hidden marks, one line.
+pub(crate) fn shown<S: AsRef<str>>(s: S) -> String {
+    pyrate_core::chat::shown(s.as_ref()).replace('\n', " ")
 }

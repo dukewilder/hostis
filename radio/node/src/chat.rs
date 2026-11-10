@@ -301,7 +301,7 @@ impl Inner {
         };
         json!({
             "id": hex(&chat::id(s)), "from": hex(&s.line.from), "voice": StationId(s.line.from).call_sign(),
-            "name": chat::shown_name(&s.line.name), "at_ms": s.line.at_ms, "kind": kind, "text": text, "track": track, "title": title,
+            "name": chat::shown_name(&s.line.name), "at_ms": s.line.at_ms, "kind": kind, "text": text, "track": track, "title": title.map(crate::shown),
             "keeper": keeper, "mine": s.line.from == *me,
         })
     }

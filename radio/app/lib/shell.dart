@@ -16,6 +16,32 @@ import 'native.dart';
 /// or a file manager arrives here.
 List<String> launchArgs = [];
 
+/// Where the app keeps files for a moment: recordings, shares, imports. On a phone that is
+/// the app's own cache. On a computer the shared temporary folder can be read by every
+/// account on the machine, so it is a folder of the app's own, emptied at each start.
+Future<Directory> scratchDir() async {
+  if (Platform.isAndroid || Platform.isIOS) return getTemporaryDirectory();
+  final d = Directory('${(await getApplicationSupportDirectory()).path}${Platform.pathSeparator}scratch');
+  if (!d.existsSync()) d.createSync(recursive: true);
+  return d;
+}
+
+/// At start on a computer: empty the scratch folder of anything a crash left, and keep the
+/// computer's search index (Spotlight, Windows Search, Tracker) out of the radio's folder.
+Future<void> deskTidy(String dir) async {
+  if (Platform.isAndroid || Platform.isIOS) return;
+  try {
+    final s = await scratchDir();
+    for (final e in s.listSync()) {
+      try { e.deleteSync(recursive: true); } catch (_) {}
+    }
+    if (Platform.isMacOS) File('$dir/.metadata_never_index').createSync();
+    if (Platform.isLinux) File('$dir/.trackerignore').createSync();
+    if (Platform.isWindows) await Process.run('attrib', ['+I', dir]);
+    if (!Platform.isWindows) await Process.run('chmod', ['700', dir]);
+  } catch (_) {}
+}
+
 class ShellChannel {
   const ShellChannel();
   static const _android = MethodChannel('pyrate/service');
@@ -29,6 +55,16 @@ class ShellChannel {
 class Desktop {
   static String? _link;
   static bool _linkTaken = false;
+
+  /// A copy that leaves the clipboard after a while, if nothing has replaced it, so a link
+  /// does not sit in clipboard history or a synced clipboard for days.
+  static Future<void> _copy(String text) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    Timer(const Duration(seconds: 90), () async {
+      final now = await Clipboard.getData('text/plain').catchError((_) => null);
+      if (now?.text == text) await Clipboard.setData(const ClipboardData(text: ''));
+    });
+  }
 
   static Future<dynamic> call(String m, Map a) async {
     switch (m) {
@@ -50,7 +86,7 @@ class Desktop {
         _linkTaken = true;
         return _link ??= _linkFromArgs();
       case 'record_start':
-        final dir = await getTemporaryDirectory();
+        final dir = await scratchDir();
         final path = '${dir.path}${Platform.pathSeparator}rec-${DateTime.now().millisecondsSinceEpoch}.wav';
         final r = Native.call({'cmd': 'rec_start', 'path': path});
         return r is Map && r['path'] != null ? path : null;
@@ -63,7 +99,10 @@ class Desktop {
         return _open(a['path']?.toString() ?? '');
       case 'share_text':
         // A computer has no share sheet: the text goes to the clipboard, ready to paste.
-        await Clipboard.setData(ClipboardData(text: a['text']?.toString() ?? ''));
+        return _copy(a['text']?.toString() ?? '');
+      case 'copy_secret':
+        return _copy(a['text']?.toString() ?? '');
+      case 'signer':
         return null;
       case 'share_file':
         return _reveal(a['path']?.toString() ?? '');
