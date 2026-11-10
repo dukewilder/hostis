@@ -34,7 +34,7 @@ TextStyle mono(double size, {Color color = boneFaint, FontWeight weight = FontWe
 const _service = MethodChannel('pyrate/service');
 
 /// This build's version code. A release is offered only when its code is higher.
-const kBuildCode = 10;
+const kBuildCode = 11;
 
 /// The stations a first open lands on when no station has yet earned it: HOSTIS's own.
 List<String> harbour = [];
