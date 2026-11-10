@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=5bc03e9cd9';
+import init, { Radio } from './pkg/pyrate_browser.js?v=92dc76df37';
 
 const HARBOUR = 'a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442';
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
