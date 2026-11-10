@@ -253,3 +253,6 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 .qi.done .qs{color:var(--ink)}.qi.bad .qs{color:var(--redup)}
 .qi .bar{flex:0 0 70px;height:1px;background:var(--line);position:relative;align-self:center}.qi .bar i{position:absolute;inset:0 auto 0 0;background:var(--ink)}
 @media (max-width:520px){.wordlist{grid-template-columns:repeat(2,1fr)}}
+.st-live{display:flex;align-items:center;justify-content:center;gap:1rem;margin:0 0 .6rem}
+.st-live .power .glyph{color:var(--redup)}.st-live .power.on{border-color:var(--redup);background:rgba(237,85,85,.12)}
+.st-livetime{font:400 .8rem var(--mono);letter-spacing:.14em;color:var(--redup);font-variant-numeric:tabular-nums}

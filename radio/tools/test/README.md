@@ -23,3 +23,4 @@ serve it (`python3 -m http.server <port>`), then rebuild the public page with pl
 - `serve_test.sh <relay id> <station id>`: builds both copies against the test network: the open player on 8099, hostis.black's copy on 8097 (with the given station standing in for HOSTIS's), then rebuilds the public copies.
 - `browser_scope.py <station id>`: hostis.black's copy plays only HOSTIS's stations, hands a stranger's station, an invitation or a flock straight to the open player, and shows no chatter.
 - `browser_raise.py <wav>`: a tab raises a station in the open player, puts the recording on it and sends it along the stem; a fresh tab finds and plays it after the first has closed. Needs a Lantern that carries every station (no `--carry-own`) on the test network.
+- `browser_live.py`: a tab goes live from a fake microphone; a second tab hears the station live.
