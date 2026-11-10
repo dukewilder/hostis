@@ -389,3 +389,23 @@ fn the_watch_bill_cuts_where_the_air_changes_hands() {
     let off = one + 2 * 3_600_000;
     assert!(bill.iter().all(|b| b.0 >= off || b.0 + b.2 <= off), "{bill:?}");
 }
+
+#[test]
+fn a_premiere_of_a_recording_added_moments_ago_airs_and_one_with_nothing_is_not_billed() {
+    let k = StationKey::from_seed([45; 32]);
+    let (mut a, h, t) = station(&k);
+    let start = at(&Zone::utc(), NEAR, 2, 600);
+    let later = start + 3 * 3_600_000;
+    // One whose only recording was withdrawn before it was due.
+    a.write(&k, t + 50, Body::Withdraw { track: h[0] }).unwrap();
+    a.write(&k, t + 60, Body::Show { title: "Gone".into(), about: "".into(), at_ms: later, tracks: vec![h[0]], live_min: 0 }).unwrap();
+    // And one set for this minute, of a recording added five seconds into it.
+    let fresh = a.write(&k, start + 5_000, track("fresh", 10, 77)).unwrap().hash().unwrap();
+    a.write(&k, start + 10_000, Body::Show { title: "Premiere".into(), about: "".into(), at_ms: start, tracks: vec![fresh], live_min: 0 }).unwrap();
+    let c = Clock::new(&a).unwrap();
+    let np = c.now(start + 30_000).unwrap();
+    assert_eq!((np.track, np.slot.as_deref()), (fresh, Some("Premiere")));
+    let l = c.listings(start - 3_600_000, later + 3_600_000);
+    assert!(l.iter().any(|l| l.title == "Premiere"));
+    assert!(!l.iter().any(|l| l.title == "Gone"), "a show with nothing to play is not promised");
+}

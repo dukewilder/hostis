@@ -114,6 +114,10 @@ struct Show {
     title: String,
     about: String,
     at_ms: u64,
+    /// The moment its recordings are judged on the air: its start, or when it was put on the
+    /// bill if that was later. A premiere set for this minute of a recording added seconds
+    /// ago still airs it.
+    as_of: u64,
     tracks: Vec<usize>,
     live_ms: u64,
 }
@@ -161,18 +165,18 @@ enum Source {
     Rounds { pool: Vec<usize>, shuffle: Option<Vec<u8>>, round: u64, order: Vec<usize>, at: usize },
     /// A fixed order, round and round.
     Cycle { order: Vec<usize>, at: usize },
-    /// A fixed order, once.
-    Once { order: Vec<usize>, at: usize },
+    /// A fixed order, once, each track judged on the air as of one moment.
+    Once { order: Vec<usize>, at: usize, as_of: u64 },
 }
 
 impl Source {
     fn next(&mut self, tracks: &[Track], t: u64) -> Option<usize> {
         match self {
-            Source::Once { order, at } => {
+            Source::Once { order, at, as_of } => {
                 while *at < order.len() {
                     let i = order[*at];
                     *at += 1;
-                    if tracks[i].on_air(t) {
+                    if tracks[i].on_air(*as_of) {
                         return Some(i);
                     }
                 }
@@ -238,6 +242,7 @@ pub struct Clock {
 impl Clock {
     pub fn new(archive: &Archive) -> Result<Self> {
         let mut tracks: Vec<Track> = Vec::new();
+        let mut billed: std::collections::HashMap<Hash, u64> = std::collections::HashMap::new();
         let station = archive.station().0;
         for e in archive.entries() {
             let by = match &e.entry.body {
@@ -261,6 +266,9 @@ impl Clock {
                         t.withdrawn_ms.get_or_insert(e.entry.at_ms);
                     }
                 }
+                Body::Show { .. } => {
+                    billed.insert(e.hash()?, e.entry.at_ms);
+                }
                 _ => {}
             }
         }
@@ -274,6 +282,7 @@ impl Clock {
                     title: title.clone(),
                     about: about.clone(),
                     at_ms: *at_ms,
+                    as_of: (*at_ms).max(billed.get(&hash).copied().unwrap_or(0)),
                     tracks: list.iter().filter_map(|h| index.get(h).copied()).collect(),
                     live_ms: *live_min as u64 * 60_000,
                 }),
@@ -427,7 +436,7 @@ impl Clock {
             return None;
         }
         if let Some(s) = self.show_at(t) {
-            let mut src = Source::Once { order: s.tracks.clone(), at: 0 };
+            let mut src = Source::Once { order: s.tracks.clone(), at: 0, as_of: s.as_of };
             if let Some(mut np) = self.walk(s.at_ms, &mut src, t, None) {
                 np.slot = Some(s.title.clone());
                 return Some(np);
@@ -441,7 +450,7 @@ impl Clock {
     }
 
     fn show_len(&self, s: &Show) -> u64 {
-        s.tracks.iter().filter(|&&i| self.tracks[i].on_air(s.at_ms)).map(|&i| self.tracks[i].duration_ms).sum::<u64>().saturating_add(s.live_ms)
+        s.tracks.iter().filter(|&&i| self.tracks[i].on_air(s.as_of)).map(|&i| self.tracks[i].duration_ms).sum::<u64>().saturating_add(s.live_ms)
     }
 
     /// The show on the air at `t`: the latest to have started, if it has not ended.
@@ -607,8 +616,10 @@ impl Clock {
     pub fn listings(&self, from: u64, until: u64) -> Vec<Listing> {
         let mut out = Vec::new();
         for s in &self.shows {
-            let end = s.at_ms.saturating_add(self.show_len(s).max(60_000));
-            if end > from && s.at_ms < until {
+            // A show with nothing it can play and no live part is not promised on the page.
+            let len = self.show_len(s);
+            let end = s.at_ms.saturating_add(len);
+            if len > 0 && end > from && s.at_ms < until {
                 out.push(Listing {
                     start_ms: s.at_ms,
                     end_ms: end,
