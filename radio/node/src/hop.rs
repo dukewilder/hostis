@@ -23,9 +23,25 @@ use sha2::{Digest, Sha512};
 
 use crate::{Inner, net::{Announce, Gossip, Request, Response}, now_ms, say};
 
-/// Chance a stem hop spreads the cargo rather than passing it on.
+/// Chance a stem hop spreads the cargo rather than passing it on. The stem's length falls out
+/// of this draw alone: four hops on average, and past twenty only once in three hundred.
 const FLUFF: f64 = 0.25;
-const MAX_STEM: u8 = 8;
+/// Cargo this node has relayed lately, so a stem that comes round again spreads here.
+const STEM_MEMORY: usize = 512;
+
+/// What one stem carries, as a fingerprint: the same cargo is the same stem.
+fn cargo_id(station: &StationId, entries: &[Vec<u8>], announce: &Option<Announce>) -> Hash {
+    let mut h = blake3::Hasher::new();
+    h.update(b"pyrate/stem-cargo/v1");
+    h.update(&station.0);
+    for e in entries {
+        h.update(blake3::hash(e).as_bytes());
+    }
+    if let Some(a) = announce {
+        h.update(&a.sig);
+    }
+    *h.finalize().as_bytes()
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Hop {
@@ -33,7 +49,9 @@ pub enum Hop {
     Forward { next: [u8; 32], blob: Vec<u8> },
     /// A request sealed to this node: an ephemeral X25519 key and the ciphertext.
     Sealed { eph: [u8; 32], ct: Vec<u8> },
-    /// A station's new entries and chunks, travelling the stem.
+    /// A station's new entries and chunks, travelling the stem. `hops` is always sent as zero,
+    /// by the broadcaster and by every relay alike, so no node can tell which one it heard
+    /// from. Older nodes still count it up; nothing here reads it.
     Stem { station: StationId, entries: Vec<Vec<u8>>, chunks: Vec<(Hash, Vec<u8>)>, announce: Option<Announce>, hops: u8 },
 }
 
@@ -200,15 +218,28 @@ impl Inner {
                 let out = postcard::to_stdvec(&resp).unwrap_or_default();
                 c.encrypt(Nonce::from_slice(&ANSWER_NONCE), out.as_slice()).unwrap_or_default()
             }
-            Hop::Stem { station, entries, chunks, announce, hops } => {
+            Hop::Stem { station, entries, chunks, announce, hops: _ } => {
                 // A Lantern that carries only its own stations never ends a stranger's stem: it
                 // hands the cargo on, so nothing of anyone else's lands on its disk.
                 let declines = self.cfg.lantern && !self.cfg.carry_all && !self.is_own(&station);
-                let pass = declines || (hops < MAX_STEM && rand::random::<f64>() > FLUFF);
+                // Cargo that has been here before has gone round: it spreads now.
+                let id = cargo_id(&station, &entries, &announce);
+                let again = {
+                    let mut seen = self.stem_seen.lock().unwrap();
+                    let again = seen.contains(&id);
+                    if !again {
+                        seen.push_back(id);
+                        while seen.len() > STEM_MEMORY {
+                            seen.pop_front();
+                        }
+                    }
+                    again
+                };
+                let pass = declines || (!again && rand::random::<f64>() > FLUFF);
                 if pass {
                     let mut nodes = self.known_nodes();
                     nodes.shuffle(&mut rand::thread_rng());
-                    let next = Hop::Stem { station, entries: entries.clone(), chunks: chunks.clone(), announce: announce.clone(), hops: hops + 1 };
+                    let next = Hop::Stem { station, entries: entries.clone(), chunks: chunks.clone(), announce: announce.clone(), hops: 0 };
                     for n in nodes.into_iter().take(3) {
                         // An empty answer is a node that declined the cargo.
                         if self.hop(n, &next).await.is_ok_and(|b| !b.is_empty()) {

@@ -8,8 +8,6 @@ Each entry gives the threat, whether the wall held, and the fix.
 
 ### Track B: privacy, anonymity and decentralisation
 
-**B1. The stem names its origin.** `hop.rs` starts every stem at `hops: 0` and each relay adds one, so the guard that receives `hops: 0` knows its peer is the broadcaster. Does not hold. Fix: the count carries nothing (every node sends 0), and loops end by the fluff draw and a memory of cargo already relayed.
-
 **B2. Pocket stations surface on the public Log.** Three ways: a listener's hourly token for a pocket station is gossiped on the public Log by whoever counts it (phones through their exit, tabs directly), naming the station; a pocket station that goes ON AIR sends its live entries down the public stem, where a stranger takes them aboard, announces itself as a carrier and serves the log by id; and a keeper's phone syncing its own pocket asks an exit for it by id. Does not hold. Fix: pocket tokens travel sealed on the pocket's own topic; pocket stations never use the stem; a keeper syncs a pocket by its tag.
 
 **B3. Pocket chatter is open.** A pocket's room sits on a topic drawn from the station's id and its lines travel in the clear, so anyone who learns the id can read the room. Does not hold. Fix: a pocket's room uses a topic drawn from its key and every line is sealed with the key.
@@ -37,3 +35,7 @@ Each entry gives the threat, whether the wall held, and the fix.
 **B14. A broadcaster asks carriers for its own station directly.** When the private route fails, a phone syncing its own station asks carriers for the log by id from its own address, which tells them who keeps it. Does not hold. Fix: a keeper's phone never asks directly for its own station unless that station is already on the air directly from the phone.
 
 **B15. Small faults.** The flock's round trip can underflow if the network clock steps between pings.
+
+## Fixed
+
+**B1. The stem names its origin.** `hop.rs` starts every stem at `hops: 0` and each relay adds one, so the guard that receives `hops: 0` knows its peer is the broadcaster. Does not hold. Fixed: every node, broadcaster and relay alike, now sends the count as zero and nothing reads it. A stem ends by the fluff draw alone (four hops on average), and a node that sees the same cargo come round again spreads it. Older nodes still count up from zero, which tells a new node only that its sender was a relay. Checked by the voyage test (18 of 18). (pending)
