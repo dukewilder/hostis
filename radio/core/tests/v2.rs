@@ -150,3 +150,51 @@ fn the_watch_bill_steps_over_quiet_minutes() {
     let bill = Clock::new(&a).unwrap().upcoming(t0 + 2, t0 + 600_000);
     assert!(!bill.is_empty(), "a track added mid-minute is on the bill from the next minute");
 }
+
+/// A 5.1 WAV (WAVE_FORMAT_EXTENSIBLE, mask 0x3F) with sound only in the centre channel, the
+/// way a film keeps its dialogue.
+fn surround_wav(path: &std::path::Path, centre: bool) {
+    let secs = 3u32;
+    let frames = 48_000 * secs;
+    let mut data = Vec::with_capacity((frames * 12) as usize);
+    for i in 0..frames {
+        for ch in 0..6 {
+            let v = if centre && ch == 2 { ((i as f32 * 0.06).sin() * 12_000.0) as i16 } else { 0 };
+            data.extend_from_slice(&v.to_le_bytes());
+        }
+    }
+    let mut w = Vec::new();
+    w.extend_from_slice(b"RIFF");
+    w.extend_from_slice(&(4 + 8 + 40 + 8 + data.len() as u32).to_le_bytes());
+    w.extend_from_slice(b"WAVEfmt ");
+    w.extend_from_slice(&40u32.to_le_bytes());
+    w.extend_from_slice(&0xFFFEu16.to_le_bytes());
+    w.extend_from_slice(&6u16.to_le_bytes());
+    w.extend_from_slice(&48_000u32.to_le_bytes());
+    w.extend_from_slice(&(48_000u32 * 12).to_le_bytes());
+    w.extend_from_slice(&12u16.to_le_bytes());
+    w.extend_from_slice(&16u16.to_le_bytes());
+    w.extend_from_slice(&22u16.to_le_bytes());
+    w.extend_from_slice(&16u16.to_le_bytes());
+    w.extend_from_slice(&0x3Fu32.to_le_bytes());
+    w.extend_from_slice(&[0x01, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xAA, 0, 0x38, 0x9B, 0x71]);
+    w.extend_from_slice(b"data");
+    w.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    w.extend_from_slice(&data);
+    std::fs::write(path, w).unwrap();
+}
+
+#[test]
+fn a_films_centre_channel_survives_the_fold_and_silence_is_refused() {
+    let dir = std::env::temp_dir();
+    let p = dir.join(format!("pyrate-51-{}.wav", std::process::id()));
+    surround_wav(&p, true);
+    let got = ingest(&p, Profile::Music).expect("the dialogue comes through");
+    let mut dec = pyrate_core::audio::ChunkDecoder::new(got.channels).unwrap();
+    let pcm: Vec<i16> = got.chunks.iter().flat_map(|(_, b)| dec.decode(b).unwrap()).collect();
+    let rms = (pcm.iter().map(|&s| (s as f64).powi(2)).sum::<f64>() / pcm.len().max(1) as f64).sqrt();
+    assert!(rms > 1_000.0, "the centre is heard on both sides: rms {rms}");
+    surround_wav(&p, false);
+    assert!(ingest(&p, Profile::Music).is_err(), "a silent file is no recording");
+    let _ = std::fs::remove_file(&p);
+}

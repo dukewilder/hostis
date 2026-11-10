@@ -9,7 +9,7 @@
 
 use std::io::Cursor;
 
-use image::{ImageFormat, ImageReader, Limits, RgbImage, codecs::jpeg::JpegEncoder, imageops::FilterType};
+use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits, RgbImage, codecs::jpeg::JpegEncoder, imageops::FilterType, metadata::Orientation};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Kind {
@@ -49,7 +49,12 @@ fn limits(max_side: u32) -> Limits {
 pub fn prepare(raw: &[u8], kind: Kind) -> Result<Prepared, String> {
     let mut r = ImageReader::new(Cursor::new(raw)).with_guessed_format().map_err(|e| e.to_string())?;
     r.limits(limits(12_000));
-    let img = r.decode().map_err(|e| format!("not a picture we can read: {e}"))?;
+    // Turned the way the camera held it: a phone's portrait photo is stored on its side with a
+    // note saying so, and the note does not survive the redraw.
+    let mut dec = r.into_decoder().map_err(|e| format!("not a picture we can read: {e}"))?;
+    let turn = dec.orientation().unwrap_or(Orientation::NoTransforms);
+    let mut img = DynamicImage::from_decoder(dec).map_err(|e| format!("not a picture we can read: {e}"))?;
+    img.apply_orientation(turn);
     let (w, h) = kind.size();
     let img = img.resize_to_fill(w, h, FilterType::Lanczos3).to_rgb8();
     let accent = accent(&img);
@@ -95,7 +100,8 @@ pub fn accent(img: &RgbImage) -> [u8; 3] {
         e.1[2] += b as f64 * w;
     }
     let bone = [0xED, 0xE4, 0xCE];
-    let Some((_, (w, sum))) = buckets.into_iter().max_by(|a, b| a.1.0.total_cmp(&b.1.0)) else { return bone };
+    // Ties go to the larger bucket key, so the same picture gives the same colour every time.
+    let Some((_, (w, sum))) = buckets.into_iter().max_by(|a, b| a.1.0.total_cmp(&b.1.0).then(a.0.cmp(&b.0))) else { return bone };
     let mut c = [sum[0] / w, sum[1] / w, sum[2] / w];
     let (mx, mn) = (c[0].max(c[1]).max(c[2]), c[0].min(c[1]).min(c[2]));
     if mx == 0.0 || (mx - mn) / mx < 0.18 {
@@ -108,4 +114,44 @@ pub fn accent(img: &RgbImage) -> [u8; 3] {
         }
     }
     [c[0] as u8, c[1] as u8, c[2] as u8]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A photo stored on its side with an EXIF note to turn it (orientation 6: a quarter
+    /// turn clockwise), white on its left half and black on its right.
+    fn sideways_photo() -> Vec<u8> {
+        let img = RgbImage::from_fn(80, 40, |x, _| if x < 40 { image::Rgb([250, 250, 250]) } else { image::Rgb([5, 5, 5]) });
+        let mut jpeg = Vec::new();
+        JpegEncoder::new_with_quality(&mut jpeg, 95).encode_image(&img).unwrap();
+        // APP1: "Exif", a little-endian TIFF header and one entry, Orientation = 6.
+        let mut exif = b"Exif\0\0II*\0\x08\0\0\0\x01\0".to_vec();
+        exif.extend_from_slice(&[0x12, 0x01, 3, 0, 1, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0]);
+        let mut app1 = vec![0xFF, 0xE1];
+        app1.extend_from_slice(&((exif.len() + 2) as u16).to_be_bytes());
+        app1.extend_from_slice(&exif);
+        let mut out = jpeg[..2].to_vec();
+        out.extend_from_slice(&app1);
+        out.extend_from_slice(&jpeg[2..]);
+        out
+    }
+
+    #[test]
+    fn a_sideways_photo_is_turned_upright() {
+        let p = prepare(&sideways_photo(), Kind::Cover).unwrap();
+        let (w, h, px) = decode(&p.jpeg).unwrap();
+        let at = |x: u32, y: u32| px[((y * w + x) * 4) as usize];
+        // Turned a quarter clockwise, the white left half is now the top.
+        assert!(at(w * 3 / 4, h / 8) > 200 && at(w * 3 / 4, h * 7 / 8) < 60, "top {} bottom {}", at(w * 3 / 4, h / 8), at(w * 3 / 4, h * 7 / 8));
+    }
+
+    #[test]
+    fn the_accent_is_the_same_every_time() {
+        // Two colours of equal weight: the tie is broken the same way on every run.
+        let img = RgbImage::from_fn(70, 70, |x, _| if x % 2 == 0 { image::Rgb([200, 30, 30]) } else { image::Rgb([30, 30, 200]) });
+        let first = accent(&img);
+        assert!((0..20).all(|_| accent(&img) == first));
+    }
 }

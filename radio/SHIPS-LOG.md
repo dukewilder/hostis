@@ -145,3 +145,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - The watch bill and the page's next shows list what really airs, cut where a slot, a show or the end of the hours takes over, so a bell rings when its show begins.
 - A premiere of a recording added moments before airs, and a show with nothing to play is not promised on the page.
 - Clock and sound hardening: a station's page shows its key beside its call sign, every chunk plays exactly its length, tapes never come out unplayable, a span must name a day, and a library in order is heard in order across its set hours.
+- Pictures come out upright with a stable accent, films keep their dialogue when folded to stereo and silent files are refused, the device's own sample format is used, the page is built in one pass, the keeper hears when a time-zone table runs out, and the clean turn of the week is ruled.

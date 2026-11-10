@@ -136,14 +136,27 @@ pub fn programme_from(v: &Value) -> Result<Programme> {
 /// Everything a station's page shows, worked out from its log alone.
 pub fn page_of(a: &Archive, now: u64, days: u64) -> Result<Value> {
     let clock = crate::clock::Clock::new(a).map_err(|e| Bad(e.to_string()))?;
+    // Each track's words and each show's list, found once for the whole page rather than by
+    // hashing the whole log again for every line of it.
+    let names: std::collections::HashMap<Hash, (String, String)> = a
+        .entries()
+        .iter()
+        .filter_map(|e| match e.entry.body() {
+            Body::Track { title, by, .. } => Some((e.hash().ok()?, (title.clone(), by.clone()))),
+            _ => None,
+        })
+        .collect();
+    let named = |t: &Hash| names.get(t).cloned().unwrap_or_default();
+    let shows: std::collections::HashMap<Hash, &Body> = a.shows().into_iter().collect();
+    let until = now.saturating_add(days.min(60).saturating_mul(86_400_000));
     let listings: Vec<Value> = clock
-        .listings(now.saturating_sub(3 * 3_600_000), now + days * 86_400_000)
+        .listings(now.saturating_sub(3 * 3_600_000), until)
         .into_iter()
         .filter(|l| l.end_ms > now)
         .take(200)
         .map(|l| {
-            let tracks: Vec<Value> = match l.show.and_then(|h| a.shows().into_iter().find(|(x, _)| *x == h)) {
-                Some((_, Body::Show { tracks, .. })) => tracks.iter().map(|t| json!({ "track": hex(t), "title": describe_track(a, t).0 })).collect(),
+            let tracks: Vec<Value> = match l.show.and_then(|h| shows.get(&h).copied()) {
+                Some(Body::Show { tracks, .. }) => tracks.iter().map(|t| json!({ "track": hex(t), "title": named(t).0 })).collect(),
                 _ => vec![],
             };
             json!({ "start_ms": l.start_ms, "end_ms": l.end_ms, "title": l.title, "about": l.about, "kind": l.kind, "live": l.live, "show": l.show.map(|h| hex(&h)), "tracks": tracks })
@@ -154,7 +167,7 @@ pub fn page_of(a: &Archive, now: u64, days: u64) -> Result<Value> {
         .into_iter()
         .take(8)
         .map(|(start, track, dur)| {
-            let (title, by) = describe_track(a, &track);
+            let (title, by) = named(&track);
             json!({ "start_ms": start, "duration_ms": dur, "title": title, "by": by, "track": hex(&track) })
         })
         .collect();
@@ -173,8 +186,10 @@ pub fn page_of(a: &Archive, now: u64, days: u64) -> Result<Value> {
         "since": a.entries().first().map(|e| e.entry.at_ms),
         "tracks": tracks,
         "on_air": on.is_some(), "back_at": back,
-        "now": on.as_ref().map(|np| { let (t, b) = describe_track(a, &np.track); json!({ "title": t, "by": b, "slot": np.slot, "position_ms": np.offset_ms, "duration_ms": np.duration_ms }) }),
+        "now": on.as_ref().map(|np| { let (t, b) = named(&np.track); json!({ "title": t, "by": b, "slot": np.slot, "position_ms": np.offset_ms, "duration_ms": np.duration_ms }) }),
         "programme": programme.as_ref().map(programme_json), "zone_name": programme.as_ref().map(|p| p.zone.name.clone()),
+        // The last change the station's time-zone table knows; past it the local time keeps its last offset.
+        "zone_until": programme.as_ref().and_then(|p| p.zone.offsets.last().map(|o| o.0)).filter(|u| *u > 0),
         "listings": listings, "next": next, "notices": notices,
         "explicit": a.explicit(), "details": a.details().map(|(k, m)| json!({ "kinds": k, "mature": m })),
     }))
