@@ -28,7 +28,7 @@ CID=$(python3 -c "import json;print(json.load(open('$R/browser/www/open.json'))[
 mkdir -p pyrateradio/ipfs
 touch pyrateradio/ipfs/players.txt
 # The player this build names, and the one the app's own links name, if it differs.
-APPCID=$(head -1 "$R/app/assets/open_players.txt" | sed -n 's,^https://\(bafy[a-z2-7]*\)\..*,\1,p')
+APPCID=$(grep -o 'bafy[a-z2-7]*' "$R/app/assets/open_players.txt" | head -1)
 for c in $APPCID $CID; do
   [ -f "$R/browser/www/cars/$c.car" ] || continue
   cp "$R/browser/www/cars/$c.car" "pyrateradio/ipfs/$c.car"

@@ -111,11 +111,15 @@ subprocess.run([IPFS, "repo", "gc", "--offline"], env=env, capture_output=True)
 # Every player built is kept, so one an app was built to name can always be published.
 os.makedirs(f"{W}/cars", exist_ok=True)
 shutil.copy(f"{W}/open.car", f"{W}/cars/{cid}.car")
-# Gateways that serve each IPFS name at an address of its own, then one that serves by path,
+# Gateways that serve each IPFS name at an address of its own (inbrowser.link fetches and checks
+# the files in the visitor's own browser), then one that serves by path,
 # then any public Lanterns listed by hand in open_players.json. The first that answers wins.
 extra_players = json.load(open(f"{R}/browser/open_players.json", encoding="utf-8")) if os.path.exists(f"{R}/browser/open_players.json") else []
+# The player's fixed name (IPNS, published by dukewilder's pin_player.sh) comes first: one
+# address for every release, so a browser keeps what it keeps from one to the next.
+ipns = open(f"{R}/browser/ipns.txt").read().strip() if os.path.exists(f"{R}/browser/ipns.txt") else ""
 # A test build can send them to its own: PYRATE_OPEN_PLAYERS="<url>,<url>".
-players = os.environ["PYRATE_OPEN_PLAYERS"].split(",") if os.environ.get("PYRATE_OPEN_PLAYERS") else [f"https://{cid}.ipfs.dweb.link/", f"https://{cid}.ipfs.w3s.link/", f"https://ipfs.io/ipfs/{cid}/"] + extra_players
+players = os.environ["PYRATE_OPEN_PLAYERS"].split(",") if os.environ.get("PYRATE_OPEN_PLAYERS") else ([f"https://{ipns}.ipns.inbrowser.link/"] if ipns else []) + [f"https://{cid}.ipfs.inbrowser.link/", f"https://{cid}.ipfs.dweb.link/", f"https://ipfs.io/ipfs/{cid}/"] + extra_players
 json.dump({"cid": cid, "players": players}, open(f"{W}/open.json", "w"), indent=1)
 # The app's own list (app/assets/open_players.txt) is set when an app is built: tools/app_players.py.
 print("open player", cid)
