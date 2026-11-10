@@ -120,8 +120,11 @@ class PlaybackService : MediaBrowserServiceCompat() {
         }
     }
 
+    /** One request for the speaker, kept for the life of the service: asking again with a new
+     *  one each tune left the old ones registered, and they answered later focus changes. */
     private fun requestFocus() {
         if (Build.VERSION.SDK_INT < 26) return
+        focus?.let { audio.requestAudioFocus(it); return }
         val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
             .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
             .setOnAudioFocusChangeListener { change ->
@@ -145,6 +148,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
             PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID)
         .setState(s, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1f)
         .build()
+
+    /** The plain disguise: the lock screen says only "Radio". */
+    private val plain: Boolean get() = prefs().getBoolean("plain_lock", false)
 
     /** What the lock screen, the car and the headphones show. */
     private fun refresh() {
@@ -190,12 +196,14 @@ class PlaybackService : MediaBrowserServiceCompat() {
         fun action(icon: Int, label: String, a: Long) = NotificationCompat.Action(icon, label,
             androidx.media.session.MediaButtonReceiver.buildMediaButtonPendingIntent(this, a))
         val n = NotificationCompat.Builder(this, "air")
-            .setContentTitle(if (live) "ON AIR" else title)
+            .setContentTitle(if (live && !plain) "ON AIR" else title)
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_flag)
             .setContentIntent(open)
             .setOngoing(true)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            // In the plain disguise the lock screen shows only "Radio", whatever is on.
+            .setVisibility(if (plain) NotificationCompat.VISIBILITY_PRIVATE else NotificationCompat.VISIBILITY_PUBLIC)
+            .apply { if (plain) setPublicVersion(NotificationCompat.Builder(this@PlaybackService, "air").setContentTitle("Radio").setSmallIcon(R.drawable.ic_flag).build()) }
             .addAction(action(android.R.drawable.ic_media_previous, "Previous station", PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS))
             .addAction(action(android.R.drawable.ic_menu_close_clear_cancel, "Stop", PlaybackStateCompat.ACTION_STOP))
             .addAction(action(android.R.drawable.ic_media_next, "Next station", PlaybackStateCompat.ACTION_SKIP_TO_NEXT))
@@ -237,10 +245,18 @@ class PlaybackService : MediaBrowserServiceCompat() {
             "wake" -> wakeUp(intent.getStringExtra("station"))
             "stop" -> stopPlaying()
             else -> {
+                val ending = intent?.hasExtra("live") == true && !intent.getBooleanExtra("live", false)
                 if (intent?.hasExtra("live") == true) live = intent.getBooleanExtra("live", false)
-                startPlaying()
-                val title = intent?.getStringExtra("title")
-                if (title != null) goForeground(title, "")
+                if (ending) {
+                    // The broadcast is over: back to what is tuned, or out of the foreground.
+                    val tuned = Native.cmd("cmd" to "status").optString("tuned", "")
+                    if (tuned.isEmpty()) stopPlaying() else refresh()
+                } else {
+                    startPlaying()
+                    // The app names the station; the plain disguise names nothing.
+                    val title = intent?.getStringExtra("title")
+                    if (title != null && !plain) goForeground(title, "")
+                }
             }
         }
         return START_NOT_STICKY

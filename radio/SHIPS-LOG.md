@@ -116,3 +116,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - Everything a node keeps on disk is sealed under a key of the device's own, wrapped by the phone's secure hardware: a seized phone is noise, even to someone holding the whole Log.
 - A browser tab is counted only while it plays, through two hops as a phone is, and answers nobody about what it holds.
 - The Colours PIN is kept under a slow, memory-hard hash.
+- The playback service leaves the foreground when a broadcast ends, keeps one claim on the speaker, and in the plain disguise names nothing on the lock screen, the bells or the Lantern.
