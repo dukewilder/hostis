@@ -73,10 +73,7 @@ Reported by a reader of the code; each is checked against the code before it is 
 - **P17** (medium) Blocking native calls on the UI thread, in Dart and in the service. `PlaybackService.kt:53-58`
 - **P27** (medium) The numbers kit decodes and rewrites WAV files sample by sample on the UI isolate. `station.dart:1562-1596`
 - **P31** (low) Android App Links are not verified, so scanned posters open the browser. `AndroidManifest.xml:43-54`
-- **P38** (low) Manifest hygiene. `AndroidManifest.xml:4`
 - **P39** (low) `setState` after await without `mounted`, and controllers that are never disposed. `more.dart:394-406`
-- **P40** (low) Passing the app on: a LAN HTTP server with no timeouts, binding every interface. `Ship.kt:90-125`
-
 ## Fixed
 
 **B1. The stem names its origin.** `hop.rs` starts every stem at `hops: 0` and each relay adds one, so the guard that receives `hops: 0` knows its peer is the broadcaster. Does not hold. Fixed: every node, broadcaster and relay alike, now sends the count as zero and nothing reads it. A stem ends by the fluff draw alone (four hops on average), and a node that sees the same cargo come round again spreads it. Older nodes still count up from zero, which tells a new node only that its sender was a relay. Checked by the voyage test (18 of 18). (ae5aa7b)
@@ -225,8 +222,12 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **B16. The Android side keeps listening notes in the clear.** The bells (each show's title, station and name), the wake-up station and the last station tuned sit in plain shared preferences beside the sealed hold, so a copy of the phone's storage says what its owner listens to and when. Does not hold. Fixed: the bells, the wake-up station and its name, and the last station tuned are sealed under the phone's hardware key, the same that wraps the hold key; a note written in the clear by an older build is read once and sealed when next written. Only a random bell key and on/off switches stay plain. (ab09d3d)
 
-**P34. Brass (amber) is used throughout.** (medium) Fixed: Amber is gone: the update banner, SCANNING, the sleep timer, KEPT, the watch bill's days, ringing bells and the station-art note are all bone in its three weights. (pending)
+**P34. Brass (amber) is used throughout.** (medium) Fixed: Amber is gone: the update banner, SCANNING, the sleep timer, KEPT, the watch bill's days, ringing bells and the station-art note are all bone in its three weights. (bb90709)
 
-**P35. Red is used beyond ON AIR, and there are two reds; M3 defaults bring rounded pickers and Roboto.** (low) Fixed: One red, #ed5555, kept to ON AIR, LIVE, the live dot and a microphone while it records (ruled in the Articles). Errors, STRIKE, MAROON, section heads, invitations and buttons are bone. The theme now sets Fell as the default face and squares dialogs, sheets, menus, toasts, the time picker, checkboxes and text buttons with hairline borders, with no tint. (pending)
+**P35. Red is used beyond ON AIR, and there are two reds; M3 defaults bring rounded pickers and Roboto.** (low) Fixed: One red, #ed5555, kept to ON AIR, LIVE, the live dot and a microphone while it records (ruled in the Articles). Errors, STRIKE, MAROON, section heads, invitations and buttons are bone. The theme now sets Fell as the default face and squares dialogs, sheets, menus, toasts, the time picker, checkboxes and text buttons with hairline borders, with no tint. (bb90709)
 
-**P36. The window behind Flutter is white in light mode.** (low) Fixed: The window behind the app, the splash and the system bars are the sheet's black whatever the phone's light or dark setting. (pending)
+**P36. The window behind Flutter is white in light mode.** (low) Fixed: The window behind the app, the splash and the system bars are the sheet's black whatever the phone's light or dark setting. (bb90709)
+
+**P38. Manifest hygiene.** (low) Fixed: The unused Wi-Fi state permission is gone, and so is the toolkit's query for apps that process text, so selected words or a PIN are never offered to a translator or any other app; only text-to-speech engines are looked for. (pending)
+
+**P40. Passing the app on: a LAN HTTP server with no timeouts, binding every interface.** (low) Fixed: The server listens on the phone's own local address only, answers only under a random path carried in the QR (anything else gets an empty 404, so a scan of the room's Wi-Fi finds nothing naming the app), serves four at a time, drops a request not made within fifteen seconds, and shuts itself after fifteen minutes. (pending)
