@@ -1187,7 +1187,19 @@ impl Node {
             let custom: Vec<iroh::RelayUrl> = std::env::var("PYRATE_RELAYS").unwrap_or_default().split(',').filter_map(|r| r.trim().parse().ok()).collect();
             let private_net = !custom.is_empty();
             let relays = if custom.is_empty() { relays } else { iroh::RelayMap::from_iter(custom) };
-            let mut b = Endpoint::builder(presets::N0).secret_key(secret).relay_mode(iroh::RelayMode::Custom(relays));
+            let dark = std::env::var_os("PYRATE_DARK").is_some_and(|v| v != "0");
+            // A dark node resolves others but never publishes its own address: no signed pkarr or
+            // DNS record ties this node id to a relay or an IP. It stays reachable through relays
+            // and through the addresses shared inside each station's gossip.
+            let mut b = if dark {
+                Endpoint::builder(presets::Minimal)
+                    .secret_key(secret)
+                    .address_lookup(iroh::address_lookup::PkarrResolver::n0_dns())
+                    .address_lookup(iroh::address_lookup::DnsAddressLookup::n0_dns())
+                    .relay_mode(iroh::RelayMode::Custom(relays))
+            } else {
+                Endpoint::builder(presets::N0).secret_key(secret).relay_mode(iroh::RelayMode::Custom(relays))
+            };
             if public_dns {
                 b = b.dns_resolver(
                     iroh::dns::DnsResolver::builder()
@@ -1199,10 +1211,9 @@ impl Node {
             // Dark running (PYRATE_DARK=1): no direct paths at all, so no peer ever learns this
             // node's address, and every relay connection goes through PYRATE_PROXY, such as
             // Tor's HTTP tunnel port. Relays then see only Tor.
-            let dark = std::env::var_os("PYRATE_DARK").is_some_and(|v| v != "0");
             if dark {
                 b = b.clear_ip_transports();
-                say("dark running: relays only, no direct paths");
+                say("dark running: relays only, no address published");
             }
             if let Some(url) = std::env::var("PYRATE_PROXY").ok().and_then(|u| u.parse().ok()) {
                 b = b.proxy_url(url).ca_tls_config(iroh::tls::CaTlsConfig::system());
