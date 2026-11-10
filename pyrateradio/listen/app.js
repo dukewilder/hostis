@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=c4e42219d3';
+import init, { Radio } from './pkg/pyrate_browser.js?v=2391e514e4';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -674,6 +674,10 @@ for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-expl
   el.onchange = () => { store(key, (el.checked ? on : (on === '1' ? '0' : '1'))); forgetPics(); rowsKey = ''; refresh(); if (cur) show(cur) };
 }
 $('mclear').onclick = () => { setMarooned(new Set()); $('mnote').textContent = 'Every station is back in the Log.'; refresh() };
+
+// A copy of the set served anywhere but hostis.black/pyrateradio/listen/ (a Lantern's
+// /player/, a mirror) points its links to the landing at the landing itself.
+if (!/\/pyrateradio\/listen\/$/.test(location.pathname)) document.querySelectorAll('a[href^="../"]').forEach(a => a.href = 'https://hostis.black/pyrateradio/' + a.getAttribute('href').slice(3));
 
 async function boot() {
   // An invitation's key leaves the address bar before anything else happens.
