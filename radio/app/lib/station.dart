@@ -196,9 +196,10 @@ class _StationPageState extends State<StationPage> {
               widget.radio.tune(id);
               Navigator.pop(context);
             }),
-            pyrateButton('PASS IT ON', () => shareStation(s)),
+            // A pocket station's whereabouts go only by invitation, never by a public link or poster.
+            if (s['pocket'] != true) pyrateButton('PASS IT ON', () => shareStation(s)),
             if ((s['tip'] ?? '').toString().isNotEmpty) pyrateButton('TIP', () => tipStation(context, s['tip'], name: (s['name'] ?? 'the station').toString())),
-            pyrateButton('A POSTER', () => pyrateSheet(context, PosterSheet(station: s))),
+            if (s['pocket'] != true) pyrateButton('A POSTER', () => pyrateSheet(context, PosterSheet(station: s))),
           ]),
           if (own) ...[
             section('YOUR STATION'),
@@ -1211,6 +1212,36 @@ class _ChatterPanelState extends State<ChatterPanel> {
 
   Set<String> get mutes => ((pref('chat_mutes') as List?) ?? []).cast<String>().toSet();
 
+  /// The voices muted on this phone, each to be heard again with a tap.
+  Future<void> unmute() async {
+    await pyrateSheet(
+      context,
+      StatefulBuilder(builder: (c, set) {
+        final m = mutes.toList();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            heading('MUTED VOICES'),
+            if (m.isEmpty) note('Nobody is muted.'),
+            for (final v in m)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(v.toUpperCase(), style: carved(10, color: boneFaint, spacing: 0.25)),
+                trailing: TextButton(
+                  onPressed: () {
+                    pref('chat_mutes', m.where((x) => x != v).toList());
+                    set(() {});
+                  },
+                  child: Text('HEAR AGAIN', style: carved(9, color: bloodBright)),
+                ),
+              ),
+          ]),
+        );
+      }),
+    );
+    read();
+  }
+
   Future<void> send(String kind, {String text = '', String? track, String? path}) async {
     final r = await Native.callAway({'cmd': 'chat_send', 'station': widget.station, 'kind': kind, 'text': text, if (track != null) 'track': track, if (path != null) 'path': path, 'mime': 'audio/mp4', 'name': name.text.trim()});
     if (r is Map && r['error'] != null) setState(() => err = r['error']);
@@ -1354,6 +1385,13 @@ class _ChatterPanelState extends State<ChatterPanel> {
       ]),
       TextField(controller: name, maxLength: 32, style: serif(15), decoration: pyrateField('Your name in the room'), onChanged: (v) => pref('chat_name', v.trim())),
       if (err != null) note(err!),
+      Wrap(spacing: 6, runSpacing: 6, children: [
+        pyrateButton('LEAVE THE CHATTER', () async {
+          await Native.callAway({'cmd': 'chat_leave', 'station': widget.station});
+          read();
+        }, color: boneFaint),
+        if (m.isNotEmpty) pyrateButton('MUTED (${m.length})', () => unmute(), color: boneFaint),
+      ]),
     ]);
   }
 }

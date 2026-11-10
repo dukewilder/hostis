@@ -101,13 +101,23 @@ object Bells {
         rescheduleWake(c)
     }
 
+    /** A secret only this app holds, so a tap on its own bell can be told from a link sent by another app. */
+    fun bellKey(c: Context): String {
+        val p = c.getSharedPreferences("pyrate", Context.MODE_PRIVATE)
+        p.getString("bell_key", null)?.let { return it }
+        val b = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
+        val k = b.joinToString("") { "%02x".format(it) }
+        p.edit().putString("bell_key", k).apply()
+        return k
+    }
+
     fun ring(c: Context, title: String, station: String, name: String, id: Int) {
         val nm = c.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= 26) {
             nm.createNotificationChannel(NotificationChannel("bells", "Bells", NotificationManager.IMPORTANCE_HIGH))
         }
         val open = PendingIntent.getActivity(c, id,
-            Intent(c, MainActivity::class.java).setAction("tune").putExtra("station", station).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            Intent(c, MainActivity::class.java).setAction("tune").putExtra("station", station).putExtra("key", bellKey(c)).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         // In the plain disguise a bell says only that something is on.
         val plain = c.getSharedPreferences("pyrate", Context.MODE_PRIVATE).getBoolean("plain_lock", false)

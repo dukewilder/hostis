@@ -4,3 +4,4 @@ browser/www/pkg/
 browser/www/dist/
 landing/out/
 app/android/build/
+app/android/.kotlin/

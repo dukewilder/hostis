@@ -71,7 +71,11 @@ class Tuner extends ChangeNotifier {
   String? tuned;
   bool playing = false;
   bool scanning = false;
-  bool firstTuneDone = false;
+  /// The first open plays the busiest earned station once in the phone's life, never again.
+  bool firstTuneDone = pref('first_tune') == true;
+
+  /// A link from outside, waiting on the owner's yes: a station id, `pocket=…` or `flock=…`.
+  String? invite;
   Timer? _poll;
   Timer? _scan;
   int _ticks = 0;
@@ -184,21 +188,22 @@ class Tuner extends ChangeNotifier {
     if (_ticks % 4 == 2) {
       // A station link or a bell's tap, waiting to be followed.
       _service.invokeMethod<String>('take_link').then((id) {
-        if (id != null && id.startsWith('flock=')) {
-          Native.call({'cmd': 'flock_join', 'link': id});
+        if (id == null) return;
+        firstTuneDone = true;
+        pref('first_tune', true);
+        // A bell this phone rang itself tunes straight away.
+        if (id.startsWith('tune=')) {
+          pendingLink = id.substring(5);
           return;
         }
-        // An invitation to a pocket station: joined here, and tuned once its log arrives.
-        if (id != null && id.startsWith('pocket=')) {
-          Native.callAway({'cmd': 'pocket_join', 'link': id}).then((r) {
-            if (r is Map && r['station'] is String) pendingLink = r['station'] as String;
-          });
-          return;
+        // Anything from outside waits for a yes: a station is not played, a pocket or
+        // a flock is not joined, until the owner says so on the dial.
+        invite = id;
+        if (!id.contains('=')) {
+          final i = stations.indexWhere((s) => s['id'] == id);
+          if (i >= 0 && pages.hasClients) pages.jumpToPage(i);
         }
-        if (id != null) {
-          firstTuneDone = true;
-          pendingLink = id;
-        }
+        notifyListeners();
       }).catchError((_) {});
     }
     if (pendingLink != null && station(pendingLink) != null) {
@@ -230,6 +235,7 @@ class Tuner extends ChangeNotifier {
       final pick = earned.isNotEmpty ? earned.first : (home.isNotEmpty ? home.first : null);
       if (pick != null || _ticks > 20) {
         firstTuneDone = true;
+        pref('first_tune', true);
         tune((pick ?? stations.first)['id'] as String);
       }
     }
@@ -237,6 +243,28 @@ class Tuner extends ChangeNotifier {
   }
 
   String? pendingLink;
+
+  void acceptInvite() {
+    final id = invite;
+    invite = null;
+    if (id == null) return;
+    if (id.startsWith('flock=')) {
+      Native.call({'cmd': 'flock_join', 'link': id});
+    } else if (id.startsWith('pocket=')) {
+      // Joined here, and tuned once its log arrives.
+      Native.callAway({'cmd': 'pocket_join', 'link': id}).then((r) {
+        if (r is Map && r['station'] is String) pendingLink = r['station'] as String;
+      });
+    } else {
+      pendingLink = id;
+    }
+    notifyListeners();
+  }
+
+  void declineInvite() {
+    invite = null;
+    notifyListeners();
+  }
 
   void tune(String id) {
     tuned = id;
@@ -425,7 +453,27 @@ class Dial extends StatelessWidget {
   Widget build(BuildContext context) {
     final stations = radio.stations;
     final up = radio.update;
+    final inv = radio.invite;
     return Column(children: [
+      if (inv != null)
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(20, 10, 12, 6),
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: bloodBright, width: 0.5))),
+          child: Row(children: [
+            Expanded(
+              child: Text(
+                  inv.startsWith('pocket=')
+                      ? 'AN INVITATION TO A PRIVATE STATION'
+                      : inv.startsWith('flock=')
+                          ? 'A FLOCK LINK · PLAY IN STEP WITH ITS HOST'
+                          : 'A LINK TO ${((radio.station(inv)?['name'] ?? '').toString().trim().isEmpty ? 'A STATION' : radio.station(inv)!['name'].toString().trim()).toUpperCase()}',
+                  style: carved(10, color: bone, spacing: 0.2)),
+            ),
+            TextButton(onPressed: radio.acceptInvite, child: Text(inv.contains('=') ? 'JOIN' : 'LISTEN', style: carved(10, color: bloodBright))),
+            TextButton(onPressed: radio.declineInvite, child: Text('NO', style: carved(10, color: boneFaint))),
+          ]),
+        ),
       if (up != null)
         InkWell(
           onTap: () => _service.invokeMethod('install', {'path': up['path']}).catchError((_) {}),
