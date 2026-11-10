@@ -26,6 +26,7 @@ with sync_playwright() as p:
     pg.click("#pass"); time.sleep(1)
     link = pg.text_content("#plink") or ""
     check("a link served from a bare address points at hostis.black", link.startswith("https://hostis.black/pyrateradio/listen/#"))
+    check("the page's policy refuses nothing it needs", not any("Content Security Policy" in l for l in logs))
     check("no page errors", not errs)
     if errs: print(errs[:3])
     b.close()

@@ -135,3 +135,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - In the browser: flocks and chatter can be left, shared chat cannot impersonate a keeper or run text backwards, the console stays quiet, a hail cannot go astray, covers load as they come into view, links outlive hostis.black without naming anyone's address, and a deploy can never mix old and new code.
 - The landing's Android fallback works, its build will not ship placeholders, its copy says what the embedded set holds, and the browser set keeps bright red for the open air with no text under the site's smallest size.
 - A keeper's Lantern keeps hails sealed under its own key rather than writing them out, and opens them only when the keeper asks.
+- The Lantern's page and the browser set both run under a strict content policy with no referrer, and a Lantern's /player/ copy links home properly.

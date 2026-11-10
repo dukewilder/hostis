@@ -16,3 +16,4 @@ serve it (`python3 -m http.server <port>`), then rebuild the public page with pl
 `python3 browser/build.py`. Playwright's Chromium: `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`.
 - `live_page.py <url>`: loads the deployed page and checks the wasm starts, after every deploy.
 - `browser_ui.py <port>`: quiet console, chatter join and leave, passed-on links that never name the serving address.
+- `lantern_page.py`: a Lantern started with `--http 127.0.0.1:8383` serves a page whose script runs under its policy.

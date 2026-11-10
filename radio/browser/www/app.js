@@ -675,6 +675,10 @@ for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-expl
 }
 $('mclear').onclick = () => { setMarooned(new Set()); $('mnote').textContent = 'Every station is back in the Log.'; refresh() };
 
+// A copy of the set served anywhere but hostis.black/pyrateradio/listen/ (a Lantern's
+// /player/, a mirror) points its links to the landing at the landing itself.
+if (!/\/pyrateradio\/listen\/$/.test(location.pathname)) document.querySelectorAll('a[href^="../"]').forEach(a => a.href = 'https://hostis.black/pyrateradio/' + a.getAttribute('href').slice(3));
+
 async function boot() {
   // An invitation's key leaves the address bar before anything else happens.
   const invite = location.hash.includes('pocket=') ? location.hash : null;

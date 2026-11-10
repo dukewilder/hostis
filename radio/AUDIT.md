@@ -34,9 +34,7 @@ Reported by a reader of the code; each is checked against the code before it is 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
 
 - **C12** (low) Lantern page and tower have no recovery when the stream ends. `node/src/web.rs:442-449`
-- **C13** (low) /player/ mirror: broken home links, no redirect, no hardening headers. `node/src/web.rs:62-63`
 - **C25** (low) Wasm traps are unrecoverable. `Cargo.toml `[profile.web] panic = "abort"`; browser/www/app.js:608-611`
-- **C28** (medium) No CSP, no Referrer-Policy, inline script in head. `node/src/web/listen.html:1-9`
 - **C29** (medium) Storage and URL inventory (what ties a visit to the next, and what stays in history). `browser/www/app.js:22-35`
 - **C34** (medium) Background and Safari playback: iPad detection, interruptions, meter, hidden tab buffer. `browser/www/app.js:100-111`
 - **C43** (low) Station chart, harbour merge and debug hook small defects. `browser/www/app.js:26-31`
@@ -260,4 +258,8 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **C50. Informational text set in the ghost tone and at sub-10px sizes.** (low) Fixed: No text in the set is under .65rem, the site's own smallest, and times, notices, chat times and the meter's label are in the faint tone rather than the ghost. (584925b)
 
-**B17. A keeper's Lantern files hails in the clear.** With PYRATE_HAILS set, the keeper's own Lantern opened each hail and wrote the voice to a folder in the clear, named with the sender's chosen name, against the ruling that a disk is noise without its own key and against the Articles, which said the hail stays sealed. Does not hold. Fixed: a kept hail is filed as it came, still sealed to the station, and sealed again under the Lantern's hold key, in a list of at most five hundred; nothing on disk shows a voice or a sender. lantern --open-hails <folder> opens them into the keeper's chosen folder and forgets them. Unit tested: the folder holds neither the voice nor the name, and the hail opens once, whole. (pending)
+**B17. A keeper's Lantern files hails in the clear.** With PYRATE_HAILS set, the keeper's own Lantern opened each hail and wrote the voice to a folder in the clear, named with the sender's chosen name, against the ruling that a disk is noise without its own key and against the Articles, which said the hail stays sealed. Does not hold. Fixed: a kept hail is filed as it came, still sealed to the station, and sealed again under the Lantern's hold key, in a list of at most five hundred; nothing on disk shows a voice or a sender. lantern --open-hails <folder> opens them into the keeper's chosen folder and forgets them. Unit tested: the folder holds neither the voice nor the name, and the hail opens once, whole. (d67efa9)
+
+**C13. /player/ mirror: broken home links, no redirect, no hardening headers.** (low) Fixed: /player redirects to /player/, and a copy of the set served anywhere but hostis.black/pyrateradio/listen/ points its links to the landing at hostis.black/pyrateradio/ rather than at the Lantern's own root. The mirror already sent nosniff, no-referrer and frame-ancestors (P-batch). (pending)
+
+**C28. No CSP, no Referrer-Policy, inline script in head.** (medium) Fixed: The Lantern's page now loads its script from /listen.js and is served with a strict policy (scripts from the Lantern only, nothing inline, no plugins, no forms sent anywhere, framed only by itself), no referrer and nosniff. The browser set, on GitHub Pages, carries its policy in the page: its own scripts, the one embed line by its hash, wasm compiled, connections out only over TLS (a loopback relay in test builds alone), and no referrer. Chromium played through both decoders under it with nothing refused. (pending)

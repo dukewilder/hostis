@@ -29,6 +29,10 @@ use tokio::sync::broadcast;
 use crate::{Inner, now_ms, say};
 
 const PAGE: &str = include_str!("web/listen.html");
+const PAGE_JS: &str = include_str!("web/listen.js");
+/// The listener page loads only its own script, pictures and sound from this Lantern; it runs
+/// nothing inline and sends no referrer.
+const PAGE_CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self'; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'";
 /// How far ahead of the hour the encoder runs. Browsers buffer the rest.
 const LEAD_MS: u64 = 4_000;
 /// Listeners one gangway serves at once, and stations it streams at once.
@@ -72,13 +76,15 @@ pub async fn serve(inner: Arc<Inner>, addr: SocketAddr, every_station: bool) -> 
         making: Arc::new(Mutex::new(HashMap::new())),
     };
     let app = Router::new()
-        .route("/", get(|| async { Html(PAGE) }))
+        .route("/", get(|| async { ([(header::CONTENT_SECURITY_POLICY, PAGE_CSP), (header::REFERRER_POLICY, "no-referrer"), (header::X_CONTENT_TYPE_OPTIONS, "nosniff")], Html(PAGE)) }))
+        .route("/listen.js", get(|| async { ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8"), (header::X_CONTENT_TYPE_OPTIONS, "nosniff"), (header::CACHE_CONTROL, "max-age=600")], PAGE_JS) }))
         .route("/log.json", get(log))
         .route("/now/{id}", get(now))
         .route("/listen/{id}", get(listen))
         .route("/art/{hash}", get(art))
         .route("/brand/{name}", get(brand))
         .route("/feed/{id}", get(feed))
+        .route("/player", get(|| async { axum::response::Redirect::permanent("/player/") }))
         .route("/player/", get(|| async { player(String::from("index.html")).await }))
         .route("/player/{*path}", get(|Path(p): Path<String>| async move { player(p).await }))
         .route("/episode/{id}/{track}", get(episode))
