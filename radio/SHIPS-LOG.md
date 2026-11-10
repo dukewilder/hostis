@@ -139,3 +139,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - A Lantern's web listener reconnects by itself when its stream breaks.
 - A browser tab whose node faults says so and comes back aboard by itself, once.
 - The browser set says what it keeps and can forget all of it in one press.
+- Browser playback holds up on iPads and through interruptions, a hidden tab keeps a minute and more queued, and the chart, harbour memory and debug hook are tidied.

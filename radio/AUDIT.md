@@ -33,8 +33,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
 
-- **C34** (medium) Background and Safari playback: iPad detection, interruptions, meter, hidden tab buffer. `browser/www/app.js:100-111`
-- **C43** (low) Station chart, harbour merge and debug hook small defects. `browser/www/app.js:26-31`
 ### Track A and B: the phone app, its Android shell and the FFI
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
@@ -265,4 +263,8 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **C25. Wasm traps are unrecoverable. `Cargo.toml `[profile.web] panic = "abort"** (low) Fixed: The node in the tab still stops dead on a fault, by design, but the tab now notices (a trap thrown in the player loop, or anywhere as an error or a rejection), stops cleanly, says so, and comes back aboard once by itself on the same station (never putting a pocket's id in the address bar); a second trap within five minutes asks for a reload instead of looping. Tested with a simulated trap. (8418d64)
 
-**C29. Storage and URL inventory (what ties a visit to the next, and what stays in history).** (medium) Fixed: The inventory is now on the page: under Your colours the set says what this browser keeps (switches, marooned stations, harbours met, name and mutes, the secret each room's voice is drawn from, pocket invitations), that none of it is sent, and that the address bar holds only a public station. FORGET THIS BROWSER clears every one of them, the session's own note included, and the tab comes back a stranger: a new voice in every room and no pockets. Tested in Chromium. (pending)
+**C29. Storage and URL inventory (what ties a visit to the next, and what stays in history).** (medium) Fixed: The inventory is now on the page: under Your colours the set says what this browser keeps (switches, marooned stations, harbours met, name and mutes, the secret each room's voice is drawn from, pocket invitations), that none of it is sent, and that the address bar holds only a public station. FORGET THIS BROWSER clears every one of them, the session's own note included, and the tab comes back a stranger: a new voice in every room and no pockets. Tested in Chromium. (56b62a0)
+
+**C34. Background and Safari playback: iPad detection, interruptions, meter, hidden tab buffer.** (medium) Fixed: An iPad, whose Safari calls itself a Mac, is now told by its touch screen and gets the lock-screen path; a call or another app taking the sound is followed by a resume when it is given back, or when the tab comes back into view; the lock-screen audio element restarts if the system pauses it; the meter stays wired on the fallback path; and a hidden tab keeps more than a minute queued, so a browser that wakes it once a minute never lets it run dry. The hidden-tab buffer is tested in Chromium (13.8 s in view, 80 s hidden); the Apple paths wait on a real iPhone (brief, section 8). (pending)
+
+**C43. Station chart, harbour merge and debug hook small defects.** (low) Fixed: Remembered harbours are checked for shape, this build's first, and capped at twenty-four; the chart keeps to the embedded set's stations, loads its map once however often the list redraws, and its dots answer Space as well as Enter; the debug tap makes one stream, not one per call, and returns nothing before the sound starts. (pending)
