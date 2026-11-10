@@ -5,6 +5,7 @@
 
 pub mod art;
 mod chat;
+mod flock;
 pub mod hop;
 pub mod trust;
 pub mod clockfix;
@@ -188,6 +189,12 @@ pub struct Inner {
     gossip: GossipNet,
     /// Station chatter this node has joined, held in memory only.
     chats: Mutex<HashMap<StationId, chat::Room>>,
+    /// Flock: the code this phone hosts under, or the host it follows and the code.
+    flock_host: Mutex<Option<[u8; 8]>>,
+    flock_with: Mutex<Option<(EndpointId, [u8; 8])>>,
+    flock_offset: std::sync::atomic::AtomicI64,
+    flock_trim: std::sync::atomic::AtomicI64,
+    flock_rtt: std::sync::atomic::AtomicU64,
     tuned: Mutex<Option<Tuned>>,
     jobs: Mutex<HashMap<u64, String>>,
     pow: Mutex<HashMap<StationId, u64>>,
@@ -279,6 +286,7 @@ impl Inner {
                 Response::Chunk(if own { store.get_chunk(&hash) } else { None }.or_else(|| self.art_mem.lock().unwrap().get(&hash)))
             }
             Request::SealedChunk { name } => Response::Sealed(store.get_sealed(&name)),
+            Request::Flock { code } => self.flock_answer(&code),
             Request::Hop(_) => Response::Hop(vec![]),
             Request::Chatter { station } => Response::Chatter(self.chatter_for(&station)),
         }
@@ -709,6 +717,21 @@ impl Inner {
         for g in outgoing {
             self.broadcast(&g).await;
         }
+    }
+
+    /// Tunes to a station, as the dial does: used when a flock follows its host.
+    pub(crate) fn tune_to(self: &Arc<Self>, st: StationId) -> Result<()> {
+        if self.refused().contains(&st) {
+            anyhow::bail!("marooned");
+        }
+        *self.tuned.lock().unwrap() = Some(Tuned { station: st, since: now_ms(), playhead: None });
+        #[cfg(feature = "playback")]
+        playout::reset(self);
+        let i2 = self.clone();
+        self.handle.spawn(async move {
+            let _ = i2.sync_log(st).await;
+        });
+        Ok(())
     }
 
     /// Lanterns keep a whole copy of every station they carry.
@@ -1180,6 +1203,11 @@ impl Node {
             gossip_tx: Mutex::new(None),
             gossip: gossip.clone(),
             chats: Mutex::new(HashMap::new()),
+            flock_host: Mutex::new(None),
+            flock_with: Mutex::new(None),
+            flock_offset: std::sync::atomic::AtomicI64::new(0),
+            flock_trim: std::sync::atomic::AtomicI64::new(0),
+            flock_rtt: std::sync::atomic::AtomicU64::new(0),
             tuned: Mutex::new(None),
             jobs: Mutex::new(HashMap::new()),
             pow: Mutex::new(HashMap::new()),
@@ -1435,6 +1463,7 @@ impl Node {
         let station = || -> Result<StationId> { Ok(StationId::from_hex(req["station"].as_str().context("station")?)?) };
         let inner = &self.inner;
         match cmd {
+            "flock_host" | "flock_join" | "flock_leave" | "flock_trim" | "flock_status" => inner.flock_call(cmd, req),
             "chat_join" | "chat_leave" | "chat_read" | "chat_send" | "chat_hail_open" => {
                 let st = station()?;
                 inner.chat_call(cmd, st, req)
@@ -1981,7 +2010,7 @@ mod playout {
             if st.station != Some(station) {
                 st = State { station: Some(station), playhead: None, track: None, decoder: None, live_seq: None };
             }
-            let now = now_ms();
+            let now = inner.play_now();
             if now.saturating_sub(last_sync) > if st.live_seq.is_some() { 2_500 } else { 8_000 } {
                 last_sync = now;
                 let _ = inner.sync_log(station).await;
@@ -2011,7 +2040,7 @@ mod playout {
             let mut guard = 0;
             while queued_ms(&inner) < AHEAD_MS && guard < 4 {
                 guard += 1;
-                let now = now_ms();
+                let now = inner.play_now();
                 if let Some(tail) = live_tail(&archive, now) {
                     // ON AIR: walk the live chunks, starting two back for a cushion.
                     let next = match st.live_seq {
@@ -2060,7 +2089,7 @@ mod playout {
                 let Ok(pcm) = dec.decode(&bytes) else { break };
                 // A first chunk starts where the hour has reached by the time it lands.
                 let skip = if st.playhead.is_none() {
-                    np.chunk_offset_ms + now_ms().saturating_sub(at.min(now_ms()))
+                    np.chunk_offset_ms + inner.play_now().saturating_sub(at.min(inner.play_now()))
                 } else {
                     np.chunk_offset_ms
                 };

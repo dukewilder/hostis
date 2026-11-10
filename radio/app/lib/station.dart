@@ -1672,3 +1672,102 @@ class _NumbersKitState extends State<NumbersKit> {
         ]),
       );
 }
+
+// ---------------------------------------------------------------------------------------
+// Flock: phones in one room playing as one. One hosts and shows a code; the others scan it
+// with their cameras and fall into step with the host, on the host's station.
+
+class FlockSheet extends StatefulWidget {
+  const FlockSheet({super.key});
+  @override
+  State<FlockSheet> createState() => _FlockSheetState();
+}
+
+class _FlockSheetState extends State<FlockSheet> {
+  Map st = {};
+  String? link;
+  final paste = TextEditingController();
+  Timer? tick;
+
+  @override
+  void initState() {
+    super.initState();
+    read();
+    tick = Timer.periodic(const Duration(seconds: 2), (_) => read());
+  }
+
+  @override
+  void dispose() {
+    tick?.cancel();
+    super.dispose();
+  }
+
+  void read() {
+    final r = Native.call({'cmd': 'flock_status'});
+    if (mounted && r is Map) setState(() => st = r);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final trim = (st['trim_ms'] as num?)?.toDouble() ?? 0;
+    final q = link == null ? null : Native.call({'cmd': 'qr', 'text': link});
+    return Padding(
+      padding: EdgeInsets.fromLTRB(24, 20, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          heading('A FLOCK'),
+          note('Phones in one room playing as one. Host here, and the others scan the code with their cameras: they set their clocks to this phone and play its station in step.'),
+          const SizedBox(height: 12),
+          if (st['hosting'] == true) ...[
+            if (q is Map)
+              Center(
+                child: Container(
+                  color: const Color(0xFFFBF8F1),
+                  width: 220,
+                  height: 220,
+                  child: CustomPaint(painter: QrPainter((q['size'] as num).toInt(), q['bits'] as String, const Color(0xFF0A0A0A))),
+                ),
+              ),
+            const SizedBox(height: 10),
+            Wrap(spacing: 6, runSpacing: 6, children: [
+              if (link != null) pyrateButton('SHARE THE LINK', () => ship.invokeMethod('share_text', {'text': 'Join my flock on Pyrate Radio: $link'})),
+              pyrateButton('END THE FLOCK', () {
+                Native.call({'cmd': 'flock_leave'});
+                setState(() => link = null);
+              }),
+            ]),
+          ] else if (st['joined'] == true) ...[
+            note('In the flock. The host answers in ${st['rtt_ms']} ms; this phone keeps to its clock.'),
+            const SizedBox(height: 8),
+            pyrateButton('LEAVE THE FLOCK', () => Native.call({'cmd': 'flock_leave'})),
+          ] else ...[
+            pyrateButton('HOST A FLOCK', () {
+              final r = Native.call({'cmd': 'flock_host'});
+              if (r is Map) setState(() => link = r['link'] as String?);
+            }),
+            const SizedBox(height: 12),
+            TextField(controller: paste, style: mono(11, color: bone), decoration: pyrateField('Or paste a flock link')),
+            const SizedBox(height: 8),
+            pyrateButton('JOIN', () {
+              final r = Native.call({'cmd': 'flock_join', 'link': paste.text.trim()});
+              if (r is Map && r['error'] != null) toast(context, r['error']);
+            }),
+          ],
+          const SizedBox(height: 18),
+          Text('THIS PHONE\'S SPEAKER', style: carved(10, color: boneFaint)),
+          note('If this phone sounds ahead of the others or behind them, as a Bluetooth speaker does, move it until they match.'),
+          Slider(
+            value: trim.clamp(-500, 500),
+            min: -500, max: 500, divisions: 100, activeColor: bone, inactiveColor: boneGhost,
+            label: '${trim.round()} ms',
+            onChanged: (v) {
+              Native.call({'cmd': 'flock_trim', 'ms': v.round()});
+              read();
+            },
+          ),
+          Text(trim == 0 ? 'As it is' : trim > 0 ? '${trim.round()} ms earlier' : '${(-trim).round()} ms later', style: mono(10, color: boneFaint)),
+        ]),
+      ),
+    );
+  }
+}

@@ -178,6 +178,10 @@ class Tuner extends ChangeNotifier {
     if (_ticks % 4 == 2) {
       // A station link or a bell's tap, waiting to be followed.
       _service.invokeMethod<String>('take_link').then((id) {
+        if (id != null && id.startsWith('flock=')) {
+          Native.call({'cmd': 'flock_join', 'link': id});
+          return;
+        }
         if (id != null) {
           firstTuneDone = true;
           pendingLink = id;
@@ -531,6 +535,7 @@ class _StationFace extends StatelessWidget {
           for (final (label, act) in <(String, VoidCallback)>[
             ('THE PAGE', () => openPage(context, s, radio)),
             ('WATCH BILL', () => pyrateSheet(context, WatchBill(station: s))),
+            ('FLOCK', () => pyrateSheet(context, const FlockSheet())),
             if (isTuned) ('TAPE IT', () => tapeIt(context)),
             ('PASS IT ON', () => shareStation(s)),
             if ((s['tip'] ?? '').toString().isNotEmpty) ('TIP', () => tipStation(context, s['tip'], name: (s['name'] ?? 'the station').toString())),
