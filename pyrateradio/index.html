@@ -306,7 +306,7 @@ html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doo
 // A station link: hostis.black/pyrateradio/#<station id>. One of HOSTIS's own plays here, in
 // the browser or the app. Anything else (another station, an invitation, a flock) goes straight
 // on to the open player before this page reads it: the part after the # never reaches a server.
-(function(){var H=["f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"],P=["https://bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm.ipfs.dweb.link/", "https://bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm.ipfs.w3s.link/", "https://ipfs.io/ipfs/bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm/"],h=(location.hash||'').toLowerCase(),id=h.slice(1);
+(function(){var H=["f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"],P=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm.ipfs.inbrowser.link/", "https://bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm/"],h=(location.hash||'').toLowerCase(),id=h.slice(1);
 if(/pocket=|flock=/.test(h)||(/^[0-9a-f]{64}$/.test(id)&&H.indexOf(id)<0)){history.replaceState(null,'',location.pathname);
 document.documentElement.className+=' leaving';var go=function(u){location.replace(u+h)},done=0;
 P.forEach(function(u){fetch(u+'favicon.png',{mode:'no-cors',cache:'no-store'}).then(function(){if(!done++)go(u)},function(){})});
@@ -315,7 +315,7 @@ if(!/^[0-9a-f]{64}$/.test(id))return;var b=document.getElementById('passed');
 var app=/Android/.test(navigator.userAgent)?' <a href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url='+encodeURIComponent(new URL('listen/#'+id,location.href).href)+';end">Open in the app</a>':'';
 document.getElementById('radio').src='listen/?embed#'+id;
 b.innerHTML='Someone passed you a HOSTIS station. It is on the dial below.'+(app?'<br>'+app:'');b.hidden=false})();
-document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm.ipfs.dweb.link/", "https://bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm.ipfs.w3s.link/", "https://ipfs.io/ipfs/bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm/"][0]});
+document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm.ipfs.inbrowser.link/", "https://bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm/"][0]});
 </script>
 
 <nav class="doors">
