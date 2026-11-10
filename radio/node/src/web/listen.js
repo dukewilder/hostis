@@ -7,10 +7,10 @@ function art(h){const c=$('cover');if(h){if(c.dataset.h!==h){c.src='/art/'+h+'.j
 // A stream that ends or breaks while the listener still wants it (the tower came down over
 // dead air, the network dropped) is asked for again, a little later each time.
 let retry=null,tries=0;
-function tune(s){clearTimeout(retry);show(s);a.src='/listen/'+s.id+'.mp3?'+Date.now();a.play().then(()=>{playing=true;tries=0;$('go').textContent='■\uFE0E STOP'}).catch(()=>{if(!playing)$('go').textContent='▶\uFE0E LISTEN'})}
+function tune(s){clearTimeout(retry);show(s);a.src='/listen/'+s.id+'.mp3?'+Date.now();a.play().then(()=>{playing=true;tries=0;$('go').textContent='■\uFE0E Stop'}).catch(()=>{if(!playing)$('go').textContent='▶\uFE0E Listen'})}
 function again(){if(!playing||!cur)return;clearTimeout(retry);$('np').textContent='Reconnecting';retry=setTimeout(()=>playing&&tune(cur),Math.min(30000,2000*2**tries++))}
 a.addEventListener('ended',again);a.addEventListener('error',()=>a.getAttribute('src')&&again());
-$('go').onclick=()=>{if(playing){clearTimeout(retry);playing=false;a.pause();a.removeAttribute('src');a.load();$('go').textContent='▶\uFE0E LISTEN'}else if(cur){playing=true;tune(cur)}};
+$('go').onclick=()=>{if(playing){clearTimeout(retry);playing=false;a.pause();a.removeAttribute('src');a.load();$('go').textContent='▶\uFE0E Listen'}else if(cur){playing=true;tune(cur)}};
 async function now(){if(!cur)return;try{const n=await (await fetch('/now/'+cur.id)).json();$('np').textContent=n.live?'Live':(n.title||'');art(n.art||cur.cover);$('by').textContent=n.by||''}catch(e){}}
 async function log(){try{stations=await (await fetch('/log.json')).json()}catch(e){return}
 const rows=$('rows');rows.innerHTML='';for(const s of stations){const r=document.createElement('div');r.className='row';r.dataset.id=s.id;r.innerHTML='<div class="mini"></div><div class="meta"><div class="name"></div><div class="cs"></div><div class="about"></div></div><div class="count"></div>';if(s.cover){r.querySelector('.mini').classList.add('pic');r.querySelector('.mini').innerHTML='<img alt="" src="/art/'+s.cover+'.jpg">'}else flag(r.querySelector('.mini'),s.id,s.live);r.querySelector('.name').textContent=s.name+(s.live?'  · ON AIR':'');r.querySelector('.cs').textContent=s.call_sign;r.querySelector('.about').textContent=s.about||'';r.querySelector('.count').innerHTML=s.aboard+'<small>ABOARD</small>';r.onclick=()=>tune(s);rows.appendChild(r)}

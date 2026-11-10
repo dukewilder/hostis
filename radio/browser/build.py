@@ -1,11 +1,29 @@
-# Builds browser/www: the radio as a static page any host can serve. Fonts and look come
-# from the Lantern's web listener, so the two stay one design.
+# Builds browser/www: the radio as a static page any host can serve, on the HOSTIS sheet.
 import re, os, shutil, subprocess, sys, hashlib
 R = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 W = f"{R}/browser/www"
-src = open(f"{R}/node/src/web/listen.html", encoding="utf-8").read()
-head = src[:src.index("</style>")]
-head = head.replace('href="/brand/mark.png"', 'href="mark.png"').replace("<title>Pyrate Radio</title>", "<title>Pyrate Radio</title>\n<meta name=\"description\" content=\"Takedown-resistant radio under HOSTIS colours. Plays in the browser, peer to peer.\">")
+sys.path.insert(0, f"{R}/brand")
+import fonts
+# The page is one more HOSTIS page: the site's faces and sheet (brand/), then the set's own.
+head = """<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pyrate Radio · Listen · HOSTIS</title>
+<meta name="description" content="Takedown-resistant radio under HOSTIS colours. Plays in the browser, peer to peer.">
+<meta name="theme-color" content="#030303">
+<meta name="color-scheme" content="dark">
+<meta property="og:title" content="Pyrate Radio · Listen">
+<meta property="og:description" content="Every station on the Log, played in the browser from whoever carries it.">
+<meta property="og:site_name" content="HOSTIS">
+<meta property="og:image" content="https://hostis.black/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@hostis_black">
+<link rel="icon" type="image/png" sizes="48x48" href="favicon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<style>
+""" + fonts.faces() + "\n" + fonts.sheet()
 extra = "\n" + open(f"{R}/browser/player.css", encoding="utf-8").read()
 body = open(f"{R}/browser/body.html", encoding="utf-8").read()
 js = open(f"{W}/app.js", encoding="utf-8").read()
@@ -48,6 +66,6 @@ open(f"{dist}/pkg/pyrate_browser.js", "w", encoding="utf-8").write(glue.replace(
 shutil.copy(f"{W}/pkg/pyrate_browser_bg.wasm", f"{dist}/pkg/pyrate_browser_bg.{v}.wasm")
 shutil.copy(f"{W}/opus-decoder.min.js", dist)
 shutil.copy(f"{W}/chart.json", dist)
-shutil.copy(f"{R}/node/src/web/wordmark.png", dist)
-shutil.copy(f"{R}/node/src/web/mark.png", dist)
+for f in ["favicon.png", "apple-touch-icon.png"]:
+    shutil.copy(f"{R}/../{f}", dist)
 print("built", v)

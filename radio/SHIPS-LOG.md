@@ -149,3 +149,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - SCUTTLE: one press makes everything the radio keeps on a phone unreadable at once and closes the app; a Lantern has --scuttle. App 0.8.3 (build 16) carries it with everything since 0.8.2, waiting on Dylan's Android key.
 - Distribution: an update is checked against its signed hash every time before it is offered, and a release needs two different keys however the key list is written.
 - App 0.8.4 (build 17): everything above, the update check included; it supersedes 0.8.3 and waits on Dylan's Android key.
+- One more HOSTIS page: the landing, the browser set and a Lantern's page now wear the HOSTIS bar, masthead, divider, section heads, grain and footer, in the site's own faces and sheet. The set is redrawn as a receiver, the radio's own wordmark retires, and the landing's set no longer leaves a gap under it on a phone.

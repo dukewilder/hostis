@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#030303">
+<meta name="color-scheme" content="dark">
+<title>Pyrate Radio · A Lantern</title>
+<link rel="icon" type="image/png" href="/brand/skull.png">
+<link rel="apple-touch-icon" href="/brand/skull.png">
+<style>
+/*FONTS*/
+/*HOSTIS*/
+/* A Lantern's own page: the HOSTIS sheet, one station on the set and the stations it raises. */
+body{font-size:18px;line-height:1.7}
+button{font:inherit}
+.top{padding:46px 18px 26px}
+.top .mh-title{font-size:clamp(32px,6.4vw,64px)}
+main{max-width:720px;margin:0 auto;padding:0 18px}
+.set{position:relative;isolation:isolate;overflow:hidden;text-align:center;padding:1.6rem 1.4rem 1.8rem;border:1px solid var(--line);background:linear-gradient(180deg,var(--panel2),var(--panel) 40%,#070707)}
+.banner{position:absolute;inset:0 0 auto 0;height:260px;background-size:cover;background-position:center;opacity:.22;filter:grayscale(1);z-index:-1;-webkit-mask-image:linear-gradient(to bottom,#000,transparent);mask-image:linear-gradient(to bottom,#000,transparent)}
+.cover{display:block;width:min(220px,58vw);aspect-ratio:1;object-fit:cover;margin:0 auto 1.2rem;border:1px solid var(--line)}
+.flag{display:inline-grid;grid-template-columns:repeat(9,1fr);gap:0 .45em;font-family:var(--mono);font-size:.8rem;line-height:1.15;padding:.9rem 1.1rem;border:1px solid var(--line);margin:0 0 1.2rem;background:var(--black)}
+.flag.live{border-color:var(--redup)}.flag span{color:rgba(237,228,206,.1)}.flag b{color:var(--ink);font-weight:400}
+.set h1{font-family:var(--sc);font-weight:400;font-size:clamp(1.9rem,5vw,2.8rem);letter-spacing:.03em;line-height:1.05;margin:0}
+.cs{font:400 .72rem var(--mono);letter-spacing:.14em;color:var(--dim);margin:.4rem 0 1rem}
+.np{font-style:italic;color:var(--bonedim);font-size:1.3rem;min-height:1.5em}
+.by{font:600 .7rem var(--carved);letter-spacing:.22em;text-transform:uppercase;color:var(--dim);min-height:1.2em}
+#go{margin-top:1.3rem;min-height:52px;padding:.8rem 1.7rem;color:var(--ink);border:1px solid var(--red);background:rgba(197,40,40,.08);font:400 1.15rem var(--sc);letter-spacing:.06em;cursor:pointer;transition:background .18s,border-color .18s}
+#go:hover{background:rgba(197,40,40,.18);border-color:var(--redup)}
+.elsewhere{max-width:30rem;margin:0 auto 1.4rem;padding:1rem 1.2rem;border:1px solid var(--red);background:rgba(197,40,40,.055);font-style:italic;color:var(--bonedim)}
+.elsewhere a{font:400 .7rem var(--mono);font-style:normal;letter-spacing:.13em;border-bottom:1px solid var(--faint)}
+.log{padding:0 0 1rem}
+.sechead{margin-top:3rem}
+.fine{color:var(--dim);font-style:italic;font-size:1rem;line-height:1.6;text-align:center;margin:0 0 1rem}
+.fine a{border-bottom:1px solid var(--faint)}.fine a:hover{border-color:var(--red)}
+.row{display:flex;align-items:center;gap:1rem;padding:.85rem .5rem;border-top:1px solid var(--line-soft);cursor:pointer;transition:background .15s}
+.row:last-child{border-bottom:1px solid var(--line-soft)}
+.row:hover{background:rgba(237,228,206,.025)}.row.on{box-shadow:inset 2px 0 0 var(--red)}
+.row .meta{flex:1;min-width:0}.name{font:400 1.15rem var(--sc);letter-spacing:.02em;color:var(--bonedim)}
+.row:hover .name,.row.on .name{color:var(--ink)}
+.row .cs{margin:.1rem 0 0;font-size:.62rem;color:var(--faint)}
+.row .about{font-style:italic;color:var(--dim);font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.count{font:400 .95rem var(--mono);text-align:right}.count small{display:block;font-size:.55rem;letter-spacing:.2em;color:var(--faint)}
+.mini{display:grid;grid-template-columns:repeat(9,1fr);font-family:var(--mono);font-size:.38rem;line-height:1.1;padding:.3rem .35rem;border:1px solid var(--line);flex:0 0 auto}
+.mini span{color:rgba(237,228,206,.1)}.mini b{color:var(--ink);font-weight:400}.mini.live{border-color:var(--redup)}
+.mini.pic{display:block;padding:0}.mini img{width:52px;height:52px;object-fit:cover;display:block}
+pre{white-space:pre-wrap;word-break:break-all;font:400 .7rem var(--mono);color:var(--dim);border:1px solid var(--line);background:var(--panel);padding:.8rem;user-select:all}
+code{font:400 .85em var(--mono);color:var(--ink)}
+.air{display:inline-block;border:1px solid var(--redup);color:var(--redup);font:400 10px var(--mono);letter-spacing:.3em;padding:.15rem .6rem;margin-bottom:.8rem}
+footer .f-host{margin:0 0 1rem;font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<nav class="flagbar" aria-label="HOSTIS"><a class="fb-mark" href="https://hostis.black/"><span class="sk" aria-hidden="true">&#9760;&#xFE0E;</span>HOSTIS</a></nav>
+<header class="masthead top">
+<p class="mh-title"><a href="https://hostis.black/pyrateradio/">Pyrate Radio</a></p>
+<p class="mh-sub">from a Lantern &#183; the stations this one raises</p>
+</header>
+<main id="main">
+<section class="set" aria-label="The radio">
+<div id="banner" class="banner"></div>
+<div id="elsewhere" class="elsewhere" hidden></div>
+<img id="cover" class="cover" alt="" hidden>
+<div id="flag" class="flag"></div>
+<div id="air"></div>
+<h1 id="name">Searching the Log</h1>
+<div id="cs" class="cs"></div>
+<div id="np" class="np" aria-live="polite"></div>
+<div id="by" class="by"></div>
+<button id="go" hidden>▶︎ Listen</button>
+<audio id="a" preload="none"></audio>
+</section>
+<section class="log">
+<div class="sechead"><h2>On This Lantern</h2><span class="cap">the stations it raises</span></div>
+<p class="fine">Hundreds more are on the air, and the app hears them all.</p>
+<div id="rows"></div>
+<div class="sechead"><h2>Hear Every Station</h2><span class="cap">no store &#183; no account &#183; no server</span></div>
+<p class="fine">Pyrate Radio is an app with no store, no account and no server. Every phone that plays it carries the stations it hears, so nothing on the air can be taken down from one place. <a href="https://hostis.black/pyrateradio/">Take the set</a>.</p>
+<div class="sechead"><h2>Raise Your Own</h2><span class="cap">a station, or a page like this one</span></div>
+<p class="fine">Open the app, go to Colours, name a station and drop recordings in. It plays all day and all night. To put your stations on your own site the way this page does, run a Lantern with <code>--http</code> and point a name at it. Every station also streams to any web page with one line:</p>
+<pre id="embed"></pre>
+</section>
+</main>
+<footer>
+<p class="f-host">a Lantern under HOSTIS colours</p>
+<p class="f-copy">no rights reserved &#183; all copies welcome</p>
+<p class="f-source"><a href="https://github.com/dukewilder/hostis" target="_blank" rel="noopener noreferrer">source code</a></p>
+</footer>
+<script src="/listen.js"></script>
+</body>
+</html>

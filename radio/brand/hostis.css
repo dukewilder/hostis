@@ -1,0 +1,108 @@
+/* The HOSTIS sheet, as account.html and reprints.html draw it: the flagship bar, the
+   masthead, the divider, carved section heads with mono captions, film grain and a
+   vignette, square hairline controls and the shared footer. Every radio page is built on
+   this, so the radio reads as one more HOSTIS page. Red is the site's accent: selection,
+   focus, the divider's diamond, the + of a fold, the hover. No rights reserved. */
+:root{
+  --black:#030303;--panel:#0a0a0a;--panel2:#0f0f0f;
+  --ink:#ede4ce;--bonedim:rgba(237,228,206,.82);--soft:rgba(237,228,206,.7);--dim:rgba(237,228,206,.5);
+  --faint:rgba(237,228,206,.34);--ghost:rgba(237,228,206,.16);
+  --red:#c52828;--redup:#ed5555;--blood:#7d1818;--blooddeep:#5a1010;
+  --line:rgba(237,228,206,.14);--line-soft:rgba(237,228,206,.07);
+  --serif:'IM Fell English',Georgia,serif;--sc:'IM Fell DW Pica SC',Georgia,serif;
+  --carved:'Cinzel',Georgia,serif;--mono:'JetBrains Mono','Courier New',monospace;
+  --skull:'Noto Sans Symbols 2','Apple Symbols','Segoe UI Symbol',var(--serif);
+  /* older names, kept for anything that still asks for them */
+  --bone:var(--ink);--bone-dim:var(--bonedim);--bone-faint:var(--dim);--bone-ghost:var(--ghost);--blood-bright:var(--redup)
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%;background:var(--black);color-scheme:dark}
+body{margin:0;background:var(--black);color:var(--ink);font-family:var(--serif);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+::selection{background:var(--red);color:var(--black)}
+::-webkit-scrollbar{height:9px;width:9px}
+::-webkit-scrollbar-track{background:var(--black)}
+::-webkit-scrollbar-thumb{background:#221f18;border:2px solid var(--black)}
+::-webkit-scrollbar-thumb:hover{background:var(--red)}
+:focus-visible{outline:1px solid var(--red);outline-offset:2px}
+button,input,select,textarea{font-family:inherit}
+a{color:var(--ink);text-decoration:none}
+a:hover{color:var(--redup)}
+[hidden]{display:none!important}
+p,li{text-wrap:pretty}h1,h2,h3{text-wrap:balance}
+
+/* film grain and vignette, as on the flagship */
+body::before{content:"";position:fixed;inset:0;z-index:98;pointer-events:none;opacity:.055;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>")}
+body::after{content:"";position:fixed;inset:0;z-index:97;pointer-events:none;opacity:.55;
+  background:repeating-linear-gradient(0deg,rgba(0,0,0,.06) 0 1px,transparent 1px 3px),radial-gradient(120% 90% at 50% 12%,transparent 55%,rgba(0,0,0,.4) 100%)}
+
+.skip-link{position:absolute;left:-9999px;top:0;z-index:100;padding:10px 16px;background:var(--ink);color:var(--black);font:400 12px var(--mono);letter-spacing:.14em}
+.skip-link:focus{left:8px;top:8px;color:var(--black)}
+
+/* the flagship bar */
+.flagbar{display:flex;justify-content:center;align-items:center;padding:11px 16px;border-bottom:1px solid var(--line-soft)}
+.fb-mark{display:inline-flex;align-items:center;font-family:var(--sc);font-size:14px;letter-spacing:.3em;color:var(--ink)}
+.fb-mark .sk{font-family:var(--skull);font-size:30px;line-height:1;margin-right:12px;color:var(--ink);transition:color .15s}
+.fb-mark:hover{color:var(--ink)}.fb-mark:hover .sk{color:var(--redup)}
+
+/* the masthead */
+.masthead{text-align:center;padding:64px 18px 30px}
+.masthead h1,.mh-title{font-family:var(--sc);font-weight:400;font-size:clamp(40px,8.4vw,86px);line-height:.98;letter-spacing:.09em;margin:0 0 6px}
+.mh-sub{font:italic 400 clamp(15px,3vw,19px) var(--serif);letter-spacing:.1em;color:var(--soft);margin:10px 0 0}
+.mh-sub a{color:inherit;border-bottom:1px solid var(--ghost)}.mh-sub a:hover{color:var(--redup);border-color:var(--red)}
+.mh-desc{max-width:620px;margin:30px auto 0;font-size:16.5px;line-height:1.65;color:var(--soft)}
+
+/* the divider, as on hostis.black */
+.divider{display:flex;align-items:center;justify-content:center;gap:1.5rem;margin:2.2rem auto 2rem;color:var(--faint);max-width:520px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(237,228,206,.5),transparent)}
+.divider-glyph{width:7px;height:7px;background:var(--red);transform:rotate(45deg);display:inline-block;flex-shrink:0}
+
+/* section heads: carved, with a mono caption under */
+.sechead{text-align:center;margin:0 2px 26px}
+.sechead h2{font-family:var(--carved);font-weight:600;font-size:clamp(18px,3.4vw,26px);letter-spacing:.16em;margin:0;color:var(--ink)}
+.cap{display:block;margin-top:9px;font:400 11px var(--mono);letter-spacing:.2em;color:var(--faint);text-transform:uppercase}
+
+/* controls: square hairlines; the one that matters most carries the blood */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.55rem;min-height:44px;margin:0;padding:.62rem 1.05rem;background:transparent;color:var(--bonedim);
+  border:1px solid var(--ghost);border-radius:0;font:400 .74rem var(--mono);letter-spacing:.13em;text-transform:uppercase;cursor:pointer;text-decoration:none;
+  transition:color .18s,border-color .18s,background .18s}
+.btn:hover{color:var(--black);background:var(--ink);border-color:var(--ink)}
+.btn.on,.btn[aria-pressed="true"]{color:var(--black);background:var(--ink);border-color:var(--ink)}
+.btn.quiet{color:var(--dim);border-color:var(--line-soft)}
+.btn.quiet:hover{color:var(--ink);background:transparent;border-color:var(--red)}
+.btn:disabled{opacity:.45;cursor:default}
+.lead-btn{display:inline-block;max-width:100%;padding:1.05rem 1.25rem;text-decoration:none;color:var(--ink);text-align:left;
+  border:1px solid var(--red);background:rgba(197,40,40,.055);cursor:pointer;transition:background .18s,border-color .18s}
+.lead-btn:hover{background:rgba(197,40,40,.14);border-color:var(--redup);color:var(--ink)}
+.lead-btn .fc-lead{display:block;font-family:var(--sc);font-size:1.12rem;letter-spacing:.05em;color:var(--ink)}
+.lead-btn .fc-sub{display:block;font-family:var(--mono);font-size:.7rem;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin-top:.42rem}
+input[type=text],input:not([type]),textarea,select{background:var(--panel);color:var(--ink);border:1px solid rgba(237,228,206,.24);border-radius:0;font:400 1rem var(--serif);padding:0 .9rem;min-height:44px}
+input::placeholder,textarea::placeholder{color:var(--faint);font-style:italic}
+input:focus,textarea:focus,select:focus{border-color:var(--blood);outline:none}
+select{font:400 12px var(--mono);letter-spacing:.1em;padding:10px 34px 10px 13px;cursor:pointer;-webkit-appearance:none;appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='7'><path d='M0 0l5 7 5-7z' fill='%23ede4ce' opacity='.55'/></svg>");background-repeat:no-repeat;background-position:right 12px center}
+select option{background:var(--panel2);color:var(--ink)}
+input[type=checkbox]{-webkit-appearance:none;appearance:none;width:16px;height:16px;margin:0;border:1px solid rgba(237,228,206,.4);background:var(--black);display:inline-grid;place-content:center;cursor:pointer;flex:0 0 auto}
+input[type=checkbox]::before{content:'';width:7px;height:7px;background:var(--red);transform:rotate(45deg) scale(0);transition:transform .12s}
+input[type=checkbox]:checked{border-color:var(--ink)}input[type=checkbox]:checked::before{transform:rotate(45deg) scale(1)}
+
+/* folds: the + in blood */
+.fold{border:1px solid var(--line);margin-top:6px}
+.fold+.fold{margin-top:-1px}
+.fold summary{cursor:pointer;list-style:none;padding:15px 18px;font:400 1.08rem var(--serif);color:var(--bonedim);transition:color .15s}
+.fold summary::-webkit-details-marker{display:none}
+.fold summary::before{content:"+";display:inline-block;width:20px;font-family:var(--mono);color:var(--red)}
+.fold[open] summary::before{content:"\2212"}
+.fold summary:hover{color:var(--ink)}
+.fold>div,.fold>p{padding:0 18px 18px 38px;margin:0;color:var(--dim);font-size:1.02rem;line-height:1.65}
+.fold a{border-bottom:1px solid var(--faint)}.fold a:hover{border-color:var(--red)}
+
+/* the footer, identical across the HOSTIS pages */
+footer{border-top:1px solid var(--line);margin-top:48px;padding:30px 16px 52px;text-align:center}
+footer .f-contact,footer .f-copy,footer .f-source{margin:1rem 0 0;font-family:var(--mono);font-size:.76rem;letter-spacing:.1em;line-height:1.7;color:rgba(237,228,206,.55);text-transform:none}
+footer .f-contact{margin-top:0}
+footer .f-contact a,footer .f-source a{color:rgba(237,228,206,.82);text-decoration:none;border-bottom:1px solid rgba(237,228,206,.22);transition:color .2s ease,border-color .2s ease}
+footer .f-contact a:hover,footer .f-source a:hover{color:#c52828;border-color:#c52828}
+
+@media (max-width:640px){.masthead{padding-top:56px}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}html{scroll-behavior:auto}}

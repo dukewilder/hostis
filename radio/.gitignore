@@ -5,3 +5,4 @@ browser/www/dist/
 landing/out/
 app/android/build/
 app/android/.kotlin/
+__pycache__/
