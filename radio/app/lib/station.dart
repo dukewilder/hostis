@@ -1761,7 +1761,12 @@ class _FlockSheetState extends State<FlockSheet> {
 
   void read() {
     final r = Native.call({'cmd': 'flock_status'});
-    if (mounted && r is Map) setState(() => st = r);
+    if (mounted && r is Map) {
+      setState(() {
+        st = r;
+        link = r['link'] as String? ?? (r['hosting'] == true ? link : null);
+      });
+    }
   }
 
   @override

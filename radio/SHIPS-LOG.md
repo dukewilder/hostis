@@ -121,3 +121,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - Podcast feeds bring aboard their newest few and then only new episodes, read themselves every few hours on Wi-Fi, and every fetch from the open web goes out under a plain name with timeouts and a size cap and leaves nothing behind.
 - Closing the segment recorder stops the microphone, takes and copies leave the phone once set, recordings are set one at a time, and the programme editor will not save over a programme it failed to read.
 - The dial keeps its station when the Log reorders, and turning it from a link no longer tunes in before the owner says yes.
+- A hosted flock keeps its code when the sheet closes, and clearing the hold or taking a station back answers on the spot.

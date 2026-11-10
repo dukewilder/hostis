@@ -65,9 +65,7 @@ impl Inner {
                 *self.flock_host.lock().unwrap() = Some(code);
                 *self.flock_with.lock().unwrap() = None;
                 self.flock_offset.store(0, Relaxed);
-                let relay = self.endpoint.addr().relay_urls().next().map(|u| u.to_string()).unwrap_or_default();
-                let link = format!("https://hostis.black/pyrateradio/listen/#flock={}@{}~{}", self.endpoint.id(), relay, hex(&code));
-                Ok(json!({ "link": link }))
+                Ok(json!({ "link": self.flock_link(&code) }))
             }
             "flock_join" => {
                 let link = req["link"].as_str().context("link")?;
@@ -109,6 +107,9 @@ impl Inner {
             }
             "flock_status" => Ok(json!({
                 "hosting": self.flock_host.lock().unwrap().is_some(),
+                // The code stays readable for as long as the flock is hosted, so closing the
+                // sheet never strands the room without it.
+                "link": self.flock_host.lock().unwrap().map(|c| self.flock_link(&c)),
                 "joined": self.flock_with.lock().unwrap().is_some(),
                 "offset_ms": self.flock_offset.load(Relaxed),
                 "rtt_ms": self.flock_rtt.load(Relaxed),
@@ -116,6 +117,13 @@ impl Inner {
             })),
             _ => Err(anyhow!("unknown command {cmd}")),
         }
+    }
+}
+
+impl Inner {
+    fn flock_link(&self, code: &[u8; 8]) -> String {
+        let relay = self.endpoint.addr().relay_urls().next().map(|u| u.to_string()).unwrap_or_default();
+        format!("https://hostis.black/pyrateradio/listen/#flock={}@{}~{}", self.endpoint.id(), relay, hex(code))
     }
 }
 
