@@ -37,11 +37,18 @@ InputDecoration pyrateField(String label) => InputDecoration(
       focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: bone)),
     );
 
+/// A small hairline tag, the way the site marks LIVE and PREMIERE.
+Widget tag(String text, Color color) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(border: Border.all(color: color, width: 1)),
+      child: Text(text, style: caps(8, color: color, spacing: 0.18)),
+    );
+
 Widget note(String text) => Text(text, style: serif(14, color: boneFaint, italic: true));
 
 Widget heading(String text, {Color color = bone}) => Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Text(text, style: carved(14, color: color)),
+      child: Text(text, style: TextStyle(fontFamily: 'Cinzel', fontWeight: FontWeight.w600, fontSize: 14, color: color, letterSpacing: 14 * 0.16, height: 1.2)),
     );
 
 Widget pyrateSwitch(bool value, ValueChanged<bool> onChanged, String label) => Row(children: [
@@ -53,8 +60,12 @@ Future<T?> pyrateSheet<T>(BuildContext context, Widget child) => showModalBottom
       context: context,
       isScrollControlled: true,
       backgroundColor: panel,
-      shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
-      builder: (c) => SafeArea(child: ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.of(c).size.height * 0.85), child: child)),
+      shape: const Border(top: BorderSide(color: line, width: 1)),
+      // The sheet's edge wears the site's diamond where a toolkit would put a grab handle.
+      builder: (c) => SafeArea(
+          child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(c).size.height * 0.85),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [const SizedBox(height: 12), const Diamond(size: 5), Flexible(child: child)]))),
     );
 
 void toast(BuildContext context, String text) {
@@ -99,7 +110,8 @@ final Set<String> harbourNames = {};
 List<Widget> seals(Map s, {double size = 9}) => [
       if (isHarbour(s['id'] as String)) ...[
         const SizedBox(width: 8),
-        Image.asset('assets/brand/mark.png', width: size * 1.7, height: size * 1.7, color: bone, colorBlendMode: BlendMode.modulate),
+        // HOSTIS's own stations wear the HOSTIS skull.
+        Text('\u2620\uFE0E', style: TextStyle(fontFamily: 'Skull', fontSize: size * 1.9, color: bone, height: 1)),
       ],
       if (falseColours(s)) ...[
         const SizedBox(width: 8),
@@ -185,8 +197,11 @@ class _LogPageState extends State<LogPage> {
           onTap: onTap,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(border: Border.all(color: on ? bone : boneGhost, width: on ? 0.9 : 0.5)),
-            child: Text(label.toUpperCase(), style: carved(9.5, color: on ? bone : boneFaint, spacing: 0.22)),
+            // The site's filter: a square hairline that turns to bone when it is on.
+            color: on ? bone : Colors.transparent,
+            decoration: null,
+            foregroundDecoration: BoxDecoration(border: Border.all(color: on ? bone : line, width: 1)),
+            child: Text(label.toUpperCase(), style: caps(9.5, color: on ? black : boneDim, spacing: 0.16)),
           ),
         ),
       );
@@ -197,7 +212,7 @@ class _LogPageState extends State<LogPage> {
       context,
       SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Padding(padding: const EdgeInsets.fromLTRB(24, 20, 24, 4), child: Row(children: [Flexible(child: Text(s['name'] ?? '', style: serif(22))), ...seals(s)])),
+          Padding(padding: const EdgeInsets.fromLTRB(24, 20, 24, 4), child: Row(children: [Flexible(child: Text(s['name'] ?? '', style: pica(21, spacing: 0.02))), ...seals(s)])),
           Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 8), child: Text('${s['call_sign']}  ·  Your chart is yours alone. Nothing here leaves this phone.', style: serif(13, color: boneFaint, italic: true))),
           ListTile(
             title: Text(s['kept'] == true ? 'STOP KEEPING' : 'KEEP', style: carved(12)),
@@ -267,7 +282,7 @@ class _LogPageState extends State<LogPage> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 26, 24, 6),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('THE LOG', style: carved(22, spacing: 0.3)),
+            masthead('The Log'),
             const SizedBox(height: 8),
             note('Every station on the air, your kept stations first. Hold a station to keep it, see its watch bill, pass it on or maroon it.'),
             if (radio.carrying > 0)
@@ -316,7 +331,7 @@ class _LogPageState extends State<LogPage> {
                 for (final p in ports) chip(p, port == p, () => setState(() => port = port == p ? null : p)),
               ]),
             const SizedBox(height: 6),
-            const Divider(color: boneGhost, height: 1, thickness: 0.5),
+            const Divider(color: lineSoft, height: 1, thickness: 1),
           ]),
         ),
       ),
@@ -342,24 +357,29 @@ class _LogPageState extends State<LogPage> {
               widget.onTune();
             },
             onLongPress: () => longPress(context, s),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            child: Container(
+              // The station in hand is marked as the site marks a row: a red rule down its edge.
+              decoration: BoxDecoration(
+                color: tuned ? const Color(0x0AC52828) : null,
+                border: tuned ? const Border(left: BorderSide(color: red, width: 2)) : null,
+              ),
+              padding: EdgeInsets.fromLTRB(tuned ? 22 : 24, 14, 24, 14),
               child: Row(children: [
                 StationArt(station: id, hash: s['cover'], width: 52, height: 52, fallback: Flag(id: id, width: 48, live: live)),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Row(children: [
-                      Flexible(child: Text(s['name'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(19, color: tuned ? bone : boneDim))),
-                      if (live) ...[const SizedBox(width: 8), Text('ON AIR', style: carved(9, color: bloodBright, spacing: 0.3))],
-                      if (s['kept'] == true) ...[const SizedBox(width: 8), Text('KEPT', style: carved(9, color: boneDim, spacing: 0.3))],
-                      if (s['pocket'] == true) ...[const SizedBox(width: 8), Text('PRIVATE', style: carved(9, color: boneFaint, spacing: 0.3))],
+                      Flexible(child: Text(s['name'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: pica(18, color: tuned ? bone : boneDim, spacing: 0.02))),
+                      if (live) ...[const SizedBox(width: 8), tag('ON AIR', bloodBright)],
+                      if (s['kept'] == true) ...[const SizedBox(width: 8), tag('KEPT', boneDim)],
+                      if (s['pocket'] == true) ...[const SizedBox(width: 8), tag('PRIVATE', boneFaint)],
                       ...seals(s),
                     ]),
                     const SizedBox(height: 2),
-                    Text(s['call_sign'] ?? '', style: mono(10, color: boneGhost)),
+                    Text(s['call_sign'] ?? '', style: caps(9.5, color: boneGhost, spacing: 0.14)),
                     if (on != null && (on['slot'] ?? '').toString().isNotEmpty)
-                      Text((on['slot'] as String).toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: carved(9, color: boneDim, spacing: 0.25)),
+                      Text((on['slot'] as String).toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: caps(9, color: boneDim, spacing: 0.22)),
                     if (on != null && (on['title'] ?? '').toString().isNotEmpty)
                       Text('Now: ${on['title']}${(on['by'] ?? '').toString().isNotEmpty ? ' · ${on['by']}' : ''}',
                           maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(13, color: boneDim, italic: true))
@@ -369,8 +389,8 @@ class _LogPageState extends State<LogPage> {
                 ),
                 const SizedBox(width: 12),
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('${s['aboard'] ?? 0}', style: mono(16, color: tuned ? bone : boneDim, weight: FontWeight.w700)),
-                  Text('ABOARD', style: carved(8, color: boneGhost, spacing: 0.2)),
+                  Text('${s['aboard'] ?? 0}', style: mono(16, color: tuned ? bone : boneDim)),
+                  Text('ABOARD', style: caps(8, color: boneGhost)),
                 ]),
               ]),
             ),
@@ -1484,7 +1504,7 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
       child: Padding(
         padding: const EdgeInsets.all(40),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('COLOURS', style: carved(16)),
+          Text('Colours', style: pica(24, spacing: 0.06)),
           const SizedBox(height: 14),
           TextField(
             controller: pin,

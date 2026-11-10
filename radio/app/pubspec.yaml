@@ -1,7 +1,7 @@
 name: pyrate
 description: "Pyrate Radio. Every install a station, a carrier and a relay. No rights reserved."
 publish_to: 'none'
-version: 0.8.4+17
+version: 0.8.5+18
 
 environment:
   sdk: ^3.9.0
@@ -25,8 +25,16 @@ flutter:
     - family: Cinzel
       fonts:
         - asset: assets/fonts/Cinzel-Regular.ttf
+        - asset: assets/fonts/Cinzel-SemiBold.ttf
+          weight: 600
         - asset: assets/fonts/Cinzel-Black.ttf
           weight: 900
+    - family: Pica
+      fonts:
+        - asset: assets/fonts/IMFellDWPicaSC-Regular.ttf
+    - family: Skull
+      fonts:
+        - asset: assets/fonts/NotoSansSymbols2-Skull.ttf
     - family: Fell
       fonts:
         - asset: assets/fonts/IMFellEnglish-Regular.ttf

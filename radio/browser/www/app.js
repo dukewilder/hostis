@@ -412,7 +412,9 @@ function listen(s) {
 }
 
 function stop() { gen++; stopAll(); playing = false; trouble = null; power(); lamps(false); ctx?.suspend(); radio?.listening(false) }
-function power() { $('clip').hidden = !(playing && clipType()) || isPocket(cur); const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■\uFE0E' : '▶\uFE0E'; g.querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen' }
+function power() { $('clip').hidden = !(playing && clipType()) || isPocket(cur); const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■\uFE0E' : '▶\uFE0E'; g.querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen';
+  // The tab says what it is playing, so a listener with many tabs can find the radio.
+  if (!EMBED && cur) document.title = (playing ? '\u25B6\uFE0E ' : '') + (cur.name || cur.call_sign || 'A station') + ' · Pyrate Radio' }
 
 // A row's cover is fetched only once the row comes into view.
 const lazy = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => {
@@ -496,6 +498,12 @@ function followLink() {
   show(s);
 }
 
+// Space or K turns the set on and off, as on any player, unless the listener is typing.
+addEventListener('keydown', e => {
+  if ((e.key !== ' ' && e.key !== 'k') || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  if (e.target.closest?.('input,textarea,select,button,a,[contenteditable],#glass') || $('go').hidden) return;
+  e.preventDefault(); $('go').click();
+});
 $('go').onclick = async () => {
   if (playing) return stop();
   if (!cur) return;
