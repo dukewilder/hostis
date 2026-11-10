@@ -10,9 +10,9 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:ffi/ffi.dart';
-import 'package:flutter/services.dart' show MethodChannel;
+import 'shell.dart';
 
-const _shell = MethodChannel('pyrate/service');
+const _shell = ShellChannel();
 
 /// While the 24 words or a PIN are on screen: no screenshot, no recents thumbnail, no
 /// screen recording.
@@ -26,8 +26,12 @@ typedef _FreeC = Void Function(Pointer<Utf8>);
 typedef _FreeD = void Function(Pointer<Utf8>);
 
 DynamicLibrary _open() {
-  if (Platform.isWindows) return DynamicLibrary.open('pyrate_ffi.dll');
-  if (Platform.isMacOS) return DynamicLibrary.open('libpyrate_ffi.dylib');
+  // A computer's build carries the node beside the app: next to the program on Windows, in
+  // the bundle's Frameworks on a Mac, in the bundle's lib on Linux. Android packs it itself.
+  final here = File(Platform.resolvedExecutable).parent.path;
+  if (Platform.isWindows) return DynamicLibrary.open('$here\\pyrate_ffi.dll');
+  if (Platform.isMacOS) return DynamicLibrary.open('$here/../Frameworks/libpyrate_ffi.dylib');
+  if (Platform.isLinux) return DynamicLibrary.open('$here/lib/libpyrate_ffi.so');
   return DynamicLibrary.open('libpyrate_ffi.so');
 }
 

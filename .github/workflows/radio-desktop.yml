@@ -1,0 +1,79 @@
+# Builds Pyrate Radio for computers from the radio branch: Windows, macOS and Linux. The
+# builds are ordinary and reproducible from the public source; nothing secret goes in, and the
+# results are published on hostis.black/pyrateradio with their checksums and torrents.
+# No rights reserved.
+name: radio desktop
+on:
+  push:
+    branches: [radio]
+    paths: ["radio/app/**", "radio/core/**", "radio/node/**", "radio/ffi/**", ".github/workflows/radio-desktop.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults: { run: { working-directory: radio } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, flutter-version: "3.47.9" }
+      - run: cargo build --release -p pyrate-ffi
+      - run: flutter build windows --release
+        working-directory: radio/app
+      - name: Pack
+        shell: pwsh
+        run: |
+          $out = "app/build/windows/x64/runner/Release"
+          Copy-Item target/release/pyrate_ffi.dll $out -Force
+          Compress-Archive -Path "$out/*" -DestinationPath pyrate-radio-windows.zip
+      - uses: actions/upload-artifact@v4
+        with: { name: pyrate-radio-windows, path: radio/pyrate-radio-windows.zip }
+  macos:
+    runs-on: macos-latest
+    defaults: { run: { working-directory: radio } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: "aarch64-apple-darwin,x86_64-apple-darwin" }
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, flutter-version: "3.47.9" }
+      - run: brew install cmake || true
+      - run: |
+          cargo build --release -p pyrate-ffi --target aarch64-apple-darwin
+          cargo build --release -p pyrate-ffi --target x86_64-apple-darwin
+          lipo -create -output libpyrate_ffi.dylib target/aarch64-apple-darwin/release/libpyrate_ffi.dylib target/x86_64-apple-darwin/release/libpyrate_ffi.dylib
+          install_name_tool -id @rpath/libpyrate_ffi.dylib libpyrate_ffi.dylib
+      - run: flutter build macos --release
+        working-directory: radio/app
+      - name: Pack
+        run: |
+          APP="app/build/macos/Build/Products/Release/Pyrate Radio.app"
+          mkdir -p "$APP/Contents/Frameworks"
+          cp libpyrate_ffi.dylib "$APP/Contents/Frameworks/"
+          # Signed by nobody: an ad-hoc signature only, so macOS will run it after one right-click Open.
+          codesign --force --deep --sign - "$APP"
+          ditto -c -k --keepParent "$APP" pyrate-radio-macos.zip
+      - uses: actions/upload-artifact@v4
+        with: { name: pyrate-radio-macos, path: radio/pyrate-radio-macos.zip }
+  linux:
+    runs-on: ubuntu-22.04
+    defaults: { run: { working-directory: radio } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, flutter-version: "3.47.9" }
+      - run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libasound2-dev
+      - run: cargo build --release -p pyrate-ffi
+      - run: flutter build linux --release
+        working-directory: radio/app
+      - name: Pack
+        run: |
+          B=app/build/linux/x64/release/bundle
+          cp app/linux/pyrate-radio.png "$B/"
+          cp app/linux/pyrate-radio.desktop "$B/"
+          tar -C "$B/.." -czf pyrate-radio-linux-x64.tar.gz --transform 's,^bundle,pyrate-radio,' bundle
+      - uses: actions/upload-artifact@v4
+        with: { name: pyrate-radio-linux, path: radio/pyrate-radio-linux-x64.tar.gz }

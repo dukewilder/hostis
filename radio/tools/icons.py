@@ -33,6 +33,22 @@ for dpi, n in {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 19
     # The adaptive safe zone is the middle 66dp of 108: the skull sits well inside it.
     skull(fg, 0.5).save(f"{RES}/mipmap-{dpi}/ic_launcher_foreground.png")
 
+# The computers: a Mac's icon is a rounded square standing in its own margin, Windows takes
+# an .ico of several sizes, Linux a PNG beside its .desktop entry.
+APP = f"{R}/app"
+def tile(n, radius=0.225, margin=0.1):
+    im = Image.new("RGBA", (n * 4, n * 4), (0, 0, 0, 0))
+    m, r = int(n * 4 * margin), int(n * 4 * (1 - 2 * margin) * radius)
+    ImageDraw.Draw(im).rounded_rectangle((m, m, n * 4 - m, n * 4 - m), r, fill=BLACK, outline=(237, 228, 206, 60), width=max(1, n // 64))
+    im = im.resize((n, n), Image.LANCZOS)
+    im.alpha_composite(skull(n, 0.56))
+    return im
+for n in [16, 32, 64, 128, 256, 512, 1024]:
+    tile(n).save(f"{APP}/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_{n}.png")
+sq = Image.new("RGBA", (256, 256), BLACK); sq.alpha_composite(skull(256, 0.8))
+sq.save(f"{APP}/windows/runner/resources/app_icon.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+sq.save(f"{APP}/linux/pyrate-radio.png")
+
 # The notification icon: the same glyph as a vector, white on clear, in a 24 by 24 box.
 font = TTFont(FONT)
 gname = font.getBestCmap()[ord(SK)]

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Pyrate Radio
+Comment=Radio every listener carries, under HOSTIS colours
+Exec=pyrate %u
+Icon=pyrate-radio
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+MimeType=x-scheme-handler/pyrate;

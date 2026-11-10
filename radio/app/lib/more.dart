@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'shell.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,7 +16,7 @@ import 'main.dart';
 import 'native.dart';
 import 'station.dart';
 
-const ship = MethodChannel('pyrate/service');
+const ship = ShellChannel();
 
 /// The kinds a station may call itself, for the Log's filters.
 const stationKinds = ['talk', 'music', 'readings', 'news', 'sound'];
