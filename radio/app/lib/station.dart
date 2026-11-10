@@ -184,7 +184,7 @@ class _StationPageState extends State<StationPage> {
             const SizedBox(width: 16),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [Flexible(child: Text(s['name'] ?? '', style: serif(26))), ...seals(s, size: 9)]),
+                Row(children: [Flexible(child: Text(s['name'] ?? '', style: pica(28, spacing: 0.03))), ...seals(s, size: 9)]),
                 if ((s['port'] ?? '').toString().isNotEmpty) Text((s['port']).toString().toUpperCase(), style: carved(9, color: boneFaint, spacing: 0.25)),
                 if (((s['kinds'] as List?) ?? []).isNotEmpty) Text(((s['kinds'] as List).join(' · ')).toUpperCase(), style: carved(9, color: boneGhost, spacing: 0.25)),
               ]),
@@ -595,7 +595,7 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
     final kind = mode['kind'] ?? 'shuffle';
     final start = (mode['start_min'] as num?)?.toInt() ?? 18 * 60;
     return ListView(padding: const EdgeInsets.fromLTRB(24, 8, 24, 48), children: [
-      Text('THE PROGRAMME', style: carved(20)),
+      masthead('The Programme'),
       note('How your station fills the day, in your own time (${zoneLabel()}). It keeps doing this for as long as anyone carries it, whether or not you ever open the app again.'),
       if (!loaded && loadError == null) Padding(padding: const EdgeInsets.only(top: 16), child: note('Reading the log')),
       // The time-zone table a programme carries runs out some day; past it the local time
@@ -1174,7 +1174,7 @@ class _PosterSheetState extends State<PosterSheet> {
                 child: Column(children: [
                   Text('PYRATE RADIO', style: carved(13, color: ink, spacing: 0.4)),
                   const SizedBox(height: 14),
-                  Text(s['name'] ?? '', textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: serif(30, color: ink)),
+                  Text(s['name'] ?? '', textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: pica(30, color: ink, spacing: 0.03)),
                   const SizedBox(height: 4),
                   Text('${frequency(id).toStringAsFixed(1)} on the dial  ${(s['call_sign'] ?? '').toString()}', style: mono(12, color: soft, weight: FontWeight.w700)),
                   if ((s['about'] ?? '').toString().isNotEmpty)

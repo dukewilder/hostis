@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -21,15 +22,108 @@ const boneDim = Color(0xD1EDE4CE);
 const boneFaint = Color(0x8CEDE4CE);
 const boneGhost = Color(0x38EDE4CE);
 const bloodBright = Color(0xFFED5555);
+// The site's accent red, as every HOSTIS page uses it: the lead control, the divider's diamond,
+// the mark beside what is tuned. Bright red stays for the open air alone.
+const red = Color(0xFFC52828);
+const line = Color(0x24EDE4CE);
+const lineSoft = Color(0x12EDE4CE);
 
 TextStyle carved(double size, {Color color = bone, double spacing = 0.3}) =>
     TextStyle(fontFamily: 'Cinzel', fontSize: size, color: color, letterSpacing: size * spacing, height: 1.2);
 TextStyle serif(double size, {Color color = bone, bool italic = false}) =>
     TextStyle(fontFamily: 'Fell', fontSize: size, color: color, fontStyle: italic ? FontStyle.italic : FontStyle.normal, height: 1.35);
+/// IM Fell DW Pica SC, the face of every HOSTIS masthead and title.
+TextStyle pica(double size, {Color color = bone, double spacing = 0.04}) =>
+    TextStyle(fontFamily: 'Pica', fontSize: size, color: color, letterSpacing: size * spacing, height: 1.12);
+/// A mono caption in capitals, the way the site labels its controls and readings.
+TextStyle caps(double size, {Color color = boneFaint, double spacing = 0.2}) =>
+    TextStyle(fontFamily: 'Mono', fontSize: size, color: color, letterSpacing: size * spacing);
 TextStyle mono(double size, {Color color = boneFaint, FontWeight weight = FontWeight.w400}) =>
     TextStyle(fontFamily: 'Mono', fontSize: size, color: color, letterSpacing: size * 0.05, fontWeight: weight);
 
 const _service = MethodChannel('pyrate/service');
+
+/// The flagship bar every HOSTIS page opens with: the skull and HOSTIS in Pica capitals.
+class HostisBar extends StatelessWidget {
+  const HostisBar({super.key});
+  @override
+  Widget build(BuildContext context) => Container(
+        height: 46,
+        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: lineSoft, width: 1))),
+        child: Semantics(
+          label: 'HOSTIS',
+          child: ExcludeSemantics(
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Text('\u2620\uFE0E', style: TextStyle(fontFamily: 'Skull', fontSize: 25, color: bone, height: 1)),
+              const SizedBox(width: 11),
+              Text('HOSTIS', style: pica(12.5, spacing: 0.3)),
+            ]),
+          ),
+        ),
+      );
+}
+
+/// The site's diamond: a small square turned on its point, in the accent red.
+class Diamond extends StatelessWidget {
+  final double size;
+  final Color color;
+  const Diamond({super.key, this.size = 7, this.color = red});
+  @override
+  Widget build(BuildContext context) => Transform.rotate(angle: math.pi / 4, child: SizedBox(width: size, height: size, child: ColoredBox(color: color)));
+}
+
+/// The divider of hostis.black: two hairlines fading out from a red diamond.
+class HostisDivider extends StatelessWidget {
+  final double width;
+  const HostisDivider({super.key, this.width = 280});
+  @override
+  Widget build(BuildContext context) {
+    Widget hair(bool left) => Expanded(
+        child: Container(height: 1, decoration: BoxDecoration(gradient: LinearGradient(colors: left ? const [Color(0x00EDE4CE), Color(0x80EDE4CE)] : const [Color(0x80EDE4CE), Color(0x00EDE4CE)]))));
+    return SizedBox(width: width, child: Row(children: [hair(true), const SizedBox(width: 18), const Diamond(), const SizedBox(width: 18), hair(false)]));
+  }
+}
+
+/// A page's masthead: the title in Pica capitals and a line under it in italic.
+Widget masthead(String title, {String? sub, CrossAxisAlignment align = CrossAxisAlignment.start}) => Column(crossAxisAlignment: align, children: [
+      Text(title, style: pica(30, spacing: 0.07)),
+      if (sub != null) ...[const SizedBox(height: 6), Text(sub, textAlign: align == CrossAxisAlignment.center ? TextAlign.center : TextAlign.start, style: serif(15, color: boneFaint, italic: true))],
+    ]);
+
+/// The one control on a screen that matters most, the way the site draws it: a red hairline
+/// over a faint wash of red, the label in Pica.
+class LeadButton extends StatelessWidget {
+  final String label;
+  final String? glyph;
+  final VoidCallback? onPressed;
+  final bool quiet;
+  const LeadButton({super.key, required this.label, this.glyph, this.onPressed, this.quiet = false});
+  @override
+  Widget build(BuildContext context) {
+    final on = onPressed != null;
+    return Semantics(
+      button: true,
+      label: label,
+      child: InkWell(
+        onTap: onPressed,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 13),
+          decoration: BoxDecoration(
+            color: quiet || !on ? Colors.transparent : const Color(0x14C52828),
+            border: Border.all(color: !on ? boneGhost : quiet ? bone : red, width: 1),
+          ),
+          child: ExcludeSemantics(
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (glyph != null) ...[Text(glyph!, style: TextStyle(fontFamily: 'Skull', fontSize: 13, height: 1, color: !on ? boneGhost : quiet ? bone : bloodBright)), const SizedBox(width: 12)],
+              Text(label, style: pica(18, color: on ? bone : boneGhost, spacing: 0.06)),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// False when the node would not start: the dial says so rather than search for ever.
 bool nodeStarted = true;
@@ -395,17 +489,17 @@ class _PyrateAppState extends State<PyrateApp> {
         brightness: Brightness.dark,
         scaffoldBackgroundColor: black,
         colorScheme: const ColorScheme.dark(primary: bone, surface: black, onSurface: bone, secondary: bone, surfaceContainerHigh: panel, outline: boneGhost),
-        textSelectionTheme: const TextSelectionThemeData(cursorColor: bone, selectionColor: boneGhost, selectionHandleColor: bone),
+        textSelectionTheme: const TextSelectionThemeData(cursorColor: bone, selectionColor: Color(0x66C52828), selectionHandleColor: red),
         // The site's own sheet throughout: Fell for any text the app does not style itself,
         // square edges, hairline borders, nothing tinted or rounded by the toolkit's defaults.
         fontFamily: 'Fell',
-        dialogTheme: const DialogThemeData(backgroundColor: panel, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5))),
+        dialogTheme: const DialogThemeData(backgroundColor: panel, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(side: BorderSide(color: line, width: 1))),
         bottomSheetTheme: const BottomSheetThemeData(backgroundColor: panel, modalBackgroundColor: panel, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder()),
-        popupMenuTheme: const PopupMenuThemeData(color: panel, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5))),
-        snackBarTheme: const SnackBarThemeData(backgroundColor: panel, behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5))),
+        popupMenuTheme: const PopupMenuThemeData(color: panel, surfaceTintColor: Colors.transparent, shape: RoundedRectangleBorder(side: BorderSide(color: line, width: 1))),
+        snackBarTheme: const SnackBarThemeData(backgroundColor: panel, behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(side: BorderSide(color: line, width: 1))),
         timePickerTheme: const TimePickerThemeData(
           backgroundColor: panel,
-          shape: RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+          shape: RoundedRectangleBorder(side: BorderSide(color: line, width: 1)),
           hourMinuteShape: RoundedRectangleBorder(),
           dayPeriodShape: RoundedRectangleBorder(),
           dayPeriodBorderSide: BorderSide(color: boneGhost, width: 0.5),
@@ -418,6 +512,7 @@ class _PyrateAppState extends State<PyrateApp> {
           fillColor: WidgetStateProperty.resolveWith((st) => st.contains(WidgetState.selected) ? bone : Colors.transparent),
           checkColor: const WidgetStatePropertyAll(black),
         ),
+        outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(foregroundColor: bone, shape: const RoundedRectangleBorder(), side: const BorderSide(color: boneGhost, width: 1))),
         textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: bone, shape: const RoundedRectangleBorder())),
         splashFactory: NoSplash.splashFactory,
         highlightColor: Colors.transparent,
@@ -426,24 +521,34 @@ class _PyrateAppState extends State<PyrateApp> {
         listenable: radio,
         builder: (context, _) => Scaffold(
           body: SafeArea(
-            child: IndexedStack(index: tab, children: [
+            child: Column(children: [
+              const HostisBar(),
+              Expanded(child: IndexedStack(index: tab, children: [
               Dial(radio: radio),
               LogPage(radio: radio, onTune: () => setState(() => tab = 0)),
               PinGate(child: ColoursPage(radio: radio)),
+              ])),
             ]),
           ),
           bottomNavigationBar: SafeArea(
             top: false,
             child: Container(
-              decoration: const BoxDecoration(border: Border(top: BorderSide(color: boneGhost, width: 0.5))),
-              height: 58,
+              decoration: const BoxDecoration(border: Border(top: BorderSide(color: line, width: 1))),
+              height: 60,
               child: Row(children: [
                 for (final (i, label) in ['THE DIAL', 'THE LOG', 'COLOURS'].indexed)
                   Expanded(
-                    child: InkWell(
-                      onTap: () => setState(() => tab = i),
-                      child: Center(
-                        child: Text(label, style: carved(11, color: tab == i ? bone : boneFaint, spacing: 0.25)),
+                    child: Semantics(
+                      selected: tab == i,
+                      button: true,
+                      child: InkWell(
+                        onTap: () => setState(() => tab = i),
+                        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          // The tab in hand wears the site's diamond.
+                          AnimatedOpacity(opacity: tab == i ? 1 : 0, duration: const Duration(milliseconds: 160), child: const Diamond(size: 5)),
+                          const SizedBox(height: 8),
+                          Text(label, style: caps(10, color: tab == i ? bone : boneFaint, spacing: 0.22)),
+                        ]),
                       ),
                     ),
                   ),
@@ -530,7 +635,7 @@ class Dial extends StatelessWidget {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(20, 10, 12, 6),
-          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: boneFaint, width: 0.5))),
+          decoration: const BoxDecoration(color: Color(0x0EC52828), border: Border(bottom: BorderSide(color: red, width: 1))),
           child: Row(children: [
             Expanded(
               child: Text(
@@ -539,7 +644,7 @@ class Dial extends StatelessWidget {
                       : inv.startsWith('flock=')
                           ? 'A FLOCK LINK · PLAY IN STEP WITH ITS HOST'
                           : 'A LINK TO ${((radio.station(inv)?['name'] ?? '').toString().trim().isEmpty ? 'A STATION' : radio.station(inv)!['name'].toString().trim()).toUpperCase()}',
-                  style: carved(10, color: bone, spacing: 0.2)),
+                  style: caps(9.5, color: bone, spacing: 0.18)),
             ),
             TextButton(onPressed: radio.acceptInvite, child: Text(inv.contains('=') ? 'JOIN' : 'LISTEN', style: carved(10, color: bone))),
             TextButton(onPressed: radio.declineInvite, child: Text('NO', style: carved(10, color: boneFaint))),
@@ -551,17 +656,17 @@ class Dial extends StatelessWidget {
           child: Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: boneFaint, width: 0.5))),
+            decoration: const BoxDecoration(color: Color(0x0EC52828), border: Border(bottom: BorderSide(color: red, width: 1))),
             child: Text('A NEW VERSION IS ABOARD · ${up['version']} · TAP TO INSTALL', textAlign: TextAlign.center, style: carved(10, color: bone, spacing: 0.2)),
           ),
         ),
-      const SizedBox(height: 18),
-      Image.asset('assets/brand/wordmark.png', width: 210, filterQuality: FilterQuality.medium, color: boneDim, colorBlendMode: BlendMode.modulate),
-      const SizedBox(height: 2),
-      Text('UNDER HOSTIS COLOURS', style: TextStyle(fontFamily: 'FellSC', fontSize: 10, color: boneGhost, letterSpacing: 2.4)),
-      const SizedBox(height: 4),
-      Text(stations.isEmpty ? '' : '${stations.length} ${stations.length == 1 ? 'STATION' : 'STATIONS'} ON THE AIR',
-          style: mono(10, color: boneGhost)),
+      const SizedBox(height: 16),
+      Text('Pyrate Radio', style: pica(26, spacing: 0.09)),
+      const SizedBox(height: 6),
+      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        if (stations.isNotEmpty) ...[const Diamond(size: 4, color: boneFaint), const SizedBox(width: 9)],
+        Text(stations.isEmpty ? 'UNDER HOSTIS COLOURS' : '${stations.length} ${stations.length == 1 ? 'STATION' : 'STATIONS'} ON THE AIR', style: caps(9.5, color: boneGhost)),
+      ]),
       Expanded(
         child: stations.isEmpty
             ? Center(
@@ -596,19 +701,17 @@ class Dial extends StatelessWidget {
                 ),
               ),
       ),
+      const HostisDivider(width: 240),
       Padding(
-        padding: const EdgeInsets.only(bottom: 18, top: 6),
+        padding: const EdgeInsets.only(bottom: 16, top: 14),
         child: radio.scanning
-            ? Text('SCANNING · TAP TO HOLD', style: carved(11, color: bone, spacing: 0.25))
+            ? Padding(padding: const EdgeInsets.symmetric(vertical: 15), child: Text('SCANNING · TAP TO HOLD', style: caps(11, color: bone)))
             : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                OutlinedButton(
+                LeadButton(
                   onPressed: stations.isEmpty ? null : radio.toggle,
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: boneFaint, width: 0.8),
-                    shape: const RoundedRectangleBorder(),
-                    padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 14),
-                  ),
-                  child: Text(radio.playing ? '■︎  STOP' : '▶︎  LISTEN', style: carved(12, spacing: 0.25)),
+                  quiet: radio.playing,
+                  glyph: radio.playing ? '■︎' : '▶︎',
+                  label: radio.playing ? 'Stop' : 'Listen',
                 ),
               ]),
       ),
@@ -652,7 +755,7 @@ class _StationFace extends StatelessWidget {
         pic == null
             ? Flag(id: id, width: 200, live: live)
             : Container(
-                decoration: BoxDecoration(border: Border.all(color: accent.withValues(alpha: 0.45), width: 0.6)),
+                decoration: BoxDecoration(border: Border.all(color: accent == bone ? line : accent.withValues(alpha: 0.45), width: 1), boxShadow: const [BoxShadow(color: Color(0xB3000000), blurRadius: 40, offset: Offset(0, 18))]),
                 child: StationArt(station: id, hash: pic, width: 220, height: 220, fallback: Flag(id: id, width: 180, live: live)),
               ),
         const SizedBox(height: 26),
@@ -660,18 +763,22 @@ class _StationFace extends StatelessWidget {
           Container(
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-            decoration: BoxDecoration(border: Border.all(color: bloodBright, width: 0.8)),
-            child: Text('ON AIR', style: carved(11, color: bloodBright, spacing: 0.35)),
+            decoration: BoxDecoration(border: Border.all(color: bloodBright, width: 1)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Container(width: 6, height: 6, decoration: const BoxDecoration(color: bloodBright, shape: BoxShape.circle)),
+              const SizedBox(width: 8),
+              Text('ON AIR', style: caps(10, color: bloodBright, spacing: 0.3)),
+            ]),
           ),
         GestureDetector(
           onTap: () => openPage(context, s, radio),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Flexible(child: Text(s['name'] ?? '', textAlign: TextAlign.center, style: serif(34))),
+            Flexible(child: Text(s['name'] ?? '', textAlign: TextAlign.center, style: pica(32, spacing: 0.03))),
             ...seals(s, size: 10),
           ]),
         ),
         const SizedBox(height: 6),
-        Text(s['call_sign'] ?? '', style: mono(12, color: boneFaint)),
+        Text(s['call_sign'] ?? '', style: caps(11, color: boneFaint, spacing: 0.14)),
         const SizedBox(height: 8),
         Wrap(alignment: WrapAlignment.center, spacing: 2, children: [
           for (final (label, act) in <(String, VoidCallback)>[
@@ -685,7 +792,7 @@ class _StationFace extends StatelessWidget {
             TextButton(
               onPressed: act,
               style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8), minimumSize: const Size(0, 30)),
-              child: Text(label, style: carved(9.5, color: boneFaint, spacing: 0.25)),
+              child: Text(label, style: caps(9.5, color: boneFaint, spacing: 0.16)),
             ),
           IconButton(
             tooltip: 'Lights out',
@@ -717,7 +824,7 @@ class _StationFace extends StatelessWidget {
                       ? Text(offAirLabel((now?['back_at'] as num?)?.toInt()), textAlign: TextAlign.center, style: serif(16, color: boneFaint, italic: true))
                       : Column(children: [
                           if (state != 'live' && (now?['slot'] ?? '').toString().isNotEmpty)
-                            Text((now!['slot']).toString().toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: carved(9.5, color: accent, spacing: 0.3)),
+                            Text((now!['slot']).toString().toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: caps(9.5, color: accent, spacing: 0.26)),
                           Text(state == 'live' ? 'Live' : title, textAlign: TextAlign.center, maxLines: 2,
                               overflow: TextOverflow.ellipsis, style: serif(19, color: boneDim, italic: true)),
                           if (by.isNotEmpty) Text(by, style: carved(11, color: boneFaint, spacing: 0.2)),
@@ -732,7 +839,7 @@ class _StationFace extends StatelessWidget {
                           ],
                         ]),
         ),
-        Text('${s['aboard'] ?? 0} ABOARD', style: mono(12, color: boneFaint, weight: FontWeight.w700)),
+        Text('${s['aboard'] ?? 0} ABOARD', style: caps(11, color: boneFaint, spacing: 0.2)),
       ]),
       ),
     ]);
@@ -779,11 +886,11 @@ class _ColoursPageState extends State<ColoursPage> {
   Widget button(String label, VoidCallback? onTap, {Color color = bone}) => OutlinedButton(
         onPressed: onTap,
         style: OutlinedButton.styleFrom(
-          side: BorderSide(color: onTap == null ? boneGhost : color.withValues(alpha: 0.7), width: 0.8),
+          side: BorderSide(color: onTap == null ? lineSoft : color.withValues(alpha: 0.42), width: 1),
           shape: const RoundedRectangleBorder(),
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
         ),
-        child: Text(label, style: carved(11, color: onTap == null ? boneGhost : color, spacing: 0.25)),
+        child: Text(label, style: caps(10.5, color: onTap == null ? boneGhost : color, spacing: 0.15)),
       );
 
   Future<void> raise() async {
@@ -963,7 +1070,7 @@ class _ColoursPageState extends State<ColoursPage> {
     final mine = widget.radio.mine;
     return ListView(padding: const EdgeInsets.fromLTRB(24, 26, 24, 40), children: [
       if (mine == null) ...[
-        Text('RAISE COLOURS', style: carved(22)),
+        masthead('Raise Colours'),
         const SizedBox(height: 10),
         Text('A station is a key made on this phone. Name it, put recordings on its clock, and it plays all day and all night, carried by every listener.',
             style: serif(16, color: boneFaint, italic: true)),
@@ -1189,7 +1296,7 @@ class _ColoursPageState extends State<ColoursPage> {
         const SizedBox(width: 18),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(mine['name'] ?? '', style: serif(26)),
+            Text(mine['name'] ?? '', style: pica(28, spacing: 0.03)),
             Text(mine['call_sign'] ?? '', style: mono(12)),
             const SizedBox(height: 6),
             Text('${mine['tracks']} ${mine['tracks'] == 1 ? 'recording' : 'recordings'} on the clock', style: serif(14, color: boneFaint, italic: true)),
