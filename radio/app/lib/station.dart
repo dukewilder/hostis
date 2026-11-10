@@ -4,8 +4,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'art.dart';
@@ -193,6 +195,7 @@ class _StationPageState extends State<StationPage> {
             }),
             pyrateButton('PASS IT ON', () => shareStation(s)),
             if ((s['tip'] ?? '').toString().isNotEmpty) pyrateButton('TIP', () => tipStation(context, s['tip'])),
+            pyrateButton('A POSTER', () => pyrateSheet(context, PosterSheet(station: s))),
           ]),
           if (own) ...[
             section('YOUR STATION'),
@@ -981,5 +984,124 @@ class _FeedsPanelState extends State<FeedsPanel> {
       ]),
       if (msg != null) Padding(padding: const EdgeInsets.only(top: 8), child: note(msg!)),
     ]);
+  }
+}
+
+// ---------------------------------------------------------------------------------------
+// A poster: the station's name, its place on the dial and a code to scan. Put it up around
+// town, and whoever scans it is listening a tap later, in the browser or the app.
+
+/// Where a station sits on every dial, from its key: 87.5 to 108.0.
+double frequency(String id) => (875 + int.parse(id.substring(0, 6), radix: 16) % 206) / 10;
+
+String stationLink(String id) => 'https://hostis.black/pyrateradio/listen/#$id';
+
+class QrPainter extends CustomPainter {
+  final int n;
+  final String bits;
+  final Color ink;
+  QrPainter(this.n, this.bits, this.ink);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cell = size.width / (n + 8);
+    final p = Paint()..color = ink;
+    for (var y = 0; y < n; y++) {
+      for (var x = 0; x < n; x++) {
+        if (bits[y * n + x] == '1') canvas.drawRect(Rect.fromLTWH((x + 4) * cell, (y + 4) * cell, cell + 0.4, cell + 0.4), p);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant QrPainter old) => old.bits != bits || old.ink != ink;
+}
+
+class PosterSheet extends StatefulWidget {
+  final Map station;
+  const PosterSheet({super.key, required this.station});
+  @override
+  State<PosterSheet> createState() => _PosterSheetState();
+}
+
+class _PosterSheetState extends State<PosterSheet> {
+  final key = GlobalKey();
+  bool paper = true;
+  String? msg;
+
+  Future<void> share() async {
+    final ro = key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    if (ro == null) return;
+    final img = await ro.toImage(pixelRatio: 5);
+    final png = await img.toByteData(format: ui.ImageByteFormat.png);
+    if (png == null) return;
+    final dir = Directory('${(await getTemporaryDirectory()).path}/share');
+    if (!dir.existsSync()) dir.createSync(recursive: true);
+    final f = File('${dir.path}/${safeName(widget.station['name'] ?? 'Pyrate Radio')} poster.png');
+    await f.writeAsBytes(png.buffer.asUint8List());
+    await ship.invokeMethod('share_file', {'path': f.path, 'mime': 'image/png'});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.station;
+    final id = s['id'] as String;
+    final q = Native.call({'cmd': 'qr', 'text': stationLink(id)});
+    final ink = paper ? const Color(0xFF0A0A0A) : bone;
+    final ground = paper ? const Color(0xFFFBF8F1) : black;
+    final soft = paper ? const Color(0xFF55524B) : boneFaint;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+      child: SingleChildScrollView(
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          heading('A POSTER'),
+          note('Print it and put it up. Whoever scans the code is listening a tap later: in the browser on any phone, or in the app if they have it. No account, no store.'),
+          const SizedBox(height: 10),
+          Wrap(children: [chip('For paper', paper, () => setState(() => paper = true)), chip('For screens', !paper, () => setState(() => paper = false))]),
+          const SizedBox(height: 8),
+          Center(
+            child: RepaintBoundary(
+              key: key,
+              child: Container(
+                width: 300,
+                height: 424,
+                color: ground,
+                padding: const EdgeInsets.fromLTRB(22, 26, 22, 18),
+                child: Column(children: [
+                  Text('PYRATE RADIO', style: carved(13, color: ink, spacing: 0.4)),
+                  const SizedBox(height: 14),
+                  Text(s['name'] ?? '', textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: serif(30, color: ink)),
+                  const SizedBox(height: 4),
+                  Text('${frequency(id).toStringAsFixed(1)} on the dial', style: mono(12, color: soft, weight: FontWeight.w700)),
+                  if ((s['about'] ?? '').toString().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(s['about'], textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: serif(13, color: soft, italic: true)),
+                    ),
+                  const Spacer(),
+                  if (q is Map)
+                    SizedBox(
+                      width: 196,
+                      height: 196,
+                      child: CustomPaint(painter: QrPainter((q['size'] as num).toInt(), q['bits'] as String, ink)),
+                    ),
+                  const Spacer(),
+                  Text('Scan to listen. No app, no account.', style: serif(14, color: ink)),
+                  const SizedBox(height: 4),
+                  Text('hostis.black/pyrateradio', style: mono(10, color: soft)),
+                ]),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(children: [
+            pyrateButton('SHARE THE POSTER', share),
+            const SizedBox(width: 8),
+            pyrateButton('THE LINK', () => ship.invokeMethod('share_text', {'text': 'Tune in to ${s['name']} on Pyrate Radio: ${stationLink(id)}'})),
+          ]),
+          if (msg != null) Padding(padding: const EdgeInsets.only(top: 8), child: note(msg!)),
+        ]),
+      ),
+    );
   }
 }

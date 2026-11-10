@@ -6,18 +6,7 @@ W = f"{R}/browser/www"
 src = open(f"{R}/node/src/web/listen.html", encoding="utf-8").read()
 head = src[:src.index("</style>")]
 head = head.replace('href="/brand/mark.png"', 'href="mark.png"').replace("<title>Pyrate Radio</title>", "<title>Pyrate Radio</title>\n<meta name=\"description\" content=\"Takedown-resistant radio under HOSTIS colours. Plays in the browser, peer to peer.\">")
-extra = """
-.tools{margin-top:.6rem}button.small{font-size:.62rem;padding:.55rem 1rem;margin:.5rem .3rem 0;border-color:var(--bone-ghost);color:var(--bone-faint)}
-.signal{font-family:var(--mono);font-size:.62rem;color:var(--bone-ghost);margin-top:1.1rem;letter-spacing:.08em}
-.switches{display:flex;flex-direction:column;gap:.55rem;margin:0 0 1.1rem;font-family:var(--mono);font-size:.72rem;color:var(--bone-dim)}
-.switches input{accent-color:#ede4ce;margin-right:.6rem;vertical-align:middle}
-.slot{font-family:var(--carved);font-size:.62rem;letter-spacing:.3em;color:var(--blood-bright);min-height:1em;text-transform:uppercase}
-.page{border-bottom:.5px solid var(--bone-ghost);flex:0 0 auto}.notice{border:.5px solid var(--bone-ghost);padding:.9rem 1rem;margin:0 0 .8rem;color:var(--bone);font-size:1.05rem}.notice small{display:block;font-family:var(--mono);font-size:.6rem;color:var(--bone-ghost);margin-top:.4rem}
-.li{display:flex;gap:1rem;align-items:baseline;padding:.3rem 0}.li .t{font-family:var(--mono);font-size:.72rem;color:var(--bone-faint);flex:0 0 auto;min-width:3.4rem}.li .w{flex:1;color:var(--bone-dim)}.li.on .w,.li.on .t{color:var(--bone)}
-.li em{display:block;color:var(--bone-faint);font-size:.88rem}.li b{font-family:var(--carved);font-weight:400;font-size:.55rem;letter-spacing:.3em;margin-left:.4rem}.lv{color:var(--blood-bright)}.pr{color:#c9a45c}
-.day{font-family:var(--carved);font-size:.62rem;letter-spacing:.3em;color:var(--bone-faint);margin:1.1rem 0 .3rem;text-transform:uppercase}.li button.cal{margin:0;padding:.3rem .6rem;font-size:.55rem}
-textarea{width:100%;min-height:9rem;background:var(--panel);color:var(--bone-dim);border:.5px solid var(--bone-ghost);font-family:var(--mono);font-size:.7rem;padding:.7rem;margin-top:1rem}
-"""
+extra = "\n" + open(f"{R}/browser/player.css", encoding="utf-8").read()
 body = open(f"{R}/browser/body.html", encoding="utf-8").read()
 js = open(f"{W}/app.js", encoding="utf-8").read()
 # A test build names its own harbour and relays: PYRATE_HARBOUR="<id>@<relay>", PYRATE_RELAYS.
@@ -27,7 +16,9 @@ v = hashlib.sha256(out_js.encode() + open(f"{W}/pkg/pyrate_browser_bg.wasm", "rb
 dist = f"{W}/dist"
 if os.path.exists(dist): shutil.rmtree(dist)
 os.makedirs(f"{dist}/pkg")
-open(f"{dist}/index.html", "w", encoding="utf-8").write(head + extra + "</style>\n</head>\n<body>\n" + body.replace("{{V}}", v) + "</body>\n</html>\n")
+# ?embed shows the set alone, for the landing page's hero; decided before first paint.
+embed = "<script>if(/[?&]embed/.test(location.search))document.documentElement.classList.add('embed')</script>\n"
+open(f"{dist}/index.html", "w", encoding="utf-8").write(head + extra + "</style>\n" + embed + "</head>\n<body>\n" + body.replace("{{V}}", v) + "</body>\n</html>\n")
 open(f"{dist}/app.js", "w", encoding="utf-8").write(out_js.replace("./pkg/pyrate_browser.js", f"./pkg/pyrate_browser.js?v={v}"))
 for f in ["pyrate_browser.js", "pyrate_browser_bg.wasm"]:
     shutil.copy(f"{W}/pkg/{f}", f"{dist}/pkg/{f}")

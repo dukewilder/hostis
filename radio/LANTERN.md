@@ -20,4 +20,23 @@ It opens no ports and needs none. Behind a VPN it works the same, through the re
 
 **The bell.** A `bell.wav` (or .mp3, .ogg) in a seed folder plays on the hour. Replace the file and the new one takes over; the old one is withdrawn. `tools/bell.py` writes a daily one from the Annals; run it from cron each morning.
 
-**Podcasts.** `tools/feed2folder.py <feed url> <seed folder>` brings your own show's episodes into a seed folder, and the Lantern puts them on the clock.
+**Podcasts.** `tools/feed2folder.py <feed url> <seed folder>` brings your own show's episodes into a seed folder, and the Lantern puts them on the clock. Going the other way, `/feed/<station id>.xml` on the web listener is the station's own podcast feed, newest recording first, so any podcast app can follow it. Episodes are made into MP3s the first time they are asked for.
+
+**The programme.** A `programme.json` in a seed folder is the station's programme, in the same form the app writes, and the Lantern sets it whenever the file changes. Times are the folder's own: give `"utc_offset_min"` (-360 for Chicago in winter). Name recordings by title, by "Artist - Title", or by file name.
+
+    {
+      "utc_offset_min": -360,
+      "mode": { "kind": "daily", "start_min": 0 },
+      "hours": [ { "days": 127, "start_min": 1080, "len_min": 360 } ],
+      "slots": [
+        { "title": "The Evening Watch", "about": "Low to high as the light goes.",
+          "span": { "days": 31, "start_min": 1140, "len_min": 30 },
+          "fill": { "kind": "tracks", "tracks": ["Low Tone", "Tester - Mid Tone"], "shuffle": false } },
+        { "title": "Night Call", "span": { "days": 127, "start_min": 1290, "len_min": 60 },
+          "fill": { "kind": "library" }, "live": true }
+      ]
+    }
+
+Modes are `shuffle`, `in_order`, `newest_first`, `daily` and `weekly` (with `"day"`, 0 for Monday). Days are a sum: Monday 1, Tuesday 2, Wednesday 4, Thursday 8, Friday 16, Saturday 32, Sunday 64; 127 is every day. Minutes count from midnight, so 1080 is six in the evening. A slot's fill is `library`, `tracks`, `newest` (with `"count"`) or `hand` (with a hand's `"key"`). Leave out `hours` for round the clock. The bell keeps ringing unless the file names an `"ident"`.
+
+**Notices.** A `notices.txt` in a seed folder holds the station's notices, one paragraph each. A new paragraph goes up on the station's page; delete it and the notice comes down. Notices posted from a phone are left alone.

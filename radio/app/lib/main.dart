@@ -943,6 +943,7 @@ class _ColoursPageState extends State<ColoursPage> {
         button('A PREMIERE', () => after(pyrateSheet(context, ShowEditor(station: id)))),
         button('A NOTICE', () => after(pyrateSheet(context, NoticeEditor(station: id)))),
         button('YOUR PAGE', () => openPage(context, mine, widget.radio)),
+        button('A POSTER', () => pyrateSheet(context, PosterSheet(station: mine))),
       ]),
     ];
   }

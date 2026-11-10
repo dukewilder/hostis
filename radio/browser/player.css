@@ -1,0 +1,128 @@
+/* The browser set: a valve radio in HOSTIS black, bone, brass and blood. The dial glass is
+   the one bold thing; everything around it stays quiet. No rights reserved. */
+:root{--brass:#c9a45c;--brass-dim:rgba(201,164,92,.45);--brass-faint:rgba(201,164,92,.18);--glow:243,217,164;--blood:#ed5555}
+html{background:#030303}
+body{display:block;min-height:100vh;background:radial-gradient(ellipse at 50% -10%,rgba(201,164,92,.07),transparent 60%),#030303}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--brass);outline-offset:3px}
+
+.top{display:flex;align-items:center;justify-content:space-between;max-width:1020px;margin:0 auto;padding:1rem 1.4rem .4rem}
+.top .home img{height:34px;display:block;opacity:.92}
+.signal{font-family:var(--mono);font-size:.68rem;color:var(--bone-faint);text-align:right}
+
+/* The cabinet */
+.set{position:relative;max-width:980px;margin:.6rem auto 0;padding:1.6rem 1.6rem 1.4rem;border:1px solid var(--brass-dim);border-radius:22px;
+  background:linear-gradient(180deg,#0e0d0b,#060605 70%);box-shadow:inset 0 1px 0 rgba(237,228,206,.06),inset 0 0 60px rgba(0,0,0,.8),0 30px 80px rgba(0,0,0,.6);overflow:hidden;isolation:isolate}
+.banner{position:absolute;inset:0 0 auto 0;height:300px;background-size:cover;background-position:center;opacity:.35;z-index:-1;
+  -webkit-mask-image:linear-gradient(to bottom,#000,transparent);mask-image:linear-gradient(to bottom,#000,transparent)}
+.face{display:grid;grid-template-columns:minmax(0,300px) 1fr;gap:1.8rem;align-items:center}
+.art{aspect-ratio:1;border:1px solid var(--brass-dim);border-radius:8px;padding:6px;background:#050505;display:grid;place-items:center;box-shadow:inset 0 0 24px rgba(0,0,0,.9)}
+.art .cover{width:100%;height:100%;margin:0;border:0;border-radius:4px;object-fit:cover;aspect-ratio:1}
+.art .flag{margin:0;border-color:var(--brass-faint);font-size:clamp(.8rem,1.9vw,1.15rem)}
+.tell{min-width:0}
+.lamps{display:flex;align-items:center;gap:.55rem;margin-bottom:.7rem}
+.lamp{width:13px;height:13px;border-radius:50%;background:#3a1414;box-shadow:inset 0 -2px 3px rgba(0,0,0,.6)}
+.lamp.on{background:var(--blood);box-shadow:0 0 14px 3px rgba(237,85,85,.55),inset 0 -2px 3px rgba(0,0,0,.25)}
+.airword{font-family:var(--carved);font-size:.66rem;letter-spacing:.32em;color:var(--bone-ghost)}
+.airword.on{color:var(--blood)}
+.rx{width:7px;height:7px;border-radius:50%;background:#2a2316;margin-left:.4rem}
+.rx.on{background:var(--brass);box-shadow:0 0 8px 2px rgba(201,164,92,.5)}
+.set h1{font-size:clamp(2rem,4.6vw,2.9rem);line-height:1.04;margin:0 0 .35rem;font-weight:400;overflow-wrap:anywhere}
+.ident{display:flex;gap:.9rem;align-items:baseline;flex-wrap:wrap}
+.freq{font-family:var(--mono);font-size:.85rem;color:var(--brass)}
+.ident .cs{margin:0;font-size:.72rem;white-space:pre}
+.slot{font-family:var(--carved);font-size:.68rem;letter-spacing:.3em;color:var(--blood);min-height:1em;margin-top:1.1rem}
+.set .np{font-size:1.4rem;min-height:1.5em;margin-top:.2rem}
+.set .by{margin-top:.1rem}
+.prog{height:2px;background:rgba(237,228,206,.12);margin-top:1rem;max-width:420px}
+.prog div{height:100%;width:0;background:var(--brass)}
+.time{font-family:var(--mono);font-size:.68rem;color:var(--bone-ghost);margin-top:.45rem;min-height:1em}
+
+/* The dial glass: every station printed where its frequency falls, the needle on the one tuned */
+.glass{position:relative;margin-top:1.6rem;height:118px;border:1px solid var(--brass-dim);border-radius:10px;overflow-x:auto;overflow-y:hidden;cursor:pointer;
+  background:radial-gradient(ellipse at 50% 135%,rgba(var(--glow),.28),rgba(var(--glow),.07) 55%,transparent 78%),#0b0906;
+  box-shadow:inset 0 0 34px rgba(0,0,0,.92),0 0 0 4px #050505,0 0 0 5px var(--brass-faint);scrollbar-width:thin;scrollbar-color:var(--brass-faint) transparent}
+.track{position:relative;height:100%;min-width:100%}
+.scale{position:absolute;left:0;right:0;bottom:0;height:40px}
+.scale i{position:absolute;bottom:0;width:1px;height:8px;background:rgba(237,228,206,.28)}
+.scale i.major{height:15px;background:rgba(237,228,206,.55)}
+.scale b{position:absolute;bottom:17px;transform:translateX(-50%);font-family:var(--mono);font-weight:400;font-size:.64rem;color:var(--brass)}
+.names{position:absolute;left:0;right:0;top:10px;height:62px}
+.names button{position:absolute;transform:translateX(-50%);background:none;border:0;margin:0;padding:.15rem .3rem;font-family:var(--carved);font-size:.62rem;letter-spacing:.16em;
+  color:rgba(237,228,206,.5);white-space:nowrap;max-width:11rem;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.names button:hover{color:var(--bone)}
+.names button.on{color:#fff6e0;text-shadow:0 0 10px rgba(var(--glow),.85)}
+.names button.live::before{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--blood);margin-right:.4rem;vertical-align:middle}
+.needle{position:absolute;top:5px;bottom:5px;width:2px;margin-left:-1px;background:var(--blood);box-shadow:0 0 9px rgba(237,85,85,.85);left:50%;transition:left .7s cubic-bezier(.2,.75,.2,1)}
+
+/* Controls and the meter */
+.controls{display:flex;align-items:center;gap:1.3rem;margin-top:1.4rem;flex-wrap:wrap}
+button.power{width:76px;height:76px;border-radius:50%;padding:0;margin:0;display:grid;place-items:center;border:1.5px solid var(--bone-faint);
+  background:radial-gradient(circle at 35% 30%,#22201b,#070707 70%);box-shadow:0 6px 18px rgba(0,0,0,.7),inset 0 1px 0 rgba(237,228,206,.08)}
+button.power .glyph{font-family:var(--serif);font-size:1.5rem;color:var(--bone);letter-spacing:0;margin-left:.15rem}
+button.power.on{border-color:var(--blood)}
+button.power.on .glyph{margin:0;color:var(--blood)}
+.buttons{display:flex;gap:.5rem;flex-wrap:wrap}
+button.plain{margin:0;font-family:var(--carved);font-size:.66rem;letter-spacing:.2em;padding:.7rem 1.1rem;border:.8px solid var(--bone-ghost);border-radius:4px;color:var(--bone-dim);background:rgba(237,228,206,.02)}
+button.plain:hover{border-color:var(--bone-faint);color:var(--bone)}
+button.plain.quiet{color:var(--bone-ghost)}
+.vu{width:128px;margin-left:auto;flex:0 0 auto}
+.vu .arc{fill:none;stroke:rgba(237,228,206,.3);stroke-width:1.2}
+.vu .hot{fill:none;stroke:var(--blood);stroke-width:2.4}
+.vu .ticks line{stroke:rgba(237,228,206,.45);stroke-width:1}
+.vu .vun{stroke:var(--bone);stroke-width:1.5;transform-origin:60px 64px;transform:rotate(-48deg)}
+.vu .hub{fill:var(--brass)}
+.vu .vulabel{font-family:var(--mono);font-size:7px;fill:var(--bone-ghost);text-anchor:middle}
+
+/* Below the set: the station's week, and the Log */
+.below{max-width:980px;margin:2.4rem auto 0;padding:0 1.4rem;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:3rem;align-items:start}
+.below section{padding:0;max-width:none;margin:0;border:0}
+.below h2{font-family:var(--serif);font-weight:400;font-size:1.45rem;letter-spacing:0;margin:0 0 .6rem;color:var(--bone)}
+.below h2.gap,.page h2+div+h2{margin-top:2.2rem}
+.page>h2:not(:first-child){margin-top:2rem}
+.fine,.how{color:var(--bone-faint);font-style:italic;font-size:.98rem;line-height:1.5;margin:0 0 1rem}
+.notice{border-left:2px solid var(--brass);padding:.75rem 1rem;margin:0 0 .8rem;background:rgba(201,164,92,.05);color:var(--bone);font-size:1.08rem;line-height:1.45}
+.notice small{display:block;font-family:var(--mono);font-size:.62rem;color:var(--bone-ghost);margin-top:.45rem}
+.li{display:flex;gap:1rem;align-items:baseline;padding:.4rem 0;border-bottom:.5px solid rgba(237,228,206,.07)}
+.li .t{font-family:var(--mono);font-size:.72rem;color:var(--bone-faint);flex:0 0 auto;min-width:3.6rem}
+.li .w{flex:1;color:var(--bone-dim);font-size:1.05rem}
+.li.on .w,.li.on .t{color:var(--bone)}
+.li.on .t::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--blood);margin-right:.45rem;vertical-align:middle}
+.li em{display:block;color:var(--bone-faint);font-size:.9rem}
+.li b{font-family:var(--carved);font-weight:400;font-size:.56rem;letter-spacing:.28em;margin-left:.45rem}
+.lv{color:var(--blood)}.pr{color:var(--brass)}
+.day{font-family:var(--carved);font-size:.64rem;letter-spacing:.3em;color:var(--brass);margin:1.3rem 0 .2rem}
+.li button.cal{margin:0;padding:.3rem .65rem;font-size:.56rem;font-family:var(--carved);letter-spacing:.18em;border:.6px solid var(--bone-ghost);border-radius:3px;color:var(--bone-faint)}
+#week{margin-top:1rem}
+.row{gap:.9rem;padding:.75rem 0}
+.row .mini{border-color:var(--brass-faint);border-radius:4px;overflow:hidden}
+.row .name{font-size:1.12rem}
+.row .count{font-size:.95rem}
+.row .fq{font-family:var(--mono);font-size:.62rem;color:var(--brass);display:block;font-weight:400}
+.switches{display:flex;flex-direction:column;gap:.6rem;margin:0 0 1rem;font-size:1rem;color:var(--bone-dim)}
+.switches input{accent-color:var(--brass);margin-right:.6rem;vertical-align:middle;width:1rem;height:1rem}
+textarea{width:100%;min-height:9rem;background:#0b0b0a;color:var(--bone-dim);border:.5px solid var(--bone-ghost);font-family:var(--mono);font-size:.72rem;padding:.7rem;margin:1rem 0 .6rem}
+#mbox .plain{margin:0 .4rem .4rem 0}
+footer{display:flex;gap:1.4rem;justify-content:center;flex-wrap:wrap;font-family:var(--serif);font-size:.95rem;letter-spacing:0;padding:3rem 1.4rem 2.4rem;color:var(--bone-faint)}
+
+@media (max-width:720px){
+  .set{border-radius:16px;padding:1.1rem 1rem 1.1rem;margin:.4rem .6rem 0}
+  .face{grid-template-columns:1fr;gap:1.2rem;text-align:center}
+  .art{width:min(56vw,230px);margin:0 auto}
+  .lamps,.ident{justify-content:center}
+  .prog{margin-left:auto;margin-right:auto}
+  .controls{justify-content:center}
+  .vu{margin-left:0}
+  .below{grid-template-columns:1fr;gap:2.4rem}
+}
+@media (prefers-reduced-motion:reduce){.needle{transition:none}}
+
+/* Inside another page, the set alone */
+html.embed,html.embed body{background:#030303;min-height:0}
+html.embed .top,html.embed .below,html.embed footer,html.embed #maroon{display:none}
+html.embed .set{margin:0;box-shadow:none}
+.passbox{display:flex;gap:1.4rem;align-items:center;margin-top:1.4rem;padding:1.1rem;border:1px solid var(--brass-dim);border-radius:10px;background:#070706}
+.passbox .qr{flex:0 0 auto;width:min(190px,42vw)}.passbox .qr svg{display:block;width:100%;height:auto;border-radius:4px}
+.passbox p{margin:0 0 .7rem;color:var(--bone-dim);font-size:1rem;line-height:1.45}.passbox .link{font-family:var(--mono);font-size:.68rem;color:var(--brass);word-break:break-all}
+.passbox .plain{margin:0 .4rem .4rem 0}
+@media (max-width:720px){.passbox{flex-direction:column;text-align:center}}

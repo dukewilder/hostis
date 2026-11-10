@@ -1,6 +1,7 @@
 //! The gangway: any browser, any phone, no app. A Lantern serves the Log as JSON,
 //! each station as an endless MP3 stream like any internet radio, and a page to
-//! play them. One encoder per station, however many tabs are listening.
+//! play them. One encoder per station, however many tabs are listening. Each station's
+//! recordings also go out as a podcast feed, so any podcast app can follow it.
 //!
 //! No rights reserved.
 
@@ -16,7 +17,7 @@ use axum::{
     Router,
     body::{Body, Bytes},
     extract::{Path, State},
-    http::{StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     response::{Html, IntoResponse, Response},
     routing::get,
 };
@@ -57,6 +58,8 @@ pub async fn serve(inner: Arc<Inner>, addr: SocketAddr, every_station: bool) -> 
         .route("/listen/{id}", get(listen))
         .route("/art/{hash}", get(art))
         .route("/brand/{name}", get(brand))
+        .route("/feed/{id}", get(feed))
+        .route("/episode/{id}/{track}", get(episode))
         .with_state(web);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     say(&format!("web listener on http://{addr}"));
@@ -114,6 +117,150 @@ async fn now(State(w): State<Web>, Path(id): Path<String>) -> Response {
         None => json!({ "live": false, "title": "", "by": "" }),
     };
     ([(header::CACHE_CONTROL, "no-store")], axum::Json(body)).into_response()
+}
+
+fn xml(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+/// Where this page is reached from, for links inside the feed: the tunnel's name, not ours.
+fn base(h: &HeaderMap) -> String {
+    let host = h.get("x-forwarded-host").or(h.get(header::HOST)).and_then(|v| v.to_str().ok()).unwrap_or("localhost");
+    let local = host.starts_with("127.") || host.starts_with("localhost") || host.starts_with("[::1]");
+    let proto = h.get("x-forwarded-proto").and_then(|v| v.to_str().ok()).unwrap_or(if local { "http" } else { "https" });
+    format!("{proto}://{host}")
+}
+
+fn rfc822(ms: u64) -> String {
+    const DAYS: [&str; 7] = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
+    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    let days = (ms / 86_400_000) as i64;
+    let secs = ms / 1000 % 86_400;
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + if m <= 2 { 1 } else { 0 };
+    format!("{}, {d:02} {} {y} {:02}:{:02}:{:02} GMT", DAYS[days.rem_euclid(7) as usize], MONTHS[(m - 1) as usize], secs / 3600, secs / 60 % 60, secs % 60)
+}
+
+/// A station's recordings as a podcast feed, newest first. Any podcast app can follow it.
+async fn feed(State(w): State<Web>, Path(id): Path<String>, h: HeaderMap) -> Response {
+    let Ok(st) = StationId::from_hex(id.trim_end_matches(".xml")) else { return StatusCode::NOT_FOUND.into_response() };
+    if !w.allowed(&st) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let Some(a) = w.inner.archive(&st) else { return StatusCode::NOT_FOUND.into_response() };
+    let (name, about) = match a.colours() {
+        Some(Entry::Colours { name, about, .. }) => (name.clone(), about.clone()),
+        _ => (st.call_sign(), String::new()),
+    };
+    let base = base(&h);
+    let link = format!("https://hostis.black/pyrateradio/listen/#{}", st.to_hex());
+    let cover = a.art().and_then(|(c, _, _)| c).map(|c| format!("{base}/art/{}.jpg", crate::hex(&c.hash)));
+    let lib = a.library().unwrap_or_default();
+    let mut items = String::new();
+    for (h, e) in lib.iter().rev().take(100) {
+        let Entry::Track { title, by, chunks, channels, .. } = e.entry.body() else { continue };
+        let ms: u64 = chunks.iter().map(|c| c.duration_ms()).sum();
+        // The bell is the station's ident, not an episode.
+        if matches!(e.entry.body(), Entry::Track { source, .. } if source.starts_with("bell ")) {
+            continue;
+        }
+        let kbps = if *channels == 1 { 64 } else { 128 };
+        let art = a.track_art(h).map(|r| format!("<itunes:image href=\"{base}/art/{}.jpg\"/>", crate::hex(&r.hash))).unwrap_or_default();
+        items.push_str(&format!(
+            "<item><title>{}</title><itunes:author>{}</itunes:author><guid isPermaLink=\"false\">{}</guid><pubDate>{}</pubDate><enclosure url=\"{base}/episode/{}/{}.mp3\" length=\"{}\" type=\"audio/mpeg\"/><itunes:duration>{}</itunes:duration>{art}</item>\n",
+            xml(title), xml(by), crate::hex(h), rfc822(e.entry.at_ms), st.to_hex(), crate::hex(h), ms * kbps / 8, ms / 1000,
+        ));
+    }
+    let image = cover.map(|c| format!("<itunes:image href=\"{c}\"/><image><url>{c}</url><title>{}</title><link>{}</link></image>", xml(&name), xml(&link))).unwrap_or_default();
+    let body = format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rss version=\"2.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\"><channel><title>{}</title><link>{}</link><description>{}</description><itunes:author>{}</itunes:author>{image}<generator>Pyrate Radio</generator>\n{items}</channel></rss>\n",
+        xml(&name), xml(&link), xml(if about.is_empty() { "A station on Pyrate Radio" } else { &about }), xml(&name),
+    );
+    ([(header::CONTENT_TYPE, "application/rss+xml; charset=utf-8"), (header::CACHE_CONTROL, "max-age=300")], body).into_response()
+}
+
+/// One recording as an MP3 for podcast apps, encoded once and kept on disk.
+async fn episode(State(w): State<Web>, Path((id, track)): Path<(String, String)>, h: HeaderMap) -> Response {
+    let Ok(st) = StationId::from_hex(&id) else { return StatusCode::NOT_FOUND.into_response() };
+    let Ok(th) = crate::unhex(track.trim_end_matches(".mp3")) else { return StatusCode::NOT_FOUND.into_response() };
+    if !w.allowed(&st) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let dir = w.inner.cfg.dir.join("episodes");
+    let path = dir.join(format!("{}.mp3", crate::hex(&th)));
+    if !path.exists() {
+        let Some(a) = w.inner.archive(&st) else { return StatusCode::NOT_FOUND.into_response() };
+        let found = a.library().unwrap_or_default().into_iter().find(|(x, _)| *x == th);
+        let Some((_, e)) = found else { return StatusCode::NOT_FOUND.into_response() };
+        let Entry::Track { chunks, channels, .. } = e.entry.body().clone() else { return StatusCode::NOT_FOUND.into_response() };
+        let mut pcm = Vec::new();
+        let Ok(mut dec) = ChunkDecoder::new(channels) else { return StatusCode::INTERNAL_SERVER_ERROR.into_response() };
+        for c in &chunks {
+            let Ok(bytes) = w.inner.chunk(&st, &c.hash).await else { return StatusCode::SERVICE_UNAVAILABLE.into_response() };
+            pcm.extend(dec.decode(&bytes).unwrap_or_default());
+        }
+        let mp3 = tokio::task::spawn_blocking(move || -> Option<Vec<u8>> {
+            let mut lame = mp3lame_encoder::Builder::new()?;
+            lame.set_num_channels(channels.clamp(1, 2)).ok()?;
+            lame.set_sample_rate(48_000).ok()?;
+            lame.set_brate(if channels == 1 { mp3lame_encoder::Bitrate::Kbps64 } else { mp3lame_encoder::Bitrate::Kbps128 }).ok()?;
+            lame.set_quality(mp3lame_encoder::Quality::Good).ok()?;
+            let mut lame = lame.build().ok()?;
+            let mut out = Vec::with_capacity(pcm.len() / 3);
+            for part in pcm.chunks(48_000 * channels as usize) {
+                if channels == 1 {
+                    lame.encode_to_vec(mp3lame_encoder::MonoPcm(part), &mut out).ok()?;
+                } else {
+                    lame.encode_to_vec(mp3lame_encoder::InterleavedPcm(part), &mut out).ok()?;
+                }
+            }
+            lame.flush_to_vec::<mp3lame_encoder::FlushNoGap>(&mut out).ok()?;
+            Some(out)
+        })
+        .await
+        .ok()
+        .flatten();
+        let Some(mp3) = mp3 else { return StatusCode::INTERNAL_SERVER_ERROR.into_response() };
+        let _ = std::fs::create_dir_all(&dir);
+        let tmp = path.with_extension("part");
+        if std::fs::write(&tmp, &mp3).and_then(|_| std::fs::rename(&tmp, &path)).is_err() {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+        // Keep the newest forty; the rest can be made again.
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            let mut files: Vec<_> = rd.filter_map(|f| f.ok()).filter_map(|f| Some((f.metadata().ok()?.modified().ok()?, f.path()))).collect();
+            files.sort();
+            let n = files.len().saturating_sub(40);
+            for (_, f) in files.into_iter().take(n) {
+                let _ = std::fs::remove_file(f);
+            }
+        }
+    }
+    let Ok(bytes) = std::fs::read(&path) else { return StatusCode::NOT_FOUND.into_response() };
+    let total = bytes.len();
+    // Podcast apps ask for pieces.
+    let range = h.get(header::RANGE).and_then(|v| v.to_str().ok()).and_then(|r| r.strip_prefix("bytes=")).and_then(|r| {
+        let (a, b) = r.split_once('-')?;
+        let start: usize = a.parse().ok()?;
+        let end: usize = if b.is_empty() { total.saturating_sub(1) } else { b.parse::<usize>().ok()?.min(total.saturating_sub(1)) };
+        (start <= end && end < total).then_some((start, end))
+    });
+    match range {
+        Some((s0, e0)) => (
+            StatusCode::PARTIAL_CONTENT,
+            [(header::CONTENT_TYPE, "audio/mpeg".to_string()), (header::ACCEPT_RANGES, "bytes".into()), (header::CONTENT_RANGE, format!("bytes {s0}-{e0}/{total}"))],
+            bytes[s0..=e0].to_vec(),
+        )
+            .into_response(),
+        None => ([(header::CONTENT_TYPE, "audio/mpeg"), (header::ACCEPT_RANGES, "bytes")], bytes).into_response(),
+    }
 }
 
 const WORDMARK: &[u8] = include_bytes!("web/wordmark.png");

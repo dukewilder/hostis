@@ -10,7 +10,7 @@ const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let radio = null, stations = [], cur = null, playing = false, gen = 0;
-let ctx = null, gain = null, sources = [];
+let ctx = null, gain = null, sources = [], meter = null;
 const pics = new Map();
 
 function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v) } catch (e) { return null } }
@@ -86,6 +86,7 @@ function audio() {
   if (ctx) return;
   ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000, latencyHint: 'playback' });
   gain = ctx.createGain();
+  meter = ctx.createAnalyser(); meter.fftSize = 1024; gain.connect(meter); vu();
   // On iPhones a page's own audio stops when the screen locks. Sent through an audio
   // element instead, it keeps playing and shows on the lock screen.
   if (/iPhone|iPad|iPod/.test(navigator.userAgent) && ctx.createMediaStreamDestination) {
@@ -108,7 +109,70 @@ function schedule(chs, skipMs, when) {
   return when + n / 48000;
 }
 
-function status(t) { $('np').textContent = t; $('by').textContent = ''; $('slot').textContent = '' }
+function status(t) { $('np').textContent = t; $('by').textContent = ''; $('slot').textContent = ''; $('prog').style.width = '0'; $('time').textContent = '' }
+
+// ---- The set: frequencies, the dial glass, the lamps and the meter ----------------------
+// Every station sits at the same place on every dial: its frequency comes from its key.
+const fq = id => (875 + parseInt(id.slice(0, 6), 16) % 206) / 10;
+// Inset from the glass's edges, so the end numerals and names stay readable.
+const at = f => 3 + (f - 87.5) / 20.5 * 94;
+let dialIds = '', order = [];
+function scale() {
+  let h = '';
+  for (let f = 88; f <= 108; f += 0.5) h += '<i style="left:' + at(f) + '%"' + (f % 2 === 0 ? ' class="major"' : '') + '></i>' + (f % 4 === 0 ? '<b style="left:' + at(f) + '%">' + f + '</b>' : '');
+  $('scale').innerHTML = h;
+  let t = ''; for (let a = -48; a <= 48; a += 12) { const r = a * Math.PI / 180; t += '<line x1="' + (60 + 46 * Math.sin(r)) + '" y1="' + (64 - 46 * Math.cos(r)) + '" x2="' + (60 + 52 * Math.sin(r)) + '" y2="' + (64 - 52 * Math.cos(r)) + '"/>' }
+  $('ticks').innerHTML = t;
+}
+function dial(list) {
+  const ids = list.map(s => s.id + (s.live ? '*' : '')).join();
+  if (ids === dialIds) return;
+  dialIds = ids; order = [...list].sort((a, b) => fq(a.id) - fq(b.id));
+  $('track').style.width = Math.max($('glass').clientWidth, order.length * 92) + 'px';
+  $('names').innerHTML = '';
+  order.forEach((s, i) => {
+    const b = document.createElement('button'); b.textContent = s.name || s.call_sign; b.dataset.id = s.id; b.title = fq(s.id).toFixed(1) + '  ' + (s.name || '');
+    b.style.left = at(fq(s.id)) + '%'; b.style.top = (i % 3) * 20 + 'px'; b.classList.toggle('live', !!s.live); b.setAttribute('role', 'option');
+    b.onclick = e => { e.stopPropagation(); tuneTo(s) };
+    $('names').appendChild(b);
+  });
+  if (cur) needle(cur.id, false);
+}
+function needle(id, smooth = true) {
+  $('needle').style.left = at(fq(id)) + '%';
+  document.querySelectorAll('#names button').forEach(b => { const on = b.dataset.id === id; b.classList.toggle('on', on); b.setAttribute('aria-selected', on) });
+  const g = $('glass'), x = $('track').clientWidth * at(fq(id)) / 100;
+  if (g.scrollWidth > g.clientWidth) g.scrollTo({ left: x - g.clientWidth / 2, behavior: smooth ? 'smooth' : 'auto' });
+  $('freq').textContent = fq(id).toFixed(1);
+}
+function tuneTo(s) { if (playing) listen(s); else show(s) }
+$('glass').addEventListener('click', e => {
+  if (!order.length) return;
+  const r = $('track').getBoundingClientRect(), f = 87.5 + ((e.clientX - r.left) / r.width * 100 - 3) / 94 * 20.5;
+  tuneTo(order.reduce((a, b) => Math.abs(fq(b.id) - f) < Math.abs(fq(a.id) - f) ? b : a));
+});
+$('glass').addEventListener('keydown', e => {
+  if (!order.length || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+  e.preventDefault();
+  const i = order.findIndex(s => s.id === cur?.id), n = e.key === 'ArrowRight' ? i + 1 : i - 1;
+  tuneTo(order[(n + order.length) % order.length]);
+});
+function lamps(live) { $('lamp').classList.toggle('on', !!live); $('air').classList.toggle('on', !!live); $('rx').classList.toggle('on', playing && sources.length > 0) }
+// The meter follows the sound, with a needle's weight.
+let vuAngle = -48;
+function vu() {
+  const buf = new Float32Array(meter.fftSize);
+  const step = () => {
+    let rms = 0;
+    if (playing) { meter.getFloatTimeDomainData(buf); for (const x of buf) rms += x * x; rms = Math.sqrt(rms / buf.length) }
+    const want = -48 + Math.min(96, Math.max(0, (20 * Math.log10(rms + 1e-6) + 42) / 42 * 96));
+    vuAngle += (want - vuAngle) * (want > vuAngle ? 0.35 : 0.08);
+    $('vun').style.transform = 'rotate(' + vuAngle.toFixed(1) + 'deg)';
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+const mmss = ms => { const s = Math.floor(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') };
 
 // ---- Times, in the listener's own clock ------------------------------------------------
 const hm = ms => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -180,9 +244,11 @@ async function play(id, g) {
 async function nowPlaying() {
   if (!cur || !radio) return;
   const p = JSON.parse(radio.plan(cur.id, radio.now()));
-  if (p.kind === 'live') { $('np').textContent = 'Live'; $('by').textContent = ''; $('air').innerHTML = '<span class="air">ON AIR</span>' }
+  lamps(p.kind === 'live');
+  if (p.kind === 'live') { $('np').textContent = 'Live from the station'; $('by').textContent = ''; $('slot').textContent = ''; $('prog').style.width = '100%'; $('time').textContent = '' }
   else if (p.kind === 'track') {
     $('np').textContent = p.title || ''; $('by').textContent = p.by || ''; $('slot').textContent = p.slot || '';
+    $('prog').style.width = Math.min(100, p.position_ms / p.duration_ms * 100) + '%'; $('time').textContent = mmss(p.position_ms) + ' of ' + mmss(p.duration_ms);
     const url = await pic(cur.id, p.art || cur.cover); art(url);
     if ('mediaSession' in navigator && playing) navigator.mediaSession.metadata = new MediaMetadata({ title: p.title || cur.name, artist: p.by || '', album: cur.name, artwork: url ? [{ src: url, sizes: '512x512', type: 'image/jpeg' }] : [] });
   } else if (p.kind === 'off air') status(offAir(p.back_at));
@@ -210,15 +276,15 @@ function ics(l, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
-let pageFor = null, pageAt = 0;
+let pageFor = null, pageAt = 0, pageV = null;
 function page(force) {
   if (!cur || !radio) return;
-  if (!force && pageFor === cur.id && Date.now() - pageAt < 30000) return;
-  const v = JSON.parse(radio.page(cur.id, 7));
+  if (force || pageFor !== cur.id || Date.now() - pageAt > 30000) { pageV = JSON.parse(radio.page(cur.id, 7)); pageFor = cur.id; pageAt = Date.now() }
+  const v = pageV;
   if (!v) { $('page').hidden = true; return }
-  pageFor = cur.id; pageAt = Date.now(); $('page').hidden = false;
+  $('page').hidden = false;
   $('notices').innerHTML = (v.notices || []).map(n => '<div class="notice">' + esc(n.text) + '<small>' + esc(dayOf(n.at_ms) + ' ' + hm(n.at_ms)) + '</small></div>').join('');
-  const next = (v.next || []).slice(v.now ? 1 : 0, 6);
+  const next = (v.next || []).filter(n => n.start_ms > radio.now()).slice(0, 5);
   $('nexth').hidden = !next.length;
   $('next').innerHTML = next.map(n => '<div class="li"><span class="t">' + hm(n.start_ms) + '</span><span class="w">' + esc(n.title) + (n.by ? ' <em>' + esc(n.by) + '</em>' : '') + '</span></div>').join('');
   $('how').textContent = (!v.now && v.back_at ? offAir(v.back_at) + ' ' : '') + howItPlays(v.programme);
@@ -246,9 +312,8 @@ async function show(s) {
   cur = s;
   flag($('flag'), s.id, s.live); art(await pic(s.id, s.cover));
   const b = await pic(s.id, s.banner); $('banner').style.backgroundImage = b ? 'url(' + b + ')' : '';
-  $('name').textContent = s.name || s.call_sign; $('cs').textContent = s.call_sign + (s.aboard !== undefined ? ' · ' + s.aboard + ' aboard' : '');
-  $('air').innerHTML = s.live ? '<span class="air">ON AIR</span>' : '';
-  $('go').hidden = false; $('go').textContent = playing ? '■ STOP' : '▶ LISTEN';
+  $('name').textContent = s.name || s.call_sign; $('cs').textContent = s.call_sign + (s.aboard !== undefined ? '  ' + s.aboard + ' aboard' : '');
+  lamps(s.live); needle(s.id); power();
   $('pass').hidden = false; $('maroon').hidden = false;
   document.querySelectorAll('.row').forEach(r => r.classList.toggle('on', r.dataset.id === s.id));
   if (location.hash.slice(1) !== s.id) history.replaceState(null, '', '#' + s.id);
@@ -258,17 +323,19 @@ async function show(s) {
 
 function listen(s) {
   audio(); ctx.resume();
-  const g = ++gen; stopAll(); playing = true; show(s); $('go').textContent = '■ STOP';
+  const g = ++gen; stopAll(); playing = true; show(s); power();
   play(s.id, g);
 }
 
-function stop() { gen++; stopAll(); playing = false; $('go').textContent = '▶ LISTEN'; ctx?.suspend() }
+function stop() { gen++; stopAll(); playing = false; power(); lamps(false); ctx?.suspend() }
+function power() { const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■' : '▶'; g.setAttribute('aria-label', playing ? 'Stop' : 'Listen') }
 
 function rows() {
   const m = marooned();
   const shown = stations.filter(s => !m.has(s.id) && allowed(s));
   const box = $('rows'); box.innerHTML = '';
-  if (!shown.length) { box.innerHTML = '<p>Listening for station cards. The first come in within a minute.</p>'; return }
+  dial(shown);
+  if (!shown.length) { box.innerHTML = '<p class="fine">Listening for station cards. The first come in within a minute.</p>'; return }
   for (const s of shown) {
     const r = document.createElement('div'); r.className = 'row'; r.dataset.id = s.id;
     r.innerHTML = '<div class="mini"></div><div class="meta"><div class="name"></div><div class="cs"></div><div class="about"></div></div><div class="count"></div>';
@@ -276,7 +343,7 @@ function rows() {
     if (s.cover) { mini.classList.add('pic'); pic(s.id, s.cover).then(u => { if (u) mini.innerHTML = '<img alt="" src="' + u + '">'; else flag(mini, s.id, s.live) }) } else flag(mini, s.id, s.live);
     r.querySelector('.name').textContent = s.name + (s.live ? '  · ON AIR' : '') + (s.explicit ? '  · EXPLICIT' : s.mature ? '  · MATURE' : '');
     r.querySelector('.cs').textContent = s.call_sign; r.querySelector('.about').textContent = s.about || '';
-    r.querySelector('.count').innerHTML = s.aboard + '<small>ABOARD</small>';
+    r.querySelector('.count').innerHTML = s.aboard + '<small>ABOARD</small><span class="fq">' + fq(s.id).toFixed(1) + '</span>';
     r.classList.toggle('on', cur?.id === s.id);
     r.onclick = () => listen(s);
     box.appendChild(r);
@@ -289,7 +356,7 @@ function refresh() {
   const n = radio.neighbours();
   $('signal').textContent = n ? n + (n === 1 ? ' neighbour' : ' neighbours') + ' · ' + stations.length + ' on the air' : 'Coming aboard';
   rows();
-  if (cur) { const u = stations.find(x => x.id === cur.id); if (u) { const pic0 = cur.cover, ban0 = cur.banner; cur = u; $('cs').textContent = u.call_sign + ' · ' + u.aboard + ' aboard'; $('name').textContent = u.name; if (u.cover !== pic0 || u.banner !== ban0) show(u) } }
+  if (cur) { const u = stations.find(x => x.id === cur.id); if (u) { const pic0 = cur.cover, ban0 = cur.banner; cur = u; $('cs').textContent = u.call_sign + '  ' + u.aboard + ' aboard'; $('name').textContent = u.name; if (u.cover !== pic0 || u.banner !== ban0) show(u) } }
   else { const id = location.hash.slice(1); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations.find(x => allowed(x) && !marooned().has(x.id))); if (s) show(s) }
 }
 
@@ -302,11 +369,20 @@ function followLink() {
 }
 
 $('go').onclick = () => { if (playing) stop(); else if (cur) listen(cur) };
-$('pass').onclick = async () => {
-  const url = location.origin + location.pathname + '#' + cur.id;
-  if (navigator.share) { try { await navigator.share({ title: cur.name, url }); return } catch (e) { } }
-  try { await navigator.clipboard.writeText(url); $('pass').textContent = 'LINK COPIED'; setTimeout(() => $('pass').textContent = 'PASS IT ON', 2000) } catch (e) { prompt('Pass on this link', url) }
+$('spin').onclick = () => {
+  const m = marooned(), pool = stations.filter(s => !m.has(s.id) && allowed(s) && s.id !== cur?.id);
+  if (pool.length) { listen(pool[Math.floor(Math.random() * pool.length)]); scrollTo({ top: 0, behavior: 'smooth' }) }
 };
+// Pass it on: the station's code to scan, its link to copy or share.
+$('pass').onclick = () => {
+  const url = 'https://hostis.black/pyrateradio/listen/#' + cur.id, q = JSON.parse(radio.qr(url)), n = q.size;
+  let d = ''; for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.bits[y * n + x] === '1') d += 'M' + (x + 4) + ' ' + (y + 4) + 'h1v1h-1z';
+  $('qr').innerHTML = '<svg viewBox="0 0 ' + (n + 8) + ' ' + (n + 8) + '" role="img" aria-label="QR code for this station"><rect width="100%" height="100%" fill="#fbf8f1"/><path d="' + d + '" fill="#0a0a0a"/></svg>';
+  $('plink').textContent = url; $('passbox').hidden = false; $('passbox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  $('pcopy').onclick = async () => { try { await navigator.clipboard.writeText(url); $('pcopy').textContent = 'Copied' } catch (e) { prompt('The link', url) } };
+  $('pshare').hidden = !navigator.share; $('pshare').onclick = () => navigator.share({ title: cur.name, text: 'Tune in to ' + cur.name + ' on Pyrate Radio', url }).catch(() => { });
+};
+$('pclose').onclick = () => { $('passbox').hidden = true; $('pcopy').textContent = 'Copy the link' };
 $('maroon').onclick = () => {
   if (!cur || !confirm('Maroon ' + cur.name + '? It leaves this browser\'s Log and stays gone until you bring it back.')) return;
   const m = marooned(); m.add(cur.id); setMarooned(m); stop(); cur = null; history.replaceState(null, '', location.pathname); refresh();
@@ -329,6 +405,7 @@ for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-expl
 $('mclear').onclick = () => { setMarooned(new Set()); $('mnote').textContent = 'Every station is back in the Log.'; refresh() };
 
 async function boot() {
+  scale();
   $('signal').textContent = 'Coming aboard';
   try { await init() } catch (e) { $('name').textContent = 'This browser cannot run the radio'; return }
   let key = store('pyrate.token');
@@ -341,4 +418,9 @@ async function boot() {
 }
 // For anyone looking under the hood: what the player is doing.
 window.pyrate = { tap: () => { const d = ctx.createMediaStreamDestination(); gain.connect(d); return d.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, station: cur?.id, scheduled: sources.length, ahead_ms: ctx ? Math.round(Math.max(0, (sources.length ? 1 : 0) * 1)) : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, webcodecs }) };
+// Inside the landing page, the set tells its host how tall it is.
+if (document.documentElement.classList.contains('embed') && parent !== window) {
+  const tell = () => parent.postMessage({ pyrate: 'height', h: document.documentElement.scrollHeight }, location.origin);
+  new ResizeObserver(tell).observe(document.body); addEventListener('load', tell);
+}
 boot();
