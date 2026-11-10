@@ -42,7 +42,15 @@ let radio = null, stations = [], cur = null, playing = false, gen = 0, bootAt = 
 let ctx = null, gain = null, sources = [], meter = null;
 const pics = new Map();
 
-function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v) } catch (e) { return null } }
+// An IPFS gateway that serves by path (/ipfs/<name>/) gives every page it serves one shared
+// origin, so anything kept there could be read by any other page on it. There the tab keeps
+// nothing past the visit, and offers the player's own address instead.
+const SHARED = /^\/ip[fn]s\//.test(location.pathname);
+const passing = new Map();
+function store(k, v) {
+  if (SHARED) { if (v === undefined) return passing.get(k) ?? null; passing.set(k, v); return }
+  try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v) } catch (e) { return null }
+}
 
 // Every harbour this tab has ever been handed, kept so a returning listener never loses a
 // door even if a later build ships a different set. Dead entries just fail to resolve.
@@ -992,5 +1000,6 @@ if (document.documentElement.classList.contains('embed') && parent !== window) {
   new ResizeObserver(tell).observe(document.body); addEventListener('load', tell);
 }
 document.querySelectorAll('a.openlink').forEach(a => { if (!a.id) a.href = OPEN_PLAYERS[0] });
+if (SHARED) { const m = location.pathname.match(/^\/ipfs\/([a-z2-7]{20,})\//); $('sharedgo').href = m ? 'https://' + m[1] + '.ipfs.dweb.link/' + location.hash : OPEN_PLAYERS[0] || '#'; $('sharednote').hidden = false }
 if (EMBED) { scale(); const p = passedId(); dormant(p && isHarbour(p) ? HARBOUR_STATIONS.find(h => h.id === p) : HARBOUR_STATIONS[0]); $('signal').textContent = '' }
 else booting = boot();
