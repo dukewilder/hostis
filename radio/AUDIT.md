@@ -70,9 +70,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
 
-- **P7** (medium) Podcast feeds and "cover from a link" call the network straight from the phone, outside the node. `station.dart:929-976`
-- **P8** (medium) Feed "keep the newest N" downloads the whole back catalogue, and the feed list can be overwritten. `station.dart:889-926`
-- **P9** (medium) Podcast feeds are never refreshed on their own. `station.dart:804`
 - **P10** (medium) Drawer Lantern: the service restarts with no node, and the charging and Wi-Fi gate lives only in the Dart UI. `LanternService.kt:27-52`
 - **P14** (medium) Temporary audio, pictures and APK copies are left on disk. `Ship.kt:22-42`
 - **P17** (medium) Blocking native calls on the UI thread, in Dart and in the service. `PlaybackService.kt:53-58`
@@ -86,7 +83,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 - **P28** (low) Direct fixes to misplaced results: CLEAR THE HOLD, strike and restore all write the same `error` field. `main.dart:903-906`
 - **P31** (low) Android App Links are not verified, so scanned posters open the browser. `AndroidManifest.xml:43-54`
 - **P32** (low) `pyrate_start` is not safe against two starters, and a failed start is invisible. `ffi/src/lib.rs:38-68; main.dart:58-60; Native.kt:21-31`
-- **P33** (low) Feed and URL fetch code writes unsolicited temp files and the downloads can be stranded. `station.dart:952-975`
 - **P34** (medium) Brass (amber) is used throughout. `main.dart:25`
 - **P35** (low) Red is used beyond ON AIR, and there are two reds; M3 defaults bring rounded pickers and Roboto. `main.dart:23 vs 24`
 - **P36** (low) The window behind Flutter is white in light mode. `app/android/app/src/main/res/values/styles.xml`
@@ -204,10 +200,18 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **P11. The "plain" disguise leaks the station name and the app name.** (medium) Fixed: in the plain disguise the playback notification is private with a public face that says only Radio, the app's station title no longer overrides it, ON AIR is not shown, and bells and the Lantern notification say only Radio. What remains: the system still names the app in the notification header, which no app can change. (650c233)
 
-**P19. Links join pockets, flocks and stations without asking.** (medium) Fixed: A link from outside waits on the dial for a yes: LISTEN or JOIN, or NO. Nothing is played or joined before it. A bell's own tap carries a private key held in the app's preferences and still tunes at once; a forged tap from another app asks like any link. (pending)
+**P19. Links join pockets, flocks and stations without asking.** (medium) Fixed: A link from outside waits on the dial for a yes: LISTEN or JOIN, or NO. Nothing is played or joined before it. A bell's own tap carries a private key held in the app's preferences and still tunes at once; a forged tap from another app asks like any link. (e9bbfaf)
 
-**P24. Joined chatter and joined pockets cannot be left; muted voices cannot be unmuted.** (medium) Fixed: The chatter has LEAVE THE CHATTER and a MUTED list where each voice can be heard again. A joined pocket has LEAVE THIS POCKET in the Log, which drops its key, log and sound from the phone. (pending)
+**P24. Joined chatter and joined pockets cannot be left; muted voices cannot be unmuted.** (medium) Fixed: The chatter has LEAVE THE CHATTER and a MUTED list where each voice can be heard again. A joined pocket has LEAVE THIS POCKET in the Log, which drops its key, log and sound from the phone. (e9bbfaf)
 
-**P25. Pocket stations are offered a public share link, poster and QR.** (medium) Fixed: Pocket stations offer no PASS IT ON, no poster and no public link anywhere in the app; shareStation refuses a pocket as a backstop. (pending)
+**P25. Pocket stations are offered a public share link, poster and QR.** (medium) Fixed: Pocket stations offer no PASS IT ON, no poster and no public link anywhere in the app; shareStation refuses a pocket as a backstop. (e9bbfaf)
 
-**P30. Opening the app always autoplays.** (low) Fixed: The first open plays the busiest earned station once in the phone's life, kept in the sealed prefs; later opens stay silent until the owner tunes. (pending)
+**P30. Opening the app always autoplays.** (low) Fixed: The first open plays the busiest earned station once in the phone's life, kept in the sealed prefs; later opens stay silent until the owner tunes. (e9bbfaf)
+
+**P7. Podcast feeds and "cover from a link" call the network straight from the phone, outside the node.** (medium) Fixed: The fetches stay on the phone, since the node would leave from the same address, but all of them now go through one guarded helper: a plain client name in place of Dart's own, timeouts on connecting and on every gap, a size cap, a client that is always closed. The feed screens say plainly that the feed's host sees this phone's address as it would any podcast app's. (pending)
+
+**P8. Feed "keep the newest N" downloads the whole back catalogue, and the feed list can be overwritten.** (medium) Fixed: A feed's first reading takes its newest few and passes over the back catalogue for good; after that only episodes newer than the last one taken come aboard. Each feed's memory is written back alone, so a feed added or removed during a reading stays that way, and the memory is trimmed to what the feed still lists. (pending)
+
+**P9. Podcast feeds are never refreshed on their own.** (medium) Fixed: The app reads its feeds every three hours, on Wi-Fi only, while it is open. (pending)
+
+**P33. Feed and URL fetch code writes unsolicited temp files and the downloads can be stranded.** (low) Fixed: A fetch writes a .part file that takes its name only when whole and is deleted on any failure; the art and the episodes are deleted once set; and each start sweeps the cache of anything older than six hours that an earlier run left behind. (pending)

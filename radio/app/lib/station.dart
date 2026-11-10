@@ -831,7 +831,7 @@ class _StartShapePickerState extends State<StartShapePicker> {
         'in_order' => 'Your recordings in the order you add them, round and round.',
         'daily' => 'A day\'s tape, from the top at the same time every day.',
         'weekly' => 'A week of programmes, from the top at the same time every week.',
-        'feed' => 'Paste your own podcast\'s feed, or one that says you may rebroadcast it. New episodes come aboard by themselves, newest first.',
+        'feed' => 'Paste your own podcast\'s feed, or one that says you may rebroadcast it. The newest come aboard now and new episodes by themselves after. This phone reads the feed itself, so its host sees this phone\'s address as it would any podcast app\'s.',
         'live' => 'Your recordings fill the day, and the same hour every day is kept for you to go live.',
         _ => 'Everything you add, shuffled, all day and all night.',
       }),
@@ -883,24 +883,49 @@ class Feeds {
 
   static Future<void> remove(String url) async => pref('feeds', load().where((f) => f['url'] != url).toList());
 
+  /// Writes one feed's memory back without touching the others, so a feed added or
+  /// removed while the feeds are being read stays added or removed.
+  static void _save(String url, Set<String> seen) {
+    final all = load();
+    for (final f in all) {
+      if (f['url'] == url) f['seen'] = seen.toList();
+    }
+    pref('feeds', all);
+  }
+
   static bool _busy = false;
 
-  /// Fetches every feed and brings aboard episodes not yet set, newest first, up to each
-  /// feed's count. Runs while the app is open; a Lantern does the same with feed2folder.
+  /// Fetches every feed and brings aboard episodes not yet set, up to each feed's count.
+  /// A feed's first reading takes its newest few and passes over the back catalogue for
+  /// good; after that only episodes newer than the last one taken come aboard. The phone
+  /// reads the feeds every few hours on Wi-Fi while the app is open; a Lantern does the
+  /// same with feed2folder.
   static Future<String> refresh() async {
     if (_busy) return 'Already reading the feeds';
     _busy = true;
     var added = 0;
+    var failed = 0;
     try {
-      final all = load();
-      for (final f in all) {
-        final items = await _items(f['url'] as String);
-        final seen = ((f['seen'] as List?) ?? []).cast<String>().toSet();
-        final fresh = items.where((i) => !seen.contains(i.$1)).take((f['count'] as num?)?.toInt() ?? 5).toList();
-        for (final (guid, title, url, show) in fresh.reversed) {
-          final path = await _download(url);
+      for (final f in load()) {
+        final url = f['url'] as String;
+        final items = await _items(url);
+        if (items == null) {
+          failed++;
+          continue;
+        }
+        final count = (f['count'] as num?)?.toInt() ?? 5;
+        final seen = ((f['seen'] as List?) ?? []).cast<String>().toSet()..retainAll(items.map((i) => i.$1));
+        final newest = items.indexWhere((i) => seen.contains(i.$1));
+        final unseen = items.sublist(0, newest < 0 ? items.length : newest);
+        for (final i in unseen.skip(count)) {
+          seen.add(i.$1);
+        }
+        _save(url, seen);
+        for (final (guid, title, enc, show) in unseen.take(count).toList().reversed) {
+          if (!load().any((x) => x['url'] == url)) break;
+          final path = await fetchOut(enc, maxBytes: 1 << 30);
           if (path == null) continue;
-          final r = await Native.callAway({'cmd': 'add_track', 'station': f['station'], 'path': path, 'title': title, 'by': show, 'source': f['url'], 'talk': true});
+          final r = await Native.callAway({'cmd': 'add_track', 'station': f['station'], 'path': path, 'title': title, 'by': show, 'source': url, 'talk': true});
           // One at a time: a phone setting five episodes at once would cook.
           final job = r is Map ? r['job'] : null;
           for (var i = 0; job != null && i < 900; i++) {
@@ -912,68 +937,39 @@ class Feeds {
           unawaited(File(path).delete().then((_) {}, onError: (_) {}));
           seen.add(guid);
           added++;
-          f['seen'] = seen.toList();
-          pref('feeds', all);
+          _save(url, seen);
         }
-        f['seen'] = seen.toList();
       }
-      pref('feeds', all);
-    } catch (e) {
-      return 'A feed could not be read: $e';
     } finally {
       _busy = false;
     }
-    return added == 0 ? 'Nothing new in the feeds' : '$added new ${added == 1 ? 'episode' : 'episodes'} coming aboard';
+    final got = added == 0 ? 'Nothing new in the feeds' : '$added new ${added == 1 ? 'episode' : 'episodes'} coming aboard';
+    return failed == 0 ? got : '$got. ${failed == 1 ? 'One feed' : '$failed feeds'} could not be read.';
   }
 
-  /// (guid, title, enclosure url, show title), newest first, from an RSS feed.
-  static Future<List<(String, String, String, String)>> _items(String url) async {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
+  /// (guid, title, enclosure url, show title) in the feed's own order, newest first in any
+  /// ordinary feed. Null when the feed cannot be read.
+  static Future<List<(String, String, String, String)>?> _items(String url) async {
+    final path = await fetchOut(url, maxBytes: 20000000);
+    if (path == null) return null;
+    final String body;
     try {
-      final rq = await client.getUrl(Uri.parse(url));
-      final rs = await rq.close();
-      final body = await rs.transform(utf8.decoder).join();
-      String unx(String s) => s.replaceAll(RegExp(r'<!\[CDATA\[|\]\]>'), '').replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&quot;', '"').replaceAll('&#39;', "'").trim();
-      String tag(String s, String t) => unx(RegExp('<$t[^>]*>([\\s\\S]*?)</$t>').firstMatch(s)?.group(1) ?? '');
-      final show = tag(body.split(RegExp('<item[ >]')).first, 'title');
-      final out = <(String, String, String, String)>[];
-      for (final m in RegExp(r'<item[ >]([\s\S]*?)</item>').allMatches(body)) {
-        final it = m.group(1)!;
-        final enc = RegExp('<enclosure[^>]*url="([^"]+)"').firstMatch(it)?.group(1);
-        if (enc == null) continue;
-        final guid = tag(it, 'guid');
-        out.add((guid.isEmpty ? enc : guid, tag(it, 'title'), unx(enc), show));
-      }
-      return out;
+      body = utf8.decode(await File(path).readAsBytes(), allowMalformed: true);
     } finally {
-      client.close();
+      unawaited(File(path).delete().then((_) {}, onError: (_) {}));
     }
-  }
-
-  static Future<String?> _download(String url) async {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 30);
-    try {
-      var uri = Uri.parse(url);
-      for (var hops = 0; hops < 6; hops++) {
-        final rq = await client.getUrl(uri);
-        rq.followRedirects = true;
-        final rs = await rq.close();
-        if (rs.statusCode >= 300 && rs.statusCode < 400 && rs.headers.value('location') != null) {
-          uri = uri.resolve(rs.headers.value('location')!);
-          continue;
-        }
-        if (rs.statusCode != 200) return null;
-        final dir = await getTemporaryDirectory();
-        final f = File('${dir.path}/feed-${DateTime.now().microsecondsSinceEpoch}.audio');
-        await rs.pipe(f.openWrite());
-        return f.path;
-      }
-      return null;
-    } catch (_) {
-      return null;
-    } finally {
-      client.close();
+    String unx(String s) => s.replaceAll(RegExp(r'<!\[CDATA\[|\]\]>'), '').replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&quot;', '"').replaceAll('&#39;', "'").trim();
+    String tag(String s, String t) => unx(RegExp('<$t[^>]*>([\\s\\S]*?)</$t>').firstMatch(s)?.group(1) ?? '');
+    final show = tag(body.split(RegExp('<item[ >]')).first, 'title');
+    final out = <(String, String, String, String)>[];
+    for (final m in RegExp(r'<item[ >]([\s\S]*?)</item>').allMatches(body)) {
+      final it = m.group(1)!;
+      final enc = RegExp('<enclosure[^>]*url="([^"]+)"').firstMatch(it)?.group(1);
+      if (enc == null) continue;
+      final guid = tag(it, 'guid');
+      out.add((guid.isEmpty ? enc : guid, tag(it, 'title'), unx(enc), show));
     }
+    return out;
   }
 }
 
@@ -993,7 +989,7 @@ class _FeedsPanelState extends State<FeedsPanel> {
     final mine = Feeds.load().where((f) => f['station'] == widget.station).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       heading('PODCAST FEEDS'),
-      note('New episodes come aboard by themselves whenever this phone has the app open. A Lantern can do it round the clock.'),
+      note('New episodes come aboard by themselves every few hours on Wi-Fi while the app is open. A Lantern can do it round the clock. The feed\'s host sees this phone\'s address, as it would any podcast app\'s.'),
       for (final f in mine)
         Row(children: [
           Expanded(child: Text(f['url'], maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(11, color: boneFaint))),

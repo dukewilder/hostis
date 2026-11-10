@@ -90,6 +90,7 @@ class Tuner extends ChangeNotifier {
   int carrying = 0;
   Timer? _ballast;
   Timer? _update;
+  Timer? _feeds;
   Map<String, dynamic>? update;
 
   Tuner() {
@@ -103,6 +104,10 @@ class Tuner extends ChangeNotifier {
       _service.invokeMethod('lantern', {'on': true, 'gb': gb}).catchError((_) {});
     }
     _checkBallast();
+    unawaited(sweepTemp());
+    // Podcast feeds are read every few hours, on Wi-Fi only, while the app is open.
+    _feeds = Timer.periodic(const Duration(minutes: 20), (_) => _checkFeeds());
+    Future.delayed(const Duration(seconds: 90), _checkFeeds);
     // New versions arrive over the network itself, signed by two of three release keys.
     Future.delayed(const Duration(seconds: 60), _checkUpdate);
     _update = Timer.periodic(const Duration(minutes: 30), (_) => _checkUpdate());
@@ -131,6 +136,17 @@ class Tuner extends ChangeNotifier {
       update = r.cast<String, dynamic>();
       notifyListeners();
     }
+  }
+
+  Future<void> _checkFeeds() async {
+    if (Feeds.load().isEmpty) return;
+    final last = (pref('feeds_at') as num?)?.toInt() ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - last < 3 * 3600000) return;
+    final c = await _service.invokeMethod<Map>('conditions').catchError((_) => <dynamic, dynamic>{}) ?? {};
+    if (c['unmetered'] != true) return;
+    pref('feeds_at', now);
+    await Feeds.refresh();
   }
 
   Future<void> _checkBallast() async {
@@ -324,6 +340,7 @@ class Tuner extends ChangeNotifier {
     _scan?.cancel();
     _ballast?.cancel();
     _update?.cancel();
+    _feeds?.cancel();
     super.dispose();
   }
 }
@@ -793,20 +810,15 @@ class _ColoursPageState extends State<ColoursPage> {
     );
     if (url == null || !url.startsWith('http')) return;
     setState(() => artNote = 'Fetching the picture');
+    final path = await fetchOut(url);
+    if (path == null) {
+      if (mounted) setState(() => artNote = 'Could not fetch that link');
+      return;
+    }
     try {
-      final req = await HttpClient().getUrl(Uri.parse(url));
-      final res = await req.close();
-      final bytes = <int>[];
-      await for (final part in res) {
-        bytes.addAll(part);
-        if (bytes.length > 30000000) throw 'too large';
-      }
-      final f = File('${Directory.systemTemp.path}/pyrate-art-${DateTime.now().millisecondsSinceEpoch}');
-      await f.writeAsBytes(bytes);
-      await _setArt(station, kind, f.path);
-      await f.delete();
-    } catch (e) {
-      setState(() => artNote = 'Could not fetch that link');
+      await _setArt(station, kind, path);
+    } finally {
+      unawaited(File(path).delete().then((_) {}, onError: (_) {}));
     }
   }
 
