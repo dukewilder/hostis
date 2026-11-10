@@ -33,8 +33,9 @@ TextStyle mono(double size, {Color color = boneFaint, FontWeight weight = FontWe
 
 const _service = MethodChannel('pyrate/service');
 
-/// This build's version code. A release is offered only when its code is higher.
-const kBuildCode = 13;
+/// This build's version code, as the installed package says it, so it can never disagree with
+/// the build. A release is offered only when its code is higher.
+Future<int> buildCode() async => await _service.invokeMethod<int>('build_code').catchError((_) => 0) ?? 0;
 
 /// The stations a first open lands on when no station has yet earned it: HOSTIS's own.
 List<String> harbour = [];
@@ -116,7 +117,9 @@ class Tuner extends ChangeNotifier {
     // Releases come down only on Wi-Fi or another unmetered network.
     final c = await _service.invokeMethod<Map>('conditions').catchError((_) => <dynamic, dynamic>{}) ?? {};
     if (c['unmetered'] != true) return;
-    final r = await Native.callAway({'cmd': 'update', 'code': kBuildCode});
+    final code = await buildCode();
+    if (code == 0) return;
+    final r = await Native.callAway({'cmd': 'update', 'code': code});
     if (r is Map && r['available'] == true) {
       update = r.cast<String, dynamic>();
       notifyListeners();

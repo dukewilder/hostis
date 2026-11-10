@@ -3,3 +3,4 @@ target/
 browser/www/pkg/
 browser/www/dist/
 landing/out/
+app/android/build/

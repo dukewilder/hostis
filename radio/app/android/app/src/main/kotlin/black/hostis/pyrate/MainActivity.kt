@@ -74,6 +74,10 @@ class MainActivity : FlutterActivity() {
                         result.success(false)
                     }
                 }
+                "build_code" -> {
+                    val info = packageManager.getPackageInfo(packageName, 0)
+                    result.success(if (Build.VERSION.SDK_INT >= 28) info.longVersionCode.toInt() else @Suppress("DEPRECATION") info.versionCode)
+                }
                 "secure" -> {
                     // While the 24 words or a PIN are on screen: no screenshots, no recents
                     // thumbnail, no screen recording.

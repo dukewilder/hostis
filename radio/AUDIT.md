@@ -104,7 +104,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 - **P34** (medium) Brass (amber) is used throughout. `main.dart:25`
 - **P35** (low) Red is used beyond ON AIR, and there are two reds; M3 defaults bring rounded pickers and Roboto. `main.dart:23 vs 24`
 - **P36** (low) The window behind Flutter is white in light mode. `app/android/app/src/main/res/values/styles.xml`
-- **P37** (low) `kBuildCode` duplicates the pubspec build number. `main.dart:37`
 - **P38** (low) Manifest hygiene. `AndroidManifest.xml:4`
 - **P39** (low) `setState` after await without `mounted`, and controllers that are never disposed. `more.dart:394-406`
 - **P40** (low) Passing the app on: a LAN HTTP server with no timeouts, binding every interface. `Ship.kt:90-125`
@@ -191,12 +190,14 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **P2. STRIKE COLOURS can never complete: the node drops the 24 words and signs with the deputy key.** (high) Fixed: strike now takes the master from the 24 words through the same path as restore, and still strikes with the key itself on a Lantern that keeps it. The app shows the result beside the act, and the words field learns nothing (no suggestions, autocorrect or keyboard learning) and is cleared after. Two new voyage steps: wrong words strike nothing, the right ones end the station (22 of 22). (ff7121e)
 
-**P3. Auto Backup is left on: deputy keys, pocket secrets and prefs go to the user's Google account.** (high) Fixed: the app turns off backup and device transfer entirely (allowBackup false, no full-backup content, and extraction rules excluding every domain), so the deputy key, pocket invitations and the owner's chart never leave the phone that way. (pending)
+**P3. Auto Backup is left on: deputy keys, pocket secrets and prefs go to the user's Google account.** (high) Fixed: the app turns off backup and device transfer entirely (allowBackup false, no full-backup content, and extraction rules excluding every domain), so the deputy key, pocket invitations and the owner's chart never leave the phone that way. (bddbcf2)
 
-**P4. The 24 words can be lost three ways.** (high) Fixed: the words are shown before anything that can fail, in a dialog that neither the back gesture nor a stray tap can close, and that closes only once the keeper ticks that all 24 are on paper; a later error is shown after. The node returns the words even if a pocket's topic fails to open (the station stays private, as it is marked so before the topic opens). (pending)
+**P4. The 24 words can be lost three ways.** (high) Fixed: the words are shown before anything that can fail, in a dialog that neither the back gesture nor a stray tap can close, and that closes only once the keeper ticks that all 24 are on paper; a later error is shown after. The node returns the words even if a pocket's topic fails to open (the station stays private, as it is marked so before the topic opens). (bddbcf2)
 
-**P5. Exported MediaBrowser service hands the station list and control to any app, private pocket stations included.** (high) Fixed: the media browser answers only this app, the system, Bluetooth and the car, lists no pocket stations, and tunes only to a well-formed id. (pending)
+**P5. Exported MediaBrowser service hands the station list and control to any app, private pocket stations included.** (high) Fixed: the media browser answers only this app, the system, Bluetooth and the car, lists no pocket stations, and tunes only to a well-formed id. (bddbcf2)
 
-**P13. Listening history is written to logcat.** (medium) Fixed: the released app writes nothing to the phone's log: the Dart prints are gone and the node's log line is empty on Android outside debug builds. (pending)
+**P13. Listening history is written to logcat.** (medium) Fixed: the released app writes nothing to the phone's log: the Dart prints are gone and the node's log line is empty on Android outside debug builds. (bddbcf2)
 
-**P29. The 24 words and PINs are typed and shown with the keyboard's learning and no screen protection.** (medium) Fixed: the 24 words and PIN fields learn nothing (no suggestions, autocorrect or keyboard learning), are cleared once read, and the screen is marked secure (no screenshot, recents thumbnail or recording) while the words, strike and appoint dialogs are up. (pending)
+**P29. The 24 words and PINs are typed and shown with the keyboard's learning and no screen protection.** (medium) Fixed: the 24 words and PIN fields learn nothing (no suggestions, autocorrect or keyboard learning), are cleared once read, and the screen is marked secure (no screenshot, recents thumbnail or recording) while the words, strike and appoint dialogs are up. (bddbcf2)
+
+**P37. `kBuildCode` duplicates the pubspec build number.** (low) Fixed: the app reads its version code from the installed package through the shell, so it can never disagree with the build; the constant is gone. (pending)
