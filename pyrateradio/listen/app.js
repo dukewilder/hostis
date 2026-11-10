@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=2391e514e4';
+import init, { Radio } from './pkg/pyrate_browser.js?v=999b95c661';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -281,6 +281,7 @@ async function play(id, g) {
       playhead = p.chunk_start + ms;
       if (p.next) radio.fetch(id, p.next).catch(() => { });
     } catch (e) {
+      if (e instanceof WebAssembly.RuntimeError) return wrecked();
       console.warn(e); reset();
       // The portable decoder that would not load is the one stumble worth giving up on.
       if (++stumbles > 5) { trouble = null; status('This browser could not play the station. Try reloading the page.'); stop(); return }
@@ -442,7 +443,7 @@ function flockFollow() {
   const h = location.hash; if (!radio || !h.includes('flock=')) return false;
   try { radio.flock_join(h) } catch (e) { return false }
   history.replaceState(null, '', location.pathname);
-  flocking = setInterval(() => { const id = radio.flock_station(); if (id && cur?.id !== id) { const s = stations.find(x => x.id === id) || { id, call_sign: '', name: 'The flock\'s station' }; playing ? listen(s) : show(s) } }, 3000);
+  flocking = setInterval(() => { if (!radio) return; const id = radio.flock_station(); if (id && cur?.id !== id) { const s = stations.find(x => x.id === id) || { id, call_sign: '', name: 'The flock\'s station' }; playing ? listen(s) : show(s) } }, 3000);
   refresh();
   return true;
 }
@@ -673,6 +674,12 @@ for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-expl
   const el = $(id); el.checked = on === '1' ? store(key) === '1' : store(key) !== '1';
   el.onchange = () => { store(key, (el.checked ? on : (on === '1' ? '0' : '1'))); forgetPics(); rowsKey = ''; refresh(); if (cur) show(cur) };
 }
+$('forget').onclick = () => {
+  if (!confirm('Forget everything this browser keeps for the radio? Pockets go too, unless you still have their invitations.')) return;
+  try { for (const k of Object.keys(localStorage)) if (k.startsWith('pyrate.')) localStorage.removeItem(k) } catch (e) { }
+  try { for (const k of Object.keys(sessionStorage)) if (k.startsWith('pyrate.')) sessionStorage.removeItem(k) } catch (e) { }
+  location.replace(location.pathname + location.search);
+};
 $('mclear').onclick = () => { setMarooned(new Set()); $('mnote').textContent = 'Every station is back in the Log.'; refresh() };
 
 // A copy of the set served anywhere but hostis.black/pyrateradio/listen/ (a Lantern's
@@ -707,6 +714,23 @@ async function boot() {
   window.addEventListener('hashchange', followLink);
   if ('mediaSession' in navigator) { navigator.mediaSession.setActionHandler('play', () => cur && listen(cur)); navigator.mediaSession.setActionHandler('pause', stop); navigator.mediaSession.setActionHandler('stop', stop) }
 }
+// The node in the tab is built to stop dead on a fault rather than carry on in a bad state.
+// When it does, the set says so and comes back aboard once by itself, on the same station
+// (never a pocket, whose id stays out of the address bar), and offers a reload after that.
+function wrecked() {
+  if (wrecked.done) return; wrecked.done = true;
+  gen++; stopAll(); playing = false; power(); radio = null;
+  let last = 0; try { last = +(sessionStorage.getItem('pyrate.wrecked') || 0) } catch (e) { }
+  const again = Date.now() - last > 300000;
+  status(again ? 'The radio stumbled badly. Coming back aboard.' : 'The radio stumbled badly and stopped. Reload the page to come back aboard.');
+  if (!again) return;
+  try { sessionStorage.setItem('pyrate.wrecked', String(Date.now())) } catch (e) { }
+  const back = cur && !isPocket(cur) ? '#' + cur.id : '';
+  setTimeout(() => { location.replace(location.pathname + location.search + back); location.reload() }, 2500);
+}
+addEventListener('error', e => { if (e.error instanceof WebAssembly.RuntimeError) wrecked() });
+addEventListener('unhandledrejection', e => { if (e.reason instanceof WebAssembly.RuntimeError) wrecked() });
+
 // For anyone looking under the hood: what the player is doing.
 window.pyrate = { tap: () => { const d = ctx.createMediaStreamDestination(); gain.connect(d); return d.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, station: cur?.id, scheduled: sources.length, ahead_ms: ctx ? Math.round(Math.max(0, (sources.length ? 1 : 0) * 1)) : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, webcodecs }) };
 // The set at rest, before it joins the network: a HOSTIS station, or the one passed on.
