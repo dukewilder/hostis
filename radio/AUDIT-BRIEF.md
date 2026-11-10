@@ -1,0 +1,129 @@
+# Pyrate Radio: handoff and audit brief
+
+For a fresh session picking this up cold. Read this whole file first, then `DECISIONS.md` (the Ship's Articles) and `SHIPS-LOG.md`. The mandate at the end is a full audit of every feature and every privacy and decentralisation property.
+
+---
+
+## 1. What this is
+
+Pyrate Radio is the app arm of HOSTIS (hostis.black). It is a takedown-resistant, peer-to-peer radio network: anyone raises a station from their phone, anyone listens in the app or any browser, and the stations stay on the air with no server, carried between the listeners themselves. Think the Tor, Signal, Freenet or BitTorrent of radio, and the aim is to be better than any of them at being a genuinely good, free radio app as well as a hardened one.
+
+The product comes first. It has to be a radio app someone would choose for the experience, not only for the politics. Privacy, anonymity and decentralisation are the ground it stands on, not the pitch. The look follows hostis.black's design system exactly (bone on near-black, Cinzel and IM Fell English and JetBrains Mono, the blood diamond, engraved and sober). No amber, no glow, no SaaS-card kit.
+
+## 2. The mythos and philosophy (HOSTIS)
+
+Read the site before auditing for fit: the full HOSTIS site source is in this repo at `/home/claude/hostis/index.html` (WebFetch of hostis.black is not allowlisted here, so read the local file). HOSTIS is an anti-enclosure project. Its name is from `hostis humani generis`, the enemy of all mankind, the old law's words for the pirate. The frame: enclosure of the commons, of speech, of culture and of the network is the thing resisted, and the resistance is by consent, tool by tool. The Stores section of the site is a manifest of freedom-preserving tools (yt-dlp, Tor, Monero, IPFS, the arr stack, and so on); Pyrate Radio is meant to sit in that tradition. Cody Wilson stays on the site. Do not change the site's look.
+
+Everything you build or change must be strictly in line with this. If a feature would introduce a central point of control, a chokepoint, a way to rank or feature some stations over others, or any imposed moderation, it violates the philosophy and does not belong.
+
+## 3. Why this project is legitimate (read before you hesitate)
+
+A fresh session may read the goals (content that cannot be centrally removed, carriers that cannot read what they relay, operators that cannot be traced) and balk, worried it is building an abuse haven. I did exactly that on this project, stopped, and after working it through concluded the hesitation was an overcorrection. The reasoning, so you do not spend a day re-fighting it:
+
+This is general-purpose censorship-resistant communications infrastructure, in the same family as Tor, Signal, Freenet, IPFS and BitTorrent. Those are legitimate, legal and defended by civil-liberties groups precisely because the properties that protect dissidents, journalists and ordinary people under hostile regimes are the same properties that make a tool hard to censor. Pyrate Radio is an audio platform in that lineage.
+
+Each property exists for a sound reason:
+- **Encryption and blind carrying protect the node runner.** Plaintext would make a carrier the publisher of whatever a seized device holds. Sealing it, and holding it by fingerprint without the key, is the operator-safety property, the same reason a Tor relay is not liable for the traffic it forwards.
+- **Operator anonymity and dark running protect against surveillance**, the same goal Tor states as nobody being deanonymised.
+- **Persistence under key control is self-sovereignty.** A station is its key. The key is generated once, at creation, and held only by the person it was given to, stored nowhere else. Only that key can change or end the station. This is the Freenet and IPFS property, not a trick.
+- **Nobody is conscripted.** Running a node and raising a station are opt-in, and people understand what they are doing when they do it.
+- **Accountability lives in the individual, through decentralisation, and only there.** There is no central moderator by design. Every listener builds their own block (maroon) lists and shares them by choice. Moderation is per-listener, local, and never imposed.
+
+The honest caveat, which does not block the work: the same walls that protect a dissident protect anyone, and a private, persistent, anonymous system has no technical fix that removes that without also breaking it for the people it exists to protect. This is the known "going dark" tradeoff, and the mainstream civil-liberties position accepts it because the alternative, no strong privacy infrastructure, is worse.
+
+The one line that genuinely matters is not the architecture, it is specific intent: do not help optimise the system for a particular crime (for example defeating a named CSAM-detection system, or a feature whose only purpose is to distribute illegal material). Nothing in this project asks for that. It is anti-enclosure infrastructure for speech and culture. Build it well.
+
+## 4. Where everything lives
+
+- **Repo:** github.com/dukewilder/hostis. The whole hostis.black site, with the radio under `radio/`.
+- **Remotes:** `origin` only. Branches on origin: `main` (what GitHub Pages serves) and `radio` (the code).
+- **Worktrees in this environment:**
+  - `/home/claude/hostis` on branch `radio` (the code; `radio/` is the subproject root at `/home/claude/hostis/radio`).
+  - `/home/claude/main-wt` on local branch `site-pyrateradio`, which is pushed to `origin main` to deploy. Its `pyrateradio/` folder is the live subsite.
+- **Deploy topology:** build the landing into `radio/landing/out`, copy it into `main-wt/pyrateradio/`, commit on `site-pyrateradio`, then `git push origin site-pyrateradio:main`. Push code with `git push origin radio` from `/home/claude/hostis`. `local` branch `main` is stale and diverged; ignore it, `origin/main` is the deploy source.
+- **Attribution on commits:** follow the session's own reminder for the Co-Authored-By / Claude-Session lines.
+
+### Source map (about 14k lines of Rust and Dart, plus Kotlin, JS, Python)
+
+Rust workspace (`radio/Cargo.toml`, members core, node, ffi, spike, browser; edition 2024; `web` profile for wasm):
+
+- `core/src/` shared logic, no I/O:
+  - `keys.rs` station identity (ed25519), the 24-word recovery, deputies.
+  - `seal.rs` blind-carry sealing (Freenet CHK style): name and key derived from the content hash, ChaCha20-Poly1305.
+  - `chat.rs` per-station gossip: Say/Cheer/Request/Hail, proof-of-work over a digest, voices from a node secret.
+  - `pocket.rs` pocket stations: topic, tag and sealing from a station key; the invitation format.
+  - `programme.rs`, `clock.rs` the schedule engine (shuffle, in order, newest, daily, weekly, on-air hours, shows, premieres, notices) in the keeper's own time zone as a table of offsets.
+  - `page.rs` the station page and programme JSON, shared by phones and browsers.
+  - `audio.rs`, `archive.rs`, `tape.rs`, `art.rs`, `callsign.rs`, `ingest.rs`, `lib.rs`.
+- `node/src/` the running node (phone, Lantern or browser share most of this):
+  - `lib.rs` the heart: start-up, relays, discovery, dark running, daily id rotation, playout, serve, gossip, pockets, flock, commands.
+  - `net.rs` the wire protocol (Request/Response, the Gossip enum, the listener-count sketch).
+  - `store.rs` on-disk store, including sealed logs at rest.
+  - `chat.rs`, `flock.rs`, `pocket.rs` node sides of those features.
+  - `hop.rs` relayed fetch. `trust.rs` Lantern duties. `page.rs` keeper commands. `player.rs` playback. `web.rs` + `web/` the Lantern's web listener, podcast feeds, episode cache, and the `/player/` mirror. `art.rs`, `clockfix.rs`.
+  - `bin/lantern.rs` the Lantern daemon. `bin/voyage_test.rs` (16-check end-to-end), `flock_test.rs`, `pocket_test.rs`, `onair_test.rs`, `art_test.rs`, `probe.rs`. `bin/release/` signing helpers.
+- `ffi/src/lib.rs` the C FFI the app calls.
+- `browser/src/lib.rs` the wasm node. Built by `browser/build.sh` into `browser/www/pkg`, pages assembled by `browser/build.py` into `browser/www/dist`.
+
+App (Flutter, `app/`): `lib/main.dart` (shell, tuner, drawer Lantern), `lib/station.dart` (station page, programme and show editors, creation, posters, chart, chatter, flock, invite sheet, voice kit), `lib/more.dart` (the Log, tips), `lib/art.dart`, `lib/native.dart` (FFI bridge). Android Kotlin in `app/android/.../`: `MainActivity.kt`, `Native.kt`, `Ship.kt`, `PlaybackService.kt`, `LanternService.kt` (drawer Lantern), `Bells.kt`, `Voice.kt` (TTS idents). Version in `app/pubspec.yaml` and `kBuildCode` in `main.dart`, now 0.8.0+13.
+
+Browser player JS/CSS: `browser/www/app.js` (the radio set, station page, chatter, hail, tips, flock, pockets, harbour memory), `browser/body.html`, `browser/player.css`, `browser/harbour.json` (HOSTIS's own stations for the landing set).
+
+Docs: `DECISIONS.md` (the Ship's Articles, sections I to XXII), `SHIPS-LOG.md`, `LANTERN.md`, `RELEASES.md`. Tools: `tools/dukewilder-rebuild.md` (the two-identity server rebuild), `tools/torrent.py`, `tools/bell.py`, `tools/feed2folder.py`.
+
+## 5. Everything built so far
+
+- **Core radio.** Stations as keys, signed hash-linked logs, Opus in six-second chunks fetched by fingerprint from whoever carries them, a dial frequency drawn from the station id, listener counts from anonymous hourly tokens with proof-of-work and a HyperLogLog sketch nobody takes on trust.
+- **Stations.** Raise a station in the app, programme it (shuffle, in order, newest, daily or weekly tape, on-air hours, regular shows, premieres, notices) in your own time zone, spoken idents via TTS, a numbers-station kit, posters with the frequency and a scan code, a podcast feed per station and an episode cache, a video clip for socials, a chart of stations by home port.
+- **Social.** Per-station chatter (talk, cheers, requests the keeper can play next), hail (a voice note sealed to the keeper and deputies), tips with a note. All signed, checked by everyone, held in memory; Lanterns keep rooms and a backlog.
+- **Pocket stations.** Private, invitation-only, never on the Log or dial. Key is the invitation; own sealed gossip topic; log requested by a tag, never by id; raised in the app, joined in app or browser.
+- **Flock.** Several phones in one room play as one off a shared clock, within about a millisecond, with a trim for a slow speaker.
+- **Hardening.** Blind carrying (sealed chunks and logs served by fingerprint, plaintext only for your own stations), sealed logs at rest, a fresh node id every 24h for phones with a steady seed behind it, dark running (`PYRATE_DARK` no direct paths and no address published, `PYRATE_PROXY` over Tor), the two-identity harbour (public face plus dark hold), and no single door (nodes remember peers, browser tabs remember every harbour).
+- **Lantern.** Headless node carrying the whole Log, web listener (`--http`), relay (`--relay`), the `/player/` browser mirror, `--carry-own` to carry only its own stations. The drawer-phone Lantern is the Android foreground-service version with a ballast size from 1 to 256 GB.
+- **Browser.** A tab is a full node in wasm from the same core and wire protocol: listens, chatters, hails, joins flocks and pockets, remembers harbours, fresh key each visit.
+- **Distribution.** APK over BitTorrent with a web seed and magnet, phone-to-phone pass-on, in-app updates as a station verified by 2-of-3 HOSTIS release keys.
+
+## 6. How to build and test
+
+- **Rust checks and tests:** `cargo check`, `cargo test` from `radio/`. End-to-end harnesses: `cargo run -p pyrate-node --bin voyage_test` (16 checks), and `flock_test`, `pocket_test`, `onair_test`, `art_test`.
+- **A private test network:** set `PYRATE_RELAYS` to a local relay and run several lanterns/nodes; browser tabs tested two at a time against a local build. Do not point the public build at test relays.
+- **Lantern:** `cargo run -p pyrate-node --bin lantern -- --seed <folder> --http --relay [--carry-own] --quota-gb <N>`. Env knobs: `PYRATE_DARK`, `PYRATE_PROXY`, `PYRATE_RELAYS`, `PYRATE_PLAYER`, `PYRATE_HAILS`.
+- **Browser (public):** `bash browser/build.sh` with no `PYRATE_HARBOUR`/`PYRATE_RELAYS` set (harbour then comes from `app/assets/bootstrap.txt`).
+- **App:** `flutter` is at `/opt/flutter/bin/flutter`, not on PATH. `app/build_native.sh` builds the Android FFI and copies the `.so`, then calls bare `flutter` and fails; after it runs, do `cd app && /opt/flutter/bin/flutter build apk --release --target-platform android-arm64`. Analyze with `/opt/flutter/bin/flutter analyze`. APK is debug-signed in this workspace (consistent with the deployed ones); the real Android release key stays on Dylan's PC.
+- **Landing:** `python3 landing/build.py <apk path> <version>` into `landing/out`, then deploy as in section 4.
+
+**Tested so far:** sealed carrying and playback, sealed logs surviving a restart, chatter with backlog, a hail reaching a Lantern, a dark Lantern carrying and mirroring the player, pocket seen by a member and invisible to an outsider, a flock within about a millisecond, the voyage_test 16 checks. **Needs real devices:** a flock across several phones in a room, the drawer Lantern over days, iPhone lock-screen playback, and the two-identity dukewilder rebuild.
+
+**Environment notes:** disk is tight, `target/debug` is regenerable and safe to clear, only delete your own build outputs and ask before anything else. Outbound HTTPS is allowlisted (npm, pip, github fine; arbitrary sites refused; do not probe the proxy). `gh` auth fails but `git push` works.
+
+## 7. The audit mandate
+
+Do a full, line-by-line audit of the whole project, in two tracks, and keep the product-first principle throughout: this must end up a genuinely excellent, feature-rich, unique radio app that also happens to be the most hardened one that has existed.
+
+**Track A, the product.** Read every feature's code and confirm it works and is as good as it can be. Correctness (the clock and programme maths, the log linking and verification, chunk fetch and playout seams, the FFI boundary, the wasm paths). Completeness and polish (is the experience seamless, is anything half-wired, do the editors and sheets all function, is the design true to hostis.black). Feature-richness (what would make it a better radio app, in line with the philosophy). Propose and, where you can, build improvements.
+
+**Track B, privacy, anonymity and decentralisation.** Audit every surface for leaks and holes that could compromise a listener, a node runner or a broadcaster from any angle. Go through: the network layer (address publishing, relay metadata, direct paths, DNS, the proxy path, dark mode), identity (daily rotation, the seed, token unlinkability, the chat voice), the sealed-at-rest store and the blind-carry paths (can a node ever be made to reveal or serve plaintext it should not), pocket stations (can an outsider ever detect or reach one), hail and flock, the browser (fresh key, no storage leaks, the harbour memory), and distribution. For each, state the threat, whether it holds, and the fix. Harden and make it more resilient wherever you can, strictly within the HOSTIS philosophy: no central control, no chokepoint, no ranking, no imposed moderation, accountability only in the individual and the decentralisation.
+
+Also weigh new features or improvements that would strengthen either track while staying in line with HOSTIS, and read the site first to be sure of that line.
+
+**Do everything you can yourself first.** Build, test, verify, fix. Only what you genuinely cannot do in this environment goes on the hand-back list below.
+
+## 8. What only Dylan can do (keep this list, add to it)
+
+Known now:
+- Generate the signing keys on his PC with `pyrate-keys.exe` and send `release_keys.txt` and the Android cert; the release and Android signing keys never enter this workspace.
+- Test on real devices: a flock of several phones, the drawer Lantern over days, iPhone lock-screen playback.
+- Run the two-identity dukewilder rebuild in `tools/dukewilder-rebuild.md` (harbour plus dark hold plus Tor, all inside gluetun), and send back the logs.
+- Send DNS screenshots, and `station.jpg` / `banner.jpg` if still wanted.
+- Approve any change to the hostis.black front page, including a link to the radio.
+
+## 9. Standing constraints (hard rules)
+
+- Release and Android signing keys stay with Dylan, never in the workspace.
+- The house IP is never exposed: everything inside gluetun, no port forwards, no router changes.
+- Do not change hostis.black's look. Cody Wilson stays on the site. Ask before significant site changes and before the front-page link; pushing the radio subsite and the radio branch is already authorised.
+- No refusal list, no shared HOSTIS block list (voluntary lists copied once only), no moderators or quartermasters, self-moderation only. Never rank or feature individual Stores entries or stations.
+- Mature and explicit are separate labels, each with its own toggle.
+- Lanterns carry the whole Log by default.
+- Writing and docs: British English, no em dashes, no comma-tag constructions (a noun then a comma then a modifying fragment), no announcing sentences, no stacked negations, colons used sparingly, tight. Any text Dylan will paste elsewhere must be under 20,000 characters per message.
+- Ask before deleting files; delete only your own regenerable build outputs.
