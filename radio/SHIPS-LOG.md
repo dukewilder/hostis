@@ -1,5 +1,26 @@
 # Pyrate Radio · Ship's log
 
+## Evening of 9 November 2026: 0.7.0 and 0.7.1
+
+**Built and tested**
+
+| Piece | Where | State |
+| --- | --- | --- |
+| The programme | `core/src/programme.rs`, `core/src/clock.rs` | Local time with daylight saving in the log; shuffled, in order, newest first, daily and weekly tapes; on-air hours; regular shows (recordings, newest, a hand's watch, live); premieres; notices. 11 tests |
+| The station page | `core/src/page.rs`, app, browser | Notices, on now, up next, the week. Same code in the phone and the tab. Bells in the app, calendar files in the browser |
+| Starting a station | app | Round the clock, in order, daily or weekly loop, a podcast feed, live every day, chosen when the colours go up |
+| Feeds | app, `node/src/web.rs` | Podcast feeds come aboard on the phone; a Lantern serves each own station as a podcast feed with MP3 episodes. Checked: valid RSS, 128 kbit/s stereo, ranges |
+| Lantern seed files | `node/src/bin/lantern.rs` | `programme.json`, `notices.txt`, a home port in the seed. Checked: set once, idempotent on restart, notices come down |
+| Chatter | `core/src/chat.rs`, `node/src/chat.rs`, browser | Rooms on gossip, voices per station, work against floods, nothing on disk. Lanterns keep rooms and hand newcomers the last lines. Checked between two tabs and two Lanterns |
+| The browser set | `browser/` | A dial with every station at its frequency, needle, lamp, meter, in hostis.black's own design. Spin the dial, the chart of the seas, Pass it on with a QR code, Clip it (20 s vertical video with sound) |
+| Posters | app | Name, frequency and a code to scan, for paper or screens |
+| Spoken idents, numbers kit | app | The phone's own voice; interval signal and five-figure groups |
+
+**Not yet**
+
+- Pocket stations (private, invitation only). Hail (a voice note to the keeper). Flock (phones in one room playing as one). A drawer phone kept running as a Lantern by a service of its own.
+- The browser on Safari and with the screen locked on an iPhone, and on the public network from this workshop.
+
 ## Night of 8 to 9 November 2026
 
 **Built and tested**
