@@ -123,9 +123,12 @@ impl Inner {
                 return Some(g);
             }
         }
-        let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.cfg.bootstrap.contains(n)).copied().collect();
+        let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.doors.contains(n)).copied().collect();
         others.shuffle(&mut rand::thread_rng());
-        let g = others.first().copied().or_else(|| known.first().copied())?;
+        // A peer met in an earlier run before a newcomer: a crowd of nodes that appeared today
+        // cannot make one of their own a guard.
+        let veterans: Vec<EndpointId> = others.iter().filter(|n| self.cfg.bootstrap.contains(n)).copied().collect();
+        let g = veterans.first().copied().or_else(|| others.first().copied()).or_else(|| known.first().copied())?;
         let _ = std::fs::write(&path, g.to_string());
         Some(g)
     }
@@ -258,7 +261,16 @@ impl Inner {
                 if declines {
                     return vec![];
                 }
-                self.fluff(station, entries, chunks, announce).await;
+                // The end of the stem waits a while before it shows anything, so the moment the
+                // cargo appears says nothing of the moment its keeper sent it: twenty seconds to a
+                // minute and a half for a recording, under a second and a half for the live air.
+                let live = entries.iter().any(|b| SignedEntry::from_bytes(b).is_ok_and(|e| matches!(e.entry.body(), Body::Live { .. })));
+                let wait = if live { rand::random::<u64>() % 1_500 } else { 20_000 + rand::random::<u64>() % 70_000 };
+                let me = self.clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(wait)).await;
+                    me.fluff(station, entries, chunks, announce).await;
+                });
                 vec![1]
             }
         }
@@ -311,9 +323,12 @@ impl Inner {
         }
         // Prefer anyone but the well-known Lanterns: a guard everyone shares would hold every
         // broadcaster's address in one place, and that place could be compelled to hand it over.
-        let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.cfg.bootstrap.contains(n)).copied().collect();
+        let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.doors.contains(n)).copied().collect();
         others.shuffle(&mut rand::thread_rng());
-        let g = others.first().copied().or_else(|| known.first().copied())?;
+        // A peer met in an earlier run before a newcomer: a crowd of nodes that appeared today
+        // cannot make one of their own a guard.
+        let veterans: Vec<EndpointId> = others.iter().filter(|n| self.cfg.bootstrap.contains(n)).copied().collect();
+        let g = veterans.first().copied().or_else(|| others.first().copied()).or_else(|| known.first().copied())?;
         let _ = std::fs::write(&path, g.to_string());
         Some(g)
     }
@@ -350,20 +365,49 @@ impl Inner {
             }
             (fresh.iter().filter_map(|e| e.to_bytes().ok()).collect::<Vec<_>>(), chunks)
         };
+        // The end of the stem holds cargo a while before it shows it (see `fluff`), so what was
+        // sent lately is not sent again for four minutes, and a card already sent goes once.
+        // Sending it again sooner would cost a phone its data and make the guard, which would
+        // know it, spread it at once. A resend goes round the guard.
+        let now = now_ms();
+        let card_at = announce.as_ref().map(|a| a.at_ms).unwrap_or(0);
+        let (resend, entries, chunks) = {
+            let sent = self.stem_sent.lock().unwrap();
+            match sent.get(&station) {
+                Some((from, n, at, _)) if *from == landed && *n == entries.len() && now.saturating_sub(*at) < 4 * 60_000 => (false, Vec::new(), Vec::new()),
+                Some((from, n, _, _)) if *from == landed && *n == entries.len() => (true, entries, chunks),
+                _ => (false, entries, chunks),
+            }
+        };
+        let announce = announce.filter(|_| self.stem_sent.lock().unwrap().get(&station).is_none_or(|s| s.3 != card_at));
         if entries.is_empty() && announce.is_none() {
             return true;
         }
+        {
+            let mut sent = self.stem_sent.lock().unwrap();
+            let e = sent.entry(station).or_insert((landed, 0, 0, 0));
+            if !entries.is_empty() {
+                *e = (landed, entries.len(), now, e.3);
+            }
+            e.3 = card_at.max(e.3);
+        }
         let hop = Hop::Stem { station, entries, chunks, announce, hops: 0 };
         let mut tried = Vec::new();
-        if let Some(g) = self.guard() {
+        if let Some(g) = self.guard().filter(|_| !resend) {
             if tokio::time::timeout(Duration::from_secs(20), self.hop(g, &hop)).await.is_ok_and(|r| r.is_ok_and(|b| !b.is_empty())) {
                 return true;
             }
             tried.push(g);
         }
-        // The guard is down: try another, never spread it ourselves.
+        if resend {
+            tried.extend(self.guard());
+        }
+        // The guard is down (or this is a resend): try another, never spread it ourselves.
         for n in self.known_nodes().into_iter().filter(|n| !tried.contains(n)).take(3) {
             if self.hop(n, &hop).await.is_ok_and(|b| !b.is_empty()) {
+                if resend {
+                    return true;
+                }
                 let _ = std::fs::write(self.cfg.dir.join("guard"), n.to_string());
                 return true;
             }

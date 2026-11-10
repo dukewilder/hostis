@@ -69,6 +69,9 @@ impl ChunkEncoder {
         };
         let mut enc = opus::Encoder::new(SAMPLE_RATE, opus_channels(profile.channels())?, app)?;
         enc.set_bitrate(Bitrate::Bits(profile.bitrate() as i32))?;
+        // Constant bitrate: every chunk of a profile is the same size, so its size on the wire
+        // says nothing of what plays, and a listener's traffic cannot be matched to a recording.
+        enc.set_vbr(false)?;
         Ok(Self {
             enc,
             channels: profile.channels() as usize,

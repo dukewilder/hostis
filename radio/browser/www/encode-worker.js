@@ -30,6 +30,8 @@ onmessage = async e => {
       // VOIP for talk, AUDIO for music, as the app chooses.
       const h = new M.OpusScriptHandler(48000, m.channels, m.talk ? 2048 : 2049);
       h._encoder_ctl(4002, m.bitrate);
+      // Constant bitrate, as the app: every chunk the same size on the wire (OPUS_SET_VBR, 0).
+      h._encoder_ctl(4006, 0);
       job = { live: !!m.live, h, ch: m.channels, inPtr: M._malloc(FRAME * m.channels * 2), outPtr: M._malloc(MAX_PACKET), pending: new Int16Array(0), parts: [], bytes: 0, frames: 0 };
       postMessage({ id: m.id, ok: true });
     } else if (m.kind === 'feed') {

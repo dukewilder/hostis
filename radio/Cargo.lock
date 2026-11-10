@@ -3477,6 +3477,7 @@ dependencies = [
  "iroh-gossip",
  "iroh-relay",
  "mp3lame-encoder",
+ "n0-future",
  "p256",
  "postcard",
  "pyrate-core",

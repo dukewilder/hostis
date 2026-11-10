@@ -45,9 +45,8 @@ with sync_playwright() as p:
     check(a.text_content(".qi .qt") == "Untitled", "a recorder's date never becomes a title: " + (a.text_content(".qi .qt") or ""))
     time.sleep(5)
     check(a.evaluate("window.__rtc") == 0, "no WebRTC")
-    # number0's address lookup goes in wave 3 of HARDENING-PLAN.md (1.18); until then it is known.
-    if "dns.iroh.link" in hosts: print("KNOWN number0's address lookup (dns.iroh.link), until wave 3")
-    check(hosts - {"dns.iroh.link"} <= {"127.0.0.1"}, "no host but the test network's: %s" % sorted(h for h in hosts if h))
+    # The test harbour names its relay, so no one's lookup service is asked anything.
+    check(hosts <= {"127.0.0.1"}, "no host but the test network's: %s" % sorted(h for h in hosts if h))
     check(not errs, "no page errors: %s" % errs[:3])
     b.close()
 sys.exit(0 if ok else 1)
