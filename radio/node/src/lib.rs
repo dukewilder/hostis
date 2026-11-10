@@ -396,7 +396,10 @@ impl Inner {
                     }
                 }
             }
-            if got.is_none() && !self.strict.load(std::sync::atomic::Ordering::Relaxed) {
+            // A phone asks carriers for its own station directly only once that station is on
+            // the air directly from it: before then, asking would tell them who keeps it.
+            let shown = !self.cfg.private || self.direct.lock().unwrap().contains(&station);
+            if got.is_none() && shown && !self.strict.load(std::sync::atomic::Ordering::Relaxed) {
                 for node in self.carriers(&station) {
                     if let Ok(Response::Entries(list)) = self.ask(node, &Request::Log { station, from: 0 }).await {
                         got = Some(list);
