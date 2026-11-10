@@ -56,6 +56,9 @@ void main() async {
       .where((l) => RegExp(r'^[0-9a-f]{64}$').hasMatch(l))
       .toList();
   Native.setReleaseKeys(await rootBundle.loadString('assets/release_keys.txt'));
+  // The hold key, from the phone's secure hardware: everything the node keeps is sealed under it.
+  final hold = await _service.invokeMethod<String>('hold_key').catchError((_) => null);
+  if (hold != null) Native.setHoldKey(hold);
   // Nothing about the node, the stations or the listener goes to the phone's log.
   Native.start('${dir.path}${Platform.pathSeparator}node', boot);
   runApp(const PyrateApp());

@@ -5,7 +5,7 @@ use pyrate_node::{Config, Node};
 use serde_json::json;
 
 fn files(d: &str) -> usize {
-    walk(&PathBuf::from(d).join("chunks"))
+    walk(&PathBuf::from(d).join("hold")) + walk(&PathBuf::from(d).join("chunks"))
 }
 fn walk(p: &std::path::Path) -> usize {
     std::fs::read_dir(p).map(|r| r.flatten().map(|e| if e.path().is_dir() { walk(&e.path()) } else { 1 }).sum()).unwrap_or(0)

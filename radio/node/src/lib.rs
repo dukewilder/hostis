@@ -5,6 +5,7 @@
 
 pub mod art;
 mod chat;
+pub mod hold;
 mod flock;
 mod pocket;
 pub mod hop;
@@ -63,6 +64,15 @@ pub fn say(msg: &str) {
     }
     #[cfg(not(target_os = "android"))]
     eprintln!("{msg}");
+}
+
+/// The hold key the next node starts under: a phone's, unwrapped from its secure hardware and
+/// handed in through the app's door before the node starts. Without one, the node keeps a key
+/// of its own beside its data (see `hold.rs`).
+static HOLD_KEY: Mutex<Option<[u8; 32]>> = Mutex::new(None);
+
+pub fn set_hold_key(key: [u8; 32]) {
+    *HOLD_KEY.lock().unwrap() = Some(key);
 }
 
 pub fn raw_now_ms() -> u64 {
@@ -234,6 +244,8 @@ pub struct Inner {
     pub(crate) stem_seen: Mutex<std::collections::VecDeque<Hash>>,
     /// Nodes that failed to answer lately, and when: asked only after the others.
     pub(crate) failed: Mutex<HashMap<[u8; 32], u64>>,
+    /// The device's hold key, for the small files the node keeps beside its store.
+    pub(crate) hold: hold::Hold,
     /// Where carriers said they can be reached, signed by each: the network's own address book.
     book: iroh::address_lookup::MemoryLookup,
     /// Running dark: publishes no address anywhere, its own harbour note included.
@@ -671,13 +683,14 @@ impl Inner {
             return *n;
         }
         // Never touch the store lock here: callers may hold it.
-        let p = self.cfg.dir.join("keys").join(format!("{}.pow", station.to_hex()));
+        let note = format!("pow/{}", station.to_hex());
+        let old = self.cfg.dir.join("keys").join(format!("{}.pow", station.to_hex()));
         // A cached answer is checked before it is trusted: a stale one would keep the
         // station out of every Log without a word.
-        let cached = std::fs::read_to_string(&p).ok().and_then(|s| s.trim().parse().ok()).filter(|n| net::pow_ok(station, *n));
+        let cached = self.hold.read_note(&self.cfg.dir, &note, Some(&old)).and_then(|b| String::from_utf8(b).ok()).and_then(|s| s.trim().parse().ok()).filter(|n| net::pow_ok(station, *n));
         let n = cached.unwrap_or_else(|| {
             let n = net::pow_find(station);
-            let _ = std::fs::write(&p, n.to_string());
+            let _ = self.hold.write_note(&self.cfg.dir, &note, n.to_string().as_bytes());
             n
         });
         self.pow.lock().unwrap().insert(*station, n);
@@ -928,18 +941,28 @@ impl Inner {
         }
     }
 
+    /// The hourly count of one of our stations, kept sealed.
+    fn aboard_history(&self, st: &StationId) -> String {
+        let old = self.cfg.dir.join(format!("aboard-{}", store::filed_as(st)));
+        self.hold.read_note(&self.cfg.dir, &format!("aboard/{}", st.to_hex()), Some(&old)).and_then(|b| String::from_utf8(b).ok()).unwrap_or_default()
+    }
+
+    /// The owner's small settings: sort order, filters and the like. Sealed, as all else.
+    pub(crate) fn prefs(&self) -> Value {
+        self.hold.read_note(&self.cfg.dir, "prefs.json", Some(&self.cfg.dir.join("prefs.json"))).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(Value::Null)
+    }
+
     /// An hourly note of how many are aboard each of our own stations, for the owner's chart.
     fn log_aboard(&self) {
         let own = self.store.lock().unwrap().own();
         let now = now_ms();
         for st in own {
             let aboard = self.log.lock().unwrap().get(&st).map(|l| l.aboard(now)).unwrap_or(0);
-            let p = self.cfg.dir.join(format!("aboard-{}", store::filed_as(&st)));
-            let mut text = std::fs::read_to_string(&p).unwrap_or_default();
+            let mut text = self.aboard_history(&st);
             text.push_str(&format!("{now} {aboard}\n"));
             let lines: Vec<&str> = text.lines().collect();
             let keep = lines[lines.len().saturating_sub(24 * 60)..].join("\n");
-            let _ = std::fs::write(&p, keep + "\n");
+            let _ = self.hold.write_note(&self.cfg.dir, &format!("aboard/{}", st.to_hex()), (keep + "\n").as_bytes());
         }
     }
 
@@ -975,7 +998,7 @@ impl Inner {
     /// The Log as the app and the web listener show it: fresh stations, most aboard first.
     /// Kept and marooned stations: the owner's own chart, on this device only.
     fn chart(&self) -> (std::collections::HashSet<String>, std::collections::HashSet<String>) {
-        let v: Value = std::fs::read(self.cfg.dir.join("chart.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(json!({}));
+        let v: Value = self.hold.read_note(&self.cfg.dir, "chart.json", Some(&self.cfg.dir.join("chart.json"))).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(json!({}));
         let set = |k: &str| v[k].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(String::from)).collect();
         (set("kept"), set("marooned"))
     }
@@ -986,7 +1009,7 @@ impl Inner {
         if on { target.insert(id.to_string()); } else { target.remove(id); }
         if kind == "marooned" && on { kept.remove(id); }
         if kind == "kept" && on { marooned.remove(id); }
-        std::fs::write(self.cfg.dir.join("chart.json"), json!({ "kept": kept, "marooned": marooned }).to_string())?;
+        self.hold.write_note(&self.cfg.dir, "chart.json", json!({ "kept": kept, "marooned": marooned }).to_string().as_bytes())?;
         Ok(())
     }
 
@@ -1002,7 +1025,7 @@ impl Inner {
         let now = now_ms();
         let kept_art_only = self.cfg.dir.join("art-kept-only").exists();
         // Explicit stations stay out of the Log and off the dial until the listener asks for them.
-        let prefs = std::fs::read(self.cfg.dir.join("prefs.json")).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()).unwrap_or(Value::Null);
+        let prefs = self.prefs();
         let show_explicit = prefs["show_explicit"] == json!(true);
         let hide_mature = prefs["hide_mature"] == json!(true);
         let own: std::collections::HashSet<StationId> = self.store.lock().unwrap().own().into_iter().collect();
@@ -1059,7 +1082,7 @@ impl Inner {
         if self.cfg.lantern || self.is_own(st) {
             return true;
         }
-        let prefs = std::fs::read(self.cfg.dir.join("prefs.json")).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()).unwrap_or(Value::Null);
+        let prefs = self.prefs();
         let (show_explicit, hide_mature) = (prefs["show_explicit"] == json!(true), prefs["hide_mature"] == json!(true));
         if show_explicit && !hide_mature {
             return true;
@@ -1267,7 +1290,8 @@ impl Inner {
 impl Node {
     pub fn start(cfg: Config) -> Result<Self> {
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build()?;
-        let store = Store::open(&cfg.dir, cfg.quota + cfg.ballast)?;
+        let store = Store::open_with(&cfg.dir, cfg.quota + cfg.ballast, HOLD_KEY.lock().unwrap().take())?;
+        let hold = store.hold.clone();
         let key_path = cfg.dir.join("node.key");
         // A seed of its own, kept: what this node carries by lot, its voices in chatter and its
         // listener tokens come from here, so they hold steady while its address changes.
@@ -1408,6 +1432,7 @@ impl Node {
             stem_misses: Mutex::new(HashMap::new()),
             stem_seen: Mutex::new(std::collections::VecDeque::new()),
             failed: Mutex::new(HashMap::new()),
+            hold,
             book: book.clone(),
             dark,
             last_harbour: std::sync::atomic::AtomicU64::new(0),
@@ -1892,7 +1917,7 @@ impl Node {
             }
             "aboard_history" => {
                 let st = station()?;
-                let text = std::fs::read_to_string(inner.cfg.dir.join(format!("aboard-{}", store::filed_as(&st)))).unwrap_or_default();
+                let text = inner.aboard_history(&st);
                 let pts: Vec<Value> = text.lines().filter_map(|l| {
                     let (t, c) = l.split_once(' ')?;
                     Some(json!([t.parse::<u64>().ok()?, c.parse::<u64>().ok()?]))
@@ -1940,12 +1965,11 @@ impl Node {
             }
             "pref" => {
                 // Small settings the app keeps beside the node: sort order, filters, and the like.
-                let p = inner.cfg.dir.join("prefs.json");
-                let mut all: serde_json::Map<String, Value> = std::fs::read(&p).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+                let mut all: serde_json::Map<String, Value> = inner.prefs().as_object().cloned().unwrap_or_default();
                 let key = req["key"].as_str().context("key")?.to_string();
                 if !req["value"].is_null() {
                     all.insert(key.clone(), req["value"].clone());
-                    std::fs::write(&p, Value::Object(all.clone()).to_string())?;
+                    inner.hold.write_note(&inner.cfg.dir, "prefs.json", Value::Object(all.clone()).to_string().as_bytes())?;
                 }
                 Ok(all.get(&key).cloned().unwrap_or(Value::Null))
             }

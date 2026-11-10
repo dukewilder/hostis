@@ -332,3 +332,4 @@ Rulings made while reading every line again. The findings themselves are in `AUD
 - **One vote a station for the network's clock**, and five must agree before anything moves.
 - **A recording shorter than a second is not played.** It is not a recording worth airing, and it would let a station make every listener's clock walk a week in twenty-millisecond steps.
 - **The network keeps its own address book.** Carriers sign where they can be reached into the gossip, so no directory outside the network is needed to find a carrier, and nothing is looked up in plain DNS. Publishing to number0's directory continues only until the fleet carries the notes.
+- **A disk is noise without its own key.** Everything a node keeps is sealed and named under a hold key of the device's own, kept in the phone's secure hardware. A carrier still cannot read what it carries: the old seal, under each chunk's own address, stays inside.

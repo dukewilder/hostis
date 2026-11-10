@@ -42,6 +42,17 @@ fn pixels(hash: &str) -> Option<(u32, u32, Vec<u8>)> {
     guard(None, || NODE.get().and_then(|n| n.art_pixels(hash)))
 }
 
+/// The device's hold key, as 64 hex characters, unwrapped by the phone's secure hardware.
+/// Call before `pyrate_start`; without it the node keeps a key beside its data.
+#[unsafe(no_mangle)]
+pub extern "C" fn pyrate_set_hold_key(hex: *const c_char) {
+    guard((), || {
+        if let Some(k) = pyrate_node::store_hex32(text(hex).trim()) {
+            pyrate_node::set_hold_key(k);
+        }
+    })
+}
+
 fn text_of(p: *const c_char) -> String {
     text(p)
 }
@@ -177,6 +188,14 @@ mod android {
     pub extern "system" fn Java_black_hostis_pyrate_Native_setReleaseKeys(mut env: JNIEnv, _c: JClass, keys: JString) {
         let text = s(&mut env, &keys);
         *super::RELEASE_KEYS.lock().unwrap() = text.lines().filter_map(|l| pyrate_node::store_hex32(l.trim())).collect();
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_black_hostis_pyrate_Native_setHoldKey(mut env: JNIEnv, _c: JClass, key: JString) {
+        let text = s(&mut env, &key);
+        if let Some(k) = pyrate_node::store_hex32(text.trim()) {
+            pyrate_node::set_hold_key(k);
+        }
     }
 
     #[unsafe(no_mangle)]

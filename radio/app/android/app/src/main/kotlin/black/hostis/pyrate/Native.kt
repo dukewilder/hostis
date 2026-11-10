@@ -11,6 +11,7 @@ object Native {
     }
 
     @JvmStatic external fun setReleaseKeys(keys: String)
+    @JvmStatic external fun setHoldKey(key: String)
     @JvmStatic external fun start(dir: String, boot: String): Int
     @JvmStatic external fun call(req: String): String
     @JvmStatic external fun art(hash: String): ByteArray?
@@ -27,6 +28,7 @@ object Native {
                 ctx.assets.open("flutter_assets/assets/$name").bufferedReader().readText()
             } catch (e: Exception) { "" }
             setReleaseKeys(asset("release_keys.txt"))
+            Hold.key(ctx)?.let { setHoldKey(it) }
             start(File(ctx.filesDir, "node").path, asset("bootstrap.txt").trim())
             started = true
         }
