@@ -1147,7 +1147,17 @@ impl Node {
                         .build(),
                 );
             }
-            if std::env::var_os("HTTPS_PROXY").is_some() && !private_net {
+            // Dark running (PYRATE_DARK=1): no direct paths at all, so no peer ever learns this
+            // node's address, and every relay connection goes through PYRATE_PROXY, such as
+            // Tor's HTTP tunnel port. Relays then see only Tor.
+            let dark = std::env::var_os("PYRATE_DARK").is_some_and(|v| v != "0");
+            if dark {
+                b = b.clear_ip_transports();
+                say("dark running: relays only, no direct paths");
+            }
+            if let Some(url) = std::env::var("PYRATE_PROXY").ok().and_then(|u| u.parse().ok()) {
+                b = b.proxy_url(url).ca_tls_config(iroh::tls::CaTlsConfig::system());
+            } else if std::env::var_os("HTTPS_PROXY").is_some() && !private_net {
                 b = b.proxy_from_env().ca_tls_config(iroh::tls::CaTlsConfig::system());
             }
             let ep = b.bind().await.map_err(|e| anyhow!("bind: {e}"))?;
