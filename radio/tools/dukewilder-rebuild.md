@@ -1,3 +1,5 @@
+Superseded by `dukewilder-wave5.md`, which brings this rebuild up to date and adds the relay, the onion, the log limits, seeding and the security check. Kept for the record.
+
 Rebuild the Pyrate Radio Lantern on dukewilder from the latest `radio` branch of github.com/dukewilder/hostis. This version splits the one Lantern into two identities: a public **harbour** that keeps only its own stations, and a dark **hold** that carries the whole Log over Tor and is tied to nothing. The point is that the node everyone can see is just a station keeper, and the node that carries everything cannot be traced to the harbour, to the VPN, or to the house.
 
 Rules that hold throughout:

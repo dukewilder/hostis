@@ -114,7 +114,7 @@ Known now:
 - Generate the signing keys on his PC with `pyrate-keys.exe` and send `release_keys.txt` and the Android cert; the release and Android signing keys never enter this workspace.
 - Test on real devices: a flock of several phones, the drawer Lantern over days (and after a reboot), iPhone and iPad lock-screen playback through a phone call, the playback service from the lock screen and the car (its threading is new in 0.8.4 and has only been built, never run), a bell, and SCUTTLE on a phone you can spare.
 - Try the computers' builds on hostis.black/pyrateradio: the Windows zip on his PC (run pyrate.exe), and the Mac zip if a Mac is to hand (right-click, Open). They were built in CI and have only been run on Linux here.
-- Run the two-identity dukewilder rebuild in `tools/dukewilder-rebuild.md` (harbour plus dark hold plus Tor, all inside gluetun), and send back the logs.
+- Make one more Proton WireGuard configuration (P2P server, NAT-PMP on) for the harbour's own tunnel, then paste `tools/dukewilder-wave5.md` into the Claude on dukewilder and send back its report. It supersedes `tools/dukewilder-rebuild.md`.
 - Send DNS screenshots, and `station.jpg` / `banner.jpg` if still wanted.
 - Approve any change to the hostis.black front page, including a link to the radio.
 - Approved by Dylan on 10 November: one file at the root of hostis.black, `/.well-known/assetlinks.json`, goes up as soon as the Android cert arrives, so a scanned poster or a shared link opens the app rather than the browser. It names only the app and its signing certificate's fingerprint. Once the Android cert is here, `tools/assetlinks.py android-cert.der` writes it; the app already asks Android to verify (P31).
