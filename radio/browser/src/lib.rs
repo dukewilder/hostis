@@ -557,6 +557,16 @@ impl Ship {
                 }
                 None
             }
+            g @ Gossip::Harbour { .. } => {
+                // A carrier's own word on where it can be reached: into the tab's address book,
+                // for carriers it knows and harbours only.
+                let (node, relay) = g.harbour_checked(raw_now())?;
+                let known = self.log.lock().unwrap().values().any(|l| l.carriers.contains_key(&node)) || self.harbour.iter().any(|h| *h.as_bytes() == node);
+                if let (true, Ok(id), Ok(url)) = (known, EndpointId::from_bytes(&node), relay.parse::<iroh::RelayUrl>()) {
+                    self.book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+                }
+                None
+            }
         }
     }
 
@@ -762,10 +772,14 @@ impl Radio {
         // A fresh node key every visit: nothing ties one visit to the next.
         let mut seed = [0u8; 32];
         getrandom::fill(&mut seed).map_err(|e| JsValue::from_str(&e.to_string()))?;
-        let ep = Endpoint::builder(presets::N0)
+        // The tab publishes its address nowhere: it reaches out through relays, and peers answer
+        // on the same connection or learn of it through gossip. It looks peers up first in its
+        // own book (harbours and carriers' signed notes), then through number0's pkarr server.
+        let ep = Endpoint::builder(presets::Minimal)
             .secret_key(SecretKey::from_bytes(&seed))
             .relay_mode(iroh::RelayMode::Custom(relays))
             .address_lookup(book.clone())
+            .address_lookup(iroh::address_lookup::PkarrResolver::n0_dns())
             .bind()
             .await
             .map_err(|e| JsValue::from_str(&format!("bind: {e}")))?;
@@ -1066,6 +1080,7 @@ impl Radio {
                         Gossip::Station(a) => a.station == st,
                         Gossip::Carrier { station, .. } => *station == st,
                         Gossip::Aboard { station, .. } => *station == st,
+                        Gossip::Harbour { .. } => true,
                     };
                     if ok {
                         s2.on_gossip(g);

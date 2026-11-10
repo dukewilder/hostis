@@ -89,6 +89,8 @@ impl Inner {
                     Gossip::Carrier { station, .. } => *station == st,
                     // The members' hourly tokens, so a pocket counts who is aboard.
                     Gossip::Aboard { station, .. } => *station == st,
+                    // Where the members can be reached, each in its own hand.
+                    Gossip::Harbour { .. } => true,
                 };
                 if ok {
                     me.on_gossip(g);

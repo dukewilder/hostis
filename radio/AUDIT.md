@@ -14,8 +14,6 @@ Each entry gives the threat, whether the wall held, and the fix.
 
 **B9. The PIN falls to a fast hash.** The Colours PIN is stored as a salted BLAKE3 hash, so a seized disk gives up a four-digit PIN at once, and with it any lock-screen PIN that matches. Holds only against a casual look. Fix: a memory-hard hash (Argon2id).
 
-**B13. One company's DNS sits under the network.** Nodes publish their id and relay to number0's pkarr server and look carriers up there, and every lookup also goes out as a plain DNS query that the line's provider can read. If that server goes, nodes can find each other only through gossip neighbours; while it stands, it and the line see who dials whom. Holds only in part. Fix: no plain DNS lookups of node ids, and each node's relay address carried inside the network, signed by the node, so nodes find each other without number0.
-
 **B14. A broadcaster asks carriers for its own station directly.** When the private route fails, a phone syncing its own station asks carriers for the log by id from its own address, which tells them who keeps it. Does not hold. Fix: a keeper's phone never asks directly for its own station unless that station is already on the air directly from the phone.
 
 ### Track A: the clock, the programme, sound and pictures
@@ -55,7 +53,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 - **C24** (low) Chat: the keeper label can be imitated, and bidi controls are not stripped. `browser/www/app.js:453; core/src/chat.rs:166-168`
 - **C25** (low) Wasm traps are unrecoverable. `Cargo.toml `[profile.web] panic = "abort"`; browser/www/app.js:608-611`
 - **C26** (low) Console logs identify the fresh node and the station being synced. `browser/src/lib.rs:49-51`
-- **C27** (medium) presets::N0 may contact number0's discovery services and default relays. `browser/src/lib.rs:694-714`
 - **C28** (medium) No CSP, no Referrer-Policy, inline script in head. `node/src/web/listen.html:1-9`
 - **C29** (medium) Storage and URL inventory (what ties a visit to the next, and what stays in history). `browser/www/app.js:22-35`
 - **C31** (medium) Playback loop can die silently (exception, empty decode, missing decoder script). `browser/www/app.js:205-256`
@@ -192,4 +189,8 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **C11. Per-request cost amplification on unauthenticated routes.** (medium) Fixed: a picture is looked for only among the stations the page may show. What remains: /now and /log.json still work out their answers on every request, cheap for a Lantern's own few stations. (261c896)
 
-**C15. Unsigned Carrier gossip: fake carriers jump the queue, grow memory and eclipse peers.** (high) Fixed: a carrier's claimed head never counts past the station's own card, a listing keeps the 64 freshest carriers, a carrier or token for a station with no card here is dropped (pockets excepted), and a node that failed to answer in the last ten minutes is asked last. The same in the app, on Lanterns and in tabs; cards now go out before carrier claims so nothing honest is dropped. Unit tested; voyage (20 of 20) and pocket (8 of 8) pass. (pending)
+**C15. Unsigned Carrier gossip: fake carriers jump the queue, grow memory and eclipse peers.** (high) Fixed: a carrier's claimed head never counts past the station's own card, a listing keeps the 64 freshest carriers, a carrier or token for a station with no card here is dropped (pockets excepted), and a node that failed to answer in the last ten minutes is asked last. The same in the app, on Lanterns and in tabs; cards now go out before carrier claims so nothing honest is dropped. Unit tested; voyage (20 of 20) and pocket (8 of 8) pass. (51ff651)
+
+**B13. One company's DNS sits under the network.** Nodes publish their id and relay to number0's pkarr server and look carriers up there, and every lookup also goes out as a plain DNS query that the line's provider can read. If that server goes, nodes can find each other only through gossip neighbours; while it stands, it and the line see who dials whom. Holds only in part. Fixed: node ids are no longer looked up in plain DNS at all (the endpoint is built from the minimal preset, the network's own book and number0's pkarr resolver over HTTPS). Every carrier now gossips a harbour note: its relay, signed with its own node key, which other nodes and tabs put in their address book for carriers and harbours they know, so nodes find each other inside the network without number0. Dark nodes send none. Tabs publish their address nowhere (C27). What remains: non-dark phones and Lanterns still publish their relay to number0's pkarr server, so that 0.8.0 nodes can find them; a later release can stop once the fleet carries notes. Unit tested; voyage (20 of 20) and pocket (8 of 8) pass. (pending)
+
+**C27. presets::N0 may contact number0's discovery services and default relays.** (medium) Fixed: a tab publishes its address nowhere and looks peers up in its own book first (see B13). (pending)
