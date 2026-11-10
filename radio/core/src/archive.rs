@@ -87,6 +87,18 @@ pub enum Body {
     /// Whether the station calls itself explicit: sexual or graphic material, a step past
     /// mature. The station's own word. Listeners see explicit stations only if they choose to.
     Rating { explicit: bool },
+    /// When the station is on the air and what fills each hour, in its own local time.
+    /// Whichever is later, this or a rota, rules.
+    Programme(crate::programme::Programme),
+    /// A one-off airing at a set moment: a premiere. Its tracks play in order from `at_ms`;
+    /// then, if `live_min` is set, the keeper means to be live for that long.
+    Show { title: String, about: String, at_ms: u64, tracks: Vec<Hash>, live_min: u32 },
+    /// A show called off before it aired.
+    Unshow { show: Hash },
+    /// A word to listeners on the station's page. `until_ms` zero: until it is taken down.
+    Notice { text: String, until_ms: u64 },
+    /// A notice taken down.
+    Unnotice { notice: Hash },
     /// An entry from a later version of the app. Kept and passed on exactly as it came, so
     /// old and new nodes share one log; this version does nothing with it.
     ///
@@ -364,6 +376,43 @@ impl Archive {
             Body::Rota(r) => Some(r.clone()),
             _ => None,
         }).unwrap_or_default()
+    }
+
+    /// The programme in force, if the station has one later than any rota.
+    pub fn programme(&self) -> Option<crate::programme::Programme> {
+        self.entries.iter().rev().find_map(|e| match e.entry.body() {
+            Body::Programme(p) => Some(Some(p.clone())),
+            Body::Rota(_) => Some(None),
+            _ => None,
+        }).flatten()
+    }
+
+    /// Shows not called off, in log order, with their entry hashes.
+    pub fn shows(&self) -> Vec<(Hash, &Body)> {
+        let off: std::collections::HashSet<Hash> = self.entries.iter().filter_map(|e| match e.entry.body() {
+            Body::Unshow { show } => Some(*show),
+            _ => None,
+        }).collect();
+        self.entries.iter().filter_map(|e| match e.entry.body() {
+            b @ Body::Show { .. } => e.hash().ok().filter(|h| !off.contains(h)).map(|h| (h, b)),
+            _ => None,
+        }).collect()
+    }
+
+    /// Notices still up at `now`, newest first: entry hash, when posted, the words.
+    pub fn notices(&self, now: u64) -> Vec<(Hash, u64, String)> {
+        let down: std::collections::HashSet<Hash> = self.entries.iter().filter_map(|e| match e.entry.body() {
+            Body::Unnotice { notice } => Some(*notice),
+            _ => None,
+        }).collect();
+        let mut v: Vec<(Hash, u64, String)> = self.entries.iter().filter_map(|e| match e.entry.body() {
+            Body::Notice { text, until_ms } if *until_ms == 0 || *until_ms > now => {
+                e.hash().ok().filter(|h| !down.contains(h)).map(|h| (h, e.entry.at_ms, text.clone()))
+            }
+            _ => None,
+        }).collect();
+        v.reverse();
+        v
     }
 
     /// Whether the station calls itself explicit. The latest word rules.

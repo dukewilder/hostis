@@ -2,22 +2,24 @@
 //! log and the time, and every node gets the same answer, to the millisecond.
 //! No server says what is on. The log and the hour say it.
 //!
-//! The week is the unit. At 00:00 UTC each Monday the clock starts the week's
-//! running order from the top, so working out "now" never walks back further
-//! than seven days. Within the week, tracks play back to back. The library is
-//! dealt in rounds: every track once, in an order seeded by the station, the
-//! week and the round, before any track plays twice. A track added mid-week
-//! joins the next round. Blocks put chosen tracks at chosen hours, and an
-//! ident plays on the bell.
+//! Two programmes exist. The older rota works in UTC: the week starts at 00:00 UTC each
+//! Monday, the library is dealt in rounds, and blocks put chosen tracks at chosen hours.
+//! The programme works in the station's own local time: a mode for the library (shuffled,
+//! in order, newest first, a daily tape or a weekly tape), the hours it is on the air,
+//! weekly slots for shows, watches and live hours, and an ident on the bell. One-off shows
+//! override both. Whichever of rota and programme is later in the log rules.
 
 use serde::{Deserialize, Serialize};
 
 use crate::{Archive, Body, Hash, Result};
+use crate::programme::{Fill, Mode, Programme, Zone};
 
 const WEEK_MS: u64 = 7 * 24 * 3600 * 1000;
 /// 1970-01-01 was a Thursday. Monday 1970-01-05 00:00 UTC.
 const FIRST_MONDAY_MS: u64 = 4 * 24 * 3600 * 1000;
 const DAY_MIN: u16 = 24 * 60;
+/// A walk never takes more steps than this, however short the tracks.
+const MAX_STEPS: usize = 400_000;
 
 /// A span of the day, in UTC minutes, given to a chosen set of tracks.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,6 +68,22 @@ pub struct NowPlaying {
     /// Which chunk to fetch first, and how far into it to begin.
     pub chunk: usize,
     pub chunk_offset_ms: u64,
+    /// The show or slot on the air, if one is.
+    pub slot: Option<String>,
+}
+
+/// A stretch of the schedule, for a station's page.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Listing {
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub title: String,
+    pub about: String,
+    /// "show", "slot" or "hours".
+    pub kind: &'static str,
+    pub live: bool,
+    /// The show's entry hash, for a one-off show.
+    pub show: Option<Hash>,
 }
 
 #[derive(Clone, Debug)]
@@ -75,12 +93,24 @@ struct Track {
     withdrawn_ms: Option<u64>,
     duration_ms: u64,
     chunk_ms: Vec<u64>,
+    /// The key that added it: the station's own, or a hand's.
+    by: [u8; 32],
 }
 
 impl Track {
     fn on_air(&self, t: u64) -> bool {
         self.added_ms <= t && self.withdrawn_ms.is_none_or(|w| t < w) && self.duration_ms > 0
     }
+}
+
+#[derive(Clone, Debug)]
+struct Show {
+    hash: Hash,
+    title: String,
+    about: String,
+    at_ms: u64,
+    tracks: Vec<usize>,
+    live_ms: u64,
 }
 
 /// splitmix64, seeded from BLAKE3. Small, fast, the same on every machine.
@@ -120,16 +150,88 @@ struct Deck {
     at: usize,
 }
 
+/// Where a walk takes its tracks from.
+enum Source {
+    /// Rounds from a pool, each track once a round; shuffled with this seed.
+    Rounds { pool: Vec<usize>, shuffle: Option<Vec<u8>>, round: u64, order: Vec<usize>, at: usize },
+    /// A fixed order, round and round.
+    Cycle { order: Vec<usize>, at: usize },
+    /// A fixed order, once.
+    Once { order: Vec<usize>, at: usize },
+}
+
+impl Source {
+    fn next(&mut self, tracks: &[Track], t: u64) -> Option<usize> {
+        match self {
+            Source::Once { order, at } => {
+                while *at < order.len() {
+                    let i = order[*at];
+                    *at += 1;
+                    if tracks[i].on_air(t) {
+                        return Some(i);
+                    }
+                }
+                None
+            }
+            Source::Cycle { order, at } => {
+                if order.is_empty() {
+                    return None;
+                }
+                for _ in 0..order.len() * 2 + 1 {
+                    if *at >= order.len() {
+                        *at = 0;
+                    }
+                    let i = order[*at];
+                    *at += 1;
+                    if tracks[i].on_air(t) {
+                        return Some(i);
+                    }
+                }
+                None
+            }
+            Source::Rounds { pool, shuffle, round, order, at } => {
+                for _ in 0..2 {
+                    while *at < order.len() {
+                        let i = order[*at];
+                        *at += 1;
+                        if tracks[i].on_air(t) {
+                            return Some(i);
+                        }
+                    }
+                    let mut fresh: Vec<usize> = pool.iter().copied().filter(|&i| tracks[i].on_air(t)).collect();
+                    if fresh.is_empty() {
+                        return None;
+                    }
+                    *round += 1;
+                    if let Some(seed) = shuffle {
+                        Dice::new(&[seed, &round.to_le_bytes()]).shuffle(&mut fresh);
+                    }
+                    *order = fresh;
+                    *at = 0;
+                }
+                None
+            }
+        }
+    }
+}
+
 pub struct Clock {
     station: [u8; 32],
     rota: Rota,
+    programme: Option<Programme>,
     tracks: Vec<Track>,
+    shows: Vec<Show>,
 }
 
 impl Clock {
     pub fn new(archive: &Archive) -> Result<Self> {
         let mut tracks: Vec<Track> = Vec::new();
+        let station = archive.station().0;
         for e in archive.entries() {
+            let by = match &e.entry.body {
+                Body::Deputed { by, .. } => *by,
+                _ => station,
+            };
             match e.entry.body() {
                 Body::Track { chunks, .. } => {
                     let chunk_ms: Vec<u64> = chunks.iter().map(|c| c.duration_ms()).collect();
@@ -139,6 +241,7 @@ impl Clock {
                         withdrawn_ms: None,
                         duration_ms: chunk_ms.iter().sum(),
                         chunk_ms,
+                        by,
                     });
                 }
                 Body::Withdraw { track } => {
@@ -149,8 +252,258 @@ impl Clock {
                 _ => {}
             }
         }
-        Ok(Self { station: archive.station().0, rota: archive.rota(), tracks })
+        let shows = archive
+            .shows()
+            .into_iter()
+            .filter_map(|(hash, b)| match b {
+                Body::Show { title, about, at_ms, tracks: list, live_min } => Some(Show {
+                    hash,
+                    title: title.clone(),
+                    about: about.clone(),
+                    at_ms: *at_ms,
+                    tracks: list.iter().filter_map(|h| tracks.iter().position(|t| &t.hash == h)).collect(),
+                    live_ms: *live_min as u64 * 60_000,
+                }),
+                _ => None,
+            })
+            .collect();
+        Ok(Self { station, rota: archive.rota(), programme: archive.programme(), tracks, shows })
     }
+
+    /// What plays between two moments: each track's start, its entry hash and its length.
+    /// The watch bill, worked out on the device; no server is asked.
+    pub fn upcoming(&self, from: u64, until: u64) -> Vec<(u64, Hash, u64)> {
+        let mut out = Vec::new();
+        let mut t = from;
+        while t < until && out.len() < 2000 {
+            // A quiet minute (nothing yet added, off the air, a gap between blocks): step past it.
+            let Some(np) = self.now(t) else {
+                t = (t / 60_000 + 1) * 60_000;
+                continue;
+            };
+            let start = t - np.offset_ms;
+            if out.last().is_none_or(|l: &(u64, Hash, u64)| l.0 != start) {
+                out.push((start, np.track, np.duration_ms));
+            }
+            t = start + np.duration_ms.max(1000);
+        }
+        out
+    }
+
+    /// What is on at `t`, in Unix milliseconds. None is dead air: an empty library, or the
+    /// station off the air.
+    pub fn now(&self, t: u64) -> Option<NowPlaying> {
+        if t < FIRST_MONDAY_MS {
+            return None;
+        }
+        if let Some(s) = self.show_at(t) {
+            let mut src = Source::Once { order: s.tracks.clone(), at: 0 };
+            if let Some(mut np) = self.walk(s.at_ms, &mut src, t, None) {
+                np.slot = Some(s.title.clone());
+                return Some(np);
+            }
+            // Past its recordings: the live part, or nothing left. The programme carries on.
+        }
+        match &self.programme {
+            None => self.rota_now(t),
+            Some(p) => self.programme_now(p, t),
+        }
+    }
+
+    fn show_len(&self, s: &Show) -> u64 {
+        s.tracks.iter().filter(|&&i| self.tracks[i].on_air(s.at_ms)).map(|&i| self.tracks[i].duration_ms).sum::<u64>() + s.live_ms
+    }
+
+    /// The show on the air at `t`: the latest to have started, if it has not ended.
+    fn show_at(&self, t: u64) -> Option<&Show> {
+        self.shows.iter().filter(|s| s.at_ms <= t && t < s.at_ms + self.show_len(s)).max_by_key(|s| s.at_ms)
+    }
+
+    fn ident_index(&self, ident: Option<Hash>) -> Option<usize> {
+        ident.and_then(|h| self.tracks.iter().position(|tr| tr.hash == h))
+    }
+
+    /// Plays tracks back to back from `start`, the ident on the bell, and says what is on at `t`.
+    fn walk(&self, start: u64, src: &mut Source, t: u64, ident: Option<(usize, u64)>) -> Option<NowPlaying> {
+        let mut cursor = start;
+        let mut last_ident: Option<u64> = None;
+        for _ in 0..MAX_STEPS {
+            let pick = match ident {
+                Some((i, bell)) if self.tracks[i].on_air(cursor) && last_ident.is_none_or(|l| cursor - l >= bell) => {
+                    last_ident = Some(cursor);
+                    Some(i)
+                }
+                _ => src.next(&self.tracks, cursor),
+            };
+            let Some(i) = pick else {
+                // Nothing on air yet: look again a minute on.
+                cursor = (cursor / 60_000 + 1) * 60_000;
+                if cursor > t {
+                    return None;
+                }
+                if matches!(src, Source::Once { .. }) {
+                    return None;
+                }
+                continue;
+            };
+            let tr = &self.tracks[i];
+            if cursor + tr.duration_ms > t {
+                let offset = t - cursor;
+                let mut chunk = 0;
+                let mut left = offset;
+                while chunk < tr.chunk_ms.len() && left >= tr.chunk_ms[chunk] {
+                    left -= tr.chunk_ms[chunk];
+                    chunk += 1;
+                }
+                return Some(NowPlaying {
+                    track: tr.hash,
+                    started_at_ms: cursor,
+                    offset_ms: offset,
+                    duration_ms: tr.duration_ms,
+                    chunk,
+                    chunk_offset_ms: left,
+                    slot: None,
+                });
+            }
+            cursor += tr.duration_ms;
+        }
+        None
+    }
+
+    fn library_order(&self) -> Vec<usize> {
+        (0..self.tracks.len()).collect()
+    }
+
+    fn programme_now(&self, p: &Programme, t: u64) -> Option<NowPlaying> {
+        let lm = p.zone.local_min(t);
+        let ident = self.ident_index(p.ident).map(|i| (i, p.ident_every_min.max(1) as u64 * 60_000));
+        let not_ident = |i: &usize| Some(self.tracks[*i].hash) != p.ident;
+        for (n, slot) in p.slots.iter().enumerate() {
+            let Some(run) = slot.span.run_start(lm) else { continue };
+            let start = p.zone.utc_ms(run);
+            let seed = |tag: &[u8]| -> Vec<u8> {
+                let mut s = self.station.to_vec();
+                s.extend_from_slice(tag);
+                s.extend_from_slice(&(n as u64).to_le_bytes());
+                s.extend_from_slice(&run.to_le_bytes());
+                s
+            };
+            let mut src = match &slot.fill {
+                Fill::Library => Source::Rounds { pool: self.library_order().into_iter().filter(not_ident).collect(), shuffle: Some(seed(b"slot")), round: 0, order: vec![], at: 0 },
+                Fill::Tracks { tracks, shuffle } => {
+                    let order: Vec<usize> = tracks.iter().filter_map(|h| self.tracks.iter().position(|x| &x.hash == h)).collect();
+                    if *shuffle {
+                        Source::Rounds { pool: order, shuffle: Some(seed(b"slot")), round: 0, order: vec![], at: 0 }
+                    } else {
+                        Source::Cycle { order, at: 0 }
+                    }
+                }
+                Fill::Hand { key } => Source::Rounds {
+                    pool: self.library_order().into_iter().filter(|&i| &self.tracks[i].by == key).filter(not_ident).collect(),
+                    shuffle: Some(seed(b"watch")),
+                    round: 0,
+                    order: vec![],
+                    at: 0,
+                },
+                Fill::Newest { count } => {
+                    let mut order: Vec<usize> = self.library_order().into_iter().filter(|&i| self.tracks[i].on_air(start)).filter(not_ident).collect();
+                    order.reverse();
+                    order.truncate((*count).max(1) as usize);
+                    Source::Cycle { order, at: 0 }
+                }
+            };
+            if let Some(mut np) = self.walk(start, &mut src, t, ident) {
+                np.slot = Some(slot.title.clone());
+                return Some(np);
+            }
+            // A slot with nothing to play falls back to the station's own mode.
+            break;
+        }
+        if !p.on_air(lm) {
+            return None;
+        }
+        let week_origin = Zone::week_origin(lm);
+        let lib: Vec<usize> = self.library_order().into_iter().filter(not_ident).collect();
+        let (anchor_lm, mut src) = match &p.mode {
+            Mode::Shuffle => {
+                let mut seed = self.station.to_vec();
+                seed.extend_from_slice(b"mode");
+                seed.extend_from_slice(&week_origin.to_le_bytes());
+                (week_origin, Source::Rounds { pool: lib, shuffle: Some(seed), round: 0, order: vec![], at: 0 })
+            }
+            Mode::InOrder => (week_origin, Source::Cycle { order: lib, at: 0 }),
+            Mode::NewestFirst => {
+                let mut order = lib;
+                order.reverse();
+                (week_origin, Source::Cycle { order, at: 0 })
+            }
+            Mode::Daily { start_min } => {
+                let s = *start_min as i64;
+                let day_start = (lm - s).div_euclid(1440) * 1440 + s;
+                (day_start, Source::Cycle { order: lib, at: 0 })
+            }
+            Mode::Weekly { day, start_min } => {
+                let mut s = week_origin + (*day as i64 % 7) * 1440 + *start_min as i64;
+                if s > lm {
+                    s -= 7 * 1440;
+                }
+                (s, Source::Cycle { order: lib, at: 0 })
+            }
+        };
+        self.walk(p.zone.utc_ms(anchor_lm), &mut src, t, ident)
+    }
+
+    /// The schedule between two moments, for a station's page: shows, slots and on-air hours.
+    pub fn listings(&self, from: u64, until: u64) -> Vec<Listing> {
+        let mut out = Vec::new();
+        for s in &self.shows {
+            let end = s.at_ms + self.show_len(s).max(60_000);
+            if end > from && s.at_ms < until {
+                out.push(Listing {
+                    start_ms: s.at_ms,
+                    end_ms: end,
+                    title: s.title.clone(),
+                    about: s.about.clone(),
+                    kind: "show",
+                    live: s.live_ms > 0,
+                    show: Some(s.hash),
+                });
+            }
+        }
+        if let Some(p) = &self.programme {
+            let (lf, lu) = (p.zone.local_min(from), p.zone.local_min(until));
+            for slot in &p.slots {
+                for run in slot.span.starts_between(lf, lu) {
+                    out.push(Listing {
+                        start_ms: p.zone.utc_ms(run),
+                        end_ms: p.zone.utc_ms(run + slot.span.len_min as i64),
+                        title: slot.title.clone(),
+                        about: slot.about.clone(),
+                        kind: "slot",
+                        live: slot.live,
+                        show: None,
+                    });
+                }
+            }
+            for h in &p.hours {
+                for run in h.starts_between(lf, lu) {
+                    out.push(Listing {
+                        start_ms: p.zone.utc_ms(run),
+                        end_ms: p.zone.utc_ms(run + h.len_min as i64),
+                        title: "On the air".into(),
+                        about: String::new(),
+                        kind: "hours",
+                        live: false,
+                        show: None,
+                    });
+                }
+            }
+        }
+        out.sort_by_key(|l| (l.start_ms, l.kind));
+        out
+    }
+
+    // ---- The rota, as it always was ---------------------------------------------------
 
     fn block_at(&self, t: u64) -> Option<usize> {
         let min = ((t / 60_000) % DAY_MIN as u64) as u16;
@@ -199,29 +552,7 @@ impl Clock {
         None
     }
 
-    /// What is on at `t`, in Unix milliseconds. None is dead air: an empty library.
-    /// What plays between two moments: each track's start, its entry hash and its length.
-    /// The watch bill, worked out on the device; no server is asked.
-    pub fn upcoming(&self, from: u64, until: u64) -> Vec<(u64, Hash, u64)> {
-        let mut out = Vec::new();
-        let mut t = from;
-        while t < until && out.len() < 2000 {
-            // A quiet minute (nothing yet added, or a gap between blocks): step past it.
-            let Some(np) = self.now(t) else {
-                t = (t / 60_000 + 1) * 60_000;
-                continue;
-            };
-            let start = t - np.offset_ms;
-            out.push((start, np.track, np.duration_ms));
-            t = start + np.duration_ms.max(1000) + 1;
-        }
-        out
-    }
-
-    pub fn now(&self, t: u64) -> Option<NowPlaying> {
-        if t < FIRST_MONDAY_MS {
-            return None;
-        }
+    fn rota_now(&self, t: u64) -> Option<NowPlaying> {
         let week = (t - FIRST_MONDAY_MS) / WEEK_MS;
         let mut cursor = FIRST_MONDAY_MS + week * WEEK_MS;
         let mut decks: Vec<Option<Deck>> = (0..=self.rota.blocks.len()).map(|_| None).collect();
@@ -265,6 +596,7 @@ impl Clock {
                     duration_ms: tr.duration_ms,
                     chunk,
                     chunk_offset_ms: left,
+                    slot: None,
                 });
             }
             cursor += tr.duration_ms;

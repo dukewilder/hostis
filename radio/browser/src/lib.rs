@@ -430,7 +430,13 @@ impl Ship {
             }
         }
         let Ok(clock) = Clock::new(a) else { return json!({ "kind": "dead air" }) };
-        let Some(np) = clock.now(at) else { return json!({ "kind": "dead air" }) };
+        let Some(np) = clock.now(at) else {
+            // Off the air until its next spell, or nothing yet to play.
+            return match clock.upcoming(at, at + 7 * 86_400_000).first() {
+                Some(b) => json!({ "kind": "off air", "back_at": b.0 }),
+                None => json!({ "kind": "dead air" }),
+            };
+        };
         let Some((title, by, chunks, channels)) = Self::describe(a, &np.track) else { return json!({ "kind": "searching" }) };
         let Some(chunk) = chunks.get(np.chunk) else { return json!({ "kind": "dead air" }) };
         let art = a.track_art(&np.track).map(|r| hex(&r.hash));
@@ -438,7 +444,7 @@ impl Ship {
             "kind": "track", "track": hex(&np.track), "title": title, "by": by, "art": art,
             "index": np.chunk, "chunk": hex(&chunk.hash), "chunk_ms": chunk.duration_ms(),
             "chunk_start": at - np.chunk_offset_ms, "channels": channels,
-            "position_ms": np.offset_ms, "duration_ms": np.duration_ms,
+            "position_ms": np.offset_ms, "duration_ms": np.duration_ms, "slot": np.slot,
             "next": chunks.get(np.chunk + 1).map(|c| hex(&c.hash)),
         })
     }
@@ -679,6 +685,16 @@ impl Radio {
             let b = s.fetch(&st, &h).await.map_err(js)?;
             Ok(js_sys::Uint8Array::from(&b[..]).into())
         }))
+    }
+
+    /// A station's page as JSON: on now, up next, the week's schedule and its notices,
+    /// worked out in this tab from the station's own log. Times are network milliseconds.
+    pub fn page(&self, id: &str, days: u32) -> Result<String, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let archives = self.ship.archives.lock().unwrap();
+        let Some(a) = archives.get(&st) else { return Ok("null".into()) };
+        let v = pyrate_core::page::page_of(a, self.ship.now(), days.min(28) as u64).map_err(|e| js(anyhow!("{e}")))?;
+        Ok(v.to_string())
     }
 
     /// The station's whole log as JSON lines of what aired: for the station page.

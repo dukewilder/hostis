@@ -108,7 +108,19 @@ function schedule(chs, skipMs, when) {
   return when + n / 48000;
 }
 
-function status(t) { $('np').textContent = t; $('by').textContent = '' }
+function status(t) { $('np').textContent = t; $('by').textContent = ''; $('slot').textContent = '' }
+
+// ---- Times, in the listener's own clock ------------------------------------------------
+const hm = ms => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+function dayOf(ms) {
+  const d = new Date(ms), t = new Date(), a = new Date(d.getFullYear(), d.getMonth(), d.getDate()), b = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  const n = Math.round((a - b) / 86400000);
+  return n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : DAYS[d.getDay()];
+}
+const when = ms => { const d = dayOf(ms); return d === 'Today' || d === 'Tomorrow' ? d.toLowerCase() : 'on ' + d };
+const offAir = back => back ? 'Off the air. Back ' + when(back) + ' at ' + hm(back) + '.' : 'Off the air';
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 // Fills twelve seconds ahead and keeps to the station's clock, the way the app does.
 async function play(id, g) {
@@ -124,7 +136,7 @@ async function play(id, g) {
     const at = playhead ?? radio.now() + 400;
     const p = JSON.parse(radio.plan(id, at));
     if (p.kind === 'searching') { if (!queued) status('Searching the Log'); await radio.sync(id).catch(() => { }); await sleep(1200); continue }
-    if (p.kind === 'dead air') { reset(); status('Dead air'); await sleep(4000); continue }
+    if (p.kind === 'dead air' || p.kind === 'off air') { if (!queued) { reset(); status(p.kind === 'off air' ? offAir(p.back_at) : 'Dead air') } await sleep(4000); continue }
     let chunk, ch, ms, seq = null;
     if (p.kind === 'live') {
       const t = p.tail;
@@ -170,10 +182,62 @@ async function nowPlaying() {
   const p = JSON.parse(radio.plan(cur.id, radio.now()));
   if (p.kind === 'live') { $('np').textContent = 'Live'; $('by').textContent = ''; $('air').innerHTML = '<span class="air">ON AIR</span>' }
   else if (p.kind === 'track') {
-    $('np').textContent = p.title || ''; $('by').textContent = p.by || '';
+    $('np').textContent = p.title || ''; $('by').textContent = p.by || ''; $('slot').textContent = p.slot || '';
     const url = await pic(cur.id, p.art || cur.cover); art(url);
     if ('mediaSession' in navigator && playing) navigator.mediaSession.metadata = new MediaMetadata({ title: p.title || cur.name, artist: p.by || '', album: cur.name, artwork: url ? [{ src: url, sizes: '512x512', type: 'image/jpeg' }] : [] });
-  } else if (!playing) status(p.kind === 'dead air' ? 'Dead air' : '');
+  } else if (p.kind === 'off air') status(offAir(p.back_at));
+  else if (!playing) status(p.kind === 'dead air' ? 'Dead air' : '');
+}
+
+// ---- The station's page: notices, up next and the week, from its own log ---------------
+function howItPlays(p) {
+  if (!p) return 'Plays its whole library shuffled, round the clock.';
+  const z = p.zone_name ? ' ' + p.zone_name : '', m = p.mode || {}, at = String(Math.floor((m.start_min || 0) / 60)).padStart(2, '0') + ':' + String((m.start_min || 0) % 60).padStart(2, '0');
+  const WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  let s = { in_order: 'Plays its library in order, from the top each Monday', newest_first: 'Plays its newest recordings first', daily: 'Plays its library in order, from the top every day at ' + at + z, weekly: 'Plays its library in order, from the top every ' + WEEK[(m.day || 0) % 7] + ' at ' + at + z }[m.kind] || 'Plays its whole library shuffled';
+  s += (p.hours || []).length ? ', on the air for set hours' + z + '.' : ', round the clock.';
+  if ((p.slots || []).length) s += ' ' + p.slots.length + (p.slots.length === 1 ? ' regular show.' : ' regular shows.');
+  return s;
+}
+
+// A show for the listener's own calendar: a small .ics, made here, sent nowhere.
+function ics(l, name) {
+  const f = ms => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const t = s => String(s || '').replace(/[\\;,]/g, c => '\\' + c).replace(/\n/g, '\\n');
+  const body = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Pyrate Radio//EN', 'BEGIN:VEVENT', 'UID:' + l.start_ms + '-' + cur.id.slice(0, 16) + '@pyrateradio', 'DTSTAMP:' + f(Date.now()), 'DTSTART:' + f(l.start_ms), 'DTEND:' + f(l.end_ms),
+    'SUMMARY:' + t(l.title + ' on ' + name), 'DESCRIPTION:' + t((l.about ? l.about + '\n' : '') + location.origin + location.pathname + '#' + cur.id), 'URL:' + location.origin + location.pathname + '#' + cur.id, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([body], { type: 'text/calendar' })); a.download = (l.title || 'show').replace(/[^\w ]+/g, '').trim().slice(0, 40) + '.ics'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+let pageFor = null, pageAt = 0;
+function page(force) {
+  if (!cur || !radio) return;
+  if (!force && pageFor === cur.id && Date.now() - pageAt < 30000) return;
+  const v = JSON.parse(radio.page(cur.id, 7));
+  if (!v) { $('page').hidden = true; return }
+  pageFor = cur.id; pageAt = Date.now(); $('page').hidden = false;
+  $('notices').innerHTML = (v.notices || []).map(n => '<div class="notice">' + esc(n.text) + '<small>' + esc(dayOf(n.at_ms) + ' ' + hm(n.at_ms)) + '</small></div>').join('');
+  const next = (v.next || []).slice(v.now ? 1 : 0, 6);
+  $('nexth').hidden = !next.length;
+  $('next').innerHTML = next.map(n => '<div class="li"><span class="t">' + hm(n.start_ms) + '</span><span class="w">' + esc(n.title) + (n.by ? ' <em>' + esc(n.by) + '</em>' : '') + '</span></div>').join('');
+  $('how').textContent = (!v.now && v.back_at ? offAir(v.back_at) + ' ' : '') + howItPlays(v.programme);
+  const now = radio.now(); let last = null, h = '', days = 0;
+  const ls = (v.listings || []).filter(l => l.kind !== 'hours');
+  for (const [i, l] of ls.entries()) {
+    const d = dayOf(l.start_ms);
+    // Today and tomorrow show; the rest of the week waits behind a button.
+    if (d !== last) { if (++days === 3) h += '<button class="small" id="week">THE WHOLE WEEK</button><div id="later" hidden>'; h += '<div class="day">' + d + '</div>'; last = d }
+    const on = l.start_ms <= now && now < l.end_ms;
+    h += '<div class="li' + (on ? ' on' : '') + '"><span class="t">' + hm(l.start_ms) + '–' + hm(l.end_ms) + '</span><span class="w">' + esc(l.title) +
+      (l.live ? ' <b class="lv">LIVE</b>' : '') + (l.kind === 'show' ? ' <b class="pr">PREMIERE</b>' : '') + (l.about ? '<em>' + esc(l.about) + '</em>' : '') + '</span>' +
+      (l.start_ms > now ? '<button class="small cal" data-i="' + i + '" title="Add to your calendar">+ CAL</button>' : '') + '</div>';
+  }
+  if (days >= 3) h += '</div>';
+  const open = !$('later')?.hidden && $('later') !== null;
+  $('listings').innerHTML = h || '<p>No shows on the bill this week.</p>';
+  if ($('week')) { if (open) { $('later').hidden = false; $('week').hidden = true } $('week').onclick = () => { $('later').hidden = false; $('week').hidden = true } }
+  $('listings').querySelectorAll('.cal').forEach(b => b.onclick = () => ics(ls[+b.dataset.i], v.name || cur.name));
 }
 
 function art(url) { const c = $('cover'); if (url) { if (c.src !== url) c.src = url; c.hidden = false; $('flag').hidden = true } else { c.hidden = true; $('flag').hidden = false } }
@@ -189,7 +253,7 @@ async function show(s) {
   document.querySelectorAll('.row').forEach(r => r.classList.toggle('on', r.dataset.id === s.id));
   if (location.hash.slice(1) !== s.id) history.replaceState(null, '', '#' + s.id);
   radio.tune(s.id);
-  nowPlaying();
+  nowPlaying(); page(true);
 }
 
 function listen(s) {
@@ -271,7 +335,7 @@ async function boot() {
   if (!/^[0-9a-f]{64}$/.test(key || '')) { const b = new Uint8Array(32); crypto.getRandomValues(b); key = [...b].map(x => x.toString(16).padStart(2, '0')).join(''); store('pyrate.token', key) }
   try { radio = await Radio.start(HARBOUR, key, RELAYS) } catch (e) { console.warn(e); $('name').textContent = 'Could not reach a relay'; $('signal').textContent = String(e); return }
   followLink(); refresh();
-  setInterval(refresh, 4000); setInterval(nowPlaying, 1000);
+  setInterval(refresh, 4000); setInterval(nowPlaying, 1000); setInterval(() => page(false), 5000);
   window.addEventListener('hashchange', followLink);
   if ('mediaSession' in navigator) { navigator.mediaSession.setActionHandler('play', () => cur && listen(cur)); navigator.mediaSession.setActionHandler('pause', stop); navigator.mediaSession.setActionHandler('stop', stop) }
 }

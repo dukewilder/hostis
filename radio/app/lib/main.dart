@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'art.dart';
 import 'more.dart';
 import 'native.dart';
+import 'station.dart';
 
 // The site's ink.
 const black = Color(0xFF030303);
@@ -510,15 +511,19 @@ class _StationFace extends StatelessWidget {
             decoration: BoxDecoration(border: Border.all(color: bloodBright, width: 0.8)),
             child: Text('ON AIR', style: carved(11, color: bloodBright, spacing: 0.35)),
           ),
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          Flexible(child: Text(s['name'] ?? '', textAlign: TextAlign.center, style: serif(34))),
-          ...seals(s, size: 10),
-        ]),
+        GestureDetector(
+          onTap: () => openPage(context, s, radio),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Flexible(child: Text(s['name'] ?? '', textAlign: TextAlign.center, style: serif(34))),
+            ...seals(s, size: 10),
+          ]),
+        ),
         const SizedBox(height: 6),
         Text(s['call_sign'] ?? '', style: mono(12, color: boneFaint)),
         const SizedBox(height: 8),
         Wrap(alignment: WrapAlignment.center, spacing: 2, children: [
           for (final (label, act) in <(String, VoidCallback)>[
+            ('THE PAGE', () => openPage(context, s, radio)),
             ('WATCH BILL', () => pyrateSheet(context, WatchBill(station: s))),
             if (isTuned) ('TAPE IT', () => tapeIt(context)),
             ('PASS IT ON', () => shareStation(s)),
@@ -555,7 +560,11 @@ class _StationFace extends StatelessWidget {
                   ? Text('Finding a carrier', style: serif(16, color: boneFaint, italic: true))
                   : state == 'dead air'
                       ? Text('Dead air', style: serif(16, color: boneFaint, italic: true))
+                      : state == 'off air'
+                      ? Text(offAirLabel((now?['back_at'] as num?)?.toInt()), textAlign: TextAlign.center, style: serif(16, color: boneFaint, italic: true))
                       : Column(children: [
+                          if (state != 'live' && (now?['slot'] ?? '').toString().isNotEmpty)
+                            Text((now!['slot']).toString().toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: carved(9.5, color: accent, spacing: 0.3)),
                           Text(state == 'live' ? 'Live' : title, textAlign: TextAlign.center, maxLines: 2,
                               overflow: TextOverflow.ellipsis, style: serif(19, color: boneDim, italic: true)),
                           if (by.isNotEmpty) Text(by, style: carved(11, color: boneFaint, spacing: 0.2)),
@@ -594,6 +603,9 @@ class _ColoursPageState extends State<ColoursPage> {
   List library = [];
   String? libraryFor;
   int libraryCount = -1;
+  final shape = StartShape();
+  Map? programme;
+  String? programmeFor;
 
   InputDecoration field(String label) => InputDecoration(
         labelText: label,
@@ -618,6 +630,7 @@ class _ColoursPageState extends State<ColoursPage> {
       error = null;
     });
     final r = await Native.callAway({'cmd': 'raise', 'name': name.text, 'about': about.text});
+    if (r is Map && r['id'] is String) await shape.apply(r['id']);
     setState(() {
       raising = false;
       if (r is Map && r['error'] != null) error = r['error'];
@@ -768,6 +781,11 @@ class _ColoursPageState extends State<ColoursPage> {
         TextField(controller: name, style: serif(20), decoration: field('Name'), maxLength: 40),
         TextField(controller: about, style: serif(16), decoration: field('What it broadcasts'), maxLength: 140),
         const SizedBox(height: 18),
+        StartShapePicker(shape: shape),
+        const SizedBox(height: 10),
+        Text('All of it can change later, and none of it needs you once it is set: the station keeps to it for as long as anyone carries it.',
+            style: serif(13, color: boneGhost, italic: true)),
+        const SizedBox(height: 18),
         Row(children: [button(raising ? 'RAISING' : 'RAISE COLOURS', raising ? null : raise)]),
         if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: serif(14, color: bloodBright))),
         const SizedBox(height: 28),
@@ -904,6 +922,31 @@ class _ColoursPageState extends State<ColoursPage> {
     ];
   }
 
+  List<Widget> _programme(String id, Map<String, dynamic> mine) {
+    if (programmeFor != id) {
+      programmeFor = id;
+      final r = Native.call({'cmd': 'programme', 'station': id});
+      programme = r is Map ? r['programme'] as Map? : null;
+    }
+    Future<void> after(Future<void> f) async {
+      await f;
+      setState(() => programmeFor = null);
+    }
+
+    return [
+      Text('THE PROGRAMME', style: carved(14)),
+      const SizedBox(height: 8),
+      Text(programmeSummary(programme), style: serif(14, color: boneFaint, italic: true)),
+      const SizedBox(height: 12),
+      Wrap(spacing: 6, runSpacing: 6, children: [
+        button('SET THE PROGRAMME', () => after(Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(backgroundColor: black, appBar: AppBar(backgroundColor: black), body: ProgrammeEditor(station: id)))))),
+        button('A PREMIERE', () => after(pyrateSheet(context, ShowEditor(station: id)))),
+        button('A NOTICE', () => after(pyrateSheet(context, NoticeEditor(station: id)))),
+        button('YOUR PAGE', () => openPage(context, mine, widget.radio)),
+      ]),
+    ];
+  }
+
   List<Widget> _station(Map<String, dynamic> mine) {
     final id = mine['id'] as String;
     loadLibrary(id, (mine['tracks'] as num?)?.toInt() ?? 0);
@@ -940,7 +983,7 @@ class _ColoursPageState extends State<ColoursPage> {
       const SizedBox(height: 26),
       Text('ADD RECORDINGS', style: carved(14)),
       const SizedBox(height: 8),
-      Text('Everything you set plays in rounds, all day, every track once before any plays twice. Name files "Artist - Title" and the clock shows both.',
+      Text('Recordings join the library, and the programme below decides when each plays. Name files "Artist - Title" and the clock shows both.',
           style: serif(14, color: boneFaint, italic: true)),
       Row(children: [
         Switch(value: talk, onChanged: (v) => setState(() => talk = v), activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel),
@@ -983,7 +1026,9 @@ class _ColoursPageState extends State<ColoursPage> {
           ),
         const SizedBox(height: 26),
       ],
-      RotaEditor(key: ValueKey(library.length), station: id, library: library),
+      ..._programme(id, mine),
+      const SizedBox(height: 26),
+      FeedsPanel(station: id),
       const SizedBox(height: 26),
       HandsPanel(station: id),
       const SizedBox(height: 26),
