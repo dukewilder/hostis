@@ -319,7 +319,7 @@ async function show(s) {
   flag($('flag'), s.id, s.live); art(await pic(s.id, s.cover));
   const b = await pic(s.id, s.banner); $('banner').style.backgroundImage = b ? 'url(' + b + ')' : '';
   $('name').textContent = s.name || s.call_sign; $('cs').textContent = s.call_sign + (s.aboard !== undefined ? '  ' + s.aboard + ' aboard' : '');
-  lamps(s.live); needle(s.id); power();
+  lamps(s.live); needle(s.id); power(); $('tip').hidden = !s.tip; $('tipbox').hidden = true;
   $('pass').hidden = false; $('maroon').hidden = false;
   document.querySelectorAll('.row').forEach(r => r.classList.toggle('on', r.dataset.id === s.id));
   if (location.hash.slice(1) !== s.id) history.replaceState(null, '', '#' + s.id);
@@ -437,6 +437,23 @@ $('askfor').onclick = () => {
 };
 $('asksend').onclick = () => { speak('request', $('asknote').value.trim(), $('asktrack').value); $('asknote').value = ''; $('askbox').hidden = true };
 setInterval(() => { if (!$('chatroom').hidden || !$('chatjoin').hidden) chatter() }, 2000);
+// A hail: up to twenty seconds of the listener's voice, sealed in this tab so that only the
+// station's own keys open it. It passes through the room live and nobody keeps it.
+let hailRec = null;
+$('hail').onclick = async () => {
+  if (hailRec) { hailRec.stop(); return }
+  let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }) } catch (e) { $('chatwho').textContent = 'Allow the microphone, then press again.'; return }
+  const type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+  const parts = []; hailRec = new MediaRecorder(stream, { mimeType: type, audioBitsPerSecond: 24000 });
+  hailRec.ondataavailable = e => e.data.size && parts.push(e.data);
+  hailRec.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop()); hailRec = null; $('hail').textContent = 'Hail the keeper';
+    const blob = new Blob(parts, { type: type.split(';')[0] }), bytes = new Uint8Array(await blob.arrayBuffer());
+    try { await radio.chat_hail(cur.id, bytes, blob.type, myName()); $('chatwho').textContent = 'Your hail is on its way. Only the keeper can hear it, and nobody keeps it.' }
+    catch (e) { $('chatwho').textContent = String(e) }
+  };
+  hailRec.start(); $('hail').textContent = 'Send the hail'; setTimeout(() => hailRec && hailRec.state === 'recording' && hailRec.stop(), 20000);
+};
 
 // ---- Clip it: twenty seconds of the station as a video to post anywhere ----------------
 const CLIP_S = 20;
@@ -496,6 +513,25 @@ async function clipIt() {
 }
 $('clip').onclick = clipIt;
 $('clipclose').onclick = () => { $('clipbox').hidden = true; URL.revokeObjectURL($('clipv').src) };
+
+// ---- Tips: from the listener's wallet to the station, with a note if they like ----------
+function tipUri(addr, note) {
+  const a = addr.trim(), n = encodeURIComponent(note.trim());
+  if (/^(lightning|bitcoin|monero):/i.test(a)) return a;
+  if (a.includes('@') || /^(lnurl|lno)/i.test(a)) return 'lightning:' + a;
+  if (/^[48]/.test(a) && (a.length === 95 || a.length === 106)) return 'monero:' + a + (n ? '?tx_description=' + n : '');
+  return 'bitcoin:' + a + (n ? '?message=' + n : '');
+}
+$('tip').onclick = () => {
+  const a = cur?.tip || ''; if (!a) return;
+  const ln = tipUri(a, '').startsWith('lightning:');
+  $('tipaddr').textContent = a; $('tipbox').hidden = false;
+  $('tiphow').textContent = ln ? 'Your wallet asks for the note in its own comment box: copy it there.' : 'Your wallet carries the note with the payment.';
+  const upd = () => { $('tipgo').href = tipUri(a, $('tipnote').value) }; $('tipnote').oninput = upd; upd();
+  $('tipcopy').onclick = async () => { try { await navigator.clipboard.writeText(a); $('tipcopy').textContent = 'Copied' } catch (e) { prompt('The address', a) } };
+  $('tipbox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+};
+$('tipclose').onclick = () => { $('tipbox').hidden = true; $('tipcopy').textContent = 'Copy the address' };
 
 // Pass it on: the station's code to scan, its link to copy or share.
 $('pass').onclick = () => {

@@ -30,6 +30,75 @@ pub enum Say {
     Cheer,
     /// A listener asks for a recording from the station's library.
     Request { track: Hash, note: String },
+    /// A voice note to the keeper, sealed so that only the station's own keys open it. It
+    /// passes through the room live; nobody else can hear it and nobody keeps it.
+    Hail { eph: [u8; 32], wraps: Vec<([u8; 32], Vec<u8>)>, sealed: Vec<u8>, mime: String },
+}
+
+/// Largest hail: twenty seconds of a voice, low and plain.
+pub const MAX_HAIL: usize = 90_000;
+
+fn x_secret(seed: &[u8; 32]) -> x25519_dalek::StaticSecret {
+    use sha2::Digest;
+    let h = sha2::Sha512::digest(seed);
+    let mut b = [0u8; 32];
+    b.copy_from_slice(&h[..32]);
+    x25519_dalek::StaticSecret::from(b)
+}
+
+fn x_public(ed: &[u8; 32]) -> Option<x25519_dalek::PublicKey> {
+    let p = curve25519_dalek::edwards::CompressedEdwardsY(*ed).decompress()?;
+    Some(x25519_dalek::PublicKey::from(p.to_montgomery().to_bytes()))
+}
+
+fn wrap_cipher(shared: &[u8; 32], to: &[u8; 32]) -> chacha20poly1305::ChaCha20Poly1305 {
+    use chacha20poly1305::KeyInit;
+    let mut k = [0u8; 64];
+    k[..32].copy_from_slice(shared);
+    k[32..].copy_from_slice(to);
+    chacha20poly1305::ChaCha20Poly1305::new(&blake3::derive_key("pyrate/hail-wrap/v1", &k).into())
+}
+
+/// Seals a voice note to each of the station's keys: its own and its deputies'.
+pub fn hail(recipients: &[[u8; 32]], audio: &[u8], mime: &str) -> Option<Say> {
+    use chacha20poly1305::aead::Aead;
+    use chacha20poly1305::KeyInit;
+    if audio.len() > MAX_HAIL || recipients.is_empty() {
+        return None;
+    }
+    let mut seed = [0u8; 32];
+    let mut key = [0u8; 32];
+    getrandom::fill(&mut seed).ok()?;
+    getrandom::fill(&mut key).ok()?;
+    let eph = x25519_dalek::StaticSecret::from(seed);
+    let nonce = chacha20poly1305::Nonce::from_slice(&[0; 12]);
+    let sealed = chacha20poly1305::ChaCha20Poly1305::new(&key.into()).encrypt(nonce, audio).ok()?;
+    let mut wraps = Vec::new();
+    for to in recipients.iter().take(16) {
+        let Some(pk) = x_public(to) else { continue };
+        let shared = eph.diffie_hellman(&pk).to_bytes();
+        wraps.push((*to, wrap_cipher(&shared, to).encrypt(nonce, key.as_slice()).ok()?));
+    }
+    Some(Say::Hail { eph: x25519_dalek::PublicKey::from(&eph).to_bytes(), wraps, sealed, mime: mime.chars().take(40).collect() })
+}
+
+/// Opens a hail with one of the station's keys, given as its seed. The sound and its type.
+pub fn open_hail(say: &Say, seed: &[u8; 32]) -> Option<(Vec<u8>, String)> {
+    use chacha20poly1305::aead::Aead;
+    use chacha20poly1305::KeyInit;
+    let Say::Hail { eph, wraps, sealed, mime } = say else { return None };
+    let me = StationKey::from_seed(*seed).id().0;
+    let (_, w) = wraps.iter().find(|(to, _)| *to == me)?;
+    let shared = x_secret(seed).diffie_hellman(&x25519_dalek::PublicKey::from(*eph)).to_bytes();
+    let nonce = chacha20poly1305::Nonce::from_slice(&[0; 12]);
+    let key: [u8; 32] = wrap_cipher(&shared, &me).decrypt(nonce, w.as_slice()).ok()?.try_into().ok()?;
+    let audio = chacha20poly1305::ChaCha20Poly1305::new(&key.into()).decrypt(nonce, sealed.as_slice()).ok()?;
+    Some((audio, mime.clone()))
+}
+
+/// Whether a hail is for one of these keys.
+pub fn hail_for(say: &Say, keys: &[[u8; 32]]) -> bool {
+    matches!(say, Say::Hail { wraps, .. } if wraps.iter().any(|(to, _)| keys.contains(to)))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -77,8 +146,18 @@ fn zeros(h: &[u8; 32]) -> u32 {
     n
 }
 
-fn worked(bytes: &[u8]) -> bool {
-    zeros(blake3::hash(bytes).as_bytes()) >= WORK_BITS
+/// The work rides on a digest of everything but the nonce, so a long line (a hail) costs
+/// no more to work than a short one.
+fn digest(l: &Line) -> [u8; 32] {
+    let body = postcard::to_allocvec(&(&l.station, &l.from, &l.name, &l.at_ms, &l.say)).expect("a line encodes");
+    *blake3::hash(&body).as_bytes()
+}
+
+fn worked(d: &[u8; 32], nonce: u64) -> bool {
+    let mut h = blake3::Hasher::new();
+    h.update(d);
+    h.update(&nonce.to_le_bytes());
+    zeros(h.finalize().as_bytes()) >= WORK_BITS
 }
 
 fn trim(s: &str, n: usize) -> String {
@@ -93,11 +172,11 @@ pub fn speak(key: &StationKey, station: &StationId, name: &str, at_ms: u64, say:
         s => s,
     };
     let mut line = Line { station: station.0, from: key.id().0, name: trim(name, MAX_NAME), at_ms, say, nonce: 0 };
-    let mut bytes = postcard::to_allocvec(&line).expect("a line encodes");
-    while !worked(&bytes) {
+    let d = digest(&line);
+    while !worked(&d, line.nonce) {
         line.nonce += 1;
-        bytes = postcard::to_allocvec(&line).expect("a line encodes");
     }
+    let bytes = postcard::to_allocvec(&line).expect("a line encodes");
     Signed { sig: key.sign(&bytes).to_vec(), line }
 }
 
@@ -111,11 +190,12 @@ pub fn check(s: &Signed, station: &StationId, now: u64) -> bool {
     match &l.say {
         Say::Text(t) if t.is_empty() || t.chars().count() > MAX_TEXT => return false,
         Say::Request { note, .. } if note.chars().count() > MAX_NOTE => return false,
+        Say::Hail { wraps, sealed, mime, .. } if wraps.is_empty() || wraps.len() > 16 || sealed.len() > MAX_HAIL + 16 || mime.len() > 40 => return false,
         _ => {}
     }
     let Ok(sig) = <[u8; 64]>::try_from(s.sig.as_slice()) else { return false };
     let Ok(bytes) = postcard::to_allocvec(l) else { return false };
-    worked(&bytes) && StationId(l.from).verify(&bytes, &sig).is_ok()
+    worked(&digest(l), l.nonce) && StationId(l.from).verify(&bytes, &sig).is_ok()
 }
 
 /// A line's own fingerprint, for telling repeats apart.
@@ -142,6 +222,21 @@ mod tests {
         let mut lazy = s.clone();
         lazy.line.nonce += 1;
         assert!(!check(&lazy, &st, 1_000_000));
+    }
+
+    #[test]
+    fn a_hail_opens_only_for_the_station_s_keys() {
+        let master = StationKey::generate().unwrap();
+        let deputy = StationKey::generate().unwrap();
+        let stranger = StationKey::generate().unwrap();
+        let say = hail(&[master.id().0, deputy.id().0], b"ahoy, play the shanty", "audio/mp4").unwrap();
+        assert_eq!(open_hail(&say, &master.seed()).unwrap().0, b"ahoy, play the shanty");
+        assert_eq!(open_hail(&say, &deputy.seed()).unwrap().1, "audio/mp4");
+        assert!(open_hail(&say, &stranger.seed()).is_none());
+        assert!(hail_for(&say, &[deputy.id().0]) && !hail_for(&say, &[stranger.id().0]));
+        let me = voice(&[3; 32], &master.id());
+        let s = speak(&me, &master.id(), "Gull", 5_000_000, say);
+        assert!(check(&s, &master.id(), 5_000_000));
     }
 
     #[test]

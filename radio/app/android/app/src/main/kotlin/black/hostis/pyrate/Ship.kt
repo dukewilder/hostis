@@ -19,7 +19,7 @@ object Ship {
     private var recPath: String? = null
     private var recStart = 0L
 
-    fun recordStart(c: Context): String {
+    fun recordStart(c: Context, bitrate: Int = 128_000): String {
         recordStop()
         val f = File(c.cacheDir, "rec-${System.currentTimeMillis()}.m4a")
         val r = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(c) else @Suppress("DEPRECATION") MediaRecorder()
@@ -27,7 +27,7 @@ object Ship {
         r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
         r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
         r.setAudioSamplingRate(48_000)
-        r.setAudioEncodingBitRate(128_000)
+        r.setAudioEncodingBitRate(bitrate)
         r.setAudioChannels(1)
         r.setOutputFile(f.path)
         r.prepare()
@@ -36,6 +36,19 @@ object Ship {
         recPath = f.path
         recStart = System.currentTimeMillis()
         return f.path
+    }
+
+    private var player: android.media.MediaPlayer? = null
+
+    /** Plays a file once, then removes it: how a keeper hears a hail. */
+    fun playOnce(path: String) {
+        player?.release()
+        player = android.media.MediaPlayer().apply {
+            setDataSource(path)
+            setOnCompletionListener { it.release(); player = null; java.io.File(path).delete() }
+            prepare()
+            start()
+        }
     }
 
     fun recordStop(): Map<String, Any?> {

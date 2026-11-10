@@ -200,7 +200,7 @@ impl Ship {
     }
 
     fn hear(&self, st: StationId, l: pyrate_core::chat::Signed) -> bool {
-        if !pyrate_core::chat::check(&l, &st, self.now()) {
+        if !pyrate_core::chat::check(&l, &st, self.now()) || matches!(l.line.say, pyrate_core::chat::Say::Hail { .. }) {
             return false;
         }
         let mut rooms = self.rooms.lock().unwrap();
@@ -663,7 +663,7 @@ impl Radio {
             .bind()
             .await
             .map_err(|e| JsValue::from_str(&format!("bind: {e}")))?;
-        let gossip = GossipNet::builder().spawn(ep.clone());
+        let gossip = GossipNet::builder().max_message_size(128 * 1024).spawn(ep.clone());
         let proto = Proto(Arc::new(Mutex::new(None)));
         let router = Router::builder(ep.clone()).accept(ALPN, proto.clone()).accept(GOSSIP_ALPN, gossip.clone()).spawn();
         let ship = Arc::new(Ship {
@@ -843,11 +843,29 @@ impl Radio {
                 pyrate_core::chat::Say::Text(t) => ("text", t.clone(), None, None),
                 pyrate_core::chat::Say::Cheer => ("cheer", String::new(), None, None),
                 pyrate_core::chat::Say::Request { track, note } => ("request", note.clone(), Some(hex(track)), a.map(|a| pyrate_core::page::describe_track(a, track).0).filter(|t| !t.is_empty())),
+                pyrate_core::chat::Say::Hail { .. } => ("hail", String::new(), None, None),
             };
             json!({ "id": hex(&pyrate_core::chat::id(l)), "voice": StationId(l.line.from).call_sign(), "name": l.line.name, "at_ms": l.line.at_ms,
                     "kind": kind, "text": text, "track": track, "title": title, "keeper": keeper, "mine": l.line.from == me })
         }).collect();
         Ok(json!({ "joined": true, "neighbours": r.neighbours, "voice": StationId(me).call_sign(), "lines": lines }).to_string())
+    }
+
+    /// Hails the keeper: a short voice note sealed so only the station's keys open it.
+    pub fn chat_hail(&self, id: &str, audio: &[u8], mime: &str, name: &str) -> Result<js_sys::Promise, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let mut to = vec![st.0];
+        if let Some(a) = self.ship.archives.lock().unwrap().get(&st) {
+            to.extend(a.deputies());
+        }
+        let say = pyrate_core::chat::hail(&to, audio, mime).ok_or_else(|| JsValue::from_str("a hail is twenty seconds at most"))?;
+        let l = pyrate_core::chat::speak(&self.ship.voice(&st), &st, name, self.ship.now(), say);
+        let bytes = postcard::to_allocvec(&l).map_err(|e| js(anyhow!("{e}")))?;
+        let tx = self.ship.rooms.lock().unwrap().get(&st).map(|r| r.tx.clone()).ok_or_else(|| JsValue::from_str("join the chatter first"))?;
+        Ok(wasm_bindgen_futures::future_to_promise(async move {
+            tx.broadcast(bytes.into()).await.map_err(|e| js(anyhow!("{e}")))?;
+            Ok(JsValue::TRUE)
+        }))
     }
 
     /// Says something in a station's chatter: kind is text, cheer or request.

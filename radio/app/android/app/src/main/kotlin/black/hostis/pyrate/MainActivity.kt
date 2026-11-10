@@ -133,12 +133,14 @@ class MainActivity : FlutterActivity() {
                         requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2)
                         result.success(null)
                     } else {
-                        try { result.success(Ship.recordStart(this)) } catch (e: Exception) { result.success(null) }
+                        try { result.success(Ship.recordStart(this, call.argument<Int>("bitrate") ?: 128_000)) } catch (e: Exception) { result.success(null) }
                     }
                 }
                 "record_stop" -> result.success(Ship.recordStop())
                 "speak" -> Voice.speakToFile(this, call.argument<String>("text") ?: "", call.argument<String>("path") ?: "",
                     (call.argument<Double>("rate") ?: 1.0).toFloat(), (call.argument<Double>("pitch") ?: 1.0).toFloat()) { ok -> result.success(ok) }
+                "play_file" -> { try { Ship.playOnce(call.argument<String>("path") ?: ""); result.success(true) } catch (e: Exception) { result.success(false) } }
+                "lantern" -> { LanternService.set(this, call.argument<Boolean>("on") == true, call.argument<Int>("gb") ?: 1); result.success(null) }
                 "share_text" -> { Ship.shareText(this, call.argument<String>("text") ?: ""); result.success(null) }
                 "share_file" -> { Ship.shareFile(this, call.argument<String>("path") ?: "", call.argument<String>("mime") ?: "audio/ogg"); result.success(null) }
                 "share_app" -> { try { Ship.shareApp(this) } catch (e: Exception) {}; result.success(null) }

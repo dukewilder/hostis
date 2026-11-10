@@ -197,7 +197,7 @@ class _StationPageState extends State<StationPage> {
               Navigator.pop(context);
             }),
             pyrateButton('PASS IT ON', () => shareStation(s)),
-            if ((s['tip'] ?? '').toString().isNotEmpty) pyrateButton('TIP', () => tipStation(context, s['tip'])),
+            if ((s['tip'] ?? '').toString().isNotEmpty) pyrateButton('TIP', () => tipStation(context, s['tip'], name: (s['name'] ?? 'the station').toString())),
             pyrateButton('A POSTER', () => pyrateSheet(context, PosterSheet(station: s))),
           ]),
           if (own) ...[
@@ -830,7 +830,7 @@ class _StartShapePickerState extends State<StartShapePicker> {
         'in_order' => 'Your recordings in the order you add them, round and round.',
         'daily' => 'A day\'s tape, from the top at the same time every day.',
         'weekly' => 'A week of programmes, from the top at the same time every week.',
-        'feed' => 'Paste a podcast\'s feed. New episodes come aboard by themselves, newest first.',
+        'feed' => 'Paste your own podcast\'s feed, or one that says you may rebroadcast it. New episodes come aboard by themselves, newest first.',
         'live' => 'Your recordings fill the day, and the same hour every day is kept for you to go live.',
         _ => 'Everything you add, shuffled, all day and all night.',
       }),
@@ -1109,7 +1109,7 @@ class _PosterSheetState extends State<PosterSheet> {
                   const SizedBox(height: 14),
                   Text(s['name'] ?? '', textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: serif(30, color: ink)),
                   const SizedBox(height: 4),
-                  Text('${frequency(id).toStringAsFixed(1)} on the dial', style: mono(12, color: soft, weight: FontWeight.w700)),
+                  Text('${frequency(id).toStringAsFixed(1)} on the dial  ${(s['call_sign'] ?? '').toString()}', style: mono(12, color: soft, weight: FontWeight.w700)),
                   if ((s['about'] ?? '').toString().isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
@@ -1125,7 +1125,7 @@ class _PosterSheetState extends State<PosterSheet> {
                   const Spacer(),
                   Text('Scan to listen. No app, no account.', style: serif(14, color: ink)),
                   const SizedBox(height: 4),
-                  Text('hostis.black/pyrateradio', style: mono(10, color: soft)),
+                  Text('hostis.black/pyrateradio, or search the call sign in any Pyrate Radio', textAlign: TextAlign.center, style: mono(8.5, color: soft)),
                 ]),
               ),
             ),
@@ -1162,6 +1162,30 @@ class _ChatterPanelState extends State<ChatterPanel> {
   Timer? tick;
   bool joining = false;
   String? err;
+  Timer? hailStop;
+  bool hailing = false;
+
+  /// A hail: up to twenty seconds of the listener's voice, sealed so only the keeper hears it.
+  Future<void> hail() async {
+    if (!hailing) {
+      final p = await ship.invokeMethod<String>('record_start', {'bitrate': 24000}).catchError((_) => null);
+      if (p == null) {
+        if (mounted) setState(() => err = 'Allow the microphone, then press again.');
+        return;
+      }
+      setState(() => hailing = true);
+      hailStop = Timer(const Duration(seconds: 20), hail);
+      return;
+    }
+    hailStop?.cancel();
+    setState(() => hailing = false);
+    final r = await ship.invokeMethod<Map>('record_stop').catchError((_) => null);
+    final path = r?['path'] as String?;
+    if (path == null) return;
+    await send('hail', track: null, path: path);
+    unawaited(File(path).delete().then((_) {}, onError: (_) {}));
+    if (mounted && err == null) toast(context, 'Your hail is on its way. Only the keeper can hear it, and nobody keeps it.');
+  }
   final say = TextEditingController();
   late final name = TextEditingController(text: (pref('chat_name') ?? '').toString());
 
@@ -1175,6 +1199,8 @@ class _ChatterPanelState extends State<ChatterPanel> {
   @override
   void dispose() {
     tick?.cancel();
+    hailStop?.cancel();
+    if (hailing) ship.invokeMethod('record_stop').catchError((_) => null);
     super.dispose();
   }
 
@@ -1185,8 +1211,8 @@ class _ChatterPanelState extends State<ChatterPanel> {
 
   Set<String> get mutes => ((pref('chat_mutes') as List?) ?? []).cast<String>().toSet();
 
-  Future<void> send(String kind, {String text = '', String? track}) async {
-    final r = await Native.callAway({'cmd': 'chat_send', 'station': widget.station, 'kind': kind, 'text': text, if (track != null) 'track': track, 'name': name.text.trim()});
+  Future<void> send(String kind, {String text = '', String? track, String? path}) async {
+    final r = await Native.callAway({'cmd': 'chat_send', 'station': widget.station, 'kind': kind, 'text': text, if (track != null) 'track': track, if (path != null) 'path': path, 'mime': 'audio/mp4', 'name': name.text.trim()});
     if (r is Map && r['error'] != null) setState(() => err = r['error']);
     read();
   }
@@ -1289,6 +1315,21 @@ class _ChatterPanelState extends State<ChatterPanel> {
                   ),
               ]),
             if (l['kind'] == 'text') Text(l['text'] ?? '', style: serif(15, color: boneDim)),
+            if (l['kind'] == 'hail')
+              Row(children: [
+                Expanded(child: Text('A hail, for your ears only', style: serif(15, color: bone, italic: true))),
+                TextButton(
+                  onPressed: () async {
+                    final r = await Native.callAway({'cmd': 'chat_hail_open', 'station': widget.station, 'id': l['id']});
+                    if (r is Map && r['path'] != null) {
+                      await ship.invokeMethod('play_file', {'path': r['path']});
+                    } else if (context.mounted) {
+                      toast(context, (r is Map ? r['error'] : null) ?? 'That hail would not open.');
+                    }
+                  },
+                  child: Text('PLAY IT', style: carved(9, color: bloodBright)),
+                ),
+              ]),
           ]),
         ),
       const SizedBox(height: 8),
@@ -1309,6 +1350,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
       Wrap(spacing: 6, runSpacing: 6, children: [
         pyrateButton('CHEERS', () => send('cheer')),
         pyrateButton('ASK FOR ONE', ask),
+        if (!widget.own) pyrateButton(hailing ? 'SEND THE HAIL' : 'HAIL THE KEEPER', hail, color: hailing ? bloodBright : bone),
       ]),
       TextField(controller: name, maxLength: 32, style: serif(15), decoration: pyrateField('Your name in the room'), onChanged: (v) => pref('chat_name', v.trim())),
       if (err != null) note(err!),
