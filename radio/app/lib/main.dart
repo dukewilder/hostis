@@ -34,7 +34,7 @@ TextStyle mono(double size, {Color color = boneFaint, FontWeight weight = FontWe
 const _service = MethodChannel('pyrate/service');
 
 /// This build's version code. A release is offered only when its code is higher.
-const kBuildCode = 11;
+const kBuildCode = 12;
 
 /// The stations a first open lands on when no station has yet earned it: HOSTIS's own.
 List<String> harbour = [];
@@ -939,11 +939,12 @@ class _ColoursPageState extends State<ColoursPage> {
       Text(programmeSummary(programme), style: serif(14, color: boneFaint, italic: true)),
       const SizedBox(height: 12),
       Wrap(spacing: 6, runSpacing: 6, children: [
-        button('SET THE PROGRAMME', () => after(Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(backgroundColor: black, appBar: AppBar(backgroundColor: black), body: ProgrammeEditor(station: id)))))),
+        button('SET THE PROGRAMME', () => after(Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(backgroundColor: black, appBar: AppBar(backgroundColor: black), body: ProgrammeEditor(station: id, name: (mine['name'] ?? '').toString())))))),
         button('A PREMIERE', () => after(pyrateSheet(context, ShowEditor(station: id)))),
         button('A NOTICE', () => after(pyrateSheet(context, NoticeEditor(station: id)))),
         button('YOUR PAGE', () => openPage(context, mine, widget.radio)),
         button('A POSTER', () => pyrateSheet(context, PosterSheet(station: mine))),
+        button('NUMBERS', () => after(pyrateSheet(context, NumbersKit(station: id)))),
       ]),
     ];
   }

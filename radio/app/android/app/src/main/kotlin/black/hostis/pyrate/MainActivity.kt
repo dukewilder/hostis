@@ -137,6 +137,8 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "record_stop" -> result.success(Ship.recordStop())
+                "speak" -> Voice.speakToFile(this, call.argument<String>("text") ?: "", call.argument<String>("path") ?: "",
+                    (call.argument<Double>("rate") ?: 1.0).toFloat(), (call.argument<Double>("pitch") ?: 1.0).toFloat()) { ok -> result.success(ok) }
                 "share_text" -> { Ship.shareText(this, call.argument<String>("text") ?: ""); result.success(null) }
                 "share_file" -> { Ship.shareFile(this, call.argument<String>("path") ?: "", call.argument<String>("mime") ?: "audio/ogg"); result.success(null) }
                 "share_app" -> { try { Ship.shareApp(this) } catch (e: Exception) {}; result.success(null) }

@@ -3,7 +3,7 @@
 //! stations of its own from folders of audio.
 //!
 //! lantern --dir <data> [--quota-gb 20] [--bootstrap <id>,<id>] [--public-dns]
-//!         [--seed "Name|About|folder|music"]...
+//!         [--seed "Name|About|folder|music|Home port"]...   (the home port is optional)
 //!         [--carry-own]   carry only this Lantern's own stations (by default it carries the whole Log;
 //!                         maroon.txt, one station id per line, takes any station off this Lantern)
 //!         A seed folder's bell.mp3 (or .wav, .ogg) plays on the hour; replace it and the new one takes over.
@@ -100,9 +100,13 @@ fn main() -> anyhow::Result<()> {
 fn seed_all(node: &Node, seeds: &[String]) -> anyhow::Result<()> {
     for seed in seeds {
         let parts: Vec<&str> = seed.split('|').collect();
-        let [name, about, folder, kind] = parts[..] else {
-            eprintln!("seed must be Name|About|folder|music or talk");
-            continue;
+        let (name, about, folder, kind, port) = match parts[..] {
+            [n, a, f, k] => (n, a, f, k, None),
+            [n, a, f, k, p] => (n, a, f, k, Some(p.trim()).filter(|p| !p.is_empty())),
+            _ => {
+                eprintln!("seed must be Name|About|folder|music or talk, with |Home port after it if you like");
+                continue;
+            }
         };
         let profile = if kind == "talk" { Profile::Talk } else { Profile::Music };
         let existing = {
@@ -111,8 +115,15 @@ fn seed_all(node: &Node, seeds: &[String]) -> anyhow::Result<()> {
         };
         let id = match existing {
             Some(id) => id,
-            None => node.raise(name, about, None)?,
+            None => node.raise(name, about, port.map(String::from))?,
         };
+        // The seed's words are the station's: a changed about or home port goes up.
+        if let Some(Body::Colours { about: a0, port: p0, .. }) = node.archive(&id).and_then(|a| a.colours().cloned()) {
+            if a0 != about || p0.as_deref() != port {
+                let r = node.call(&serde_json::json!({ "cmd": "colours_set", "station": id.to_hex(), "about": about, "port": port.unwrap_or("") }));
+                println!("  colours set {r}");
+            }
+        }
 
         // station.jpg and banner.jpg in the folder are the station's art.
         let current = node.archive(&id).and_then(|a| a.art());
