@@ -98,3 +98,4 @@ On the phone the node starts, joins the Log and finds the PC Lantern. Confirmed 
 A full read of every line, findings kept in `AUDIT.md` as they are found and fixed. Each fix is its own commit.
 
 - The stem no longer names its broadcaster: every node sends the hop count as zero, and a stem that comes round again spreads.
+- Pocket stations stay off the public Log: their tokens count among members on their own topic, they never take the public stem, and the Lantern's gangway refuses them.

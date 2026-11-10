@@ -44,8 +44,9 @@ struct Web {
 }
 
 impl Web {
+    /// A pocket station is never on the gangway: it is for its invited members only.
     fn allowed(&self, st: &StationId) -> bool {
-        self.every_station || self.inner.store.lock().unwrap().keys.contains_key(st)
+        !self.inner.is_pocket(st) && (self.every_station || self.inner.store.lock().unwrap().keys.contains_key(st))
     }
 }
 

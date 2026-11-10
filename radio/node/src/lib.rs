@@ -355,6 +355,14 @@ impl Inner {
     /// Our copy is checked against the network's from the start: newer entries come aboard,
     /// and if two phones wrote at once, ours are rewritten on top of the network's.
     async fn sync_own(&self, station: StationId) -> Result<usize> {
+        // A pocket is asked of its members, by its tag: its id never leaves the circle.
+        if let Some(k) = self.pocket_key(&station) {
+            let remote = self.pocket_fetch(station, k, 0).await;
+            if remote.is_empty() {
+                return Ok(0);
+            }
+            return self.reconcile(station, remote);
+        }
         let remote: Vec<SignedEntry> = {
             let mut got = None;
             if self.cfg.private {
@@ -466,7 +474,9 @@ impl Inner {
         if let Some(b) = self.store.lock().unwrap().get_chunk(hash) {
             return Ok(b);
         }
-        if self.cfg.private {
+        // A pocket's sound comes from its members, who already know each other: a private
+        // route would hand a stranger at the exit the pocket's id.
+        if self.cfg.private && !self.is_pocket(station) {
             if let Ok(b) = self.private_chunk(*station, *hash, keep).await {
                 return Ok(b);
             }
@@ -720,7 +730,12 @@ impl Inner {
                 self.tokens_sent.lock().unwrap().insert(station, hour);
                 let token = self.token(&station, hour);
                 let nonce = tokio::task::spawn_blocking(move || net::token_find(&station, hour, &token)).await.unwrap_or(0);
-                if self.cfg.private {
+                if self.is_pocket(&station) {
+                    // A pocket's listeners are counted among its members only, sealed on its own
+                    // topic: a token on the public Log would name the station to everyone.
+                    self.accept_token(station, hour, token, nonce, false);
+                    self.pocket_say(station, &Gossip::Aboard { station, hour, tokens: vec![(token, nonce)] }).await;
+                } else if self.cfg.private {
                     // Counted by a stranger two hops away, so neighbours never see what we hear.
                     self.private_token(station, hour, token, nonce).await;
                 } else {
@@ -729,9 +744,10 @@ impl Inner {
             }
         }
         let outgoing: Vec<Gossip> = {
+            let pockets: std::collections::HashSet<StationId> = self.pockets.lock().unwrap().keys().copied().collect();
             let mut log = self.log.lock().unwrap();
             log.iter_mut()
-                .filter(|(_, l)| !l.outbox.is_empty())
+                .filter(|(st, l)| !l.outbox.is_empty() && !pockets.contains(st))
                 .flat_map(|(st, l)| {
                     let mut by_hour: HashMap<u64, Vec<([u8; 32], u64)>> = HashMap::new();
                     for (t, n, h) in l.outbox.drain(..) {
@@ -1059,7 +1075,9 @@ impl Inner {
                         let _ = s.write(station, now_ms(), Body::Live { chunk: c, channels: 1, bitrate: 24_000 });
                     }
                     drop(s);
-                    if me.cfg.private {
+                    // A pocket station never goes down the public stem: its members fetch from
+                    // the keeper, who tells them it is on the air on the pocket's own topic.
+                    if me.cfg.private && !me.is_pocket(&station) {
                         let m2 = me.clone();
                         me.handle.spawn(async move { m2.stem_push(station, None).await });
                     }
@@ -1492,6 +1510,12 @@ impl Node {
             Body::Track { title, .. } => Some(title.clone()),
             _ => None,
         }).collect()).unwrap_or_default()
+    }
+
+    /// Whether this node has heard of a station at all: a card, a carrier, a listener token or
+    /// a log. The pocket test uses it to prove an outsider never learns a pocket exists.
+    pub fn heard_of(&self, id: &pyrate_core::StationId) -> bool {
+        self.inner.log.lock().unwrap().contains_key(id) || self.inner.store.lock().unwrap().logs.contains_key(id)
     }
 
     /// Whether a chunk sits in this device's hold (tests use it to prove art stayed in memory).
