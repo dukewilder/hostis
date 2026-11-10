@@ -33,7 +33,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
 
-- **C29** (medium) Storage and URL inventory (what ties a visit to the next, and what stays in history). `browser/www/app.js:22-35`
 - **C34** (medium) Background and Safari playback: iPad detection, interruptions, meter, hidden tab buffer. `browser/www/app.js:100-111`
 - **C43** (low) Station chart, harbour merge and debug hook small defects. `browser/www/app.js:26-31`
 ### Track A and B: the phone app, its Android shell and the FFI
@@ -264,4 +263,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **C12. Lantern page and tower have no recovery when the stream ends.** (low) Fixed: When a Lantern stream ends or breaks while the listener still wants it (the tower came down over dead air, the network dropped), the page asks for it again, two seconds later and then longer each time up to thirty, saying Reconnecting meanwhile. Tested in Chromium against a Lantern: a stream broken mid-play came back by itself. (e7de7e6)
 
-**C25. Wasm traps are unrecoverable. `Cargo.toml `[profile.web] panic = "abort"** (low) Fixed: The node in the tab still stops dead on a fault, by design, but the tab now notices (a trap thrown in the player loop, or anywhere as an error or a rejection), stops cleanly, says so, and comes back aboard once by itself on the same station (never putting a pocket's id in the address bar); a second trap within five minutes asks for a reload instead of looping. Tested with a simulated trap. (pending)
+**C25. Wasm traps are unrecoverable. `Cargo.toml `[profile.web] panic = "abort"** (low) Fixed: The node in the tab still stops dead on a fault, by design, but the tab now notices (a trap thrown in the player loop, or anywhere as an error or a rejection), stops cleanly, says so, and comes back aboard once by itself on the same station (never putting a pocket's id in the address bar); a second trap within five minutes asks for a reload instead of looping. Tested with a simulated trap. (8418d64)
+
+**C29. Storage and URL inventory (what ties a visit to the next, and what stays in history).** (medium) Fixed: The inventory is now on the page: under Your colours the set says what this browser keeps (switches, marooned stations, harbours met, name and mutes, the secret each room's voice is drawn from, pocket invitations), that none of it is sent, and that the address bar holds only a public station. FORGET THIS BROWSER clears every one of them, the session's own note included, and the tab comes back a stranger: a new voice in every room and no pockets. Tested in Chromium. (pending)

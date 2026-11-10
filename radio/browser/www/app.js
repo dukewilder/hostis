@@ -674,6 +674,12 @@ for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-expl
   const el = $(id); el.checked = on === '1' ? store(key) === '1' : store(key) !== '1';
   el.onchange = () => { store(key, (el.checked ? on : (on === '1' ? '0' : '1'))); forgetPics(); rowsKey = ''; refresh(); if (cur) show(cur) };
 }
+$('forget').onclick = () => {
+  if (!confirm('Forget everything this browser keeps for the radio? Pockets go too, unless you still have their invitations.')) return;
+  try { for (const k of Object.keys(localStorage)) if (k.startsWith('pyrate.')) localStorage.removeItem(k) } catch (e) { }
+  try { for (const k of Object.keys(sessionStorage)) if (k.startsWith('pyrate.')) sessionStorage.removeItem(k) } catch (e) { }
+  location.replace(location.pathname + location.search);
+};
 $('mclear').onclick = () => { setMarooned(new Set()); $('mnote').textContent = 'Every station is back in the Log.'; refresh() };
 
 // A copy of the set served anywhere but hostis.black/pyrateradio/listen/ (a Lantern's
@@ -714,7 +720,8 @@ async function boot() {
 function wrecked() {
   if (wrecked.done) return; wrecked.done = true;
   gen++; stopAll(); playing = false; power(); radio = null;
-  const again = Date.now() - +(sessionStorage.getItem('pyrate.wrecked') || 0) > 300000;
+  let last = 0; try { last = +(sessionStorage.getItem('pyrate.wrecked') || 0) } catch (e) { }
+  const again = Date.now() - last > 300000;
   status(again ? 'The radio stumbled badly. Coming back aboard.' : 'The radio stumbled badly and stopped. Reload the page to come back aboard.');
   if (!again) return;
   try { sessionStorage.setItem('pyrate.wrecked', String(Date.now())) } catch (e) { }
