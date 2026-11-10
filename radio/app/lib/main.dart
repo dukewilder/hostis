@@ -33,6 +33,9 @@ TextStyle mono(double size, {Color color = boneFaint, FontWeight weight = FontWe
 
 const _service = MethodChannel('pyrate/service');
 
+/// False when the node would not start: the dial says so rather than search for ever.
+bool nodeStarted = true;
+
 /// This build's version code, as the installed package says it, so it can never disagree with
 /// the build. A release is offered only when its code is higher.
 Future<int> buildCode() async => await _service.invokeMethod<int>('build_code').catchError((_) => 0) ?? 0;
@@ -60,7 +63,7 @@ void main() async {
   final hold = await _service.invokeMethod<String>('hold_key').catchError((_) => null);
   if (hold != null) Native.setHoldKey(hold);
   // Nothing about the node, the stations or the listener goes to the phone's log.
-  Native.start('${dir.path}${Platform.pathSeparator}node', boot);
+  nodeStarted = Native.start('${dir.path}${Platform.pathSeparator}node', boot) >= 0;
   runApp(const PyrateApp());
 }
 
@@ -528,9 +531,19 @@ class Dial extends StatelessWidget {
         child: stations.isEmpty
             ? Center(
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Text('Searching the Log', style: serif(22, color: boneDim, italic: true)),
-                  const SizedBox(height: 10),
-                  const SizedBox(width: 120, child: LinearProgressIndicator(minHeight: 1, color: boneFaint, backgroundColor: boneGhost)),
+                  if (!nodeStarted) ...[
+                    Text('The radio would not start', style: serif(22, color: boneDim, italic: true)),
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Text(((Native.call({'cmd': 'status'}) as Map?)?['start_error'] ?? 'Close the app fully and open it again.').toString(),
+                          textAlign: TextAlign.center, style: serif(13, color: boneFaint, italic: true)),
+                    ),
+                  ] else ...[
+                    Text('Searching the Log', style: serif(22, color: boneDim, italic: true)),
+                    const SizedBox(height: 10),
+                    const SizedBox(width: 120, child: LinearProgressIndicator(minHeight: 1, color: boneFaint, backgroundColor: boneGhost)),
+                  ],
                 ]),
               )
             : GestureDetector(

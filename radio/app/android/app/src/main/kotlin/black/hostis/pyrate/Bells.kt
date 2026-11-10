@@ -172,6 +172,12 @@ class AlarmReceiver : BroadcastReceiver() {
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) {
-        if (i.action == Intent.ACTION_BOOT_COMPLETED) Bells.restoreAll(c)
+        if (i.action != Intent.ACTION_BOOT_COMPLETED) return
+        Bells.restoreAll(c)
+        // A drawer Lantern comes back on after a power cut, as it was left.
+        val p = c.getSharedPreferences("pyrate", Context.MODE_PRIVATE)
+        if (p.getBoolean("lantern_on", false)) {
+            try { LanternService.set(c, true, p.getInt("lantern_gb", 1)) } catch (e: Exception) {}
+        }
     }
 }
