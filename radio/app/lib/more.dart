@@ -104,7 +104,10 @@ List<Widget> seals(Map s, {double size = 9}) => [
         const SizedBox(width: 8),
         Text('FALSE COLOURS?', style: carved(size, color: bloodBright, spacing: 0.25)),
       ],
-      if (s['mature'] == true) ...[
+      if (s['explicit'] == true) ...[
+        const SizedBox(width: 8),
+        Text('EXPLICIT', style: carved(size, color: bloodBright, spacing: 0.25)),
+      ] else if (s['mature'] == true) ...[
         const SizedBox(width: 8),
         Text('MATURE', style: carved(size, color: boneFaint, spacing: 0.25)),
       ],
@@ -139,7 +142,7 @@ class _LogPageState extends State<LogPage> {
   List<Map<String, dynamic>> filtered() {
     final q = search.text.trim().toLowerCase();
     var st = widget.radio.stations.where((s) {
-      if (hideMature && s['mature'] == true) return false;
+      if (hideMature && (s['mature'] == true || s['explicit'] == true)) return false;
       if (kind != null && !((s['kinds'] as List?) ?? []).contains(kind)) return false;
       if (port != null && (s['port'] ?? '') != port) return false;
       if (q.isEmpty) return true;
@@ -696,6 +699,7 @@ class DetailsPanel extends StatefulWidget {
 class _DetailsPanelState extends State<DetailsPanel> {
   Set<String> kinds = {};
   bool mature = false;
+  bool explicit = false;
   final port = TextEditingController();
   final tip = TextEditingController();
   String? saved;
@@ -707,6 +711,7 @@ class _DetailsPanelState extends State<DetailsPanel> {
     if (d is Map && d['error'] == null) {
       kinds = ((d['kinds'] as List?) ?? []).cast<String>().toSet();
       mature = d['mature'] == true;
+      explicit = d['explicit'] == true;
       port.text = d['port'] ?? '';
       tip.text = d['tip'] ?? '';
     }
@@ -729,13 +734,14 @@ class _DetailsPanelState extends State<DetailsPanel> {
             ),
           ),
       ]),
-      pyrateSwitch(mature, (v) => setState(() => mature = v), 'Mature: listeners who hide mature stations will not see it'),
+      pyrateSwitch(mature, (v) => setState(() => mature = v), 'Mature: strong language or themes. Listeners who hide mature stations will not see it'),
+      pyrateSwitch(explicit, (v) => setState(() => explicit = v), 'Explicit: sexual or graphic material. Only listeners who turn explicit stations on will see it'),
       TextField(controller: port, style: serif(16), decoration: pyrateField('Home port (a city, for Local)')),
       TextField(controller: tip, style: mono(12, color: bone), decoration: pyrateField('Tips: a Lightning address, Bitcoin or Monero')),
       const SizedBox(height: 12),
       Row(children: [
         pyrateButton('SET THE PAPERS', () {
-          Native.call({'cmd': 'details_set', 'station': widget.station, 'kinds': kinds.toList(), 'mature': mature});
+          Native.call({'cmd': 'details_set', 'station': widget.station, 'kinds': kinds.toList(), 'mature': mature, 'explicit': explicit});
           final r = Native.call({'cmd': 'colours_set', 'station': widget.station, 'port': port.text, 'tip': tip.text});
           setState(() => saved = r is Map && r['error'] != null ? r['error'] : 'Set. The Log hears it within a minute.');
         }),

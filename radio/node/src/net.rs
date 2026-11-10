@@ -58,13 +58,18 @@ pub struct Card {
     pub mature: bool,
     /// Where tips go, paid from the listener's own wallet.
     pub tip: Option<String>,
+    /// Whether the station calls itself explicit. Written after the fields above, so an
+    /// older app reads the card as it always has; a card from before it reads as not explicit.
+    #[serde(skip)]
+    pub explicit: bool,
 }
 
 const CARD_DOMAIN: &[u8] = b"pyrate/announce/v2\0";
 
 impl Card {
     pub fn sign(self, key: &StationKey) -> Announce {
-        let raw = postcard::to_stdvec(&self).unwrap_or_default();
+        let mut raw = postcard::to_stdvec(&self).unwrap_or_default();
+        raw.extend(postcard::to_stdvec(&self.explicit).unwrap_or_default());
         let mut m = CARD_DOMAIN.to_vec();
         m.extend_from_slice(&raw);
         Announce { sig: key.sign(&m), card: self, raw }
@@ -114,7 +119,8 @@ impl<'de> Deserialize<'de> for Announce {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let w = AnnounceWire::deserialize(d)?;
         // Trailing fields from later versions are ignored here and kept in `raw`.
-        let card: Card = postcard::from_bytes(&w.card).map_err(serde::de::Error::custom)?;
+        let (mut card, rest): (Card, &[u8]) = postcard::take_from_bytes(&w.card).map_err(serde::de::Error::custom)?;
+        card.explicit = postcard::take_from_bytes::<bool>(rest).map(|(e, _)| e).unwrap_or(false);
         Ok(Announce { card, raw: w.card, sig: w.sig })
     }
 }
@@ -278,7 +284,7 @@ mod tests {
         let a = Card {
             station: k.id(), head: 3, name: "HOSTIS".into(), about: "".into(), port: None,
             live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None,
-            kinds: vec!["talk".into()], mature: false, tip: None,
+            kinds: vec!["talk".into()], mature: false, tip: None, explicit: false,
         }
         .sign(&k);
         assert!(a.verify());
@@ -293,6 +299,26 @@ mod tests {
     }
 
     #[test]
+    fn explicit_rides_at_the_end_and_old_cards_read_as_not() {
+        let k = StationKey::generate().unwrap();
+        let mut card = Card {
+            station: k.id(), head: 1, name: "X".into(), about: "".into(), port: None,
+            live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None,
+            kinds: vec![], mature: true, tip: None, explicit: true,
+        };
+        let back: Announce = postcard::from_bytes(&postcard::to_stdvec(&card.clone().sign(&k)).unwrap()).unwrap();
+        assert!(back.verify() && back.explicit && back.mature);
+        // A card signed before explicit existed: the same bytes, minus the last one.
+        card.explicit = false;
+        let raw = postcard::to_stdvec(&card).unwrap();
+        let mut m = CARD_DOMAIN.to_vec();
+        m.extend_from_slice(&raw);
+        let wire = postcard::to_stdvec(&AnnounceWire { card: raw, sig: k.sign(&m) }).unwrap();
+        let old: Announce = postcard::from_bytes(&wire).unwrap();
+        assert!(old.verify() && !old.explicit);
+    }
+
+    #[test]
     fn a_card_from_a_later_version_still_verifies() {
         // A later version appends a field to the card. This one reads what it knows.
         #[derive(Serialize)]
@@ -304,7 +330,7 @@ mod tests {
         let card = Card {
             station: k.id(), head: 1, name: "Later".into(), about: "".into(), port: None,
             live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None,
-            kinds: vec![], mature: false, tip: None,
+            kinds: vec![], mature: false, tip: None, explicit: false,
         };
         let mut raw = postcard::to_stdvec(&card).unwrap();
         raw.extend(postcard::to_stdvec(&Later { card: &card, extra: 9 }.extra).unwrap());

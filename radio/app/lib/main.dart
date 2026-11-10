@@ -33,7 +33,7 @@ TextStyle mono(double size, {Color color = boneFaint, FontWeight weight = FontWe
 const _service = MethodChannel('pyrate/service');
 
 /// This build's version code. A release is offered only when its code is higher.
-const kBuildCode = 9;
+const kBuildCode = 10;
 
 /// The stations a first open lands on when no station has yet earned it: HOSTIS's own.
 List<String> harbour = [];
@@ -823,6 +823,27 @@ class _ColoursPageState extends State<ColoursPage> {
           activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel,
         ),
         Flexible(child: Text('Show art only for stations I keep', style: mono(11))),
+      ]),
+      const SizedBox(height: 26),
+      Text('MATURE AND EXPLICIT', style: carved(14)),
+      const SizedBox(height: 8),
+      Text('Each station says for itself whether it is mature or explicit. A station that lies about it is yours to maroon.',
+          style: serif(14, color: boneFaint, italic: true)),
+      Row(children: [
+        Switch(
+          value: pref('hide_mature') == true,
+          onChanged: (v) => setState(() => pref('hide_mature', v)),
+          activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel,
+        ),
+        Flexible(child: Text('Hide mature stations', style: mono(11))),
+      ]),
+      Row(children: [
+        Switch(
+          value: pref('show_explicit') == true,
+          onChanged: (v) => setState(() => pref('show_explicit', v)),
+          activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel,
+        ),
+        Flexible(child: Text('Show explicit stations', style: mono(11))),
       ]),
       const SizedBox(height: 26),
       ShipPapers(radio: widget.radio),

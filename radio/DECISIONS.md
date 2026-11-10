@@ -281,3 +281,12 @@ A tab is a node. `browser/` builds the listener to WebAssembly from the same cor
 - Maroon lists work in the tab, in the same format as the app's and a Lantern's maroon.txt.
 - Listening only, for now. Raising and broadcasting stay in the app.
 - `PYRATE_RELAYS` (node) and `PYRATE_HARBOUR` / `PYRATE_RELAYS` (browser build) name a private network's own relays and peers.
+
+## XIX. Self-moderation (9 November 2026)
+
+Dylan's ruling: moderation belongs to each listener. No votes, no reputation scores, nobody elected to judge for others; anyone given power over what others see gets leaned on, or leans.
+
+- **The station's own word.** A station says whether it is mature (strong language or themes) and whether it is explicit (sexual or graphic material). Two separate labels, because they are different things.
+- **The listener's own switches.** Explicit stations stay out of the Log and off the dial until the listener turns them on. Mature stations show unless the listener hides them. Art from stations the listener has never kept can be hidden. All of it in the app and in the browser, and none of it leaves the device.
+- **Maroon and pass the list.** A station that lies about itself is the listener's to maroon. Lists of marooned stations pass hand to hand as copies, taken aboard by choice.
+- The explicit label rides at the end of the station card, so older apps read the card as before and an older card reads as not explicit.
