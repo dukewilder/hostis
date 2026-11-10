@@ -2049,14 +2049,7 @@ pub fn store_hex32(s: &str) -> Option<[u8; 32]> {
 }
 
 pub fn unhex(s: &str) -> Result<Hash> {
-    if s.len() != 64 {
-        anyhow::bail!("bad hash");
-    }
-    let mut h = [0u8; 32];
-    for i in 0..32 {
-        h[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)?;
-    }
-    Ok(h)
+    pyrate_core::unhex32(s).ok_or_else(|| anyhow!("bad hash"))
 }
 
 fn getrandom(b: &mut [u8]) -> Result<()> {

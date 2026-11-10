@@ -16,8 +16,6 @@ Each entry gives the threat, whether the wall held, and the fix.
 
 **B9. The PIN falls to a fast hash.** The Colours PIN is stored as a salted BLAKE3 hash, so a seized disk gives up a four-digit PIN at once, and with it any lock-screen PIN that matches. Holds only against a casual look. Fix: a memory-hard hash (Argon2id).
 
-**B10. A malformed id can stop a node.** `StationId::from_hex`, `unhex` and the browser's `unhex32` slice strings by byte, so 64 bytes holding a multi-byte character panic. The FFI and the browser are reached by pasted links. Fix: parse by bytes, never by string slices.
-
 **B11. A struck station's art stays on disk.** Strike drops a station's recordings but not its pictures. Fix: drop the art with them.
 
 **B12. A Lantern's chatter memory never empties.** Each room keeps every line id it has seen for the life of the process. Fix: forget ids older than the window in which a line is accepted at all.
@@ -44,7 +42,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 - **A10** (low) Clock correction jumps from 0 to 2 s instead of easing in. `node/src/clockfix.rs:26`
 - **A11** (low) `ChunkDecoder::decode` trusts the chunk's packet count and sizes. `core/src/audio.rs:166-174; archive.rs `Chunk::check``
 - **A12** (low) Ogg writer can overflow the lacing byte and drops bad chunks silently. `core/src/tape.rs:26-45`
-- **A13** (low) `unhex` accepts a leading `+`. `core/src/page.rs:33`
 - **A14** (low) `span_from` truncates `days` and accepts a span that never runs. `core/src/page.rs:56`
 - **A15** (low) Hours plus a continuous mode silently skips what plays off the air. `core/src/clock.rs:422-453`
 - **A16** (low) Spans and tables read from the log are not validated, so `now` and `listings` can disagree and costs are unbounded. `core/src/programme.rs:82-121`
@@ -113,12 +110,10 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
 
-- **P1** (high) Second `initNative` call aborts the process. `ffi/src/lib.rs:115-126; Native.kt:21-31; MainActivity.kt:49`
 - **P2** (high) STRIKE COLOURS can never complete: the node drops the 24 words and signs with the deputy key. `main.dart:1079-1101; node/src/lib.rs:1957-1960`
 - **P3** (high) Auto Backup is left on: deputy keys, pocket secrets and prefs go to the user's Google account. `AndroidManifest.xml:16-19`
 - **P4** (high) The 24 words can be lost three ways. `main.dart:646-679`
 - **P5** (high) Exported MediaBrowser service hands the station list and control to any app, private pocket stations included. `AndroidManifest.xml:81-88; PlaybackService.kt:272-288`
-- **P6** (medium) One non-ASCII "hex" string aborts the app: no catch_unwind and byte-slicing parsers. `ffi/src/lib.rs:72-79`
 - **P7** (medium) Podcast feeds and "cover from a link" call the network straight from the phone, outside the node. `station.dart:929-976`
 - **P8** (medium) Feed "keep the newest N" downloads the whole back catalogue, and the feed list can be overwritten. `station.dart:889-926`
 - **P9** (medium) Podcast feeds are never refreshed on their own. `station.dart:804`
@@ -171,3 +166,11 @@ Reported by a reader of the code; each is checked against the code before it is 
 **B4. Ballast is announced and served away from the charger.** A phone keeps announcing its ballast stations and serving sealed chunks to strangers on mobile data, which spends the owner's data, and its ballast set (fixed by its steady seed) ties each day's fresh id to the last and each network it uses to the next. Holds only in part. Fixed: a phone announces its ballast only while it is on Wi-Fi and charging, and on mobile data it serves strangers no sealed chunks at all. What remains: a phone that charges on Wi-Fi in more than one place can still be tied across those places by its ballast set, and a keeper who cares can set the ballast aside. (pending)
 
 **B6. Stems and ballast ignore the listener's own switches.** A stem can end on a phone for a station its owner marooned, and ballast and stems take aboard explicit stations on a phone whose owner keeps them hidden. Does not hold for the owner's choice. Fixed: a node declines the stem and the ballast for any station its owner marooned, and a phone declines explicit stations while its owner hides them, and mature ones while they hide those. The station's word is read from its card, its log or the stem's own cargo. A declined stem is handed on, as a Lantern that carries its own already does. Checked by a new voyage test step (20 of 20). (pending)
+
+**B10. A malformed id can stop a node.** `StationId::from_hex`, `unhex` and the browser's `unhex32` slice strings by byte, so 64 bytes holding a multi-byte character panic. The FFI and the browser are reached by pasted links. Fixed: every hex parser (ids, keys, hashes, flock codes, release signatures) now goes through one strict parser in the core that reads bytes, takes only hex digits and cannot panic. A test feeds it 64 bytes holding a two-byte character and a leading plus. (pending)
+
+**P6. One non-ASCII "hex" string aborts the app: no catch_unwind and byte-slicing parsers.** (medium) Fixed: the same strict parser closes the panics, and every door of the FFI (the C calls and the JNI calls) now catches a panic and answers with an error instead of aborting the app. (pending)
+
+**P1. Second `initNative` call aborts the process.** (high) Fixed: the Android context is set once a process on the Rust side, whoever asks first, so the playback service starting after the app (or before it) no longer trips ndk-context's assertion. Confirmed in ndk-context 0.1.1, which asserts on a second call; checked by building the FFI for Android. (pending)
+
+**A13. `unhex` accepts a leading `+`.** (low) Fixed: the strict parser takes no sign. (pending)

@@ -159,7 +159,9 @@ impl Inner {
             let sha: [u8; 32] = Sha256::digest(&apk).into();
             let sigs: Vec<(u8, Vec<u8>)> = std::fs::read_to_string(p.with_extension("sigs")).unwrap_or_default().lines().filter_map(|l| {
                 let (i, h) = l.trim().split_once(' ')?;
-                Some((i.parse().ok()?, (0..h.len() / 2).map(|j| u8::from_str_radix(&h[j * 2..j * 2 + 2], 16)).collect::<Result<Vec<u8>, _>>().ok()?))
+                let mut sig = vec![0u8; h.len() / 2];
+                pyrate_core::unhex_into(h, &mut sig)?;
+                Some((i.parse().ok()?, sig))
             }).collect();
             if !release_trusted(&self.cfg.release_keys, code, &sha, &sigs) {
                 say(&format!("release {code} skipped: it needs two of the three release signatures"));

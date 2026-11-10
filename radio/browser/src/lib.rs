@@ -55,14 +55,7 @@ fn hex(b: &[u8]) -> String {
 }
 
 fn unhex32(s: &str) -> Result<[u8; 32]> {
-    if s.len() != 64 {
-        return Err(anyhow!("not a 64-character id"));
-    }
-    let mut out = [0u8; 32];
-    for (i, o) in out.iter_mut().enumerate() {
-        *o = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)?;
-    }
-    Ok(out)
+    pyrate_core::unhex32(s).ok_or_else(|| anyhow!("not a 64-character id"))
 }
 
 fn js(e: anyhow::Error) -> JsValue {
@@ -998,10 +991,11 @@ impl Radio {
     /// is set to the host's over pings, and it plays what the host plays.
     pub fn flock_join(&self, link: &str) -> Result<(), JsValue> {
         let tail = link.split("flock=").nth(1).ok_or_else(|| JsValue::from_str("not a flock link"))?;
-        let (who, code) = tail.split_once('~').ok_or_else(|| JsValue::from_str("not a flock link"))?;
+        let (who, code_hex) = tail.split_once('~').ok_or_else(|| JsValue::from_str("not a flock link"))?;
         let (id, relay) = who.split_once('@').unwrap_or((who, ""));
         let host: EndpointId = id.parse().map_err(|_| JsValue::from_str("not a flock link"))?;
-        let code: [u8; 8] = (0..8).map(|i| code.get(i * 2..i * 2 + 2).and_then(|b| u8::from_str_radix(b, 16).ok())).collect::<Option<Vec<u8>>>().and_then(|v| v.try_into().ok()).ok_or_else(|| JsValue::from_str("bad code"))?;
+        let mut code = [0u8; 8];
+        pyrate_core::unhex_into(code_hex, &mut code).ok_or_else(|| JsValue::from_str("bad code"))?;
         if let Ok(url) = relay.parse() {
             self.ship.book.add_endpoint_info(iroh::EndpointAddr { id: host, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
         }

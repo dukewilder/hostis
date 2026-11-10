@@ -25,13 +25,7 @@ impl StationId {
     }
 
     pub fn from_hex(s: &str) -> Result<Self> {
-        if s.len() != 64 {
-            return Err(Error::Key);
-        }
-        let mut out = [0u8; 32];
-        for (i, byte) in out.iter_mut().enumerate() {
-            *byte = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).map_err(|_| Error::Key)?;
-        }
+        let out = crate::unhex32(s).ok_or(Error::Key)?;
         VerifyingKey::from_bytes(&out).map_err(|_| Error::Key)?;
         Ok(Self(out))
     }

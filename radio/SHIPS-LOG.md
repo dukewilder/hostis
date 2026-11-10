@@ -101,3 +101,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - Pocket stations stay off the public Log: their tokens count among members on their own topic, they never take the public stem, and the Lantern's gangway refuses them.
 - A pocket's chatter is sealed on a topic drawn from its key, in the app and the browser, and a tab never puts a pocket's id or invitation in the address bar.
 - A phone carries for the fleet only on Wi-Fi while charging, and never a station its owner marooned or keeps hidden.
+- One strict hex parser everywhere, the app's door catches panics, and the Android context is set once a process: a malformed link or a second start no longer kills the app.

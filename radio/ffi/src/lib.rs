@@ -21,6 +21,27 @@ pub extern "C" fn pyrate_set_release_keys(text: *const c_char) {
     *RELEASE_KEYS.lock().unwrap() = text_of(text).lines().filter_map(|l| pyrate_node::store_hex32(l.trim())).collect();
 }
 
+/// Runs one call across the door. A panic in the node becomes an answer the app can show,
+/// never an abort of the whole app: unwinding out of an `extern` function ends the process.
+fn guard<T>(fallback: T, f: impl FnOnce() -> T) -> T {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).unwrap_or(fallback)
+}
+
+fn answer(req: &str) -> String {
+    guard(serde_json::json!({ "error": "the node stumbled on that; try again" }).to_string(), || {
+        match (NODE.get(), serde_json::from_str::<serde_json::Value>(req)) {
+            (Some(n), Ok(v)) => n.call(&v),
+            (None, _) => serde_json::json!({ "error": "node not started" }),
+            (_, Err(e)) => serde_json::json!({ "error": e.to_string() }),
+        }
+        .to_string()
+    })
+}
+
+fn pixels(hash: &str) -> Option<(u32, u32, Vec<u8>)> {
+    guard(None, || NODE.get().and_then(|n| n.art_pixels(hash)))
+}
+
 fn text_of(p: *const c_char) -> String {
     text(p)
 }
@@ -36,6 +57,10 @@ fn text(p: *const c_char) -> String {
 /// Starts the node once. Returns 0 on success, 1 if already running, -1 on failure.
 #[unsafe(no_mangle)]
 pub extern "C" fn pyrate_start(dir: *const c_char, bootstrap: *const c_char) -> i32 {
+    guard(-1, || start(dir, bootstrap))
+}
+
+fn start(dir: *const c_char, bootstrap: *const c_char) -> i32 {
     if NODE.get().is_some() {
         return 1;
     }
@@ -70,12 +95,7 @@ pub extern "C" fn pyrate_start(dir: *const c_char, bootstrap: *const c_char) -> 
 /// One JSON request in, one JSON answer out. Free the answer with `pyrate_free`.
 #[unsafe(no_mangle)]
 pub extern "C" fn pyrate_call(req: *const c_char) -> *mut c_char {
-    let answer = match (NODE.get(), serde_json::from_str::<serde_json::Value>(&text(req))) {
-        (Some(n), Ok(v)) => n.call(&v),
-        (None, _) => serde_json::json!({ "error": "node not started" }),
-        (_, Err(e)) => serde_json::json!({ "error": e.to_string() }),
-    };
-    CString::new(answer.to_string()).unwrap_or_default().into_raw()
+    CString::new(answer(&text(req))).unwrap_or_default().into_raw()
 }
 
 #[unsafe(no_mangle)]
@@ -90,7 +110,7 @@ pub extern "C" fn pyrate_free(s: *mut c_char) {
 /// `pyrate_free_bytes`, passing the length written to `len`.
 #[unsafe(no_mangle)]
 pub extern "C" fn pyrate_art(hash: *const c_char, len: *mut usize) -> *mut u8 {
-    let Some((w, h, px)) = NODE.get().and_then(|n| n.art_pixels(&text(hash))) else { return std::ptr::null_mut() };
+    let Some((w, h, px)) = pixels(&text(hash)) else { return std::ptr::null_mut() };
     let mut out = Vec::with_capacity(8 + px.len());
     out.extend(w.to_le_bytes());
     out.extend(h.to_le_bytes());
@@ -117,12 +137,17 @@ pub extern "system" fn Java_black_hostis_pyrate_MainActivity_initNative(
     _class: jni::objects::JClass,
     context: jni::objects::JObject,
 ) {
-    let Ok(vm) = env.get_java_vm() else { return };
-    let Ok(ctx) = env.new_global_ref(context) else { return };
-    unsafe {
-        ndk_context::initialize_android_context(vm.get_java_vm_pointer() as *mut _, ctx.as_obj().as_raw() as *mut _);
-    }
-    std::mem::forget(ctx);
+    // Once a process: the Activity and the playback service may both ask, and a second
+    // initialisation would trip ndk-context's assertion and abort the app.
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let Ok(vm) = env.get_java_vm() else { return };
+        let Ok(ctx) = env.new_global_ref(context) else { return };
+        unsafe {
+            ndk_context::initialize_android_context(vm.get_java_vm_pointer() as *mut _, ctx.as_obj().as_raw() as *mut _);
+        }
+        std::mem::forget(ctx);
+    });
 }
 
 /// Test launches pass `--ez mute true`, so the whole chain runs without a sound.
@@ -164,19 +189,14 @@ mod android {
     #[unsafe(no_mangle)]
     pub extern "system" fn Java_black_hostis_pyrate_Native_call(mut env: JNIEnv, _c: JClass, req: JString) -> jstring {
         let req = s(&mut env, &req);
-        let answer = match (super::NODE.get(), serde_json::from_str::<serde_json::Value>(&req)) {
-            (Some(n), Ok(v)) => n.call(&v),
-            (None, _) => serde_json::json!({ "error": "node not started" }),
-            (_, Err(e)) => serde_json::json!({ "error": e.to_string() }),
-        };
-        env.new_string(answer.to_string()).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut())
+        env.new_string(super::answer(&req)).map(|j| j.into_raw()).unwrap_or(std::ptr::null_mut())
     }
 
     /// Width and height (4 bytes each, big-endian) then RGBA, or null.
     #[unsafe(no_mangle)]
     pub extern "system" fn Java_black_hostis_pyrate_Native_art(mut env: JNIEnv, _c: JClass, hash: JString) -> jbyteArray {
         let h = s(&mut env, &hash);
-        let Some((w, ht, px)) = super::NODE.get().and_then(|n| n.art_pixels(&h)) else { return std::ptr::null_mut() };
+        let Some((w, ht, px)) = super::pixels(&h) else { return std::ptr::null_mut() };
         let mut out = Vec::with_capacity(8 + px.len());
         out.extend(w.to_be_bytes());
         out.extend(ht.to_be_bytes());
