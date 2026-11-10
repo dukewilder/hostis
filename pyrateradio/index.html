@@ -306,7 +306,7 @@ html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doo
 // A station link: hostis.black/pyrateradio/#<station id>. One of HOSTIS's own plays here, in
 // the browser or the app. Anything else (another station, an invitation, a flock) goes straight
 // on to the open player before this page reads it: the part after the # never reaches a server.
-(function(){var H=["f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"],P=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeidikalo3az6nr35sir6sy45xxe4essv5r7x6pgvymhkbkckap64qe.ipfs.inbrowser.link/", "https://bafybeidikalo3az6nr35sir6sy45xxe4essv5r7x6pgvymhkbkckap64qe.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeidikalo3az6nr35sir6sy45xxe4essv5r7x6pgvymhkbkckap64qe/"],h=(location.hash||'').toLowerCase(),id=h.slice(1);
+(function(){var H=["f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"],P=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeihalhkw733w43cxuwlbf2khfovr4kb57pv3t62oedxsbzjqk4b2mi.ipfs.inbrowser.link/", "https://bafybeihalhkw733w43cxuwlbf2khfovr4kb57pv3t62oedxsbzjqk4b2mi.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeihalhkw733w43cxuwlbf2khfovr4kb57pv3t62oedxsbzjqk4b2mi/"],h=(location.hash||'').toLowerCase(),id=h.slice(1);
 if(/pocket=|flock=/.test(h)||(/^[0-9a-f]{64}$/.test(id)&&H.indexOf(id)<0)){history.replaceState(null,'',location.pathname);
 document.documentElement.className+=' leaving';var go=function(u){location.replace(u+h)},done=0;
 var ping=function(u){return fetch(u+'favicon.png',{mode:'no-cors',cache:'no-store'}).then(function(){return u})};
@@ -318,7 +318,7 @@ if(!/^[0-9a-f]{64}$/.test(id))return;var b=document.getElementById('passed');
 var app=/Android/.test(navigator.userAgent)?' <a href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url='+encodeURIComponent(new URL('listen/#'+id,location.href).href)+';end">Open in the app</a>':'';
 document.getElementById('radio').src='listen/?embed#'+id;
 b.innerHTML='Someone passed you a HOSTIS station. It is on the dial below.'+(app?'<br>'+app:'');b.hidden=false})();
-document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeidikalo3az6nr35sir6sy45xxe4essv5r7x6pgvymhkbkckap64qe.ipfs.inbrowser.link/", "https://bafybeidikalo3az6nr35sir6sy45xxe4essv5r7x6pgvymhkbkckap64qe.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeidikalo3az6nr35sir6sy45xxe4essv5r7x6pgvymhkbkckap64qe/"][0]});
+document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeihalhkw733w43cxuwlbf2khfovr4kb57pv3t62oedxsbzjqk4b2mi.ipfs.inbrowser.link/", "https://bafybeihalhkw733w43cxuwlbf2khfovr4kb57pv3t62oedxsbzjqk4b2mi.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeihalhkw733w43cxuwlbf2khfovr4kb57pv3t62oedxsbzjqk4b2mi/"][0]});
 </script>
 
 <nav class="doors">
@@ -359,9 +359,9 @@ document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51
 </div>
 <p class="sums">sha-256 3c988ee6b950646937ac7cea70ef83ef66866241fc97500041c86fb9eb47ea60</p>
 <h3 class="small">On a computer</h3>
-<div class="desk"><a href="pyrate-radio-0.8.8-windows.zip"><b>Windows</b><small>10 and 11 · zip</small></a><a href="pyrate-radio-0.8.8-macos.zip"><b>Mac</b><small>Apple and Intel · zip</small></a><a href="pyrate-radio-0.8.8-linux-x64.tar.gz"><b>Linux</b><small>x86-64 · tar.gz</small></a></div>
-<p class="desk-sums">windows 2f9ff91e76dfd37dd64247665c820fcb856e1b08e7f1e6807718e0a5e3ba3893 · <a href="pyrate-radio-0.8.8-windows.zip.torrent">torrent</a><br>mac 6b62d21d7ef6c1b7e8a577b27a398b57feb4ad2a9d1a8a858947b4a6dc58e2a5 · <a href="pyrate-radio-0.8.8-macos.zip.torrent">torrent</a><br>linux 63119f666274a4cec7b7027c7104ff21d8f2fbe14e0f3cecb300949437376254 · <a href="pyrate-radio-0.8.8-linux-x64.tar.gz.torrent">torrent</a></p>
-<p class="note">Version 0.8.8, built from the public source by GitHub's machines. On a Mac, open it the first time with a right-click and Open: it is signed by nobody. Computers take new versions from this page.</p>
+<div class="desk"><a href="pyrate-radio-0.9.0-windows.zip"><b>Windows</b><small>10 and 11 · zip</small></a><a href="pyrate-radio-0.9.0-macos.zip"><b>Mac</b><small>Apple and Intel · zip</small></a><a href="pyrate-radio-0.9.0-linux-x64.tar.gz"><b>Linux</b><small>x86-64 · tar.gz</small></a></div>
+<p class="desk-sums">windows 4f3c1566cfade24fa0f279238af3b33bbecf044b33bb2013c6b113e48fe6dc1d · <a href="pyrate-radio-0.9.0-windows.zip.torrent">torrent</a><br>mac f2a3da68d1e998788edc628c559e3ae63463d13de8d44254553d8806acf39eb2 · <a href="pyrate-radio-0.9.0-macos.zip.torrent">torrent</a><br>linux 4600e5af6d10c5fae9101ea0a0eaf99259481c5edd765a60a540c97c710d1705 · <a href="pyrate-radio-0.9.0-linux-x64.tar.gz.torrent">torrent</a></p>
+<p class="note">Version 0.9.0, built from the public source by GitHub's machines. On a Mac, open it the first time with a right-click and Open: it is signed by nobody. Computers take new versions from this page.</p>
 <div class="prose">
 <p>The open player runs in any browser, on iPhone and iPad too, and listens, raises stations and goes live with nothing installed. The same app file travels by BitTorrent with no website needed, and anyone who has the app can pass it on, phone to phone, from Colours. The source is Rust and Flutter, CC0: build it yourself and compare.</p>
 <p>Check what you install against the checksum above. Once signing begins, every release will carry HOSTIS's signature, and the app takes an update only when two of the three release keys have signed it.</p>
