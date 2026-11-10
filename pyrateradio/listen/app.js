@@ -1,9 +1,15 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=224845a223';
+import init, { Radio } from './pkg/pyrate_browser.js?v=80adc53e1d';
 
 const HARBOUR = 'a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442';
+// HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
+// and nothing else, and it joins the network only when the visitor presses Listen.
+const HARBOUR_STATIONS = [{"id": "f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "name": "The Public Domain", "call_sign": "GAHAGU·3695"}, {"id": "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a", "name": "Readings", "call_sign": "DEVAKA·F42C"}];
+const EMBED = document.documentElement.classList.contains('embed');
+const passedId = () => { const id = location.hash.slice(1); return /^[0-9a-f]{64}$/.test(id) ? id : null };
+const inSet = s => !EMBED || HARBOUR_STATIONS.some(h => h.id === s.id) || s.id === passedId();
 const RELAYS = '';
 const AHEAD_MS = 12000;
 const $ = id => document.getElementById(id);
@@ -14,6 +20,15 @@ let ctx = null, gain = null, sources = [], meter = null;
 const pics = new Map();
 
 function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v) } catch (e) { return null } }
+
+// Every harbour this tab has ever been handed, kept so a returning listener never loses a
+// door even if a later build ships a different set. Dead entries just fail to resolve.
+function rememberHarbours() {
+  let saved = []; try { saved = JSON.parse(store('pyrate.harbours') || '[]') } catch (e) {}
+  const union = [...new Set(HARBOUR.split(/[,\s]+/).filter(Boolean).concat(saved))];
+  try { store('pyrate.harbours', JSON.stringify(union)) } catch (e) {}
+  return union.join(',');
+}
 function marooned() { try { return new Set(JSON.parse(store('pyrate.maroon') || '[]')) } catch (e) { return new Set() } }
 function setMarooned(s) { store('pyrate.maroon', JSON.stringify([...s])) }
 // The listener's own switches. Explicit stays off and art stays on until they say otherwise.
@@ -313,8 +328,9 @@ async function show(s) {
   flag($('flag'), s.id, s.live); art(await pic(s.id, s.cover));
   const b = await pic(s.id, s.banner); $('banner').style.backgroundImage = b ? 'url(' + b + ')' : '';
   $('name').textContent = s.name || s.call_sign; $('cs').textContent = s.call_sign + (s.aboard !== undefined ? '  ' + s.aboard + ' aboard' : '');
-  lamps(s.live); needle(s.id); power();
-  $('pass').hidden = false; $('maroon').hidden = false;
+  lamps(s.live); needle(s.id); power(); $('tip').hidden = !s.tip; $('tipbox').hidden = true;
+  // A pocket station is passed on only by its keeper's invitation.
+  $('pass').hidden = !!s.pocket; $('maroon').hidden = false; if (s.pocket) $('clip').hidden = true;
   document.querySelectorAll('.row').forEach(r => r.classList.toggle('on', r.dataset.id === s.id));
   if (location.hash.slice(1) !== s.id) history.replaceState(null, '', '#' + s.id);
   radio.tune(s.id);
@@ -332,7 +348,7 @@ function power() { $('clip').hidden = !(playing && clipType()); const g = $('go'
 
 function rows() {
   const m = marooned();
-  const shown = stations.filter(s => !m.has(s.id) && allowed(s));
+  const shown = stations.filter(s => !m.has(s.id) && allowed(s) && inSet(s));
   const box = $('rows'); box.innerHTML = '';
   dial(shown); if (!$('chart').hidden) chart();
   if (!shown.length) { box.innerHTML = '<p class="fine">Listening for station cards. The first come in within a minute.</p>'; return }
@@ -341,7 +357,7 @@ function rows() {
     r.innerHTML = '<div class="mini"></div><div class="meta"><div class="name"></div><div class="cs"></div><div class="about"></div></div><div class="count"></div>';
     const mini = r.querySelector('.mini');
     if (s.cover) { mini.classList.add('pic'); pic(s.id, s.cover).then(u => { if (u) mini.innerHTML = '<img alt="" src="' + u + '">'; else flag(mini, s.id, s.live) }) } else flag(mini, s.id, s.live);
-    r.querySelector('.name').textContent = s.name + (s.live ? '  · ON AIR' : '') + (s.explicit ? '  · EXPLICIT' : s.mature ? '  · MATURE' : '');
+    r.querySelector('.name').textContent = s.name + (s.live ? '  ON AIR' : '') + (s.pocket ? '  PRIVATE' : '') + (s.explicit ? '  EXPLICIT' : s.mature ? '  MATURE' : '');
     r.querySelector('.cs').textContent = s.call_sign; r.querySelector('.about').textContent = s.about || '';
     r.querySelector('.count').innerHTML = s.aboard + '<small>ABOARD</small><span class="fq">' + fq(s.id).toFixed(1) + '</span>';
     r.classList.toggle('on', cur?.id === s.id);
@@ -357,7 +373,27 @@ function refresh() {
   $('signal').textContent = n ? n + (n === 1 ? ' neighbour' : ' neighbours') + ' · ' + stations.length + ' on the air' : 'Coming aboard';
   rows();
   if (cur) { const u = stations.find(x => x.id === cur.id); if (u) { const pic0 = cur.cover, ban0 = cur.banner; cur = u; $('cs').textContent = u.call_sign + '  ' + u.aboard + ' aboard'; $('name').textContent = u.name; if (u.cover !== pic0 || u.banner !== ban0) show(u) } }
-  else { const id = location.hash.slice(1); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations.find(x => allowed(x) && !marooned().has(x.id))); if (s) show(s) }
+  else { const id = location.hash.slice(1); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations.find(x => allowed(x) && inSet(x) && !marooned().has(x.id))); if (s) show(s) }
+}
+
+// A flock link (#flock=...): this tab plays in step with the phone that showed it.
+function flockFollow() {
+  const h = location.hash; if (!radio || !h.includes('flock=')) return false;
+  try { radio.flock_join(h) } catch (e) { return false }
+  $('signal').textContent = 'In a flock: playing in step with its host';
+  setInterval(() => { const id = radio.flock_station(); if (id && cur?.id !== id) { const s = stations.find(x => x.id === id) || { id, call_sign: '', name: 'The flock\'s station' }; playing ? listen(s) : show(s) } }, 3000);
+  return true;
+}
+
+// A pocket station's invitation (#pocket=...): the tab joins, keeps the invitation in this
+// browser only, and clears the key from the address bar.
+function savedPockets() { try { return JSON.parse(store('pyrate.pockets') || '[]') } catch (e) { return [] } }
+async function pocketJoin(link, open) {
+  try {
+    const id = await radio.pocket_join(link);
+    const all = savedPockets(); if (!all.includes(link)) { all.push(link); store('pyrate.pockets', JSON.stringify(all)) }
+    if (open) { history.replaceState(null, '', location.pathname + '#' + id); followLink() }
+  } catch (e) { $('signal').textContent = 'That invitation did not open: ' + e }
 }
 
 // A station link (#<id>) works before the station's card arrives: the harbour carries it.
@@ -368,9 +404,15 @@ function followLink() {
   show(s);
 }
 
-$('go').onclick = () => { if (playing) stop(); else if (cur) listen(cur) };
+$('go').onclick = async () => {
+  if (playing) return stop();
+  if (!cur) return;
+  if (!radio) { audio(); ctx.resume(); $('np').textContent = 'Coming aboard'; await boot(); cur = stations.find(x => x.id === cur.id) || cur }
+  listen(cur);
+};
 $('spin').onclick = () => {
-  const m = marooned(), pool = stations.filter(s => !m.has(s.id) && allowed(s) && s.id !== cur?.id);
+  const m = marooned(), pool = (radio ? stations : HARBOUR_STATIONS).filter(s => !m.has(s.id) && allowed(s) && inSet(s) && s.id !== cur?.id);
+  if (!radio) { if (pool.length) dormant(pool[Math.floor(Math.random() * pool.length)]); return }
   if (pool.length) { listen(pool[Math.floor(Math.random() * pool.length)]); scrollTo({ top: 0, behavior: 'smooth' }) }
 };
 // ---- The chart of the seas: stations by the home port they name ------------------------
@@ -425,6 +467,23 @@ $('askfor').onclick = () => {
 };
 $('asksend').onclick = () => { speak('request', $('asknote').value.trim(), $('asktrack').value); $('asknote').value = ''; $('askbox').hidden = true };
 setInterval(() => { if (!$('chatroom').hidden || !$('chatjoin').hidden) chatter() }, 2000);
+// A hail: up to twenty seconds of the listener's voice, sealed in this tab so that only the
+// station's own keys open it. It passes through the room live and nobody keeps it.
+let hailRec = null;
+$('hail').onclick = async () => {
+  if (hailRec) { hailRec.stop(); return }
+  let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }) } catch (e) { $('chatwho').textContent = 'Allow the microphone, then press again.'; return }
+  const type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+  const parts = []; hailRec = new MediaRecorder(stream, { mimeType: type, audioBitsPerSecond: 24000 });
+  hailRec.ondataavailable = e => e.data.size && parts.push(e.data);
+  hailRec.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop()); hailRec = null; $('hail').textContent = 'Hail the keeper';
+    const blob = new Blob(parts, { type: type.split(';')[0] }), bytes = new Uint8Array(await blob.arrayBuffer());
+    try { await radio.chat_hail(cur.id, bytes, blob.type, myName()); $('chatwho').textContent = 'Your hail is on its way. Only the keeper can hear it, and nobody keeps it.' }
+    catch (e) { $('chatwho').textContent = String(e) }
+  };
+  hailRec.start(); $('hail').textContent = 'Send the hail'; setTimeout(() => hailRec && hailRec.state === 'recording' && hailRec.stop(), 20000);
+};
 
 // ---- Clip it: twenty seconds of the station as a video to post anywhere ----------------
 const CLIP_S = 20;
@@ -485,6 +544,25 @@ async function clipIt() {
 $('clip').onclick = clipIt;
 $('clipclose').onclick = () => { $('clipbox').hidden = true; URL.revokeObjectURL($('clipv').src) };
 
+// ---- Tips: from the listener's wallet to the station, with a note if they like ----------
+function tipUri(addr, note) {
+  const a = addr.trim(), n = encodeURIComponent(note.trim());
+  if (/^(lightning|bitcoin|monero):/i.test(a)) return a;
+  if (a.includes('@') || /^(lnurl|lno)/i.test(a)) return 'lightning:' + a;
+  if (/^[48]/.test(a) && (a.length === 95 || a.length === 106)) return 'monero:' + a + (n ? '?tx_description=' + n : '');
+  return 'bitcoin:' + a + (n ? '?message=' + n : '');
+}
+$('tip').onclick = () => {
+  const a = cur?.tip || ''; if (!a) return;
+  const ln = tipUri(a, '').startsWith('lightning:');
+  $('tipaddr').textContent = a; $('tipbox').hidden = false;
+  $('tiphow').textContent = ln ? 'Your wallet asks for the note in its own comment box: copy it there.' : 'Your wallet carries the note with the payment.';
+  const upd = () => { $('tipgo').href = tipUri(a, $('tipnote').value) }; $('tipnote').oninput = upd; upd();
+  $('tipcopy').onclick = async () => { try { await navigator.clipboard.writeText(a); $('tipcopy').textContent = 'Copied' } catch (e) { prompt('The address', a) } };
+  $('tipbox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+};
+$('tipclose').onclick = () => { $('tipbox').hidden = true; $('tipcopy').textContent = 'Copy the address' };
+
 // Pass it on: the station's code to scan, its link to copy or share.
 $('pass').onclick = () => {
   const url = 'https://hostis.black/pyrateradio/listen/#' + cur.id, q = JSON.parse(radio.qr(url)), n = q.size;
@@ -522,17 +600,28 @@ async function boot() {
   try { await init() } catch (e) { $('name').textContent = 'This browser cannot run the radio'; return }
   let key = store('pyrate.token');
   if (!/^[0-9a-f]{64}$/.test(key || '')) { const b = new Uint8Array(32); crypto.getRandomValues(b); key = [...b].map(x => x.toString(16).padStart(2, '0')).join(''); store('pyrate.token', key) }
-  try { radio = await Radio.start(HARBOUR, key, RELAYS) } catch (e) { console.warn(e); $('name').textContent = 'Could not reach a relay'; $('signal').textContent = String(e); return }
-  followLink(); refresh();
+  try { radio = await Radio.start(rememberHarbours(), key, RELAYS) } catch (e) { console.warn(e); $('name').textContent = 'Could not reach a relay'; $('signal').textContent = String(e); return }
+  for (const l of savedPockets()) pocketJoin(l, false);
+  if (location.hash.includes('pocket=')) pocketJoin(location.hash, true);
+  else if (!flockFollow()) followLink();
+  refresh();
   setInterval(refresh, 4000); setInterval(nowPlaying, 1000); setInterval(() => page(false), 5000);
   window.addEventListener('hashchange', followLink);
   if ('mediaSession' in navigator) { navigator.mediaSession.setActionHandler('play', () => cur && listen(cur)); navigator.mediaSession.setActionHandler('pause', stop); navigator.mediaSession.setActionHandler('stop', stop) }
 }
 // For anyone looking under the hood: what the player is doing.
 window.pyrate = { tap: () => { const d = ctx.createMediaStreamDestination(); gain.connect(d); return d.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, station: cur?.id, scheduled: sources.length, ahead_ms: ctx ? Math.round(Math.max(0, (sources.length ? 1 : 0) * 1)) : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, webcodecs }) };
+// The set at rest, before it joins the network: a HOSTIS station, or the one passed on.
+function dormant(s) {
+  cur = s; flag($('flag'), s.id, false); art(null);
+  $('name').textContent = s.name; $('cs').textContent = s.call_sign || ''; $('freq').textContent = fq(s.id).toFixed(1);
+  dial(HARBOUR_STATIONS.concat(passedId() && !HARBOUR_STATIONS.some(h => h.id === passedId()) ? [{ id: passedId(), name: 'Passed on' }] : []));
+  needle(s.id, false); power(); $('pass').hidden = true; $('np').textContent = 'Press Listen to come aboard.'; $('by').textContent = '';
+}
 // Inside the landing page, the set tells its host how tall it is.
 if (document.documentElement.classList.contains('embed') && parent !== window) {
   const tell = () => parent.postMessage({ pyrate: 'height', h: document.documentElement.scrollHeight }, location.origin);
   new ResizeObserver(tell).observe(document.body); addEventListener('load', tell);
 }
-boot();
+if (EMBED) { scale(); const p = passedId(); dormant(p ? { id: p, name: 'A passed-on station', call_sign: '' } : HARBOUR_STATIONS[0]); $('signal').textContent = '' }
+else boot();
