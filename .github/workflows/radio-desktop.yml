@@ -10,6 +10,10 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# A newer push supersedes a build still running.
+concurrency:
+  group: radio-desktop
+  cancel-in-progress: true
 jobs:
   windows:
     runs-on: windows-latest

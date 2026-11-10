@@ -34,6 +34,8 @@ done
 ls -t pyrateradio/ipfs/*.car | tail -n +25 | xargs -r git rm -q --cached --ignore-unmatch
 ls -t pyrateradio/ipfs/*.car | tail -n +25 | xargs -r rm -f
 cp "$R/tools/pin_player.sh" pyrateradio/ipfs/pin_player.sh
+# The newest open player as plain files, for any Lantern to serve at /player/ (LANTERN.md).
+tar -C "$R/browser/www/dist-open" -czf pyrateradio/ipfs/open-player.tar.gz .
 git add -A pyrateradio
 git commit -q -m "pyrateradio: $1 (radio $H)
 
