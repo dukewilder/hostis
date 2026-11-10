@@ -29,6 +29,17 @@ fn main() -> anyhow::Result<()> {
     let seeds: Vec<String> = args.windows(2).filter(|w| w[0] == "--seed").map(|w| w[1].clone()).collect();
     std::fs::create_dir_all(&dir)?;
 
+    // Scuttle: the hold key goes, and everything this Lantern kept becomes noise at once.
+    if args.iter().any(|a| a == "--scuttle") {
+        let key = std::env::var_os("PYRATE_HOLD_KEY").map(PathBuf::from).unwrap_or_else(|| dir.join("hold.key"));
+        if key.exists() {
+            let len = std::fs::metadata(&key).map(|m| m.len()).unwrap_or(32) as usize;
+            let _ = std::fs::write(&key, vec![0u8; len]);
+            std::fs::remove_file(&key)?;
+        }
+        println!("scuttled: {} is noise now; delete it at leisure", dir.display());
+        return Ok(());
+    }
     // The keeper, back: the hails this Lantern kept, opened into a folder of their choosing.
     if let Some(out) = get("--open-hails") {
         let n = pyrate_node::open_hails(&dir, std::path::Path::new(&out))?;

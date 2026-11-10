@@ -71,6 +71,30 @@ object Hold {
         e.putString(key, sealed).apply()
     }
 
+    /**
+     * Scuttle: the hardware key that wraps the hold key is destroyed, and with it everything
+     * the radio kept on this phone becomes noise at once, before a single file is deleted.
+     * A note is left so the next start clears the noise away and begins fresh.
+     */
+    fun scuttle(ctx: Context) {
+        synchronized(this) {
+            try { KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(ALIAS) } catch (e: Exception) {}
+            File(ctx.filesDir, "hold.wrapped").delete()
+            cached = null
+            ctx.getSharedPreferences("pyrate", Context.MODE_PRIVATE).edit().clear().commit()
+            File(ctx.filesDir, "scuttled").writeText("1")
+        }
+    }
+
+    /** After a scuttle: the node's folder, now noise, is cleared before anything opens it. */
+    fun clearIfScuttled(ctx: Context) {
+        val mark = File(ctx.filesDir, "scuttled")
+        if (!mark.exists()) return
+        File(ctx.filesDir, "node").deleteRecursively()
+        ctx.cacheDir.listFiles()?.forEach { it.deleteRecursively() }
+        mark.delete()
+    }
+
     fun key(ctx: Context): String? {
         cached?.let { return it }
         synchronized(this) {

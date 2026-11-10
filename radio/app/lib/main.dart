@@ -1085,6 +1085,28 @@ class _ColoursPageState extends State<ColoursPage> {
           toast(context, r is Map && r['error'] != null ? 'Not cleared: ${r['error']}' : (n == null || n == 0 ? 'The hold was already clear.' : 'The hold is clear.'));
         }),
       ]),
+      const SizedBox(height: 26),
+      Text('SCUTTLE', style: carved(14)),
+      const SizedBox(height: 8),
+      Text('For a phone about to be taken. One press destroys the key everything the radio keeps here is sealed under, in the phone\'s secure hardware: what you have heard, your chart, pockets, bells and this phone\'s key to your station become noise at once, and the app closes. Your station lives on in the network and comes back to any phone with its 24 words.',
+          style: serif(14, color: boneFaint, italic: true)),
+      const SizedBox(height: 10),
+      Row(children: [
+        button('SCUTTLE', () async {
+          final ok = await showDialog<bool>(
+            context: context,
+            builder: (c) => AlertDialog(
+              title: Text('Scuttle the radio on this phone?', style: serif(20)),
+              content: Text('Everything it keeps becomes unreadable now, and cannot be brought back. Have your 24 words before you do this.', style: serif(14, color: boneFaint, italic: true)),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(c, false), child: Text('NOT NOW', style: carved(11, color: boneFaint))),
+                TextButton(onPressed: () => Navigator.pop(c, true), child: Text('SCUTTLE', style: carved(11))),
+              ],
+            ),
+          );
+          if (ok == true) await _service.invokeMethod('scuttle').catchError((_) {});
+        }),
+      ]),
     ];
   }
 

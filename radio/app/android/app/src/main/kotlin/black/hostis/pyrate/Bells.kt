@@ -66,6 +66,16 @@ object Bells {
         Hold.putS(c, "bells", keep.toString())
     }
 
+    /** Every bell and the morning alarm called off, so nothing rings after a scuttle. */
+    fun cancelAll(c: Context) {
+        val list = try { JSONArray(Hold.getS(c, "bells") ?: "[]") } catch (e: Exception) { JSONArray() }
+        for (k in 0 until list.length()) {
+            alarms(c).cancel(pending(c, list.getJSONObject(k).optInt("id"), Intent(c, AlarmReceiver::class.java).setAction("bell")))
+        }
+        alarms(c).cancel(pending(c, 9_000_001, Intent(c, AlarmReceiver::class.java).setAction("wake")))
+        (c.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancelAll()
+    }
+
     /** Whether a bell can show at all: notifications on for the app and for its bells. */
     fun canRing(c: Context): Boolean {
         val nm = c.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

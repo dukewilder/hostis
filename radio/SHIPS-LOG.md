@@ -146,3 +146,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - A premiere of a recording added moments before airs, and a show with nothing to play is not promised on the page.
 - Clock and sound hardening: a station's page shows its key beside its call sign, every chunk plays exactly its length, tapes never come out unplayable, a span must name a day, and a library in order is heard in order across its set hours.
 - Pictures come out upright with a stable accent, films keep their dialogue when folded to stereo and silent files are refused, the device's own sample format is used, the page is built in one pass, the keeper hears when a time-zone table runs out, and the clean turn of the week is ruled.
+- SCUTTLE: one press makes everything the radio keeps on a phone unreadable at once and closes the app; a Lantern has --scuttle. App 0.8.3 (build 16) carries it with everything since 0.8.2, waiting on Dylan's Android key.
