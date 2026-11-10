@@ -29,6 +29,12 @@ fn main() -> anyhow::Result<()> {
     let seeds: Vec<String> = args.windows(2).filter(|w| w[0] == "--seed").map(|w| w[1].clone()).collect();
     std::fs::create_dir_all(&dir)?;
 
+    // The keeper, back: the hails this Lantern kept, opened into a folder of their choosing.
+    if let Some(out) = get("--open-hails") {
+        let n = pyrate_node::open_hails(&dir, std::path::Path::new(&out))?;
+        println!("{n} {} opened into {out}", if n == 1 { "hail" } else { "hails" });
+        return Ok(());
+    }
     let node = Node::start(Config { dir: dir.clone(), quota, lantern: true, carry_all: !args.iter().any(|a| a == "--carry-own"), bootstrap, public_dns: args.iter().any(|a| a == "--public-dns"), private: false, ballast: 0, release_keys: get("--release-keys").map(|p| std::fs::read_to_string(p).unwrap_or_default().lines().filter_map(|l| pyrate_core::StationId::from_hex(l.trim()).ok().map(|i| i.0)).collect()).unwrap_or_default() })?;
     println!("LANTERN LIT");
     // Carrying only its own stations: whatever else it held before goes, now.

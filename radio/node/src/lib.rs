@@ -71,6 +71,8 @@ pub fn say(msg: &str) {
 /// of its own beside its data (see `hold.rs`).
 static HOLD_KEY: Mutex<Option<[u8; 32]>> = Mutex::new(None);
 
+pub use chat::open_hails;
+
 pub fn set_hold_key(key: [u8; 32]) {
     *HOLD_KEY.lock().unwrap() = Some(key);
 }

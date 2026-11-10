@@ -23,6 +23,110 @@ use serde_json::{Value, json};
 
 use crate::{Inner, describe_track, hex, now_ms, say, unhex};
 
+/// How many kept hails a Lantern holds before the oldest go.
+const KEPT_HAILS: usize = 500;
+
+impl Inner {
+    fn keep_hail(&self, s: &Signed) {
+        keep_hail_in(&self.hold, &self.cfg.dir, s);
+    }
+}
+
+fn keep_hail_in(hold: &crate::hold::Hold, dir: &std::path::Path, s: &Signed) {
+    static ONE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _one = ONE.lock().unwrap_or_else(|e| e.into_inner());
+    let Ok(bytes) = postcard::to_allocvec(s) else { return };
+    let id = hex(&chat::id(s));
+    let mut kept: Vec<String> = hold.read_note(dir, "hails", None).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+    if kept.contains(&id) || hold.write_note(dir, &format!("hail {id}"), &bytes).is_err() {
+        return;
+    }
+    kept.push(id);
+    while kept.len() > KEPT_HAILS {
+        let old = kept.remove(0);
+        hold.remove_note(dir, &format!("hail {old}"));
+    }
+    if let Ok(b) = serde_json::to_vec(&kept) {
+        let _ = hold.write_note(dir, "hails", &b);
+    }
+}
+
+#[cfg(test)]
+mod kept_hails {
+    use pyrate_core::StationKey;
+    use pyrate_core::chat;
+
+    #[test]
+    fn a_kept_hail_is_noise_on_disk_and_opens_for_the_keeper() {
+        let dir = std::env::temp_dir().join(format!("pyrate-hails-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let key = StationKey::generate().unwrap();
+        let st = key.id();
+        let mut store = crate::store::Store::open_with(&dir, u64::MAX, None).unwrap();
+        store.add_key(StationKey::from_seed(key.seed())).unwrap();
+        drop(store);
+        let voice = b"OggS a few seconds of a voice saying hello there";
+        let say = chat::hail(&[st.0], voice, "audio/ogg").unwrap();
+        let listener = StationKey::generate().unwrap();
+        let line = chat::speak(&listener, &st, "Anne", 1_794_000_000_000, say);
+        let hold = crate::hold::Hold::for_dir(&dir, None).unwrap();
+        super::keep_hail_in(&hold, &dir, &line);
+        // Nothing under the node's folder holds the voice or the sender's name in the clear.
+        let mut stack = vec![dir.clone()];
+        while let Some(d) = stack.pop() {
+            for e in std::fs::read_dir(&d).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                    continue;
+                }
+                let b = std::fs::read(&p).unwrap();
+                assert!(!b.windows(5).any(|w| w == b"hello"), "{p:?}");
+                assert!(!b.windows(4).any(|w| w == b"Anne"), "{p:?}");
+                assert!(!p.to_string_lossy().contains("Anne"));
+            }
+        }
+        let out = dir.join("opened");
+        assert_eq!(super::open_hails(&dir, &out).unwrap(), 1);
+        let files: Vec<_> = std::fs::read_dir(&out).unwrap().flatten().collect();
+        assert_eq!(files.len(), 1);
+        assert_eq!(std::fs::read(files[0].path()).unwrap(), voice);
+        assert!(files[0].file_name().to_string_lossy().contains("Anne"));
+        // Opened once, then forgotten.
+        assert_eq!(super::open_hails(&dir, &out).unwrap(), 0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+/// Opens the hails a keeper's Lantern kept into `out`, one sound file each, named by
+/// station, time and sender, and forgets them. The count opened.
+pub fn open_hails(dir: &std::path::Path, out: &std::path::Path) -> Result<usize> {
+    let hold = crate::hold::Hold::for_dir(dir, None)?;
+    let store = crate::store::Store::open_with(dir, u64::MAX, None)?;
+    let kept: Vec<String> = hold.read_note(dir, "hails", None).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+    std::fs::create_dir_all(out)?;
+    let mut n = 0;
+    for id in &kept {
+        let name = format!("hail {id}");
+        let Some(s) = hold.read_note(dir, &name, None).and_then(|b| postcard::from_bytes::<Signed>(&b).ok()) else { continue };
+        let st = StationId(s.line.station);
+        let Some((audio, mime)) = store.keys.get(&st).and_then(|k| chat::open_hail(&s.line.say, &k.seed())) else { continue };
+        let ext = if mime.contains("webm") { "webm" } else if mime.contains("ogg") { "ogg" } else { "m4a" };
+        let who: String = chat::shown_name(&s.line.name).chars().map(|c| if matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') { ' ' } else { c }).take(40).collect();
+        let who = who.trim().trim_start_matches('.').to_string();
+        let who = if who.is_empty() { StationId(s.line.from).call_sign() } else { who };
+        std::fs::write(out.join(format!("{} {} {}.{ext}", st.call_sign(), s.line.at_ms / 1000, who)), audio)?;
+        hold.remove_note(dir, &name);
+        n += 1;
+    }
+    for id in &kept {
+        hold.remove_note(dir, &format!("hail {id}"));
+    }
+    hold.remove_note(dir, "hails");
+    Ok(n)
+}
+
 /// Lines a node holds per room, in memory.
 const KEEP: usize = 200;
 
@@ -61,15 +165,13 @@ impl Inner {
             if !chat::hail_for(&s.line.say, &mine) {
                 return false;
             }
-            // A Lantern's keeper may ask for hails to wait in a folder of their own
-            // (PYRATE_HAILS); otherwise a hail lives only in memory, as everything here does.
-            if let (Some(dir), Some(k)) = (std::env::var_os("PYRATE_HAILS"), self.store.lock().unwrap().keys.get(&st).map(|k| k.seed())) {
-                if let Some((audio, mime)) = chat::open_hail(&s.line.say, &k) {
-                    let ext = if mime.contains("webm") { "webm" } else if mime.contains("ogg") { "ogg" } else { "m4a" };
-                    let _ = std::fs::create_dir_all(&dir);
-                    let name = format!("{} {} {}.{ext}", st.call_sign(), s.line.at_ms / 1000, if s.line.name.is_empty() { StationId(s.line.from).call_sign() } else { s.line.name.replace(['/', '\\'], " ") });
-                    let _ = std::fs::write(std::path::Path::new(&dir).join(name), audio);
-                }
+            // A keeper's own Lantern may be asked (PYRATE_HAILS) to keep hails for a keeper who
+            // is away. Each is kept as it came, still sealed to the station, and sealed again
+            // under the node's hold key, so the disk shows neither the voice nor who sent it;
+            // `lantern --open-hails <folder>` opens them for the keeper. Otherwise a hail lives
+            // only in memory, as everything here does.
+            if std::env::var_os("PYRATE_HAILS").is_some() {
+                self.keep_hail(&s);
             }
         }
         let mut rooms = self.chats.lock().unwrap();
