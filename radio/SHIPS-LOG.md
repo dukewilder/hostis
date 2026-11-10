@@ -129,3 +129,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - The app keeps to the site's sheet: no amber anywhere, one red kept for the open air, square hairline dialogs and sheets in Fell, and a black window even on a phone set to light.
 - Passing the app on by QR serves it under a secret path on one address for fifteen minutes, and selected text is never offered to other apps.
 - The screen and the playback service never wait on the node: the dial polls in the background and the service has a thread of its own for every call.
+- The numbers kit builds its messages in the background.
