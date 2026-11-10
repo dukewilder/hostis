@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=7b5fe9d7a8';
+import init, { Radio } from './pkg/pyrate_browser.js?v=c4e42219d3';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -388,7 +388,7 @@ function listen(s) {
 }
 
 function stop() { gen++; stopAll(); playing = false; trouble = null; power(); lamps(false); ctx?.suspend(); radio?.listening(false) }
-function power() { $('clip').hidden = !(playing && clipType()) || isPocket(cur); const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■' : '▶'; g.querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen' }
+function power() { $('clip').hidden = !(playing && clipType()) || isPocket(cur); const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■\uFE0E' : '▶\uFE0E'; g.querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen' }
 
 // A row's cover is fetched only once the row comes into view.
 const lazy = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => {
@@ -548,7 +548,7 @@ function dropHail() { if (hailRec) { hailDrop = true; hailRec.stop() } }
 $('hail').onclick = async () => {
   if (hailRec) { hailRec.stop(); return }
   if (!window.MediaRecorder || !navigator.mediaDevices) { $('chatwho').textContent = 'This browser cannot record a hail. The app can.'; return }
-  let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }) } catch (e) { $('chatwho').textContent = 'Allow the microphone, then press again.'; return }
+  let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }) } catch (e) { $('chatwho').textContent = window !== parent ? 'A page holding the radio cannot lend it the microphone. Open the full player to send a hail.' : 'Allow the microphone, then press again.'; return }
   const type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find(t => MediaRecorder.isTypeSupported(t)) || '';
   const parts = [], to = cur.id; let rec;
   try { rec = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 24000 } : { audioBitsPerSecond: 24000 }) } catch (e) { stream.getTracks().forEach(t => t.stop()); $('chatwho').textContent = 'This browser cannot record a hail. The app can.'; return }
@@ -607,7 +607,7 @@ async function clipIt() {
     g.fillStyle = '#fbf8f1'; g.fillRect(qx, qy, QS, QS); g.fillStyle = '#0a0a0a';
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.bits[y * n + x] === '1') g.fillRect(qx + (x + 4) * cell, qy + (y + 4) * cell, cell + .3, cell + .3);
     g.fillStyle = faint; g.font = '22px "JetBrains Mono"'; g.fillText(url.replace(/^https:\/\//, '').replace(/\/listen\/#.*$/, '').replace(/#.*$/, ''), W / 2, 1200);
-    g.fillStyle = blood; g.fillRect(40, H - 46, (W - 80) * Math.min(1, el / CLIP_S), 4);
+    g.fillStyle = bone; g.fillRect(40, H - 46, (W - 80) * Math.min(1, el / CLIP_S), 4);
     if (el < CLIP_S && rec.state === 'recording') requestAnimationFrame(draw); else if (rec.state === 'recording') rec.stop();
   };
   rec.onstop = () => {

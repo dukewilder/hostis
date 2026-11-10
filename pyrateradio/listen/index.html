@@ -177,13 +177,15 @@ button:hover{border-color:var(--bone)}
 footer{text-align:center;font-family:var(--carved);font-size:.65rem;letter-spacing:.3em;color:var(--bone-faint);padding:1.5rem}footer a{color:inherit}
 
 /* The browser set, drawn in hostis.black's own system: black, bone and blood, square
-   hairlines, Cinzel for titles, IM Fell for words, the site's buttons and its grain.
-   No rights reserved. */
+   hairlines, Cinzel for titles, IM Fell for words, the site's buttons (its compass and
+   download buttons, pill and blood-deep as they are there) and its grain. Bright red is
+   kept for the open air: ON AIR, LIVE, the live dot, the tuned needle with its blood
+   diamond and the meter's hot end. No text under .65rem. No rights reserved. */
 :root{--near-black:#0a0a0a;--blood:#c52828;--blood-deep:#5a1010}
 html{background:var(--black)}
 body{display:block;min-height:100vh;background:var(--black);font-size:18px;line-height:1.7}
 a{color:inherit}
-:focus-visible{outline:1px dashed var(--blood-bright);outline-offset:4px}
+:focus-visible{outline:1px dashed var(--blood);outline-offset:4px}
 .grain{position:fixed;inset:0;pointer-events:none;z-index:999;opacity:.05;mix-blend-mode:soft-light;
   background-image:url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.93 0 0 0 0 0.89 0 0 0 0 0.81 0 0 0 0.55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>")}
 
@@ -211,12 +213,12 @@ a{color:inherit}
 .ident{display:flex;gap:1rem;align-items:baseline;flex-wrap:wrap}
 .freq{font-family:var(--mono);font-size:.8rem;letter-spacing:.08em;color:var(--bone)}
 .ident .cs{margin:0;font-size:.72rem;white-space:pre}
-.slot{font-family:var(--carved);font-weight:600;font-size:.72rem;letter-spacing:.45em;text-transform:uppercase;color:var(--blood-bright);min-height:1em;margin-top:1.3rem}
+.slot{font-family:var(--carved);font-weight:600;font-size:.72rem;letter-spacing:.45em;text-transform:uppercase;color:var(--bone-faint);min-height:1em;margin-top:1.3rem}
 .set .np{font-size:1.45rem;min-height:1.5em;margin-top:.25rem;color:var(--bone-dim)}
 .set .by{margin-top:.1rem}
 .prog{height:1px;background:var(--bone-ghost);margin-top:1.1rem;max-width:440px}
 .prog div{height:100%;width:0;background:var(--bone)}
-.time{font-family:var(--mono);font-size:.68rem;color:var(--bone-ghost);margin-top:.5rem;min-height:1em}
+.time{font-family:var(--mono);font-size:.68rem;color:var(--bone-faint);margin-top:.5rem;min-height:1em}
 
 /* The dial: every station printed where its frequency falls, the needle on the one tuned */
 .glass{position:relative;margin-top:2rem;height:118px;border:1px solid var(--bone-faint);background:var(--black);overflow-x:auto;overflow-y:hidden;cursor:pointer;scrollbar-width:thin;scrollbar-color:var(--bone-ghost) transparent}
@@ -224,9 +226,9 @@ a{color:inherit}
 .scale{position:absolute;left:0;right:0;bottom:0;height:40px}
 .scale i{position:absolute;bottom:0;width:1px;height:7px;background:var(--bone-ghost)}
 .scale i.major{height:14px;background:var(--bone-faint)}
-.scale b{position:absolute;bottom:17px;transform:translateX(-50%);font-family:var(--mono);font-weight:400;font-size:.62rem;color:var(--bone-faint)}
+.scale b{position:absolute;bottom:17px;transform:translateX(-50%);font-family:var(--mono);font-weight:400;font-size:.65rem;color:var(--bone-faint)}
 .names{position:absolute;left:0;right:0;top:12px;height:62px}
-.names button{position:absolute;transform:translateX(-50%);background:none;border:0;margin:0;padding:.1rem .3rem;font-family:var(--carved);font-weight:600;font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;
+.names button{position:absolute;transform:translateX(-50%);background:none;border:0;margin:0;padding:.1rem .3rem;font-family:var(--carved);font-weight:600;font-size:.65rem;letter-spacing:.18em;text-transform:uppercase;
   color:var(--bone-faint);white-space:nowrap;max-width:11rem;overflow:hidden;text-overflow:ellipsis;cursor:pointer;line-height:1.4}
 .names button:hover{color:var(--bone)}
 .names button.on{color:var(--bone)}
@@ -239,7 +241,7 @@ a{color:inherit}
 button.power{margin:0;display:inline-flex;align-items:center;gap:.7rem;padding:1.05rem 2.1rem;font-family:var(--carved);font-weight:700;font-size:.95rem;letter-spacing:.18em;text-transform:uppercase;
   color:var(--bone);background:var(--blood-deep);border:1px solid var(--blood);transition:background .25s ease}
 button.power:hover{background:var(--blood);border-color:var(--blood)}
-button.power.on{background:var(--black);border-color:var(--blood-bright);color:var(--blood-bright)}
+button.power.on{background:var(--black);border-color:var(--bone);color:var(--bone)}
 .buttons{display:flex;gap:.6rem;flex-wrap:wrap}
 button.plain{height:44px;margin:0;border-radius:999px;background:var(--black);border:1px solid var(--bone-faint);color:var(--bone);display:inline-flex;align-items:center;
   font-family:var(--mono);font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;padding:0 1.1rem;transition:background .2s ease,border-color .2s ease}
@@ -251,34 +253,34 @@ button.plain.quiet{border-color:var(--bone-ghost);color:var(--bone-faint)}
 .vu .ticks line{stroke:var(--bone-faint);stroke-width:1}
 .vu .vun{stroke:var(--bone);stroke-width:1.3;transform-origin:60px 64px;transform:rotate(-48deg)}
 .vu .hub{fill:var(--blood)}
-.vu .vulabel{font-family:var(--mono);font-size:7px;letter-spacing:.1em;fill:var(--bone-ghost);text-anchor:middle}
+.vu .vulabel{font-family:var(--mono);font-size:9px;letter-spacing:.1em;fill:var(--bone-faint);text-anchor:middle}
 
 /* Below the set: the station's week, and the Log */
 .below{max-width:980px;margin:3.4rem auto 0;padding:0 1.4rem;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:3.4rem;align-items:start}
 .below section{padding:0;max-width:none;margin:0;border:0}
-.below h2{font-family:var(--carved);font-weight:600;font-size:.78rem;letter-spacing:.45em;text-transform:uppercase;color:var(--blood-bright);margin:0 0 1.1rem}
+.below h2{font-family:var(--carved);font-weight:600;font-size:.78rem;letter-spacing:.45em;text-transform:uppercase;color:var(--bone);margin:0 0 1.1rem}
 .below h2.gap,.page>h2:not(:first-child){margin-top:2.6rem}
 .fine,.how{color:var(--bone-faint);font-style:italic;font-size:1rem;line-height:1.6;margin:0 0 1rem}
 .notice{border:1px solid var(--bone-ghost);padding:.9rem 1.1rem;margin:0 0 .8rem;color:var(--bone);font-size:1.08rem;line-height:1.5;background:linear-gradient(180deg,#060606 0%,#030303 100%)}
-.notice small{display:block;font-family:var(--mono);font-size:.62rem;color:var(--bone-ghost);margin-top:.45rem}
+.notice small{display:block;font-family:var(--mono);font-size:.65rem;color:var(--bone-faint);margin-top:.45rem}
 .li{display:flex;gap:1rem;align-items:baseline;padding:.45rem 0;border-bottom:1px solid rgba(237,228,206,.08)}
 .li .t{font-family:var(--mono);font-size:.72rem;color:var(--bone-faint);flex:0 0 auto;min-width:3.6rem}
 .li .w{flex:1;color:var(--bone-dim);font-size:1.05rem}
 .li.on .w,.li.on .t{color:var(--bone)}
 .li.on .t::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--blood-bright);margin-right:.45rem;vertical-align:middle}
 .li em{display:block;color:var(--bone-faint);font-size:.92rem}
-.li b{font-family:var(--carved);font-weight:600;font-size:.56rem;letter-spacing:.3em;text-transform:uppercase;margin-left:.45rem}
+.li b{font-family:var(--carved);font-weight:600;font-size:.65rem;letter-spacing:.3em;text-transform:uppercase;margin-left:.45rem}
 .lv{color:var(--blood-bright)}.pr{color:var(--bone)}
 .day{font-family:var(--carved);font-weight:600;font-size:.66rem;letter-spacing:.35em;text-transform:uppercase;color:var(--bone-faint);margin:1.4rem 0 .2rem}
-.li button.cal{height:30px;font-size:.6rem;padding:0 .8rem}
+.li button.cal{height:30px;font-size:.65rem;padding:0 .8rem}
 #week{margin-top:1.2rem}
 .row{gap:.9rem;padding:.8rem 0}
 .row .mini{border-color:var(--bone-ghost)}
 .row .name{font-size:1.12rem}
 .row .count{font-size:.95rem}
-.row .fq{font-family:var(--mono);font-size:.62rem;color:var(--bone-faint);display:block;font-weight:400}
+.row .fq{font-family:var(--mono);font-size:.65rem;color:var(--bone-faint);display:block;font-weight:400}
 .switches{display:flex;flex-direction:column;gap:.6rem;margin:0 0 1rem;font-size:1rem;color:var(--bone-dim)}
-.switches input{accent-color:var(--blood);margin-right:.6rem;vertical-align:middle;width:1rem;height:1rem}
+.switches input{accent-color:var(--bone);margin-right:.6rem;vertical-align:middle;width:1rem;height:1rem}
 textarea{width:100%;min-height:9rem;background:var(--near-black);color:var(--bone-dim);border:1px solid var(--bone-ghost);font-family:var(--mono);font-size:.72rem;padding:.7rem;margin:1rem 0 .6rem}
 #mbox .plain{margin:0 .4rem .4rem 0}
 .passbox{display:flex;gap:1.6rem;align-items:center;margin-top:1.6rem;padding:1.3rem;border:1px solid var(--bone-faint);background:var(--black)}
@@ -306,9 +308,9 @@ html.embed .top,html.embed .below,html.embed footer,html.embed #maroon,html.embe
 html.embed .set{margin:0}
 .lines{max-height:340px;overflow-y:auto;border:1px solid var(--bone-ghost);padding:.4rem .9rem;margin:0 0 .8rem;background:var(--black)}
 .line{padding:.45rem 0;border-bottom:1px solid rgba(237,228,206,.06)}
-.line .who{background:none;border:0;padding:0;margin:0;font-family:var(--carved);font-weight:600;font-size:.6rem;letter-spacing:.25em;text-transform:uppercase;color:var(--bone-faint);cursor:pointer}
-.line.keeper .who{color:var(--blood-bright)}.line.mine .who{color:var(--bone);cursor:default}
-.line small{font-family:var(--mono);font-size:.58rem;color:var(--bone-ghost);margin-left:.6rem}
+.line .who{background:none;border:0;padding:0;margin:0;font-family:var(--carved);font-weight:600;font-size:.65rem;letter-spacing:.25em;text-transform:uppercase;color:var(--bone-faint);cursor:pointer}
+.line.keeper .who{color:var(--bone)}.line.mine .who{color:var(--bone-dim);cursor:default}
+.line small{font-family:var(--mono);font-size:.65rem;color:var(--bone-faint);margin-left:.6rem}
 .line .said{color:var(--bone-dim);font-size:1.02rem;line-height:1.45;overflow-wrap:anywhere}
 .line .cheer,.line .req{font-style:italic;color:var(--bone)}
 .say{display:flex;gap:.6rem;margin:0 0 .6rem}
@@ -321,7 +323,7 @@ a.plain{text-decoration:none}
 .chart svg{display:block;width:100%;height:auto;border:1px solid var(--bone-ghost);background:var(--black)}
 .chart .land{fill:rgba(237,228,206,.07);stroke:var(--bone-ghost);stroke-width:.4}
 .chart .dot{cursor:pointer}.chart .dot circle{fill:var(--bone);stroke:var(--black);stroke-width:1}
-.chart .dot.live circle{fill:var(--blood-bright)}.chart .dot.on circle{r:5;fill:var(--bone);stroke:var(--blood-bright);stroke-width:1.5}
+.chart .dot.live circle{fill:var(--blood-bright)}.chart .dot.on circle{r:5;fill:var(--black);stroke:var(--bone);stroke-width:1.5}
 .chart .dot:hover circle,.chart .dot:focus-visible circle{r:5}
 .chart p{margin-top:.6rem}
 #tipbox input{width:100%;height:44px;background:var(--black);color:var(--bone);border:1px solid var(--bone-faint);padding:0 .9rem;font-family:var(--serif);font-size:1rem;margin:0 0 .6rem}
@@ -356,7 +358,7 @@ a.plain{text-decoration:none}
 </div>
 
 <div class="controls">
-<button id="go" class="power" hidden><span class="glyph">▶</span><span class="lbl">Listen</span></button>
+<button id="go" class="power" hidden><span class="glyph">▶︎</span><span class="lbl">Listen</span></button>
 <div class="buttons">
 <button id="spin" class="plain">Spin the dial</button>
 <button id="pass" class="plain" hidden>Pass it on</button>
@@ -413,6 +415,6 @@ a.plain{text-decoration:none}
 </section>
 </div>
 <footer><a href="../">Pyrate Radio</a> <a href="../#set">Take the set</a> <a href="../#faq">Questions</a> <span>No rights reserved</span></footer>
-<script type="module" src="app.js?v=7b5fe9d7a8"></script>
+<script type="module" src="app.js?v=c4e42219d3"></script>
 </body>
 </html>
