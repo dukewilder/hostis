@@ -17,6 +17,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.Looper
 import android.os.PowerManager
 import android.support.v4.media.MediaBrowserCompat
@@ -38,11 +39,15 @@ class PlaybackService : MediaBrowserServiceCompat() {
     private lateinit var audio: AudioManager
     private var focus: AudioFocusRequest? = null
     private val main = Handler(Looper.getMainLooper())
+    /** Every call into the node runs here, one after another, never on the main thread: a
+     *  node starting up or busy with a slow job cannot stall the lock screen or the car. */
+    private val worker = HandlerThread("pyrate-node").apply { start() }
+    private val work = Handler(worker.looper)
     private var lastKey = ""
-    private var live = false
-    private var foreground = false
+    @Volatile private var live = false
+    @Volatile private var foreground = false
     private var alarmTone: Ringtone? = null
-    private var waking = false
+    @Volatile private var waking = false
 
     private val noisy = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, i: Intent?) {
@@ -53,23 +58,23 @@ class PlaybackService : MediaBrowserServiceCompat() {
     private val poll = object : Runnable {
         override fun run() {
             refresh()
-            main.postDelayed(this, 1500)
+            work.postDelayed(this, 1500)
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        Native.ensure(this)
+        work.post { Native.ensure(this) }
         audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         session = MediaSessionCompat(this, "pyrate").apply {
             setCallback(object : MediaSessionCompat.Callback() {
-                override fun onPlay() = resume()
+                override fun onPlay() { work.post { resume() } }
                 override fun onPause() = stopPlaying()
                 override fun onStop() = stopPlaying()
-                override fun onSkipToNext() { Native.cmd("cmd" to "tune_next", "dir" to 1); startPlaying() }
-                override fun onSkipToPrevious() { Native.cmd("cmd" to "tune_next", "dir" to -1); startPlaying() }
+                override fun onSkipToNext() { work.post { Native.cmd("cmd" to "tune_next", "dir" to 1); startPlaying() } }
+                override fun onSkipToPrevious() { work.post { Native.cmd("cmd" to "tune_next", "dir" to -1); startPlaying() } }
                 override fun onPlayFromMediaId(id: String?, extras: Bundle?) {
-                    if (id != null && Regex("^[0-9a-f]{64}$").matches(id)) tune(id)
+                    if (id != null && Regex("^[0-9a-f]{64}$").matches(id)) work.post { tune(id) }
                 }
             })
             isActive = true
@@ -80,17 +85,19 @@ class PlaybackService : MediaBrowserServiceCompat() {
             (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
                 .createNotificationChannel(NotificationChannel("air", "On the air", NotificationManager.IMPORTANCE_LOW))
         }
-        main.post(poll)
+        work.post(poll)
     }
 
     private fun prefs() = getSharedPreferences("pyrate", Context.MODE_PRIVATE)
 
+    /** On the node's thread. */
     private fun tune(id: String) {
         Native.cmd("cmd" to "tune", "station" to id)
         Hold.putS(this, "last", id)
         startPlaying()
     }
 
+    /** On the node's thread. */
     private fun resume() {
         val tuned = Native.cmd("cmd" to "status").optString("tuned", "")
         if (tuned.isEmpty()) {
@@ -99,24 +106,31 @@ class PlaybackService : MediaBrowserServiceCompat() {
         } else startPlaying()
     }
 
-    private fun startPlaying() {
-        Native.cmd("cmd" to "volume", "value" to 1.0)
-        requestFocus()
-        goForeground("Pyrate Radio", "")
-        refresh()
+    /** From any thread: the node is asked on its own, the speaker and the lock screen on the main one. */
+    private fun startPlaying(title: String = "Pyrate Radio") {
+        work.post {
+            Native.cmd("cmd" to "volume", "value" to 1.0)
+            main.post {
+                requestFocus()
+                goForeground(title, "")
+            }
+            refresh()
+        }
     }
 
     private fun stopPlaying() {
-        Native.cmd("cmd" to "stop")
-        alarmTone?.stop()
-        alarmTone = null
-        waking = false
-        if (Build.VERSION.SDK_INT >= 26) focus?.let { audio.abandonAudioFocusRequest(it) }
-        session.setPlaybackState(state(PlaybackStateCompat.STATE_STOPPED))
-        if (!live) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            foreground = false
-            release()
+        work.post { Native.cmd("cmd" to "stop") }
+        main.post {
+            alarmTone?.stop()
+            alarmTone = null
+            waking = false
+            if (Build.VERSION.SDK_INT >= 26) focus?.let { audio.abandonAudioFocusRequest(it) }
+            session.setPlaybackState(state(PlaybackStateCompat.STATE_STOPPED))
+            if (!live) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                foreground = false
+                release()
+            }
         }
     }
 
@@ -130,9 +144,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
             .setOnAudioFocusChangeListener { change ->
                 when (change) {
                     // A call or a voice prompt: radio goes quiet and keeps its place in the hour.
-                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> Native.cmd("cmd" to "volume", "value" to 0.0)
-                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> Native.cmd("cmd" to "volume", "value" to 0.25)
-                    AudioManager.AUDIOFOCUS_GAIN -> Native.cmd("cmd" to "volume", "value" to 1.0)
+                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> work.post { Native.cmd("cmd" to "volume", "value" to 0.0) }
+                    AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> work.post { Native.cmd("cmd" to "volume", "value" to 0.25) }
+                    AudioManager.AUDIOFOCUS_GAIN -> work.post { Native.cmd("cmd" to "volume", "value" to 1.0) }
                     // Another player took the speaker for good.
                     AudioManager.AUDIOFOCUS_LOSS -> if (!live) stopPlaying()
                 }
@@ -153,6 +167,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
     private val plain: Boolean get() = prefs().getBoolean("plain_lock", false)
 
     /** What the lock screen, the car and the headphones show. */
+    /** On the node's thread; what it changes on screen is handed to the main one. */
     private fun refresh() {
         val st = Native.cmd("cmd" to "status")
         val tuned = st.optString("tuned", "")
@@ -170,11 +185,14 @@ class PlaybackService : MediaBrowserServiceCompat() {
         val pic = now?.optString("art")?.ifEmpty { null } ?: cover
         val plain = prefs().getBoolean("plain_lock", false)
         val key = "$tuned|$title|$by|$pic|$plain"
-        session.setPlaybackState(state(PlaybackStateCompat.STATE_PLAYING))
-        if (waking && now?.optString("state") == "playing") {
-            waking = false
-            alarmTone?.stop()
-            alarmTone = null
+        val sounding = now?.optString("state") == "playing"
+        main.post {
+            session.setPlaybackState(state(PlaybackStateCompat.STATE_PLAYING))
+            if (waking && sounding) {
+                waking = false
+                alarmTone?.stop()
+                alarmTone = null
+            }
         }
         if (key == lastKey) return
         lastKey = key
@@ -187,8 +205,11 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, name)
             Native.bitmap(pic)?.let { md.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, it) }
         }
-        session.setMetadata(md.build())
-        if (foreground) goForeground(if (plain) "Radio" else title, if (plain) "" else name)
+        val built = md.build()
+        main.post {
+            session.setMetadata(built)
+            if (foreground) goForeground(if (plain) "Radio" else title, if (plain) "" else name)
+        }
     }
 
     private fun goForeground(title: String, text: String) {
@@ -249,13 +270,16 @@ class PlaybackService : MediaBrowserServiceCompat() {
                 if (intent?.hasExtra("live") == true) live = intent.getBooleanExtra("live", false)
                 if (ending) {
                     // The broadcast is over: back to what is tuned, or out of the foreground.
-                    val tuned = Native.cmd("cmd" to "status").optString("tuned", "")
-                    if (tuned.isEmpty()) stopPlaying() else refresh()
+                    work.post {
+                        val tuned = Native.cmd("cmd" to "status").optString("tuned", "")
+                        if (tuned.isEmpty()) stopPlaying() else refresh()
+                    }
                 } else {
-                    startPlaying()
-                    // The app names the station; the plain disguise names nothing.
-                    val title = intent?.getStringExtra("title")
-                    if (title != null && !plain) goForeground(title, "")
+                    // The app names the station; the plain disguise names nothing. The service
+                    // goes to the foreground at once, before the node is asked anything.
+                    val t = intent?.getStringExtra("title")?.takeIf { !plain } ?: "Pyrate Radio"
+                    goForeground(t, "")
+                    startPlaying(t)
                 }
             }
         }
@@ -268,10 +292,10 @@ class PlaybackService : MediaBrowserServiceCompat() {
         live = false
         waking = true
         goForeground("Good morning", "Tuning in")
-        if (station != null) Native.cmd("cmd" to "tune", "station" to station)
+        if (station != null) work.post { Native.cmd("cmd" to "tune", "station" to station) }
         requestFocus()
         for (step in 0..10) {
-            main.postDelayed({ if (waking || step > 0) Native.cmd("cmd" to "volume", "value" to (0.15 + step * 0.085)) }, step * 3000L)
+            work.postDelayed({ if (waking || step > 0) Native.cmd("cmd" to "volume", "value" to (0.15 + step * 0.085)) }, step * 3000L)
         }
         main.postDelayed({
             if (waking) {
@@ -302,6 +326,11 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     /** The Log, for the car and anything else that browses media. */
     override fun onLoadChildren(parentId: String, result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
+        result.detach()
+        work.post { loadChildren(result) }
+    }
+
+    private fun loadChildren(result: Result<MutableList<MediaBrowserCompat.MediaItem>>) {
         val items = mutableListOf<MediaBrowserCompat.MediaItem>()
         val stations = Native.list("stations")
         for (i in 0 until stations.length()) {
@@ -315,11 +344,13 @@ class PlaybackService : MediaBrowserServiceCompat() {
             Native.bitmap(s.optString("cover").ifEmpty { null })?.let { d.setIconBitmap(Bitmap.scale(it)) }
             items.add(MediaBrowserCompat.MediaItem(d.build(), MediaBrowserCompat.MediaItem.FLAG_PLAYABLE))
         }
-        result.sendResult(items)
+        main.post { result.sendResult(items) }
     }
 
     override fun onDestroy() {
-        main.removeCallbacks(poll)
+        work.removeCallbacksAndMessages(null)
+        worker.quitSafely()
+        main.removeCallbacksAndMessages(null)
         try { unregisterReceiver(noisy) } catch (e: Exception) {}
         session.release()
         release()

@@ -176,9 +176,23 @@ class Tuner extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _refresh() {
+  bool _refreshing = false;
+
+  /// The dial's poll runs off the screen's thread, one at a time, so a node busy with a
+  /// slow job never stalls a frame.
+  Future<void> _refresh() async {
+    if (_refreshing) return;
+    _refreshing = true;
+    try {
+      await _refreshOnce();
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  Future<void> _refreshOnce() async {
     _ticks++;
-    final st = Native.call({'cmd': 'status'});
+    final st = await Native.callAway({'cmd': 'status'});
     if (st is Map<String, dynamic> && st['error'] == null) status = st;
     // The lock screen, headphones or the car may have changed station or stopped the radio.
     final nodeTuned = status['tuned'] as String?;
@@ -225,7 +239,7 @@ class Tuner extends ChangeNotifier {
       tune(id);
     }
     if (_ticks % 3 == 1 || stations.isEmpty) {
-      final list = Native.call({'cmd': 'stations'});
+      final list = await Native.callAway({'cmd': 'stations'});
       if (list is List) {
         final at = pages.hasClients ? (pages.page ?? 0).round() : -1;
         final shown = at >= 0 && at < stations.length ? stations[at]['id'] as String? : null;
@@ -273,7 +287,7 @@ class Tuner extends ChangeNotifier {
     invite = null;
     if (id == null) return;
     if (id.startsWith('flock=')) {
-      Native.call({'cmd': 'flock_join', 'link': id});
+      Native.callAway({'cmd': 'flock_join', 'link': id});
     } else if (id.startsWith('pocket=')) {
       // Joined here, and tuned once its log arrives.
       Native.callAway({'cmd': 'pocket_join', 'link': id}).then((r) {
@@ -900,9 +914,9 @@ class _ColoursPageState extends State<ColoursPage> {
               button('BANNER', () => pickArt(id, 'banner')),
               button('COVER FROM A LINK', () => linkArt(id, 'cover')),
               if (mine['cover'] != null || mine['banner'] != null)
-                button('TAKE IT DOWN', () {
-                  Native.call({'cmd': 'art_clear', 'station': id, 'kind': 'cover'});
-                  Native.call({'cmd': 'art_clear', 'station': id, 'kind': 'banner'});
+                button('TAKE IT DOWN', () async {
+                  await Native.callAway({'cmd': 'art_clear', 'station': id, 'kind': 'cover'});
+                  await Native.callAway({'cmd': 'art_clear', 'station': id, 'kind': 'banner'});
                 }, color: boneFaint),
             ]),
           ),
@@ -1003,7 +1017,10 @@ class _ColoursPageState extends State<ColoursPage> {
           Row(children: [
             Expanded(child: Text(m['name'] ?? '', style: serif(16, color: boneDim))),
             TextButton(
-              onPressed: () => setState(() => Native.call({'cmd': 'maroon', 'station': m['id'], 'value': false})),
+              onPressed: () async {
+                await Native.callAway({'cmd': 'maroon', 'station': m['id'], 'value': false});
+                if (mounted) setState(() {});
+              },
               child: Text('BRING BACK', style: carved(10, color: boneFaint)),
             ),
           ]),
@@ -1080,8 +1097,8 @@ class _ColoursPageState extends State<ColoursPage> {
             child: Text('ON AIR  ${fmtTime((live['since_ms'] as num).toInt())}', style: mono(13, color: bloodBright, weight: FontWeight.w700)),
           ),
           const SizedBox(width: 12),
-          button('END BROADCAST', () {
-            Native.call({'cmd': 'end_live'});
+          button('END BROADCAST', () async {
+            await Native.callAway({'cmd': 'end_live'});
             _service.invokeMethod('live', {'on': false}).catchError((_) {});
           }),
         ])
@@ -1089,7 +1106,8 @@ class _ColoursPageState extends State<ColoursPage> {
         Row(children: [
           button('GO ON AIR', () async {
             if (!await askMic(context)) return;
-            final r = Native.call({'cmd': 'go_live', 'station': id});
+            final r = await Native.callAway({'cmd': 'go_live', 'station': id});
+            if (!mounted) return;
             if (r is Map && r['error'] != null) {
               setState(() => error = r['error']);
             } else {
@@ -1253,7 +1271,7 @@ class _ColoursPageState extends State<ColoursPage> {
           words.clear();
           words.dispose();
           if (ok == true) {
-            final r = Native.call({'cmd': 'strike', 'station': id, 'phrase': phrase});
+            final r = await Native.callAway({'cmd': 'strike', 'station': id, 'phrase': phrase});
             if (!context.mounted) return;
             toast(context, r is Map && r['error'] != null ? 'Not struck: ${r['error']}' : 'Colours struck. The station has ended.');
           }
