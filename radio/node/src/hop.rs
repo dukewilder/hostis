@@ -133,6 +133,24 @@ impl Inner {
         }
     }
 
+    /// The first hop of every private fetch, kept as long as it answers. A first hop drawn
+    /// afresh for each fetch would, over a day of listening, sooner or later be drawn together
+    /// with a hostile exit; a guard kept for weeks is either hostile from the start or never.
+    /// After Tor's entry guards. Well-known Lanterns are passed over, as for the stem's guard.
+    fn fetch_guard(&self, known: &[EndpointId]) -> Option<EndpointId> {
+        let path = self.cfg.dir.join("fetch-guard");
+        if let Some(g) = std::fs::read_to_string(&path).ok().and_then(|s| s.trim().parse::<EndpointId>().ok()) {
+            if known.contains(&g) {
+                return Some(g);
+            }
+        }
+        let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.cfg.bootstrap.contains(n)).copied().collect();
+        others.shuffle(&mut rand::thread_rng());
+        let g = others.first().copied().or_else(|| known.first().copied())?;
+        let _ = std::fs::write(&path, g.to_string());
+        Some(g)
+    }
+
     /// Two hops when the network allows, one when it has only one other node.
     pub(crate) async fn ask_privately(&self, ask: &Ask) -> Result<Vec<u8>> {
         let mut nodes = self.known_nodes();
@@ -140,13 +158,23 @@ impl Inner {
             return Err(anyhow!("no route"));
         }
         nodes.shuffle(&mut rand::thread_rng());
-        let exit = nodes[0];
+        if nodes.len() < 2 {
+            let exit = nodes[0];
+            let (sealed, c) = seal(exit.as_bytes(), ask)?;
+            let raw = self.hop(exit, &sealed).await?;
+            return c.decrypt(Nonce::from_slice(&ANSWER_NONCE), raw.as_slice()).map_err(|_| anyhow!("open"));
+        }
+        let guard = self.fetch_guard(&nodes).ok_or_else(|| anyhow!("no route"))?;
+        let exit = *nodes.iter().find(|n| **n != guard).ok_or_else(|| anyhow!("no route"))?;
         let (sealed, c) = seal(exit.as_bytes(), ask)?;
-        let raw = if nodes.len() >= 2 {
-            let blob = postcard::to_stdvec(&sealed)?;
-            self.hop(nodes[1], &Hop::Forward { next: *exit.as_bytes(), blob }).await?
-        } else {
-            self.hop(exit, &sealed).await?
+        let blob = postcard::to_stdvec(&sealed)?;
+        let raw = match self.hop(guard, &Hop::Forward { next: *exit.as_bytes(), blob }).await {
+            Ok(r) => r,
+            Err(e) => {
+                // The guard is gone: the next fetch draws another.
+                let _ = std::fs::remove_file(self.cfg.dir.join("fetch-guard"));
+                return Err(e);
+            }
         };
         c.decrypt(Nonce::from_slice(&ANSWER_NONCE), raw.as_slice()).map_err(|_| anyhow!("open"))
     }
