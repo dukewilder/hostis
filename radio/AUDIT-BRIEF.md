@@ -115,7 +115,7 @@ Known now:
 - Run the two-identity dukewilder rebuild in `tools/dukewilder-rebuild.md` (harbour plus dark hold plus Tor, all inside gluetun), and send back the logs.
 - Send DNS screenshots, and `station.jpg` / `banner.jpg` if still wanted.
 - Approve any change to the hostis.black front page, including a link to the radio.
-- Say yes to one file at the root of hostis.black, `/.well-known/assetlinks.json`, so a scanned poster or a shared link opens the app rather than the browser. It names only the app and its signing certificate's fingerprint. Once the Android cert is here, `tools/assetlinks.py android-cert.der` writes it; the app already asks Android to verify (P31).
+- Approved by Dylan on 10 November: one file at the root of hostis.black, `/.well-known/assetlinks.json`, goes up as soon as the Android cert arrives, so a scanned poster or a shared link opens the app rather than the browser. It names only the app and its signing certificate's fingerprint. Once the Android cert is here, `tools/assetlinks.py android-cert.der` writes it; the app already asks Android to verify (P31).
 - Sign each APK with the Android key on his PC (`release sign-apk android-key.txt android-cert.der <apk> "Pyrate Radio.apk"`). The debug key that signed 0.8.0 went with an earlier container, so no build from here can install over it: the first build he signs needs one uninstall of 0.8.0. Before that, write down each station's 24 words and copy any pocket invitations, since uninstalling clears the phone's deputy key and pockets. Every build after installs as an update. 0.8.5 (build 18) is the first to sign; the 0.8.1 to 0.8.4 builds sent earlier can be thrown away.
 
 ## 9. Standing constraints (hard rules)
