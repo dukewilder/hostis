@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'shell.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -41,7 +42,7 @@ TextStyle caps(double size, {Color color = boneFaint, double spacing = 0.2}) =>
 TextStyle mono(double size, {Color color = boneFaint, FontWeight weight = FontWeight.w400}) =>
     TextStyle(fontFamily: 'Mono', fontSize: size, color: color, letterSpacing: size * 0.05, fontWeight: weight);
 
-const _service = MethodChannel('pyrate/service');
+const _service = ShellChannel();
 
 /// The flagship bar every HOSTIS page opens with: the skull and HOSTIS in Pica capitals.
 class HostisBar extends StatelessWidget {
@@ -138,7 +139,8 @@ List<String> harbour = [];
 /// The open players this build knows, the first the one its links name.
 List<String> openPlayers = [];
 
-void main() async {
+void main(List<String> args) async {
+  launchArgs = args;
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: black,
@@ -146,7 +148,8 @@ void main() async {
     statusBarIconBrightness: Brightness.light,
   ));
   final dir = await getApplicationSupportDirectory();
-  final boot = (await rootBundle.loadString('assets/bootstrap.txt')).trim();
+  // PYRATE_BOOTSTRAP names other first doors, for a private network or a test.
+  final boot = Platform.environment['PYRATE_BOOTSTRAP'] ?? (await rootBundle.loadString('assets/bootstrap.txt')).trim();
   // HOSTIS's own stations, where a first open lands, and the keys that sign releases.
   harbour = (await rootBundle.loadString('assets/harbour.txt'))
       .split('\n')
@@ -527,7 +530,8 @@ class _PyrateAppState extends State<PyrateApp> {
       home: ListenableBuilder(
         listenable: radio,
         builder: (context, _) => Scaffold(
-          body: SafeArea(
+          // On a computer the set keeps a radio's width in the middle of the window.
+          body: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 620), child: SafeArea(
             child: Column(children: [
               const HostisBar(),
               Expanded(child: IndexedStack(index: tab, children: [
@@ -536,7 +540,7 @@ class _PyrateAppState extends State<PyrateApp> {
               PinGate(child: ColoursPage(radio: radio)),
               ])),
             ]),
-          ),
+          ))),
           bottomNavigationBar: SafeArea(
             top: false,
             child: Container(

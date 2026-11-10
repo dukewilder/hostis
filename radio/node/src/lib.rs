@@ -2146,6 +2146,18 @@ impl Node {
                 self.with_master(id, phrase, "restore")?;
                 Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign() }))
             }
+            // A recording from the microphone, on computers (the phone records for itself).
+            #[cfg(feature = "playback")]
+            "rec_start" => {
+                let path = PathBuf::from(req["path"].as_str().context("path")?);
+                crate::player::rec_start(path.clone())?;
+                Ok(json!({ "path": path.to_string_lossy() }))
+            }
+            #[cfg(feature = "playback")]
+            "rec_stop" => Ok(match crate::player::rec_stop() {
+                Some((p, ms)) => json!({ "path": p.to_string_lossy(), "ms": ms }),
+                None => json!({ "path": null }),
+            }),
             "go_live" => {
                 let st = station()?;
                 inner.go_live(st, req["file"].as_str().map(PathBuf::from))?;

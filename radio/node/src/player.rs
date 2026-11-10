@@ -140,3 +140,69 @@ where
         None,
     )?)
 }
+
+/// A recording from the microphone to a WAV file, for computers, where the app has no
+/// recorder of its own: a segment, a bell, a hail. One at a time.
+struct Rec {
+    stop: Arc<std::sync::atomic::AtomicBool>,
+    path: std::path::PathBuf,
+    started: std::time::Instant,
+    done: std::thread::JoinHandle<Result<()>>,
+}
+static REC: Mutex<Option<Rec>> = Mutex::new(None);
+
+pub fn rec_start(path: std::path::PathBuf) -> Result<()> {
+    let _ = rec_stop();
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (s2, p2) = (stop.clone(), path.clone());
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<()>>();
+    let done = std::thread::spawn(move || -> Result<()> {
+        let buf: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
+        let input = match open_input(buf.clone()) {
+            Ok(i) => { let _ = ready_tx.send(Ok(())); i }
+            Err(e) => { let _ = ready_tx.send(Err(anyhow!("{e}"))); return Err(e) }
+        };
+        let mut pcm: Vec<i16> = Vec::new();
+        while !s2.load(std::sync::atomic::Ordering::Relaxed) && pcm.len() < 48_000 * 60 * 30 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            pcm.append(&mut buf.lock().unwrap_or_else(|e| e.into_inner()));
+        }
+        drop(input);
+        pcm.append(&mut buf.lock().unwrap_or_else(|e| e.into_inner()));
+        write_wav(&p2, &pcm)
+    });
+    ready_rx.recv().map_err(|_| anyhow!("the recorder did not start"))??;
+    *REC.lock().unwrap_or_else(|e| e.into_inner()) = Some(Rec { stop, path, started: std::time::Instant::now(), done });
+    Ok(())
+}
+
+/// The file and how long it ran, once it is written.
+pub fn rec_stop() -> Option<(std::path::PathBuf, u64)> {
+    let r = REC.lock().unwrap_or_else(|e| e.into_inner()).take()?;
+    r.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    let ms = r.started.elapsed().as_millis() as u64;
+    match r.done.join() {
+        Ok(Ok(())) => Some((r.path, ms)),
+        _ => None,
+    }
+}
+
+fn write_wav(path: &std::path::Path, pcm: &[i16]) -> Result<()> {
+    let data = (pcm.len() * 2) as u32;
+    let mut b = Vec::with_capacity(44 + data as usize);
+    b.extend_from_slice(b"RIFF");
+    b.extend_from_slice(&(36 + data).to_le_bytes());
+    b.extend_from_slice(b"WAVEfmt ");
+    b.extend_from_slice(&16u32.to_le_bytes());
+    b.extend_from_slice(&1u16.to_le_bytes()); // PCM
+    b.extend_from_slice(&1u16.to_le_bytes()); // mono
+    b.extend_from_slice(&48_000u32.to_le_bytes());
+    b.extend_from_slice(&96_000u32.to_le_bytes());
+    b.extend_from_slice(&2u16.to_le_bytes());
+    b.extend_from_slice(&16u16.to_le_bytes());
+    b.extend_from_slice(b"data");
+    b.extend_from_slice(&data.to_le_bytes());
+    for s in pcm { b.extend_from_slice(&s.to_le_bytes()) }
+    std::fs::write(path, b)?;
+    Ok(())
+}
