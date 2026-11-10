@@ -590,7 +590,8 @@ impl Inner {
                     Some(Body::Colours { tip, .. }) => tip.clone(),
                     _ => None,
                 };
-                net::Card { station: id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof, cover, accent, kinds, mature, tip }
+                let explicit = log.explicit();
+                net::Card { station: id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof, cover, accent, kinds, mature, tip, explicit }
                     .sign(key)
             };
             if self.cfg.private && !self.direct.lock().unwrap().contains(&id) {
@@ -818,6 +819,11 @@ impl Inner {
         let refused = self.refused();
         let now = now_ms();
         let kept_art_only = self.cfg.dir.join("art-kept-only").exists();
+        // Explicit stations stay out of the Log and off the dial until the listener asks for them.
+        let prefs = std::fs::read(self.cfg.dir.join("prefs.json")).ok().and_then(|b| serde_json::from_slice::<Value>(&b).ok()).unwrap_or(Value::Null);
+        let show_explicit = prefs["show_explicit"] == json!(true);
+        let hide_mature = prefs["hide_mature"] == json!(true);
+        let own: std::collections::HashSet<StationId> = self.store.lock().unwrap().own().into_iter().collect();
         let banners: HashMap<StationId, String> = {
             let s = self.store.lock().unwrap();
             s.logs.iter().filter_map(|(id, a)| Some((*id, hex(&a.art()?.1?.hash)))).collect()
@@ -837,11 +843,14 @@ impl Inner {
                 if is_marooned && !marooned_too {
                     return None;
                 }
+                if !own.contains(id) && ((a.explicit && !show_explicit) || (hide_mature && (a.mature || a.explicit))) {
+                    return None;
+                }
                 let is_kept = kept.contains(&hex);
                 let show = !is_marooned && (is_kept || !kept_art_only);
                 let accent = a.accent.map(|c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]));
                 Some((aboard + if is_kept { 1 << 40 } else { 0 }, json!({
-                    "kinds": a.kinds, "mature": a.mature, "tip": a.tip,
+                    "kinds": a.kinds, "mature": a.mature, "explicit": a.explicit, "tip": a.tip,
                     "cover": a.cover.filter(|_| show).map(|h| crate::hex(&h)),
                     "banner": banners.get(id).filter(|_| show),
                     "accent": accent,
@@ -1382,7 +1391,13 @@ impl Node {
             "details_set" => {
                 let st = station()?;
                 let kinds: Vec<String> = req["kinds"].as_array().into_iter().flatten().filter_map(|k| k.as_str().map(|s| s.to_lowercase())).take(5).collect();
-                inner.store.lock().unwrap().write(st, now_ms(), Body::Details { kinds, mature: req["mature"].as_bool().unwrap_or(false) })?;
+                let mut s = inner.store.lock().unwrap();
+                s.write(st, now_ms(), Body::Details { kinds, mature: req["mature"].as_bool().unwrap_or(false) })?;
+                if let Some(explicit) = req["explicit"].as_bool() {
+                    if s.logs.get(&st).map(|a| a.explicit()) != Some(explicit) {
+                        s.write(st, now_ms(), Body::Rating { explicit })?;
+                    }
+                }
                 Ok(json!({ "ok": true }))
             }
             "colours_set" => {
@@ -1412,7 +1427,7 @@ impl Node {
                     Some(Body::Colours { port, tip, .. }) => (port.clone(), tip.clone()),
                     _ => (None, None),
                 };
-                Ok(json!({ "kinds": kinds, "mature": mature, "port": port, "tip": tip }))
+                Ok(json!({ "kinds": kinds, "mature": mature, "explicit": a.explicit(), "port": port, "tip": tip }))
             }
             "schedule" => {
                 let st = station()?;

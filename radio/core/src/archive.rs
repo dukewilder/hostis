@@ -84,6 +84,9 @@ pub enum Body {
     /// What kind of station this is, for the Log's filters, and whether it calls itself mature.
     /// The station's own word: nobody else can set it. The latest one rules.
     Details { kinds: Vec<String>, mature: bool },
+    /// Whether the station calls itself explicit: sexual or graphic material, a step past
+    /// mature. The station's own word. Listeners see explicit stations only if they choose to.
+    Rating { explicit: bool },
     /// An entry from a later version of the app. Kept and passed on exactly as it came, so
     /// old and new nodes share one log; this version does nothing with it.
     ///
@@ -361,6 +364,14 @@ impl Archive {
             Body::Rota(r) => Some(r.clone()),
             _ => None,
         }).unwrap_or_default()
+    }
+
+    /// Whether the station calls itself explicit. The latest word rules.
+    pub fn explicit(&self) -> bool {
+        self.entries.iter().rev().find_map(|e| match e.entry.body() {
+            Body::Rating { explicit } => Some(*explicit),
+            _ => None,
+        }).unwrap_or(false)
     }
 
     /// The station's own word on what it is, if it has said.

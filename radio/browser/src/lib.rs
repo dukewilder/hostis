@@ -463,7 +463,7 @@ impl Ship {
                 Some((aboard, json!({
                     "id": id.to_hex(), "call_sign": id.call_sign(), "name": a.name, "about": a.about,
                     "port": a.port, "live": a.live, "aboard": aboard, "since": a.since,
-                    "kinds": a.kinds, "mature": a.mature, "tip": a.tip,
+                    "kinds": a.kinds, "mature": a.mature, "explicit": a.explicit, "tip": a.tip,
                     "cover": a.cover.map(|h| hex(&h)), "banner": banners.get(id), "accent": accent,
                     "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),
                 })))

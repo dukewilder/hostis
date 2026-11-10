@@ -9,6 +9,8 @@ head = head.replace('href="/brand/mark.png"', 'href="mark.png"').replace("<title
 extra = """
 .tools{margin-top:.6rem}button.small{font-size:.62rem;padding:.55rem 1rem;margin:.5rem .3rem 0;border-color:var(--bone-ghost);color:var(--bone-faint)}
 .signal{font-family:var(--mono);font-size:.62rem;color:var(--bone-ghost);margin-top:1.1rem;letter-spacing:.08em}
+.switches{display:flex;flex-direction:column;gap:.55rem;margin:0 0 1.1rem;font-family:var(--mono);font-size:.72rem;color:var(--bone-dim)}
+.switches input{accent-color:#ede4ce;margin-right:.6rem;vertical-align:middle}
 textarea{width:100%;min-height:9rem;background:var(--panel);color:var(--bone-dim);border:.5px solid var(--bone-ghost);font-family:var(--mono);font-size:.7rem;padding:.7rem;margin-top:1rem}
 """
 body = open(f"{R}/browser/body.html", encoding="utf-8").read()
