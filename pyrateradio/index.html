@@ -266,7 +266,8 @@ section{padding:44px 0 8px}
 .desk a{display:block;padding:.9rem .8rem;border:1px solid var(--line);background:var(--panel);text-align:center;color:var(--ink);transition:border-color .18s,background .18s}
 .desk a+a{margin-left:-1px}.desk a:hover{border-color:var(--red);background:rgba(197,40,40,.055);position:relative}
 .desk b{display:block;font:400 1.05rem var(--sc);letter-spacing:.05em;font-weight:400}.desk small{display:block;font:400 .6rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-top:.3rem}
-.desk-sums{font:400 .62rem var(--mono);color:var(--faint);word-break:break-all;text-align:center;margin:.6rem 0 1.2rem;line-height:1.8}
+.desk-sums{font:400 .62rem var(--mono);color:var(--faint);word-break:break-all;text-align:center;margin:.6rem 0 1.2rem;line-height:1.8}.desk-sums a{white-space:nowrap;border-bottom:1px solid var(--faint)}
+.desk+.desk-sums+.note{margin-bottom:2rem}
 @media (max-width:560px){.desk{grid-template-columns:1fr}.desk a+a{margin:-1px 0 0}}
 .sums{font:400 .7rem var(--mono);letter-spacing:.06em;color:var(--faint);word-break:break-all;text-align:center;margin:1.1rem 0}
 .getset{display:flex;flex-direction:column;gap:0;margin:0 auto 1.2rem;max-width:560px}
@@ -305,7 +306,7 @@ html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doo
 // A station link: hostis.black/pyrateradio/#<station id>. One of HOSTIS's own plays here, in
 // the browser or the app. Anything else (another station, an invitation, a flock) goes straight
 // on to the open player before this page reads it: the part after the # never reaches a server.
-(function(){var H=["f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"],P=["https://bafybeih3pkaeapdddazpva5kt5nspl2gla3dm7duojqwdk4olc3cnol7qu.ipfs.dweb.link/", "https://bafybeih3pkaeapdddazpva5kt5nspl2gla3dm7duojqwdk4olc3cnol7qu.ipfs.w3s.link/", "https://ipfs.io/ipfs/bafybeih3pkaeapdddazpva5kt5nspl2gla3dm7duojqwdk4olc3cnol7qu/"],h=(location.hash||'').toLowerCase(),id=h.slice(1);
+(function(){var H=["f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"],P=["https://bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm.ipfs.dweb.link/", "https://bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm.ipfs.w3s.link/", "https://ipfs.io/ipfs/bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm/"],h=(location.hash||'').toLowerCase(),id=h.slice(1);
 if(/pocket=|flock=/.test(h)||(/^[0-9a-f]{64}$/.test(id)&&H.indexOf(id)<0)){history.replaceState(null,'',location.pathname);
 document.documentElement.className+=' leaving';var go=function(u){location.replace(u+h)},done=0;
 P.forEach(function(u){fetch(u+'favicon.png',{mode:'no-cors',cache:'no-store'}).then(function(){if(!done++)go(u)},function(){})});
@@ -314,7 +315,7 @@ if(!/^[0-9a-f]{64}$/.test(id))return;var b=document.getElementById('passed');
 var app=/Android/.test(navigator.userAgent)?' <a href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url='+encodeURIComponent(new URL('listen/#'+id,location.href).href)+';end">Open in the app</a>':'';
 document.getElementById('radio').src='listen/?embed#'+id;
 b.innerHTML='Someone passed you a HOSTIS station. It is on the dial below.'+(app?'<br>'+app:'');b.hidden=false})();
-document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://bafybeih3pkaeapdddazpva5kt5nspl2gla3dm7duojqwdk4olc3cnol7qu.ipfs.dweb.link/", "https://bafybeih3pkaeapdddazpva5kt5nspl2gla3dm7duojqwdk4olc3cnol7qu.ipfs.w3s.link/", "https://ipfs.io/ipfs/bafybeih3pkaeapdddazpva5kt5nspl2gla3dm7duojqwdk4olc3cnol7qu/"][0]});
+document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm.ipfs.dweb.link/", "https://bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm.ipfs.w3s.link/", "https://ipfs.io/ipfs/bafybeibb4qgwbyhk7zikwhiicfjgkuo34wnar75x6hj66e4chbujkgjasm/"][0]});
 </script>
 
 <nav class="doors">
@@ -355,11 +356,11 @@ document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://baf
 </div>
 <p class="sums">sha-256 3c988ee6b950646937ac7cea70ef83ef66866241fc97500041c86fb9eb47ea60</p>
 <h3 class="small">On a computer</h3>
-<div class="desk"><a href="pyrate-radio-0.8.5-windows.zip"><b>Windows</b><small>10 and 11 · zip</small></a><a href="pyrate-radio-0.8.5-macos.zip"><b>Mac</b><small>Apple and Intel · zip</small></a><a href="pyrate-radio-0.8.5-linux-x64.tar.gz"><b>Linux</b><small>x86-64 · tar.gz</small></a></div>
-<p class="desk-sums">windows 364c88be723e7d5d1e8eebe519b672bcf93b7489248a856e034f6389eb7bc889 · <a href="pyrate-radio-0.8.5-windows.zip.torrent">torrent</a><br>mac 2095e3cf749dd983de6c83d0efed1de99830dbcff36a7d16d4c99a02cb6fc028 · <a href="pyrate-radio-0.8.5-macos.zip.torrent">torrent</a><br>linux 643726a19aed36209e9431814a93c859b4b236d502efaf81f7f4bd13edd49b94 · <a href="pyrate-radio-0.8.5-linux-x64.tar.gz.torrent">torrent</a></p>
-<p class="note">Version 0.8.5, built from the public source by GitHub's machines. On a Mac, open it the first time with a right-click and Open: it is signed by nobody. Computers take new versions from this page.</p>
+<div class="desk"><a href="pyrate-radio-0.8.6-windows.zip"><b>Windows</b><small>10 and 11 · zip</small></a><a href="pyrate-radio-0.8.6-macos.zip"><b>Mac</b><small>Apple and Intel · zip</small></a><a href="pyrate-radio-0.8.6-linux-x64.tar.gz"><b>Linux</b><small>x86-64 · tar.gz</small></a></div>
+<p class="desk-sums">windows 36138dfb0b43ff2db4bce3bc8b1d0f0e5fc60037046080aa5fda9266c4e61c3d · <a href="pyrate-radio-0.8.6-windows.zip.torrent">torrent</a><br>mac e30e64105f7e3288e71b0bc6f6616dbee14db756f42827751dc4ecb0ea96b933 · <a href="pyrate-radio-0.8.6-macos.zip.torrent">torrent</a><br>linux 6cd08bcfce6fdf813133f40f700d99aaa20ef670713b1e8a2dc68e238046a7a8 · <a href="pyrate-radio-0.8.6-linux-x64.tar.gz.torrent">torrent</a></p>
+<p class="note">Version 0.8.6, built from the public source by GitHub's machines. On a Mac, open it the first time with a right-click and Open: it is signed by nobody. Computers take new versions from this page.</p>
 <div class="prose">
-<p>The browser plays on iPhone, iPad, Windows, Mac and Linux, for listening only. The same app file travels by BitTorrent with no website needed, and anyone who has the app can pass it on, phone to phone, from Colours. The source is Rust and Flutter, CC0: build it yourself and compare.</p>
+<p>The open player runs in any browser, on iPhone and iPad too, and listens, raises stations and goes live with nothing installed. The same app file travels by BitTorrent with no website needed, and anyone who has the app can pass it on, phone to phone, from Colours. The source is Rust and Flutter, CC0: build it yourself and compare.</p>
 <p>Check what you install against the checksum above. Once signing begins, every release will carry HOSTIS's signature, and the app takes an update only when two of the three release keys have signed it.</p>
 </div>
 <h3 class="small">On stock Android</h3>
@@ -411,6 +412,8 @@ document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://baf
 
 <details class="fold"><summary>Is it free?</summary><div>Yes, and it stays free. Nothing is sold in it, to you or about you. A station can show a tip address, and a tip goes straight from the listener's wallet to the station.</div></details>
 <details class="fold"><summary>Do I need an account?</summary><div>No. Open it and listen, in the app or in the browser. Nobody asks for a name, an email or a phone number. A station is its key, and the key lives on the phone that made it.</div></details>
+<details class="fold"><summary>Can I broadcast without installing anything?</summary><div>Yes. Open the <a class="openlink" href="listen/">open player</a> in any browser, name a station under Raise Colours, write down its twenty-four words, and drop recordings in or go live from the microphone. The tab sends them out along a stem of other nodes, so no listener can trace them to it, and once a carrier holds them they play whether or not the tab stays open. For the most cover, do it from Tor Browser.</div></details>
+<details class="fold"><summary>Is there an app for my computer?</summary><div>Yes, for Windows, Mac and Linux, under <a href="#set">Take the set</a>. It is the same app as on Android: it listens, raises stations, goes live and, left running on a computer, carries stations for the fleet.</div></details>
 <details class="fold"><summary>Does it work on iPhone?</summary><div>Yes, in the browser, listening and broadcasting both. Open the <a class="openlink" href="listen/">open player</a> in Safari, and add it to your home screen to open it like an app. It plays every station, raises stations of your own and goes live from the microphone. The app adds listening with the screen off, and runs on Android and on computers.</div></details>
 <details class="fold"><summary>How can it run with no server?</summary><div>Every phone with the app and every open Listen page is a node. Nodes keep the Log of stations between them by gossip, check every card and entry against the station's key, and fetch six-second chunks of sound from whoever carries them. Relays help nodes that cannot reach each other directly. A relay passes sealed traffic it cannot read, and anyone can run one.</div></details>
 <details class="fold"><summary>If my phone carries other stations, can I see what they are?</summary><div>No, and that is the point. The stations your phone carries for others sit on it sealed, by fingerprint, without the key to open them. Your phone hands on sealed bytes it cannot read, the way a relay does. It plays in the clear only the stations whose keys you hold, the ones you made or took aboard yourself.</div></details>

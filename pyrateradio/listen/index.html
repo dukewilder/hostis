@@ -486,6 +486,7 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 .st-live{display:flex;align-items:center;justify-content:center;gap:1rem;margin:0 0 .6rem}
 .st-live .power .glyph{color:var(--redup)}.st-live .power.on{border-color:var(--redup);background:rgba(237,85,85,.12)}
 .st-livetime{font:400 .8rem var(--mono);letter-spacing:.14em;color:var(--redup);font-variant-numeric:tabular-nums}
+.tag{display:inline-block;margin-left:.55rem;padding:0 .35rem;border:1px solid var(--ghost);font:400 .55rem var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim);vertical-align:.2em}.tag.lv{border-color:var(--redup);color:var(--redup)}
 </style>
 <script>if(/[?&]embed/.test(location.search))document.documentElement.classList.add('embed')</script>
 </head>
@@ -539,6 +540,7 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 <audio id="a" playsinline></audio>
 </section>
 
+<p id="sharednote" class="appnote" hidden>This gateway shares one address with every page it serves, so this tab keeps nothing past the visit. <a id="sharedgo" href="#">Open the player at its own address</a></p>
 <p id="appnote" class="appnote" hidden>Pyrate Radio on this phone? <a id="appopen" href="#">Open this station in the app</a></p>
 <p class="takeset open-only"><a href="../#set"><span class="ts-lead">Take the set</span><span class="ts-sub">the app for android &#183; plays with the screen off &#183; raise your own station</span></a></p>
 <div class="divider"><span class="divider-glyph"></span></div>
@@ -634,6 +636,6 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 <p class="f-copy">no rights reserved &#183; all copies welcome</p>
 <p class="f-source"><a href="https://github.com/dukewilder/hostis" target="_blank" rel="noopener noreferrer">source code</a></p>
 </footer>
-<script type="module" src="app.js?v=7e3b409561"></script>
+<script type="module" src="app.js?v=45393d6111"></script>
 </body>
 </html>
