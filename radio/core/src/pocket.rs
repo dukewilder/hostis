@@ -49,16 +49,7 @@ pub fn open(key: &[u8; 32], sealed: &[u8]) -> Option<Vec<u8>> {
     cipher(key).decrypt(Nonce::from_slice(&sealed[..12]), &sealed[12..]).ok()
 }
 
-fn unhex32(s: &str) -> Option<[u8; 32]> {
-    if s.len() != 64 {
-        return None;
-    }
-    let mut out = [0u8; 32];
-    for (i, b) in out.iter_mut().enumerate() {
-        *b = u8::from_str_radix(s.get(i * 2..i * 2 + 2)?, 16).ok()?;
-    }
-    Some(out)
-}
+use crate::unhex32;
 
 /// An invitation: hostis.black/pyrateradio/listen/#pocket=<station>.<key>.<host>@<relay>.
 /// The part after # never leaves the browser or the phone it is opened on.

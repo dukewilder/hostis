@@ -120,12 +120,7 @@ impl Inner {
 }
 
 fn unhex_n<const N: usize>(s: &str) -> Result<[u8; N]> {
-    if s.len() != N * 2 {
-        anyhow::bail!("bad code");
-    }
     let mut out = [0u8; N];
-    for (i, b) in out.iter_mut().enumerate() {
-        *b = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)?;
-    }
+    pyrate_core::unhex_into(s, &mut out).ok_or_else(|| anyhow!("bad code"))?;
     Ok(out)
 }

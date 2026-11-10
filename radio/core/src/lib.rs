@@ -33,6 +33,27 @@ pub use keys::{StationId, StationKey};
 /// A BLAKE3 hash. The same hash iroh-blobs uses, so chunks are blobs as they stand.
 pub type Hash = [u8; 32];
 
+/// Strict hex into `out`: exactly two hex digits a byte and nothing else (no sign, no space).
+/// Reads bytes, never slices the string, so no input can make it panic.
+pub fn unhex_into(s: &str, out: &mut [u8]) -> Option<()> {
+    let b = s.as_bytes();
+    if b.len() != out.len() * 2 {
+        return None;
+    }
+    let d = |c: u8| (c as char).to_digit(16).map(|v| v as u8);
+    for (i, o) in out.iter_mut().enumerate() {
+        *o = d(b[2 * i])? << 4 | d(b[2 * i + 1])?;
+    }
+    Some(())
+}
+
+/// Strict hex of 32 bytes: an id, a key or a hash.
+pub fn unhex32(s: &str) -> Option<[u8; 32]> {
+    let mut out = [0u8; 32];
+    unhex_into(s, &mut out)?;
+    Some(out)
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("bad word phrase: {0}")]
@@ -69,3 +90,17 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn hex_is_strict_and_never_panics() {
+        assert_eq!(super::unhex32(&"ab".repeat(32)), Some([0xab; 32]));
+        assert_eq!(super::unhex32(&"AB".repeat(32)), Some([0xab; 32]));
+        // 64 bytes with a two-byte character in them: sliced by string, this panicked.
+        assert_eq!(super::unhex32(&("é".to_string() + &"a".repeat(62))), None);
+        assert_eq!(super::unhex32(&("+f".to_string() + &"a".repeat(62))), None);
+        assert_eq!(super::unhex32("abc"), None);
+        assert!(crate::StationId::from_hex(&"éé".repeat(16)).is_err());
+    }
+}

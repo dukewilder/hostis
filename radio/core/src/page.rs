@@ -25,14 +25,7 @@ pub fn hex(b: &[u8]) -> String {
 }
 
 pub fn unhex(s: &str) -> Result<[u8; 32]> {
-    if s.len() != 64 || !s.is_ascii() {
-        return bad("not a 64-character hex string");
-    }
-    let mut out = [0u8; 32];
-    for (i, b) in out.iter_mut().enumerate() {
-        *b = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).map_err(|_| Bad("not hex".into()))?;
-    }
-    Ok(out)
+    crate::unhex32(s).ok_or_else(|| Bad("not a 64-character hex string".into()))
 }
 
 /// A track's title and who it is by, from its entry hash. Empty if the log has no such track.
