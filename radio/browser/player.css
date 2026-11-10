@@ -256,3 +256,4 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 .st-live{display:flex;align-items:center;justify-content:center;gap:1rem;margin:0 0 .6rem}
 .st-live .power .glyph{color:var(--redup)}.st-live .power.on{border-color:var(--redup);background:rgba(237,85,85,.12)}
 .st-livetime{font:400 .8rem var(--mono);letter-spacing:.14em;color:var(--redup);font-variant-numeric:tabular-nums}
+.tag{display:inline-block;margin-left:.55rem;padding:0 .35rem;border:1px solid var(--ghost);font:400 .55rem var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim);vertical-align:.2em}.tag.lv{border-color:var(--redup);color:var(--redup)}

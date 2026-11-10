@@ -479,7 +479,9 @@ function rows() {
     const mini = r.querySelector('.mini');
     flag(mini, s.id, s.live);
     if (s.cover) { mini.classList.add('pic'); if (lazy) lazy.observe(r); else pic(s.id, s.cover).then(u => { if (u) mini.innerHTML = '<img alt="" src="' + u + '">' }) }
-    r.querySelector('.name').textContent = s.name + (s.live ? '  ON AIR' : '') + (s.pocket ? '  PRIVATE' : '') + (s.explicit ? '  EXPLICIT' : s.mature ? '  MATURE' : '');
+    const nm = r.querySelector('.name'); nm.textContent = s.name;
+    // What a station says of itself, as hairline tags: the open air in bright red, the rest in bone.
+    for (const [t, c] of [[s.live && 'On air', 'lv'], [s.pocket && 'Private', ''], [s.explicit ? 'Explicit' : s.mature && 'Mature', '']]) if (t) { const g = document.createElement('span'); g.className = 'tag ' + c; g.textContent = t; nm.append(g) }
     r.querySelector('.cs').textContent = s.call_sign; r.querySelector('.about').textContent = s.about || '';
     r.querySelector('.count').innerHTML = s.aboard + '<small>ABOARD</small><span class="fq">' + fq(s.id).toFixed(1) + '</span>';
     r.classList.toggle('on', cur?.id === s.id);

@@ -23,11 +23,16 @@ cp -r "$R/landing/out/listen" pyrateradio/listen
 # with the list of every open player ever published, for pinners (tools/pin_player.sh).
 CID=$(python3 -c "import json;print(json.load(open('$R/browser/www/open.json'))['cid'])")
 mkdir -p pyrateradio/ipfs
-cp "$R/browser/www/open.car" "pyrateradio/ipfs/$CID.car"
 touch pyrateradio/ipfs/players.txt
-grep -qx "$CID" pyrateradio/ipfs/players.txt || echo "$CID" >> pyrateradio/ipfs/players.txt
-ls -t pyrateradio/ipfs/*.car | tail -n +13 | xargs -r git rm -q --cached --ignore-unmatch
-ls -t pyrateradio/ipfs/*.car | tail -n +13 | xargs -r rm -f
+# The player this build names, and the one the app's own links name, if it differs.
+APPCID=$(head -1 "$R/app/assets/open_players.txt" | sed -n 's,^https://\(bafy[a-z2-7]*\)\..*,\1,p')
+for c in $APPCID $CID; do
+  [ -f "$R/browser/www/cars/$c.car" ] || continue
+  cp "$R/browser/www/cars/$c.car" "pyrateradio/ipfs/$c.car"
+  grep -qx "$c" pyrateradio/ipfs/players.txt || echo "$c" >> pyrateradio/ipfs/players.txt
+done
+ls -t pyrateradio/ipfs/*.car | tail -n +25 | xargs -r git rm -q --cached --ignore-unmatch
+ls -t pyrateradio/ipfs/*.car | tail -n +25 | xargs -r rm -f
 cp "$R/tools/pin_player.sh" pyrateradio/ipfs/pin_player.sh
 git add -A pyrateradio
 git commit -q -m "pyrateradio: $1 (radio $H)

@@ -65,7 +65,7 @@ Rust workspace (`radio/Cargo.toml`, members core, node, ffi, spike, browser; edi
 - `ffi/src/lib.rs` the C FFI the app calls.
 - `browser/src/lib.rs` the wasm node. Built by `browser/build.sh` into `browser/www/pkg`, pages assembled by `browser/build.py` into `browser/www/dist`.
 
-App (Flutter, `app/`): `lib/main.dart` (shell, tuner, drawer Lantern), `lib/station.dart` (station page, programme and show editors, creation, posters, chart, chatter, flock, invite sheet, voice kit), `lib/more.dart` (the Log, tips), `lib/art.dart`, `lib/native.dart` (FFI bridge). Android Kotlin in `app/android/.../`: `MainActivity.kt`, `Native.kt`, `Ship.kt`, `PlaybackService.kt`, `LanternService.kt` (drawer Lantern), `Bells.kt`, `Voice.kt` (TTS idents). Version in `app/pubspec.yaml` only (the app reads its build code from the installed package), now 0.8.5+18.
+App (Flutter, `app/`): `lib/main.dart` (shell, tuner, drawer Lantern), `lib/station.dart` (station page, programme and show editors, creation, posters, chart, chatter, flock, invite sheet, voice kit), `lib/more.dart` (the Log, tips), `lib/art.dart`, `lib/native.dart` (FFI bridge). Android Kotlin in `app/android/.../`: `MainActivity.kt`, `Native.kt`, `Ship.kt`, `PlaybackService.kt`, `LanternService.kt` (drawer Lantern), `Bells.kt`, `Voice.kt` (TTS idents). Version in `app/pubspec.yaml` only (the app reads its build code from the installed package), now 0.8.6+19.
 
 Browser player JS/CSS: `browser/www/app.js` (the radio set, station page, chatter, hail, tips, flock, pockets, harbour memory), `browser/body.html`, `browser/player.css`, `browser/harbour.json` (HOSTIS's own stations for the landing set).
 
@@ -112,12 +112,14 @@ Also weigh new features or improvements that would strengthen either track while
 Known now:
 - Generate the signing keys on his PC with `pyrate-keys.exe` and send `release_keys.txt` and the Android cert; the release and Android signing keys never enter this workspace.
 - Test on real devices: a flock of several phones, the drawer Lantern over days (and after a reboot), iPhone and iPad lock-screen playback through a phone call, the playback service from the lock screen and the car (its threading is new in 0.8.4 and has only been built, never run), a bell, and SCUTTLE on a phone you can spare.
+- Try the computers' builds on hostis.black/pyrateradio: the Windows zip on his PC (run pyrate.exe), and the Mac zip if a Mac is to hand (right-click, Open). They were built in CI and have only been run on Linux here.
+- Send back the `k51…` name of the open player's IPNS key once dukewilder makes it (step 6 of `tools/dukewilder-rebuild.md`); the links then use it, and a browser keeps its settings and stations across releases.
 - Pin the open player on IPFS from dukewilder (step 6 of `tools/dukewilder-rebuild.md`: a kubo container inside gluetun and an hourly `pin_player.sh`). Until a node pins it, links to other stations open a gateway that cannot find the player. Anyone with an IPFS node can run the same script.
 - Run the two-identity dukewilder rebuild in `tools/dukewilder-rebuild.md` (harbour plus dark hold plus Tor, all inside gluetun), and send back the logs.
 - Send DNS screenshots, and `station.jpg` / `banner.jpg` if still wanted.
 - Approve any change to the hostis.black front page, including a link to the radio.
 - Approved by Dylan on 10 November: one file at the root of hostis.black, `/.well-known/assetlinks.json`, goes up as soon as the Android cert arrives, so a scanned poster or a shared link opens the app rather than the browser. It names only the app and its signing certificate's fingerprint. Once the Android cert is here, `tools/assetlinks.py android-cert.der` writes it; the app already asks Android to verify (P31).
-- Sign each APK with the Android key on his PC (`release sign-apk android-key.txt android-cert.der <apk> "Pyrate Radio.apk"`). The debug key that signed 0.8.0 went with an earlier container, so no build from here can install over it: the first build he signs needs one uninstall of 0.8.0. Before that, write down each station's 24 words and copy any pocket invitations, since uninstalling clears the phone's deputy key and pockets. Every build after installs as an update. 0.8.5 (build 18) is the first to sign; the 0.8.1 to 0.8.4 builds sent earlier can be thrown away.
+- Sign each APK with the Android key on his PC (`release sign-apk android-key.txt android-cert.der <apk> "Pyrate Radio.apk"`). The debug key that signed 0.8.0 went with an earlier container, so no build from here can install over it: the first build he signs needs one uninstall of 0.8.0. Before that, write down each station's 24 words and copy any pocket invitations, since uninstalling clears the phone's deputy key and pockets. Every build after installs as an update. 0.8.6 (build 19) is the first to sign; the 0.8.1 to 0.8.5 builds sent earlier can be thrown away.
 
 ## 9. Standing constraints (hard rules)
 
