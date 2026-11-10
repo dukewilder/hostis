@@ -143,3 +143,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - The clock crosses a week of short recordings in a few steps, so a station of jingles plays to the end of Sunday and every listener's clock does less work.
 - The hour the clocks repeat in autumn neither rewinds a daily or weekly tape nor cuts a slot short, and the page lists slots as they air.
 - The watch bill and the page's next shows list what really airs, cut where a slot, a show or the end of the hours takes over, so a bell rings when its show begins.
+- A premiere of a recording added moments before airs, and a show with nothing to play is not promised on the page.
