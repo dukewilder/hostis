@@ -434,11 +434,14 @@ mod tests {
 
 const WORDMARK: &[u8] = include_bytes!("web/wordmark.png");
 const MARK: &[u8] = include_bytes!("web/mark.png");
+// The HOSTIS skull, the icon every HOSTIS page wears. The two older marks stay for pages cached before it.
+const SKULL: &[u8] = include_bytes!("web/skull.png");
 
 async fn brand(Path(name): Path<String>) -> Response {
     let body = match name.as_str() {
         "wordmark.png" => WORDMARK,
         "mark.png" => MARK,
+        "skull.png" => SKULL,
         _ => return StatusCode::NOT_FOUND.into_response(),
     };
     ([(header::CONTENT_TYPE, "image/png"), (header::CACHE_CONTROL, "public, max-age=86400")], body).into_response()

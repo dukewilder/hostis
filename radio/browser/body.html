@@ -1,19 +1,22 @@
-<div class="grain" aria-hidden="true"></div>
-<header class="top">
-<a class="home" href="../"><img src="wordmark.png" alt="Pyrate Radio"></a>
-<div id="signal" class="signal"></div><button id="flockleave" class="small" hidden>Leave the flock</button>
+<a class="skip-link" href="#set">Skip to the radio</a>
+<nav class="flagbar" aria-label="HOSTIS"><a class="fb-mark" href="https://hostis.black/"><span class="sk" aria-hidden="true">&#9760;&#xFE0E;</span>HOSTIS</a></nav>
+<header class="masthead top">
+<p class="mh-title"><a href="../">Pyrate Radio</a></p>
+<p class="mh-sub">every station on the Log &#183; played in this tab, from whoever carries it</p>
+<p class="signalrow"><span id="signal" class="signal" role="status"></span><button id="flockleave" class="btn quiet" hidden>Leave the flock</button></p>
 </header>
 
-<section class="set" aria-label="The radio">
+<section class="set" id="set" aria-label="The radio" tabindex="-1">
 <div id="banner" class="banner"></div>
+<div class="plate" aria-hidden="true"><span>Receiver</span><span class="band">88 to 108</span><span>Under HOSTIS colours</span></div>
 <div class="face">
 <div class="art"><img id="cover" class="cover" alt="" hidden><div id="flag" class="flag"></div></div>
 <div class="tell">
-<div class="lamps"><span id="lamp" class="lamp" title="Lit when the station is broadcasting live"></span><span id="air" class="airword">On air</span><span id="rx" class="rx" title="Lit while sound is arriving"></span></div>
+<div class="lamps"><span id="lamp" class="lamp" title="Lit when the station is broadcasting live"></span><span id="air" class="airword">On air</span><span class="sep"></span><span id="rx" class="rx" title="Lit while sound is arriving"></span><span class="rxword">Signal</span></div>
 <h1 id="name">Searching the Log</h1>
 <div class="ident"><span id="freq" class="freq"></span><span id="cs" class="cs"></span></div>
 <div id="slot" class="slot"></div>
-<div id="np" class="np"></div>
+<div id="np" class="np" aria-live="polite"></div>
 <div id="by" class="by"></div>
 <div class="prog"><div id="prog"></div></div>
 <div id="time" class="time"></div>
@@ -27,62 +30,68 @@
 <div class="controls">
 <button id="go" class="power" hidden><span class="glyph">▶︎</span><span class="lbl">Listen</span></button>
 <div class="buttons">
-<button id="spin" class="plain">Spin the dial</button>
-<button id="pass" class="plain" hidden>Pass it on</button>
-<button id="clip" class="plain" hidden>Clip it</button>
-<button id="tip" class="plain" hidden>Tip</button>
-<button id="maroon" class="plain quiet" hidden>Maroon</button>
+<button id="spin" class="btn">Spin the dial</button>
+<button id="pass" class="btn" hidden>Pass it on</button>
+<button id="clip" class="btn" hidden>Clip it</button>
+<button id="tip" class="btn" hidden>Tip</button>
+<button id="maroon" class="btn quiet" hidden>Maroon</button>
 </div>
 <svg class="vu" viewBox="0 0 120 70" aria-hidden="true"><path class="arc" d="M14 62 A50 50 0 0 1 106 62"/><path class="hot" d="M88 27 A50 50 0 0 1 106 62"/><g class="ticks" id="ticks"></g><line id="vun" class="vun" x1="60" y1="64" x2="60" y2="18"/><circle cx="60" cy="64" r="3.5" class="hub"/><text x="60" y="58" class="vulabel">VU</text></svg>
 </div>
-<div id="passbox" class="passbox" hidden><div class="qr" id="qr"></div><div class="passtext"><p>Scan it with a phone camera and the station plays a tap later, in the browser or the app. No account, no store.</p><p class="link" id="plink"></p><button id="pcopy" class="plain">Copy the link</button><button id="pshare" class="plain">Share</button><button id="pclose" class="plain quiet">Close</button></div></div>
-<div id="clipbox" class="passbox" hidden><video id="clipv" playsinline controls></video><div class="passtext"><p>Twenty seconds of what is on, with the station's name, its place on the dial and a code to scan. Post it anywhere.</p><a id="clipsave" class="plain" download>Save the clip</a> <button id="clipshare" class="plain">Share</button> <button id="clipclose" class="plain quiet">Close</button></div></div>
-<div id="tipbox" class="passbox" hidden><div class="passtext"><p>A tip goes from your own wallet straight to the station. Pyrate Radio moves no money and sees none of it.</p><p class="link" id="tipaddr"></p><input id="tipnote" maxlength="140" placeholder="A note for the keeper" aria-label="A note for the keeper"><p class="fine" id="tiphow"></p><a id="tipgo" class="plain">Open my wallet</a> <button id="tipcopy" class="plain">Copy the address</button> <button id="tipclose" class="plain quiet">Close</button></div></div>
+<div id="passbox" class="passbox" hidden><div class="qr" id="qr"></div><div class="passtext"><p class="boxhead">Pass it on</p><p>Scan it with a phone camera and the station plays a tap later, in the browser or the app. No account, no store.</p><p class="link" id="plink"></p><div class="row-btns"><button id="pcopy" class="btn">Copy the link</button><button id="pshare" class="btn">Share</button><button id="pclose" class="btn quiet">Close</button></div></div></div>
+<div id="clipbox" class="passbox" hidden><video id="clipv" playsinline controls></video><div class="passtext"><p class="boxhead">Clip it</p><p>Twenty seconds of what is on, with the station's name, its place on the dial and a code to scan. Post it anywhere.</p><div class="row-btns"><a id="clipsave" class="btn" download>Save the clip</a><button id="clipshare" class="btn">Share</button><button id="clipclose" class="btn quiet">Close</button></div></div></div>
+<div id="tipbox" class="passbox" hidden><div class="passtext"><p class="boxhead">Tip the station</p><p>A tip goes from your own wallet straight to the station. Pyrate Radio moves no money and sees none of it.</p><p class="link" id="tipaddr"></p><input id="tipnote" maxlength="140" placeholder="A note for the keeper" aria-label="A note for the keeper"><p class="fine" id="tiphow"></p><div class="row-btns"><a id="tipgo" class="btn">Open my wallet</a><button id="tipcopy" class="btn">Copy the address</button><button id="tipclose" class="btn quiet">Close</button></div></div></div>
 <audio id="a" playsinline></audio>
 </section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
 
 <div class="below">
 <section class="page" id="page" hidden>
 <div id="notices"></div>
-<h2>Chatter</h2>
-<div id="chatjoin"><p class="fine">Talk with whoever else is listening, cheer what is on, or ask the station for a recording. Lines are kept by nobody: they pass between the people in the room and are gone. Joining tells the others in the room that you are here, which listening alone never does.</p><button id="chatgo" class="plain">Join the chatter</button></div>
+<div class="sechead"><h2>Chatter</h2><span class="cap">kept by nobody</span></div>
+<div id="chatjoin"><p class="fine">Talk with whoever else is listening, cheer what is on, or ask the station for a recording. Lines pass between the people in the room and are gone. Joining tells the others in the room that you are here, which listening alone never does.</p><p class="centre"><button id="chatgo" class="btn">Join the chatter</button></p></div>
 <div id="chatroom" class="chat" hidden>
 <p id="chatwho" class="fine"></p>
 <div id="lines" class="lines" aria-live="polite"></div>
-<form id="say" class="say"><input id="sayt" maxlength="280" autocomplete="off" placeholder="Say something" aria-label="Say something"><button class="plain" type="submit">Say</button></form>
-<div class="sayrow"><button id="cheer" class="plain">Cheers</button><button id="askfor" class="plain">Ask for a recording</button><button id="hail" class="plain">Hail the keeper</button><button id="chatleave" class="plain">Leave the chatter</button><input id="myname" maxlength="32" placeholder="Your name in the room" aria-label="Your name in the room"></div>
-<div id="askbox" hidden><select id="asktrack" aria-label="A recording"></select><input id="asknote" maxlength="140" placeholder="A word with it, if you like" aria-label="A word with it"><button id="asksend" class="plain">Ask</button></div>
+<form id="say" class="say"><input id="sayt" maxlength="280" autocomplete="off" placeholder="Say something" aria-label="Say something"><button class="btn" type="submit">Say</button></form>
+<div class="sayrow"><button id="cheer" class="btn">Cheers</button><button id="askfor" class="btn">Ask for a recording</button><button id="hail" class="btn">Hail the keeper</button><button id="chatleave" class="btn quiet">Leave</button><input id="myname" maxlength="32" placeholder="Your name in the room" aria-label="Your name in the room"></div>
+<div id="askbox" hidden><select id="asktrack" aria-label="A recording"></select><input id="asknote" maxlength="140" placeholder="A word with it, if you like" aria-label="A word with it"><button id="asksend" class="btn">Ask</button></div>
 </div>
-<h2 id="nexth">Up next</h2>
+<div class="sechead gap"><h2 id="nexth">Up Next</h2><span class="cap">from the station's own log</span></div>
 <div id="next"></div>
-<h2>This week</h2>
+<div class="sechead gap"><h2>This Week</h2><span class="cap">times are yours</span></div>
 <p id="how" class="how"></p><p id="key" class="key" title="The call sign is a name; the key is the station. Two stations can wear the same call sign, never the same key."></p>
 <div id="listings"></div>
-<p class="fine">Worked out in this tab from the station's own log. Times are yours.</p>
+<p class="fine">Worked out in this tab from the station's own log.</p>
 </section>
 
 <section class="log">
-<h2>On the air</h2>
-<p class="fine">Every station this tab has heard of, most aboard first. The tab checks each station's signature and plays from whoever carries it.</p>
-<div class="views"><button id="vlist" class="plain on" aria-pressed="true">The list</button><button id="vchart" class="plain" aria-pressed="false">The chart</button></div>
+<div class="sechead"><h2>On the Air</h2><span class="cap">most aboard first &#183; ranked by nobody</span></div>
+<p class="fine">Every station this tab has heard of. The tab checks each station's signature and plays from whoever carries it.</p>
+<div class="views" role="group" aria-label="How to show the Log"><button id="vlist" class="btn on" aria-pressed="true">The list</button><button id="vchart" class="btn" aria-pressed="false">The chart</button></div>
 <div id="chart" class="chart" hidden></div>
 <div id="rows"></div>
-<h2 class="gap">Take the set</h2>
-<p class="fine">The app plays with the screen off, keeps the stations you love on your phone and raises stations of your own. No store, no account. <a href="../#set">Take the set</a>.</p>
-<h2 class="gap">Your colours</h2>
-<p class="fine">What reaches you is your own choice, and it stays in this browser. A marooned station leaves this browser's Log. Lists of marooned stations pass from hand to hand: paste one in to take it aboard, or copy yours out to share.</p>
+<div class="sechead gap"><h2>Take the Set</h2><span class="cap">android &#183; no store, no account</span></div>
+<p class="fine">The app plays with the screen off, keeps the stations you love on your phone and raises stations of your own.</p>
+<p class="centre"><a class="lead-btn" href="../#set"><span class="fc-lead">Take the set</span><span class="fc-sub">the app for android</span></a></p>
+<div class="sechead gap"><h2>Your Colours</h2><span class="cap">kept in this browser</span></div>
+<p class="fine">What reaches you is your own choice. A marooned station leaves this browser's Log. Lists of marooned stations pass from hand to hand: paste one in to take it aboard, or copy yours out to share.</p>
 <div class="switches">
-<label><input type="checkbox" id="sw-mature"> Hide mature stations</label>
-<label><input type="checkbox" id="sw-explicit"> Show explicit stations</label>
-<label><input type="checkbox" id="sw-art"> Show station art</label>
+<label><input type="checkbox" id="sw-mature"><span>Hide mature stations</span></label>
+<label><input type="checkbox" id="sw-explicit"><span>Show explicit stations</span></label>
+<label><input type="checkbox" id="sw-art"><span>Show station art</span></label>
 </div>
 <p class="fine">Each station says for itself whether it is mature or explicit. A station that lies about it is yours to maroon.</p>
-<button id="mlist" class="plain">Maroon list</button>
-<div id="mbox" hidden><textarea id="mtext" spellcheck="false"></textarea><button id="mtake" class="plain">Take aboard</button><button id="mclear" class="plain">Bring every station back</button><div id="mnote" class="fine"></div></div>
-<h2 class="gap">What this browser keeps</h2>
-<p class="fine">Your switches and marooned stations, the harbours it has met, your name and mutes in the chatter, the secret each room's voice is drawn from, and any pocket invitations you opened. It sends none of this anywhere. The address bar holds the public station you are on, and a pocket's never. Forgetting it all makes this browser a stranger to the radio: a new voice in every room, and no pockets.</p>
-<button id="forget" class="plain">Forget this browser</button>
+<p class="centre"><button id="mlist" class="btn">Maroon list</button></p>
+<div id="mbox" hidden><textarea id="mtext" spellcheck="false" aria-label="The maroon list"></textarea><div class="row-btns"><button id="mtake" class="btn">Take aboard</button><button id="mclear" class="btn quiet">Bring every station back</button></div><div id="mnote" class="fine"></div></div>
+<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your switches and marooned stations, the harbours it has met, your name and mutes in the chatter, the secret each room's voice is drawn from, and any pocket invitations you opened. It sends none of this anywhere. The address bar holds the public station you are on, and a pocket's never.</p><p>Forgetting it all makes this browser a stranger to the radio: a new voice in every room, and no pockets.</p></div></details>
+<p class="centre"><button id="forget" class="btn quiet">Forget this browser</button></p>
 </section>
 </div>
-<footer><a href="../">Pyrate Radio</a> <a href="../#set">Take the set</a> <a href="../#faq">Questions</a> <span>No rights reserved</span></footer>
+<footer>
+<p class="f-contact">Email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>
+<p class="f-copy">no rights reserved &#183; all copies welcome</p>
+<p class="f-source"><a href="https://github.com/dukewilder/hostis" target="_blank" rel="noopener noreferrer">source code</a></p>
+</footer>
 <script type="module" src="app.js?v={{V}}"></script>
