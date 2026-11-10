@@ -40,6 +40,15 @@
 <div class="below">
 <section class="page" id="page" hidden>
 <div id="notices"></div>
+<h2>Chatter</h2>
+<div id="chatjoin"><p class="fine">Talk with whoever else is listening, cheer what is on, or ask the station for a recording. Lines are kept by nobody: they pass between the people in the room and are gone. Joining tells the others in the room that you are here, which listening alone never does.</p><button id="chatgo" class="plain">Join the chatter</button></div>
+<div id="chatroom" class="chat" hidden>
+<p id="chatwho" class="fine"></p>
+<div id="lines" class="lines" aria-live="polite"></div>
+<form id="say" class="say"><input id="sayt" maxlength="280" autocomplete="off" placeholder="Say something" aria-label="Say something"><button class="plain" type="submit">Say</button></form>
+<div class="sayrow"><button id="cheer" class="plain">Cheers</button><button id="askfor" class="plain">Ask for a recording</button><input id="myname" maxlength="32" placeholder="Your name in the room" aria-label="Your name in the room"></div>
+<div id="askbox" hidden><select id="asktrack" aria-label="A recording"></select><input id="asknote" maxlength="140" placeholder="A word with it, if you like" aria-label="A word with it"><button id="asksend" class="plain">Ask</button></div>
+</div>
 <h2 id="nexth">Up next</h2>
 <div id="next"></div>
 <h2>This week</h2>

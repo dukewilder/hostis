@@ -24,6 +24,8 @@ pub enum Request {
     Chunk { hash: Hash },
     /// A hop of a private route or a stem. See `hop.rs`.
     Hop(Vec<u8>),
+    /// The last lines of a station's chatter that a node in the room still holds.
+    Chatter { station: StationId },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -31,6 +33,7 @@ pub enum Response {
     Entries(Vec<Vec<u8>>),
     Chunk(Option<Vec<u8>>),
     Hop(Vec<u8>),
+    Chatter(Vec<Vec<u8>>),
 }
 
 /// The signed face of a station's card. Fields are only ever added at the end: an older

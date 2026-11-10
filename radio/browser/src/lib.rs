@@ -120,8 +120,18 @@ impl Hold {
     }
 }
 
+/// A station's chatter as this tab holds it: the room's sender and the last lines.
+struct Room {
+    tx: GossipSender,
+    lines: VecDeque<pyrate_core::chat::Signed>,
+    seen: HashSet<Hash>,
+    neighbours: usize,
+}
+
 struct Ship {
     ep: Endpoint,
+    gossip: GossipNet,
+    rooms: Mutex<HashMap<StationId, Room>>,
     harbour: Vec<EndpointId>,
     tx: Mutex<Option<GossipSender>>,
     log: Mutex<HashMap<StationId, Listing>>,
@@ -169,7 +179,89 @@ impl Ship {
             ),
             Request::Chunk { hash } => Response::Chunk(self.hold.lock().unwrap().get(&hash)),
             Request::Hop(_) => Response::Hop(vec![]),
+            Request::Chatter { station } => Response::Chatter(
+                self.rooms.lock().unwrap().get(&station).map(|r| r.lines.iter().rev().take(60).rev().filter_map(|l| postcard::to_allocvec(l).ok()).collect()).unwrap_or_default(),
+            ),
         }
+    }
+
+    /// The tab's voice under a station's colours: from its own kept key, so the same voice
+    /// comes back on the next visit from this browser.
+    fn voice(&self, st: &StationId) -> pyrate_core::StationKey {
+        let secret = *blake3::keyed_hash(&self.token_key, b"pyrate/chat/secret").as_bytes();
+        pyrate_core::chat::voice(&secret, st)
+    }
+
+    fn hear(&self, st: StationId, l: pyrate_core::chat::Signed) -> bool {
+        if !pyrate_core::chat::check(&l, &st, self.now()) {
+            return false;
+        }
+        let mut rooms = self.rooms.lock().unwrap();
+        let Some(r) = rooms.get_mut(&st) else { return false };
+        if !r.seen.insert(pyrate_core::chat::id(&l)) {
+            return false;
+        }
+        r.lines.push_back(l);
+        r.lines.make_contiguous().sort_by_key(|l| l.line.at_ms);
+        while r.lines.len() > 200 {
+            r.lines.pop_front();
+        }
+        true
+    }
+
+    async fn chat_join(self: &Arc<Self>, st: StationId) -> Result<()> {
+        if self.rooms.lock().unwrap().contains_key(&st) {
+            return Ok(());
+        }
+        let mut peers = self.harbour.clone();
+        if let Some(l) = self.log.lock().unwrap().get(&st) {
+            peers.extend(l.carriers.keys().filter_map(|n| EndpointId::from_bytes(n).ok()));
+        }
+        peers.retain(|p| *p != self.ep.id());
+        peers.sort();
+        peers.dedup();
+        peers.truncate(12);
+        let sub = self.gossip.subscribe(TopicId::from_bytes(pyrate_core::chat::topic(&st)), peers.clone()).await.map_err(|e| anyhow!("{e}"))?;
+        let (tx, mut rx) = sub.split();
+        self.rooms.lock().unwrap().insert(st, Room { tx, lines: VecDeque::new(), seen: HashSet::new(), neighbours: 0 });
+        let me = self.clone();
+        spawn(async move {
+            while let Some(ev) = rx.next().await {
+                match ev {
+                    Ok(Event::Received(m)) => {
+                        if let Ok(l) = postcard::from_bytes(&m.content) {
+                            me.hear(st, l);
+                        }
+                    }
+                    Ok(Event::NeighborUp(_)) => {
+                        if let Some(r) = me.rooms.lock().unwrap().get_mut(&st) {
+                            r.neighbours += 1;
+                        }
+                    }
+                    Ok(Event::NeighborDown(_)) => {
+                        if let Some(r) = me.rooms.lock().unwrap().get_mut(&st) {
+                            r.neighbours = r.neighbours.saturating_sub(1);
+                        }
+                    }
+                    _ => {}
+                }
+                if !me.rooms.lock().unwrap().contains_key(&st) {
+                    break;
+                }
+            }
+        });
+        let me = self.clone();
+        spawn(async move {
+            for p in peers.into_iter().take(3) {
+                if let Ok(Response::Chatter(lines)) = me.ask(p, &Request::Chatter { station: st }).await {
+                    let got = lines.iter().filter_map(|b| postcard::from_bytes::<pyrate_core::chat::Signed>(b).ok()).filter(|l| me.hear(st, l.clone())).count();
+                    if got > 0 {
+                        break;
+                    }
+                }
+            }
+        });
+        Ok(())
     }
 
     async fn conn(&self, node: EndpointId) -> Result<Connection> {
@@ -561,6 +653,8 @@ impl Radio {
         let router = Router::builder(ep.clone()).accept(ALPN, proto.clone()).accept(GOSSIP_ALPN, gossip.clone()).spawn();
         let ship = Arc::new(Ship {
             ep,
+            gossip: gossip.clone(),
+            rooms: Mutex::new(HashMap::new()),
             harbour: harbour.clone(),
             tx: Mutex::new(None),
             log: Mutex::new(HashMap::new()),
@@ -702,6 +796,62 @@ impl Radio {
         let Some(a) = archives.get(&st) else { return Ok("null".into()) };
         let v = pyrate_core::page::page_of(a, self.ship.now(), days.min(28) as u64).map_err(|e| js(anyhow!("{e}")))?;
         Ok(v.to_string())
+    }
+
+    /// Joins a station's chatter. Resolves when the tab is in the room.
+    pub fn chat_join(&self, id: &str) -> Result<js_sys::Promise, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let s = self.ship.clone();
+        Ok(wasm_bindgen_futures::future_to_promise(async move {
+            s.chat_join(st).await.map_err(js)?;
+            Ok(JsValue::TRUE)
+        }))
+    }
+
+    pub fn chat_leave(&self, id: &str) {
+        if let Ok(b) = unhex32(id) {
+            self.ship.rooms.lock().unwrap().remove(&StationId(b));
+        }
+    }
+
+    /// The room as JSON: whether the tab is in it, how many it is linked to, and the lines.
+    pub fn chat_read(&self, id: &str) -> Result<String, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let me = self.ship.voice(&st).id().0;
+        let rooms = self.ship.rooms.lock().unwrap();
+        let Some(r) = rooms.get(&st) else { return Ok(json!({ "joined": false, "lines": [] }).to_string()) };
+        let archives = self.ship.archives.lock().unwrap();
+        let a = archives.get(&st);
+        let lines: Vec<Value> = r.lines.iter().map(|l| {
+            let keeper = l.line.from == st.0 || a.is_some_and(|a| a.deputies().contains(&l.line.from));
+            let (kind, text, track, title) = match &l.line.say {
+                pyrate_core::chat::Say::Text(t) => ("text", t.clone(), None, None),
+                pyrate_core::chat::Say::Cheer => ("cheer", String::new(), None, None),
+                pyrate_core::chat::Say::Request { track, note } => ("request", note.clone(), Some(hex(track)), a.map(|a| pyrate_core::page::describe_track(a, track).0).filter(|t| !t.is_empty())),
+            };
+            json!({ "id": hex(&pyrate_core::chat::id(l)), "voice": StationId(l.line.from).call_sign(), "name": l.line.name, "at_ms": l.line.at_ms,
+                    "kind": kind, "text": text, "track": track, "title": title, "keeper": keeper, "mine": l.line.from == me })
+        }).collect();
+        Ok(json!({ "joined": true, "neighbours": r.neighbours, "voice": StationId(me).call_sign(), "lines": lines }).to_string())
+    }
+
+    /// Says something in a station's chatter: kind is text, cheer or request.
+    pub fn chat_send(&self, id: &str, kind: &str, text: &str, track: &str, name: &str) -> Result<js_sys::Promise, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let say = match kind {
+            "cheer" => pyrate_core::chat::Say::Cheer,
+            "request" => pyrate_core::chat::Say::Request { track: unhex32(track).map_err(js)?, note: text.into() },
+            _ if text.trim().is_empty() => return Err(JsValue::from_str("nothing to say")),
+            _ => pyrate_core::chat::Say::Text(text.into()),
+        };
+        let l = pyrate_core::chat::speak(&self.ship.voice(&st), &st, name, self.ship.now(), say);
+        let bytes = postcard::to_allocvec(&l).map_err(|e| js(anyhow!("{e}")))?;
+        let tx = self.ship.rooms.lock().unwrap().get(&st).map(|r| r.tx.clone()).ok_or_else(|| JsValue::from_str("join the chatter first"))?;
+        self.ship.hear(st, l);
+        Ok(wasm_bindgen_futures::future_to_promise(async move {
+            tx.broadcast(bytes.into()).await.map_err(|e| js(anyhow!("{e}")))?;
+            Ok(JsValue::TRUE)
+        }))
     }
 
     /// The station's whole log as JSON lines of what aired: for the station page.
