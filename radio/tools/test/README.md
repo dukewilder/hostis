@@ -14,3 +14,4 @@ For the browser scripts, build a test page with `PYRATE_HARBOUR="<lantern id>@ht
 PYRATE_RELAYS=http://127.0.0.1:3340 python3 browser/build.py`, copy `browser/www/dist` aside and
 serve it (`python3 -m http.server <port>`), then rebuild the public page with plain
 `python3 browser/build.py`. Playwright's Chromium: `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`.
+- `live_page.py <url>`: loads the deployed page and checks the wasm starts, after every deploy.

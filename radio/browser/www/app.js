@@ -15,7 +15,7 @@ const AHEAD_MS = 12000;
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-let radio = null, stations = [], cur = null, playing = false, gen = 0;
+let radio = null, stations = [], cur = null, playing = false, gen = 0, bootAt = 0;
 let ctx = null, gain = null, sources = [], meter = null;
 const pics = new Map();
 
@@ -125,6 +125,8 @@ function schedule(chs, skipMs, when) {
 }
 
 function status(t) { $('np').textContent = t; $('by').textContent = ''; $('slot').textContent = ''; $('prog').style.width = '0'; $('time').textContent = '' }
+// A trouble the player is in, shown in place of the title until it clears.
+let trouble = null;
 
 // ---- The set: frequencies, the dial glass, the lamps and the meter ----------------------
 // Every station sits at the same place on every dial: its frequency comes from its key.
@@ -201,56 +203,72 @@ const when = ms => { const d = dayOf(ms); return d === 'Today' || d === 'Tomorro
 const offAir = back => back ? 'Off the air. Back ' + when(back) + ' at ' + hm(back) + '.' : 'Off the air';
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-// Fills twelve seconds ahead and keeps to the station's clock, the way the app does.
+// Fills twelve seconds ahead and keeps to the station's clock, the way the app does. Any
+// stumble (a decoder that will not load, a chunk that will not decode) starts the step again
+// rather than ending the loop, and says so on the set.
 async function play(id, g) {
-  let playhead = null, next = 0, track = null, dec = null, liveSeq = null, misses = 0;
-  const reset = () => { stopAll(); playhead = null; track = null; liveSeq = null; dec?.close(); dec = null };
+  let playhead = null, next = 0, track = null, dec = null, liveSeq = null, misses = 0, wait = 1200, stumbles = 0;
+  const reset = () => { stopAll(); playhead = null; next = 0; track = null; liveSeq = null; dec?.close(); dec = null };
   while (g === gen) {
-    const queued = Math.max(0, next - ctx.currentTime) * 1000;
-    if (playhead !== null || liveSeq !== null) {
-      if (queued > AHEAD_MS) { await sleep(400); continue }
-      // Off the beat: something stalled. Drop what is queued and rejoin the clock.
-      if (liveSeq === null && Math.abs(playhead - queued - radio.now()) > 4000) reset();
+    try {
+      const queued = Math.max(0, next - ctx.currentTime) * 1000;
+      if (playhead !== null || liveSeq !== null) {
+        if (queued > AHEAD_MS) { await sleep(400); continue }
+        // Off the beat: something stalled. Drop what is queued and rejoin the clock.
+        if (liveSeq === null && Math.abs(playhead - queued - radio.now()) > 4000) reset();
+      }
+      const at = playhead ?? radio.now() + 400;
+      const p = JSON.parse(radio.plan(id, at));
+      if (p.kind === 'struck') { reset(); trouble = null; status('This station has struck its colours. It has ended.'); refresh(); return }
+      // A log not found yet is looked for less and less often, up to every fifteen seconds.
+      if (p.kind === 'searching') { if (!queued) status('Searching the Log'); await radio.sync(id).catch(() => { }); await sleep(wait); wait = Math.min(15000, wait * 1.6); continue }
+      wait = 1200;
+      if (p.kind === 'dead air' || p.kind === 'off air') { if (!queued) { reset(); status(p.kind === 'off air' ? offAir(p.back_at) : 'Dead air') } await sleep(4000); continue }
+      let chunk, ch, ms, seq = null;
+      if (p.kind === 'live') {
+        const t = p.tail;
+        const n = liveSeq === null ? (t[t.length - 2] || t[t.length - 1]) : t.find(x => x.seq > liveSeq);
+        if (!n) { await radio.sync(id).catch(() => { }); await sleep(1500); continue }
+        // From a track to the live broadcast: nothing of the track stays queued ahead of it.
+        if (liveSeq === null) { reset(); dec = await Decoder.make(n.channels) }
+        ({ chunk, channels: ch, ms } = n); seq = n.seq;
+      } else {
+        if (liveSeq !== null) reset();
+        chunk = p.chunk; ch = p.channels; ms = p.chunk_ms;
+      }
+      let bytes;
+      try { bytes = await radio.fetch(id, chunk); misses = 0; trouble = null } catch (e) {
+        if (++misses > 2) trouble = 'No carrier answered yet';
+        await sleep(1500); continue;
+      }
+      if (g !== gen) return;
+      if (p.kind === 'track' && (track !== p.track || !dec || playhead === null)) { dec?.close(); dec = await Decoder.make(ch); track = p.track }
+      const chs = await dec.decode(bytes);
+      if (g !== gen) return;
+      // A chunk that decodes to nothing is skipped, as a missing one is.
+      if (!chs.length || !chs[0].length) { if (seq !== null) liveSeq = seq; else playhead = (playhead ?? p.chunk_start) + ms; continue }
+      stumbles = 0;
+      if (seq !== null) {
+        next = schedule(chs, 0, Math.max(next, ctx.currentTime + 0.3)); liveSeq = seq;
+        continue;
+      }
+      let when, skip = 0;
+      if (playhead === null) {
+        const lead = 0.3;
+        skip = radio.now() + lead * 1000 - p.chunk_start;
+        if (skip >= ms) continue;
+        skip = Math.max(0, skip); when = ctx.currentTime + lead;
+      } else when = Math.max(next, ctx.currentTime + 0.05);
+      next = schedule(chs, skip, when);
+      playhead = p.chunk_start + ms;
+      if (p.next) radio.fetch(id, p.next).catch(() => { });
+    } catch (e) {
+      console.warn(e); reset();
+      // The portable decoder that would not load is the one stumble worth giving up on.
+      if (++stumbles > 5) { trouble = null; status('This browser could not play the station. Try reloading the page.'); stop(); return }
+      trouble = 'The player stumbled. Starting again';
+      await sleep(800 * stumbles);
     }
-    const at = playhead ?? radio.now() + 400;
-    const p = JSON.parse(radio.plan(id, at));
-    if (p.kind === 'searching') { if (!queued) status('Searching the Log'); await radio.sync(id).catch(() => { }); await sleep(1200); continue }
-    if (p.kind === 'dead air' || p.kind === 'off air') { if (!queued) { reset(); status(p.kind === 'off air' ? offAir(p.back_at) : 'Dead air') } await sleep(4000); continue }
-    let chunk, ch, ms, seq = null;
-    if (p.kind === 'live') {
-      const t = p.tail;
-      const n = liveSeq === null ? (t[t.length - 2] || t[t.length - 1]) : t.find(x => x.seq > liveSeq);
-      if (!n) { await radio.sync(id).catch(() => { }); await sleep(1500); continue }
-      if (liveSeq === null) { reset(); dec = await Decoder.make(n.channels) }
-      ({ chunk, channels: ch, ms } = n); seq = n.seq;
-    } else {
-      if (liveSeq !== null) reset();
-      chunk = p.chunk; ch = p.channels; ms = p.chunk_ms;
-    }
-    let bytes;
-    try { bytes = await radio.fetch(id, chunk); misses = 0 } catch (e) {
-      if (++misses > 2) status('No carrier answered yet');
-      await sleep(1500); continue;
-    }
-    if (g !== gen) return;
-    if (p.kind === 'track' && (track !== p.track || !dec || playhead === null)) { dec?.close(); dec = await Decoder.make(ch); track = p.track }
-    let chs;
-    try { chs = await dec.decode(bytes) } catch (e) { console.warn(e); reset(); await sleep(500); continue }
-    if (g !== gen || !chs.length) return;
-    if (seq !== null) {
-      next = schedule(chs, 0, Math.max(next, ctx.currentTime + 0.3)); liveSeq = seq;
-      continue;
-    }
-    let when, skip = 0;
-    if (playhead === null) {
-      const lead = 0.3;
-      skip = radio.now() + lead * 1000 - p.chunk_start;
-      if (skip >= ms) continue;
-      skip = Math.max(0, skip); when = ctx.currentTime + lead;
-    } else when = Math.max(next, ctx.currentTime + 0.05);
-    next = schedule(chs, skip, when);
-    playhead = p.chunk_start + ms;
-    if (p.next) radio.fetch(id, p.next).catch(() => { });
   }
   dec?.close();
 }
@@ -260,6 +278,8 @@ async function nowPlaying() {
   if (!cur || !radio) return;
   const p = JSON.parse(radio.plan(cur.id, radio.now()));
   lamps(p.kind === 'live');
+  if (playing && trouble) { status(trouble); return }
+  if (p.kind === 'struck') { status('This station has struck its colours. It has ended.'); return }
   if (p.kind === 'live') { $('np').textContent = 'Live from the station'; $('by').textContent = ''; $('slot').textContent = ''; $('prog').style.width = '100%'; $('time').textContent = '' }
   else if (p.kind === 'track') {
     $('np').textContent = p.title || ''; $('by').textContent = p.by || ''; $('slot').textContent = p.slot || '';
@@ -346,7 +366,7 @@ function listen(s) {
   play(s.id, g);
 }
 
-function stop() { gen++; stopAll(); playing = false; power(); lamps(false); ctx?.suspend(); radio?.listening(false) }
+function stop() { gen++; stopAll(); playing = false; trouble = null; power(); lamps(false); ctx?.suspend(); radio?.listening(false) }
 function power() { $('clip').hidden = !(playing && clipType()) || isPocket(cur); const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■' : '▶'; g.querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen' }
 
 function rows() {
@@ -354,7 +374,11 @@ function rows() {
   const shown = stations.filter(s => !m.has(s.id) && allowed(s) && inSet(s));
   const box = $('rows'); box.innerHTML = '';
   dial(shown); if (!$('chart').hidden) chart();
-  if (!shown.length) { box.innerHTML = '<p class="fine">Listening for station cards. The first come in within a minute.</p>'; return }
+  if (!shown.length) {
+    const long = bootAt && Date.now() - bootAt > 90000;
+    box.innerHTML = '<p class="fine">' + (long ? 'No station has reached this tab yet. ' + (radio?.neighbours() ? 'The network is here but quiet; stations may be hidden by your switches below.' : 'Nothing on this network has answered: it may block peer-to-peer traffic. Another network, or the app, may get through.') : 'Listening for station cards. The first come in within a minute.') + '</p>';
+    return;
+  }
   for (const s of shown) {
     const r = document.createElement('div'); r.className = 'row'; r.dataset.id = s.id;
     r.innerHTML = '<div class="mini"></div><div class="meta"><div class="name"></div><div class="cs"></div><div class="about"></div></div><div class="count"></div>';
@@ -611,7 +635,17 @@ async function boot() {
   try { await init() } catch (e) { $('name').textContent = 'This browser cannot run the radio'; return }
   let key = store('pyrate.token');
   if (!/^[0-9a-f]{64}$/.test(key || '')) { const b = new Uint8Array(32); crypto.getRandomValues(b); key = [...b].map(x => x.toString(16).padStart(2, '0')).join(''); store('pyrate.token', key) }
-  try { radio = await Radio.start(rememberHarbours(), key, RELAYS) } catch (e) { console.warn(e); $('name').textContent = 'Could not reach a relay'; $('signal').textContent = String(e); return }
+  // No relay answering is not the end: the set says so and tries again, more slowly each time.
+  for (let tries = 0; !radio; tries++) {
+    try { radio = await Radio.start(rememberHarbours(), key, RELAYS) } catch (e) {
+      console.warn(e);
+      $('name').textContent = 'Could not reach a relay';
+      $('signal').textContent = 'Trying again. If it never comes, this network may block the radio: try another, or the app.';
+      await sleep(Math.min(60000, 5000 * 2 ** tries));
+    }
+  }
+  $('name').textContent = '';
+  bootAt = Date.now();
   for (const l of savedPockets()) pocketJoin(l, false);
   if (invite) pocketJoin(invite, true);
   else if (!flockFollow()) followLink();
