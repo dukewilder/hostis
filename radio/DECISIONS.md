@@ -300,3 +300,23 @@ Dylan's ruling: moderation belongs to each listener. No votes, no reputation sco
 **The programme.** A station keeps a programme in its keeper's own time, daylight saving written into the log as a table of offsets: shuffled, in order, newest first, a daily tape or a weekly one; on-air hours; regular shows filled with chosen recordings, the newest, a hand's watch or a live hour; premieres; notices. Whichever of rota and programme is later rules, so old stations are untouched.
 
 **The page and the dial.** Every station has a page worked out from its own log by the same code on phones and in browsers. Every station has a frequency drawn from its key, the same on every dial. Posters carry it with a code to scan.
+
+
+## XXI. Hardening (9 November 2026)
+
+Every node already carried the whole Log. This voyage asks what a carrier can be made to answer for, and sets it to nothing it did not choose.
+
+- **Blind carrying.** A carrier holds and serves a station's sound and log sealed, by fingerprint, without the key to open them. It is a name and a box of bytes, the way a Freenet node holds what it cannot read. A node serves plaintext only for the stations whose keys it holds. So a seized phone shows what its owner chose to keep and nothing of what it carried for others.
+- **Sealed logs at rest.** Each carried log is written to disk sealed under a key drawn from the station's id, one record at a time. It opens only when the id arrives through the owner's own keys, a station card or a request. On disk it reads as noise.
+- **A new address every day.** A phone's network identity is drawn fresh every 24 hours, so no one follows one phone from day to day by its id. A steady seed behind it keeps the listener count, the chat voice and the ballast seat unbroken across the change. Lanterns keep their id, so a newcomer has a fixed door.
+- **Dark running.** `PYRATE_DARK=1` drops every direct path and stops the node publishing any address, so nothing ties its id to a relay or an IP. `PYRATE_PROXY` sends its relay connections through Tor. A dark node is reached through relays and through addresses shared inside a station's gossip, and a listener notices none of it.
+- **Two identities.** A harbour is split in two: a public face that keeps only its own stations and stands as a bootstrap door, and a dark hold on a separate id that carries the whole Log over Tor and is advertised nowhere. The known node is a station keeper; the node that carries everything is tied to neither the harbour nor the house.
+- **No single door.** Every node remembers the peers it has met and starts from them next time. A browser tab keeps every harbour it has ever been handed. Several harbours and the crew relays stand together, so there is no one door to close.
+
+## XXII. Private and together (9 November 2026)
+
+- **Pocket stations.** A station that never shows on the Log. Its key is the invitation: whoever holds it finds the station on its own sealed topic, hears it, carries it and passes it on, and no one else can tell it exists. Its log is asked for by a tag drawn from the key, never by its id, and is never served to a stranger. Raised in the app with a switch, shared by a link or a scanned code, joined in the app or any browser.
+- **Flock.** Several phones in one room play as one. One phone hosts, the others sample its clock over the local relay, keep the closest reading and fall in with it, a hand's trim either way for the slow speaker in the corner. It cannot be faked without real phones in the room.
+- **Hail.** A listener sends the keeper a short voice note, sealed to the station's key and its deputies, that only the keeper can open. A Lantern may hold hails for a keeper who is away, still sealed, in a folder it cannot read.
+- **The drawer phone.** An old phone kept as a Lantern by itself: a foreground service with wake and Wi-Fi locks, a ballast size from one to 256 GB, carrying the Log in the back of a drawer.
+- **Tips with a note.** A listener leaves the keeper a tip with a line of thanks.

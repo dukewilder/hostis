@@ -83,3 +83,12 @@ On the phone the node starts, joins the Log and finds the PC Lantern. Confirmed 
 - Built and tested end to end on one machine (`voyage_test`, 16 checks): cards carrying kinds, mature, port and tips; a listener working out the watch bill; a co-host appointed with the 24 words and writing as a deputy; a Lantern carrying the whole Log, and its maroon list taking a station off it, art included; maroon lists shared and taken aboard; an old-format log carried into the new format.
 - The Lantern's hourly bell set from a seed folder. Google's apksigner verifies the offline signing.
 - Every decision and what was set down is in the Ship's Articles, sections XVI and XVII.
+
+
+**9 November: hardening, and the private stations**
+
+- Carriers now hold sealed. A carried station's sound and log sit on a node by fingerprint, under a key it does not have. A node opens plaintext only for stations whose keys it holds, and sealed logs read as noise on disk until the right id arrives. A seized node answers for what its owner kept, not for what it carried.
+- Phones draw a fresh network id every day, a steady seed behind it keeping the count, the chat voice and the ballast seat. Dark running drops direct paths, publishes no address and speaks through Tor. A harbour splits into a public face that keeps only its own stations and a dark hold that carries the whole Log over Tor on a separate id. The dukewilder rebuild in `tools/dukewilder-rebuild.md` sets both up inside gluetun.
+- Pocket stations: private, off the Log, found only by the key that is their invitation, in the app and the browser. Flock: phones in a room on one clock. Hail: a sealed voice note to the keeper. The drawer phone: an old handset left as a Lantern. Tips carry a note.
+- Built and checked on the test network: sealed carrying and playback, sealed logs surviving a restart, chatter with a backlog, a hail reaching a keeper's Lantern, a dark Lantern carrying and mirroring the player, pocket stations seen by a member and invisible to an outsider, a flock within about a millisecond.
+- App at 0.8.0. The browser player rides on any Lantern at `/player/`, and the APK seeds over BitTorrent with a web seed.
