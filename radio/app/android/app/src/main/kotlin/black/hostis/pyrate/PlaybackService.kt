@@ -87,14 +87,14 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     private fun tune(id: String) {
         Native.cmd("cmd" to "tune", "station" to id)
-        prefs().edit().putString("last", id).apply()
+        Hold.putS(this, "last", id)
         startPlaying()
     }
 
     private fun resume() {
         val tuned = Native.cmd("cmd" to "status").optString("tuned", "")
         if (tuned.isEmpty()) {
-            val last = prefs().getString("last", null)
+            val last = Hold.getS(this, "last")
             if (last != null) tune(last) else { Native.cmd("cmd" to "tune_next", "dir" to 1); startPlaying() }
         } else startPlaying()
     }

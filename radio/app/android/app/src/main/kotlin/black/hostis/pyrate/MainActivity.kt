@@ -204,7 +204,7 @@ class MainActivity : FlutterActivity() {
                 }
                 "plain_lock_get" -> result.success(getSharedPreferences("pyrate", Context.MODE_PRIVATE).getBoolean("plain_lock", false))
                 "remember" -> {
-                    getSharedPreferences("pyrate", Context.MODE_PRIVATE).edit().putString("last", call.argument<String>("station")).apply()
+                    Hold.putS(this, "last", call.argument<String>("station"))
                     result.success(null)
                 }
                 else -> result.notImplemented()
