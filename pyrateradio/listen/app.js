@@ -1,15 +1,38 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=b47180d97e';
+import init, { Radio } from './pkg/pyrate_browser.js?v=a9f785d479';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
 // and nothing else, and it joins the network only when the visitor presses Listen.
 const HARBOUR_STATIONS = [{"id": "f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "name": "The Public Domain", "call_sign": "GAHAGU·3695"}, {"id": "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a", "name": "Readings", "call_sign": "DEVAKA·F42C"}];
 const EMBED = document.documentElement.classList.contains('embed');
+// Where this copy plays. 'harbour' is hostis.black's own copy: HOSTIS's stations and nothing
+// else, so nothing on that domain belongs to anyone else. Every other station, invitation and
+// flock goes straight to an open player, the same set served where no one owns it (IPFS, a
+// Lantern). 'open' is that copy: the whole Log, the chatter and the colours.
+const SCOPE = "harbour";
+const OPEN_PLAYERS = ["https://bafybeie65u2bmtct5ftzyhwmftnzim4asbbf5miyxe2wyirf2iuk5hps2q.ipfs.dweb.link/", "https://bafybeie65u2bmtct5ftzyhwmftnzim4asbbf5miyxe2wyirf2iuk5hps2q.ipfs.w3s.link/", "https://ipfs.io/ipfs/bafybeie65u2bmtct5ftzyhwmftnzim4asbbf5miyxe2wyirf2iuk5hps2q/"];
+const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
+const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
 const passedId = () => { const id = location.hash.slice(1); return /^[0-9a-f]{64}$/.test(id) ? id : null };
-const inSet = s => !EMBED || HARBOUR_STATIONS.some(h => h.id === s.id) || s.id === passedId();
+const inSet = s => !HOSTIS_ONLY || isHarbour(s.id);
+// The open player that answers first; the first on the list if none answers in time.
+async function openPlayer() {
+  const tries = OPEN_PLAYERS.map(u => fetch(u + 'favicon.png', { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(3500) }).then(() => u));
+  try { return await Promise.any(tries) } catch (e) { return OPEN_PLAYERS[0] }
+}
+// A link for anything that is not HOSTIS's own leaves this copy before it is read: the part
+// after the # never reaches a server, and this page never shows, names or plays what it holds.
+const foreign = h => /pocket=|flock=/.test(h) || (/^#[0-9a-f]{64}$/.test(h) && !isHarbour(h.slice(1)));
+function handOff() {
+  const h = location.hash; if (!HOSTIS_ONLY || EMBED || !foreign(h)) return false;
+  history.replaceState(null, '', location.pathname + location.search);
+  document.documentElement.classList.add('leaving');
+  openPlayer().then(u => location.replace(u + h));
+  return true;
+}
 const RELAYS = "";
 const AHEAD_MS = 12000;
 const $ = id => document.getElementById(id);
@@ -235,9 +258,12 @@ const offAir = back => back ? 'Off the air. Back ' + when(back) + ' at ' + hm(ba
 // HTTPS name, so links still work if hostis.black is gone; otherwise hostis.black. A copy
 // reached by a bare address, on plain HTTP or at a private name is never named in a link,
 // since that address may be someone's house.
-const shareBase = () => {
+// HOSTIS's own stations are passed on as hostis.black links. Every other station is passed on
+// as an open player's link, so a stranger's station never wears hostis.black.
+const shareBase = (st = cur) => {
+  if (st && isHarbour(st.id) && !isPocket(st)) return 'https://hostis.black/pyrateradio/listen/';
   const h = location.hostname, pub = location.protocol === 'https:' && !/^[\d.]+$|^\[|^localhost$|\.local$|\.lan$|\.home$|\.internal$/.test(h);
-  return pub && !EMBED ? location.origin + location.pathname : 'https://hostis.black/pyrateradio/listen/';
+  return SCOPE === 'open' && pub && !EMBED ? location.origin + location.pathname : OPEN_PLAYERS[0];
 };
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
@@ -390,6 +416,8 @@ function art(url) { const c = $('cover'); if (url) { if (c.src !== url) c.src = 
 async function show(s) {
   if (hailFor && hailFor !== s.id) dropHail();
   cur = s;
+  // On hostis.black the chatter is in the open player: this station's room, one tap away.
+  if (SCOPE === 'harbour') $('chatopen').href = OPEN_PLAYERS[0] + '#' + s.id;
   flag($('flag'), s.id, s.live); art(await pic(s.id, s.cover));
   const b = await pic(s.id, s.banner); $('banner').style.backgroundImage = b ? 'url(' + b + ')' : '';
   $('name').textContent = s.name || s.call_sign; $('cs').textContent = s.call_sign + (s.aboard !== undefined ? '  ' + s.aboard + ' aboard' : '');
@@ -454,7 +482,7 @@ function rows() {
 
 function refresh() {
   if (!radio) return;
-  stations = JSON.parse(radio.stations());
+  stations = JSON.parse(radio.stations()).filter(inSet);
   const n = radio.neighbours();
   $('signal').textContent = (flocking ? 'In a flock, in step with its host · ' : '') + (n ? n + (n === 1 ? ' neighbour' : ' neighbours') + ' · ' + stations.length + ' on the air' : 'Coming aboard');
   $('flockleave').hidden = !flocking;
@@ -493,7 +521,9 @@ async function pocketJoin(link, open) {
 // A station link (#<id>) works before the station's card arrives: the harbour carries it.
 function followLink() {
   const id = wanted || location.hash.slice(1);
-  if (!/^[0-9a-f]{64}$/.test(id) || cur?.id === id) return;
+  if (!/^[0-9a-f]{64}$/.test(id) || cur?.id === id || (HOSTIS_ONLY && !isHarbour(id))) return;
+  // On an Android phone, a passed station can go straight to the app if it is there.
+  if (/Android/.test(navigator.userAgent) && !pockets.has(id)) { $('appopen').href = 'intent://station/' + id + '#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url=' + encodeURIComponent('https://hostis.black/pyrateradio/#set') + ';end'; $('appnote').hidden = false }
   const s = stations.find(x => x.id === id) || { id, call_sign: id.slice(0, 8).toUpperCase(), name: pockets.has(id) ? 'A private station' : 'A passed-on station', pocket: pockets.has(id) };
   show(s);
 }
@@ -605,7 +635,7 @@ function clipType() { for (const t of ['video/mp4;codecs=avc1.42E01E,mp4a.40.2',
 async function clipIt() {
   const type = clipType(); if (!type || !playing || !cur) return;
   const W = 720, H = 1280, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
-  const st = cur, url = shareBase() + '#' + st.id, q = JSON.parse(radio.qr(url));
+  const st = cur, url = shareBase(st) + '#' + st.id, q = JSON.parse(radio.qr(url));
   const coverUrl = await pic(st.id, st.cover); let img = null;
   if (coverUrl) { img = new Image(); img.src = coverUrl; await img.decode().catch(() => { img = null }) }
   const dest = ctx.createMediaStreamDestination(); gain.connect(dest);
@@ -719,6 +749,7 @@ $('mclear').onclick = () => { setMarooned(new Set()); $('mnote').textContent = '
 if (!/\/pyrateradio\/listen\/$/.test(location.pathname)) document.querySelectorAll('a[href^="../"]').forEach(a => a.href = 'https://hostis.black/pyrateradio/' + a.getAttribute('href').slice(3));
 
 async function boot() {
+  if (handOff()) return;
   // An invitation's key leaves the address bar before anything else happens.
   const invite = location.hash.includes('pocket=') ? location.hash : null;
   if (invite) history.replaceState(null, '', location.pathname);
@@ -738,12 +769,12 @@ async function boot() {
   }
   $('name').textContent = '';
   bootAt = Date.now();
-  for (const l of savedPockets()) pocketJoin(l, false);
+  if (!HOSTIS_ONLY) for (const l of savedPockets()) pocketJoin(l, false);
   if (invite) pocketJoin(invite, true);
   else if (!flockFollow()) followLink();
   refresh();
   setInterval(refresh, 4000); setInterval(nowPlaying, 1000); setInterval(() => page(false), 5000);
-  window.addEventListener('hashchange', followLink);
+  window.addEventListener('hashchange', () => handOff() || followLink());
   if ('mediaSession' in navigator) { navigator.mediaSession.setActionHandler('play', () => cur && listen(cur)); navigator.mediaSession.setActionHandler('pause', stop); navigator.mediaSession.setActionHandler('stop', stop) }
 }
 // The node in the tab is built to stop dead on a fault rather than carry on in a bad state.
@@ -773,7 +804,7 @@ window.pyrate = { tap: () => { if (!ctx) return null; if (!tapped) { tapped = ct
 function dormant(s) {
   cur = s; flag($('flag'), s.id, false); art(null);
   $('name').textContent = s.name; $('cs').textContent = s.call_sign || ''; $('freq').textContent = fq(s.id).toFixed(1);
-  dial(HARBOUR_STATIONS.concat(passedId() && !HARBOUR_STATIONS.some(h => h.id === passedId()) ? [{ id: passedId(), name: 'Passed on' }] : []));
+  dial(HARBOUR_STATIONS);
   needle(s.id, false); power(); $('pass').hidden = true; $('np').textContent = 'Press Listen to come aboard.'; $('by').textContent = '';
 }
 // Inside the landing page, the set tells its host how tall it is.
@@ -782,5 +813,6 @@ if (document.documentElement.classList.contains('embed') && parent !== window) {
   const tell = () => parent.postMessage({ pyrate: 'height', h: Math.ceil(document.body.getBoundingClientRect().height) }, location.origin);
   new ResizeObserver(tell).observe(document.body); addEventListener('load', tell);
 }
-if (EMBED) { scale(); const p = passedId(); dormant(p ? { id: p, name: 'A passed-on station', call_sign: '' } : HARBOUR_STATIONS[0]); $('signal').textContent = '' }
+document.querySelectorAll('a.openlink').forEach(a => { if (!a.id) a.href = OPEN_PLAYERS[0] });
+if (EMBED) { scale(); const p = passedId(); dormant(p && isHarbour(p) ? HARBOUR_STATIONS.find(h => h.id === p) : HARBOUR_STATIONS[0]); $('signal').textContent = '' }
 else booting = boot();
