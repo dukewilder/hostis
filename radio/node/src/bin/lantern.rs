@@ -4,7 +4,8 @@
 //!
 //! lantern --dir <data> [--quota-gb 20] [--bootstrap <id>,<id>] [--public-dns]
 //!         [--seed "Name|About|folder|music|Home port"]...   (the home port is optional)
-//!         [--carry-own]   carry only this Lantern's own stations (by default it carries the whole Log;
+//!         [--carry-own]   carry only this Lantern's own stations, and drop anything else it held
+//!                         (by default it carries the whole Log;
 //!                         maroon.txt, one station id per line, takes any station off this Lantern)
 //!         A seed folder's bell.mp3 (or .wav, .ogg) plays on the hour; replace it and the new one takes over.
 //!         A seed folder's station.jpg and banner.jpg become the station's art.
@@ -30,6 +31,11 @@ fn main() -> anyhow::Result<()> {
 
     let node = Node::start(Config { dir: dir.clone(), quota, lantern: true, carry_all: !args.iter().any(|a| a == "--carry-own"), bootstrap, public_dns: args.iter().any(|a| a == "--public-dns"), private: false, ballast: 0, release_keys: get("--release-keys").map(|p| std::fs::read_to_string(p).unwrap_or_default().lines().filter_map(|l| pyrate_core::StationId::from_hex(l.trim()).ok().map(|i| i.0)).collect()).unwrap_or_default() })?;
     println!("LANTERN LIT");
+    // Carrying only its own stations: whatever else it held before goes, now.
+    if args.iter().any(|a| a == "--carry-own") {
+        let r = node.call(&serde_json::json!({ "cmd": "clear_hold" }));
+        println!("carrying only this Lantern's own stations {r}");
+    }
     // --http 127.0.0.1:8080 serves the web listener; --relay 127.0.0.1:3340 runs a relay. Both
     // bind to loopback by default: a tunnel puts them on the public internet, not this machine.
     if let Some(addr) = get("--http").and_then(|a| a.parse().ok()) {
@@ -88,11 +94,12 @@ fn main() -> anyhow::Result<()> {
                 println!("seeding: {e}");
             }
         }
+        // Counts only: a Lantern's own output never lists the stations it carries.
         let st = node.call(&serde_json::json!({ "cmd": "stations" }));
         let n = st.as_array().map(|a| a.len()).unwrap_or(0);
-        let line: Vec<String> = st.as_array().into_iter().flatten().take(8)
-            .map(|s| format!("{} ({} aboard)", s["name"].as_str().unwrap_or("?"), s["aboard"])).collect();
-        println!("{} · {n} stations in the Log · {}", now_ms() / 1000, line.join(", "));
+        let mine = node.call(&serde_json::json!({ "cmd": "status" }));
+        let own = mine["mine"]["name"].as_str().map(|m| format!(" · keeping {m}")).unwrap_or_default();
+        println!("{} · {n} stations in the Log{own}", now_ms() / 1000);
         let _ = Body::Strike; // keep the import honest across features
     }
 }

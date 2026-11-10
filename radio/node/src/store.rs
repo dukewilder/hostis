@@ -1,6 +1,12 @@
 //! What a node holds: station logs and the chunks they name, on its own disk.
 //! Its own stations are never evicted. Everything else it carries lives under a
 //! quota and leaves oldest-touched first.
+//!
+//! Nothing on the disk says what it is. Chunks are sealed under keys drawn from their own
+//! addresses, and logs under keys drawn from their stations' ids, each filed under a hash
+//! no one can turn back into an id. A seized disk is unlabelled noise: only someone who
+//! already knows a station's id can test whether it is here. The node itself opens a log
+//! only when the station's card reaches it again from the network.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -15,6 +21,56 @@ use pyrate_core::{Archive, Body, Hash, SignedEntry, StationId, StationKey};
 
 fn hex(h: &[u8]) -> String {
     h.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn derive(tag: &[u8], id: &StationId) -> [u8; 32] {
+    let mut h = blake3::Hasher::new();
+    h.update(tag);
+    h.update(&id.0);
+    *h.finalize().as_bytes()
+}
+
+/// The name a station's files go under: a hash of its id that cannot be turned back.
+pub fn filed_as(id: &StationId) -> String {
+    hex(&derive(b"pyrate/log-name/v1", id))
+}
+
+fn log_cipher(id: &StationId) -> chacha20poly1305::ChaCha20Poly1305 {
+    use chacha20poly1305::KeyInit;
+    chacha20poly1305::ChaCha20Poly1305::new(&derive(b"pyrate/log-key/v1", id).into())
+}
+
+/// One sealed record: its length, a fresh nonce, and the entry under the station's log key.
+fn seal_record(id: &StationId, plain: &[u8]) -> Result<Vec<u8>> {
+    use chacha20poly1305::aead::Aead;
+    let mut nonce = [0u8; 12];
+    rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce);
+    let ct = log_cipher(id).encrypt(chacha20poly1305::Nonce::from_slice(&nonce), plain).map_err(|_| anyhow::anyhow!("seal"))?;
+    let mut out = Vec::with_capacity(4 + 12 + ct.len());
+    out.extend(((12 + ct.len()) as u32).to_be_bytes());
+    out.extend(nonce);
+    out.extend(ct);
+    Ok(out)
+}
+
+fn read_sealed(id: &StationId, bytes: &[u8]) -> Archive {
+    use chacha20poly1305::aead::Aead;
+    let c = log_cipher(id);
+    let mut a = Archive::new(*id);
+    let mut at = 0;
+    while at + 4 <= bytes.len() {
+        let n = u32::from_be_bytes(bytes[at..at + 4].try_into().unwrap()) as usize;
+        at += 4;
+        if n < 12 || at + n > bytes.len() {
+            break;
+        }
+        let Ok(plain) = c.decrypt(chacha20poly1305::Nonce::from_slice(&bytes[at..at + 12]), &bytes[at + 12..at + n]) else { break };
+        if SignedEntry::from_bytes(&plain).and_then(|e| a.append(e)).is_err() {
+            break;
+        }
+        at += n;
+    }
+    a
 }
 
 pub struct Store {
@@ -40,6 +96,10 @@ impl Store {
             if let Ok(seed) = <[u8; 32]>::try_from(seed.as_slice()) {
                 s.keys.insert(station, StationKey::from_seed(seed));
             }
+        }
+        let own: Vec<StationId> = s.keys.keys().copied().collect();
+        for id in own {
+            s.open_log(&id);
         }
         let mut legacy = Vec::new();
         for f in fs::read_dir(dir.join("logs"))? {
@@ -68,7 +128,10 @@ impl Store {
                 legacy.push((id, f.path(), bytes));
                 continue;
             }
-            s.logs.insert(id, a);
+            // A log from before sealing: sealed now, and the plain file goes.
+            if s.replace_log(id, a).is_ok() {
+                let _ = fs::remove_file(f.path());
+            }
         }
         // Logs from before bodies were framed. A station whose master key is here is written
         // again, entry by entry and at the same times, so it keeps its library, its clock and
@@ -126,11 +189,24 @@ impl Store {
     }
 
     fn log_path(&self, id: &StationId) -> PathBuf {
-        self.dir.join("logs").join(format!("{}.log", id.to_hex()))
+        self.dir.join("logs").join(format!("{}.sl", filed_as(id)))
+    }
+
+    /// Opens a station's sealed log, if this disk holds one and it is not open yet. The node
+    /// calls this when the station's id reaches it, from its own keys or from the network.
+    pub fn open_log(&mut self, id: &StationId) -> bool {
+        if self.logs.contains_key(id) {
+            return true;
+        }
+        let Ok(bytes) = fs::read(self.log_path(id)) else { return false };
+        let a = read_sealed(id, &bytes);
+        self.logs.insert(*id, a);
+        true
     }
 
     /// Appends whatever entries extend the log, in order. Returns how many were new.
     pub fn put_entries(&mut self, id: StationId, entries: Vec<SignedEntry>) -> Result<usize> {
+        self.open_log(&id);
         let path = self.log_path(&id);
         let a = self.logs.entry(id).or_insert_with(|| Archive::new(id));
         let mut file = fs::OpenOptions::new().create(true).append(true).open(&path)?;
@@ -141,8 +217,7 @@ impl Store {
             }
             let bytes = e.to_bytes()?;
             a.append(e)?;
-            file.write_all(&(bytes.len() as u32).to_be_bytes())?;
-            file.write_all(&bytes)?;
+            file.write_all(&seal_record(&id, &bytes)?)?;
             added += 1;
         }
         if a.is_struck() {
@@ -154,6 +229,7 @@ impl Store {
 
     /// Signs a new entry for one of this node's own stations.
     pub fn write(&mut self, id: StationId, at_ms: u64, body: Body) -> Result<SignedEntry> {
+        self.open_log(&id);
         let key = self.keys.get(&id).ok_or_else(|| anyhow::anyhow!("not our station"))?;
         let a = self.logs.entry(id).or_insert_with(|| Archive::new(id));
         // A deputy wraps what it writes, so carriers can check the deputy's signature.
@@ -196,17 +272,41 @@ impl Store {
     /// A seized device holds unlabelled noise. Nothing on it says what any file is; only
     /// someone who already holds a station's log can test for that station's chunks.
     fn sealed_name(h: &Hash) -> String {
-        hex(&blake3::derive_key("pyrate/hold-name/v1", h))
-    }
-
-    fn seal_cipher(h: &Hash) -> chacha20poly1305::ChaCha20Poly1305 {
-        use chacha20poly1305::KeyInit;
-        chacha20poly1305::ChaCha20Poly1305::new(&blake3::derive_key("pyrate/hold-key/v1", h).into())
+        hex(&pyrate_core::seal::name(h))
     }
 
     fn chunk_path(&self, h: &Hash) -> PathBuf {
         let x = Self::sealed_name(h);
         self.dir.join("chunks").join(&x[..2]).join(x)
+    }
+
+    fn named_path(&self, name: &Hash) -> PathBuf {
+        let x = hex(name);
+        self.dir.join("chunks").join(&x[..2]).join(x)
+    }
+
+    /// A chunk's sealed bytes by the name it is filed under, as they lie on the disk. Nothing
+    /// is opened: this is what a carrier hands on.
+    pub fn get_sealed(&self, name: &Hash) -> Option<Vec<u8>> {
+        let p = self.named_path(name);
+        let b = fs::read(&p).ok()?;
+        if let Ok(f) = fs::File::options().append(true).open(&p) {
+            let _ = f.set_modified(SystemTime::now());
+        }
+        Some(b)
+    }
+
+    /// Keeps sealed bytes fetched for the chunk `h`, once they are checked against it.
+    pub fn put_sealed(&self, h: &Hash, sealed: &[u8]) -> Result<()> {
+        if pyrate_core::seal::unseal(h, sealed).is_none() {
+            anyhow::bail!("sealed chunk does not match its hash");
+        }
+        let p = self.chunk_path(h);
+        fs::create_dir_all(p.parent().unwrap())?;
+        let tmp = p.with_extension("part");
+        fs::write(&tmp, sealed)?;
+        fs::rename(tmp, p)?;
+        Ok(())
     }
 
     /// Where unsealed chunks lived before sealing. Read once, sealed, removed.
@@ -224,9 +324,7 @@ impl Store {
         if blake3::hash(bytes).as_bytes() != h {
             anyhow::bail!("chunk does not match its hash");
         }
-        let sealed = Self::seal_cipher(h)
-            .encrypt(chacha20poly1305::Nonce::from_slice(&[0; 12]), bytes)
-            .map_err(|_| anyhow::anyhow!("seal"))?;
+        let sealed = pyrate_core::seal::seal(h, bytes);
         let p = self.chunk_path(h);
         fs::create_dir_all(p.parent().unwrap())?;
         let tmp = p.with_extension("part");
@@ -236,10 +334,9 @@ impl Store {
     }
 
     pub fn get_chunk(&self, h: &Hash) -> Option<Vec<u8>> {
-        use chacha20poly1305::aead::Aead;
         let p = self.chunk_path(h);
         if let Ok(sealed) = fs::read(&p) {
-            let bytes = Self::seal_cipher(h).decrypt(chacha20poly1305::Nonce::from_slice(&[0; 12]), sealed.as_slice()).ok()?;
+            let bytes = pyrate_core::seal::unseal(h, &sealed)?;
             // Touch, so carrying keeps what is listened to.
             if let Ok(f) = fs::File::options().append(true).open(&p) {
                 let _ = f.set_modified(SystemTime::now());
@@ -258,11 +355,11 @@ impl Store {
     pub fn replace_log(&mut self, id: StationId, a: Archive) -> Result<()> {
         let mut bytes = Vec::new();
         for e in a.entries() {
-            let b = e.to_bytes()?;
-            bytes.extend((b.len() as u32).to_be_bytes());
-            bytes.extend(b);
+            bytes.extend(seal_record(&id, &e.to_bytes()?)?);
         }
-        fs::write(self.log_path(&id), bytes)?;
+        let tmp = self.log_path(&id).with_extension("tmp");
+        fs::write(&tmp, bytes)?;
+        fs::rename(&tmp, self.log_path(&id))?;
         self.logs.insert(id, a);
         Ok(())
     }
@@ -271,6 +368,7 @@ impl Store {
     pub fn forget_log(&mut self, id: &StationId) {
         self.logs.remove(id);
         let _ = fs::remove_file(self.log_path(id));
+        let _ = fs::remove_file(self.dir.join("logs").join(format!("{}.log", id.to_hex())));
     }
 
     pub fn remove_chunk(&self, h: &Hash) {
@@ -296,11 +394,13 @@ impl Store {
                 }
             }
         }
-        let gone: Vec<StationId> = self.logs.keys().filter(|id| !keep_ids.contains(id)).copied().collect();
-        for id in gone {
-            let _ = fs::remove_file(self.log_path(&id));
-            self.logs.remove(&id);
+        let keep_logs: HashSet<String> = keep_ids.iter().map(|id| format!("{}.sl", filed_as(id))).collect();
+        for f in fs::read_dir(self.dir.join("logs"))?.flatten() {
+            if !keep_logs.contains(&f.file_name().to_string_lossy().to_string()) {
+                let _ = fs::remove_file(f.path());
+            }
         }
+        self.logs.retain(|id, _| keep_ids.contains(id));
         Ok(n)
     }
 

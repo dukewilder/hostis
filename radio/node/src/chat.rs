@@ -209,6 +209,15 @@ impl Inner {
     /// listeners who come in find someone there and the last lines to read.
     pub(crate) async fn keep_rooms(self: &Arc<Self>) {
         let mut want: Vec<StationId> = self.store.lock().unwrap().keys.keys().copied().collect();
+        // A Lantern that carries only its own stations sits only in their rooms.
+        if !self.cfg.carry_all {
+            for st in want {
+                if let Err(e) = self.chat_join(st).await {
+                    say(&format!("chatter: {e}"));
+                }
+            }
+            return;
+        }
         let now = now_ms();
         let mut busy: Vec<(u64, StationId)> = self.log.lock().unwrap().iter().filter(|(_, l)| l.fresh(now)).map(|(id, l)| (l.aboard(now), *id)).collect();
         busy.sort_by(|a, b| b.0.cmp(&a.0));

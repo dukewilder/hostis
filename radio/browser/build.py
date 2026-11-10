@@ -11,7 +11,10 @@ body = open(f"{R}/browser/body.html", encoding="utf-8").read()
 js = open(f"{W}/app.js", encoding="utf-8").read()
 # A test build names its own harbour and relays: PYRATE_HARBOUR="<id>@<relay>", PYRATE_RELAYS.
 harbour = os.environ.get("PYRATE_HARBOUR") or ",".join(open(f"{R}/app/assets/bootstrap.txt").read().split())
-out_js = js.replace("{{HARBOUR}}", harbour).replace("{{RELAYS}}", os.environ.get("PYRATE_RELAYS", ""))
+import json
+# HOSTIS's own stations: the only ones the landing page's set offers.
+harbour_stations = json.dumps(json.load(open(f"{R}/browser/harbour.json", encoding="utf-8")), ensure_ascii=False)
+out_js = js.replace("{{HARBOUR}}", harbour).replace("{{RELAYS}}", os.environ.get("PYRATE_RELAYS", "")).replace("'{{HARBOUR_STATIONS}}'", harbour_stations)
 v = hashlib.sha256(out_js.encode() + open(f"{W}/pkg/pyrate_browser_bg.wasm", "rb").read()).hexdigest()[:10]
 dist = f"{W}/dist"
 if os.path.exists(dist): shutil.rmtree(dist)

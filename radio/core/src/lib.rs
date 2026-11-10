@@ -18,6 +18,7 @@ pub mod ingest;
 pub mod keys;
 pub mod page;
 pub mod programme;
+pub mod seal;
 pub mod tape;
 
 pub use archive::{ArtRef, Archive, Body, Chunk, Entry, SignedEntry, release_message, release_trusted};

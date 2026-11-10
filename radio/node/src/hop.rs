@@ -43,6 +43,8 @@ pub(crate) enum Ask {
     Chunk { station: StationId, hash: Hash },
     /// A listener's hourly token, merged into the station's aboard sketch by the exit.
     Token { station: StationId, hour: u64, token: [u8; 32], nonce: u64 },
+    /// A chunk by its sealed name: the exit passes it on unopened.
+    Sealed { station: StationId, name: Hash },
 }
 
 fn x_secret(seed: &[u8; 32]) -> x25519_dalek::StaticSecret {
@@ -143,13 +145,12 @@ impl Inner {
     }
 
     pub(crate) async fn private_chunk(&self, station: StationId, hash: Hash, keep: bool) -> Result<Vec<u8>> {
+        let name = pyrate_core::seal::name(&hash);
         for _ in 0..3 {
-            let Ok(raw) = self.ask_privately(&Ask::Chunk { station, hash }).await else { continue };
-            if let Ok(Response::Chunk(Some(b))) = postcard::from_bytes::<Response>(&raw) {
-                if blake3::hash(&b).as_bytes() != &hash {
-                    continue;
-                }
-                if !keep || self.store.lock().unwrap().put_chunk(&hash, &b).is_ok() {
+            let Ok(raw) = self.ask_privately(&Ask::Sealed { station, name }).await else { continue };
+            if let Ok(Response::Sealed(Some(s))) = postcard::from_bytes::<Response>(&raw) {
+                let Some(b) = pyrate_core::seal::unseal(&hash, &s) else { continue };
+                if !keep || self.store.lock().unwrap().put_sealed(&hash, &s).is_ok() {
                     return Ok(b);
                 }
             }
@@ -190,6 +191,7 @@ impl Inner {
                     // An exit passes what it fetches straight through: nothing it relays for a stranger
                     // lands on its own device.
                     Ask::Chunk { station, hash } => Response::Chunk(self.chunk_direct(&station, &hash, false).await.ok()),
+                    Ask::Sealed { station, name } => Response::Sealed(self.sealed_direct(&station, &name).await.ok()),
                     Ask::Token { station, hour, token, nonce } => {
                         self.accept_token(station, hour, token, nonce, true);
                         Response::Entries(vec![])

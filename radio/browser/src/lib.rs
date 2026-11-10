@@ -107,6 +107,11 @@ impl Hold {
         self.items.iter().find(|(k, _)| k == h).map(|(_, v)| v.clone())
     }
 
+    /// What this tab holds under a sealed name, sealed for handing on.
+    fn sealed(&self, name: &Hash) -> Option<Vec<u8>> {
+        self.items.iter().find(|(k, _)| pyrate_core::seal::name(k) == *name).map(|(k, v)| pyrate_core::seal::seal(k, v))
+    }
+
     fn put(&mut self, h: Hash, b: Vec<u8>) {
         if self.items.iter().any(|(k, _)| *k == h) {
             return;
@@ -177,7 +182,9 @@ impl Ship {
                     .map(|a| a.entries().iter().skip(from as usize).take(2000).filter_map(|e| e.to_bytes().ok()).collect())
                     .unwrap_or_default(),
             ),
-            Request::Chunk { hash } => Response::Chunk(self.hold.lock().unwrap().get(&hash)),
+            // A tab hands on what it holds sealed, by name, as every node does.
+            Request::Chunk { .. } => Response::Chunk(None),
+            Request::SealedChunk { name } => Response::Sealed(self.hold.lock().unwrap().sealed(&name)),
             Request::Hop(_) => Response::Hop(vec![]),
             Request::Chatter { station } => Response::Chatter(
                 self.rooms.lock().unwrap().get(&station).map(|r| r.lines.iter().rev().take(60).rev().filter_map(|l| postcard::to_allocvec(l).ok()).collect()).unwrap_or_default(),
@@ -370,7 +377,15 @@ impl Ship {
         if let Some(b) = self.hold.lock().unwrap().get(hash) {
             return Ok(b);
         }
+        let name = pyrate_core::seal::name(hash);
         for node in self.carriers(station) {
+            if let Ok(Response::Sealed(Some(s))) = self.ask(node, &Request::SealedChunk { name }).await {
+                if let Some(b) = pyrate_core::seal::unseal(hash, &s) {
+                    self.hold.lock().unwrap().put(*hash, b.clone());
+                    return Ok(b);
+                }
+            }
+            // A keeper's own node hands out its station's sound in the clear.
             if let Ok(Response::Chunk(Some(b))) = self.ask(node, &Request::Chunk { hash: *hash }).await {
                 if blake3::hash(&b).as_bytes() != hash {
                     continue;

@@ -3401,6 +3401,7 @@ version = "0.1.0"
 dependencies = [
  "bip39",
  "blake3",
+ "chacha20poly1305",
  "ebur128",
  "ed25519-dalek",
  "getrandom 0.3.4",

@@ -4,6 +4,12 @@
 import init, { Radio } from './pkg/pyrate_browser.js';
 
 const HARBOUR = '{{HARBOUR}}';
+// HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
+// and nothing else, and it joins the network only when the visitor presses Listen.
+const HARBOUR_STATIONS = '{{HARBOUR_STATIONS}}';
+const EMBED = document.documentElement.classList.contains('embed');
+const passedId = () => { const id = location.hash.slice(1); return /^[0-9a-f]{64}$/.test(id) ? id : null };
+const inSet = s => !EMBED || HARBOUR_STATIONS.some(h => h.id === s.id) || s.id === passedId();
 const RELAYS = '{{RELAYS}}';
 const AHEAD_MS = 12000;
 const $ = id => document.getElementById(id);
@@ -332,7 +338,7 @@ function power() { $('clip').hidden = !(playing && clipType()); const g = $('go'
 
 function rows() {
   const m = marooned();
-  const shown = stations.filter(s => !m.has(s.id) && allowed(s));
+  const shown = stations.filter(s => !m.has(s.id) && allowed(s) && inSet(s));
   const box = $('rows'); box.innerHTML = '';
   dial(shown); if (!$('chart').hidden) chart();
   if (!shown.length) { box.innerHTML = '<p class="fine">Listening for station cards. The first come in within a minute.</p>'; return }
@@ -357,7 +363,7 @@ function refresh() {
   $('signal').textContent = n ? n + (n === 1 ? ' neighbour' : ' neighbours') + ' · ' + stations.length + ' on the air' : 'Coming aboard';
   rows();
   if (cur) { const u = stations.find(x => x.id === cur.id); if (u) { const pic0 = cur.cover, ban0 = cur.banner; cur = u; $('cs').textContent = u.call_sign + '  ' + u.aboard + ' aboard'; $('name').textContent = u.name; if (u.cover !== pic0 || u.banner !== ban0) show(u) } }
-  else { const id = location.hash.slice(1); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations.find(x => allowed(x) && !marooned().has(x.id))); if (s) show(s) }
+  else { const id = location.hash.slice(1); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations.find(x => allowed(x) && inSet(x) && !marooned().has(x.id))); if (s) show(s) }
 }
 
 // A station link (#<id>) works before the station's card arrives: the harbour carries it.
@@ -368,9 +374,15 @@ function followLink() {
   show(s);
 }
 
-$('go').onclick = () => { if (playing) stop(); else if (cur) listen(cur) };
+$('go').onclick = async () => {
+  if (playing) return stop();
+  if (!cur) return;
+  if (!radio) { audio(); ctx.resume(); $('np').textContent = 'Coming aboard'; await boot(); cur = stations.find(x => x.id === cur.id) || cur }
+  listen(cur);
+};
 $('spin').onclick = () => {
-  const m = marooned(), pool = stations.filter(s => !m.has(s.id) && allowed(s) && s.id !== cur?.id);
+  const m = marooned(), pool = (radio ? stations : HARBOUR_STATIONS).filter(s => !m.has(s.id) && allowed(s) && inSet(s) && s.id !== cur?.id);
+  if (!radio) { if (pool.length) dormant(pool[Math.floor(Math.random() * pool.length)]); return }
   if (pool.length) { listen(pool[Math.floor(Math.random() * pool.length)]); scrollTo({ top: 0, behavior: 'smooth' }) }
 };
 // ---- The chart of the seas: stations by the home port they name ------------------------
@@ -530,9 +542,17 @@ async function boot() {
 }
 // For anyone looking under the hood: what the player is doing.
 window.pyrate = { tap: () => { const d = ctx.createMediaStreamDestination(); gain.connect(d); return d.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, station: cur?.id, scheduled: sources.length, ahead_ms: ctx ? Math.round(Math.max(0, (sources.length ? 1 : 0) * 1)) : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, webcodecs }) };
+// The set at rest, before it joins the network: a HOSTIS station, or the one passed on.
+function dormant(s) {
+  cur = s; flag($('flag'), s.id, false); art(null);
+  $('name').textContent = s.name; $('cs').textContent = s.call_sign || ''; $('freq').textContent = fq(s.id).toFixed(1);
+  dial(HARBOUR_STATIONS.concat(passedId() && !HARBOUR_STATIONS.some(h => h.id === passedId()) ? [{ id: passedId(), name: 'Passed on' }] : []));
+  needle(s.id, false); power(); $('pass').hidden = true; $('np').textContent = 'Press Listen to come aboard.'; $('by').textContent = '';
+}
 // Inside the landing page, the set tells its host how tall it is.
 if (document.documentElement.classList.contains('embed') && parent !== window) {
   const tell = () => parent.postMessage({ pyrate: 'height', h: document.documentElement.scrollHeight }, location.origin);
   new ResizeObserver(tell).observe(document.body); addEventListener('load', tell);
 }
-boot();
+if (EMBED) { scale(); const p = passedId(); dormant(p ? { id: p, name: 'A passed-on station', call_sign: '' } : HARBOUR_STATIONS[0]); $('signal').textContent = '' }
+else boot();
