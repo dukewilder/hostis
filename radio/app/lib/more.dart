@@ -496,6 +496,64 @@ Future<void> tapeIt(BuildContext context) async {
   await ship.invokeMethod('share_file', {'path': name, 'mime': 'audio/ogg'});
 }
 
+/// One fetch from the open web, made by this phone itself: a plain client name rather than
+/// the toolkit's own, timeouts on connecting and on every gap, a cap on size, and a file
+/// that only takes its name once whole. The path, or null.
+Future<String?> fetchOut(String url, {int maxBytes = 30000000}) async {
+  final uri = Uri.tryParse(url.trim());
+  if (uri == null || !(uri.scheme == 'https' || uri.scheme == 'http') || uri.host.isEmpty) return null;
+  final client = HttpClient()
+    ..connectionTimeout = const Duration(seconds: 20)
+    ..idleTimeout = const Duration(seconds: 15)
+    ..userAgent = 'Mozilla/5.0';
+  final dir = await getTemporaryDirectory();
+  final stem = '${dir.path}/out-${DateTime.now().microsecondsSinceEpoch}';
+  final part = File('$stem.part');
+  try {
+    final rq = await client.getUrl(uri).timeout(const Duration(seconds: 30));
+    rq.followRedirects = true;
+    rq.maxRedirects = 6;
+    final rs = await rq.close().timeout(const Duration(seconds: 60));
+    if (rs.statusCode != 200 || rs.contentLength > maxBytes) return null;
+    final sink = part.openWrite();
+    var n = 0;
+    try {
+      await for (final chunk in rs.timeout(const Duration(seconds: 60))) {
+        n += chunk.length;
+        if (n > maxBytes) throw 'too large';
+        sink.add(chunk);
+      }
+    } finally {
+      await sink.close();
+    }
+    return part.renameSync('$stem.got').path;
+  } catch (_) {
+    return null;
+  } finally {
+    client.close(force: true);
+    try {
+      if (part.existsSync()) part.deleteSync();
+    } catch (_) {}
+  }
+}
+
+/// Clears what earlier runs fetched or copied and never cleaned up: a fetch cut off by a
+/// closed app, a picture or an episode left behind by a crash.
+Future<void> sweepTemp() async {
+  try {
+    final dir = await getTemporaryDirectory();
+    final old = DateTime.now().subtract(const Duration(hours: 6));
+    await for (final e in dir.list()) {
+      final n = e.path.split('/').last;
+      if (e is File && (n.startsWith('out-') || n.startsWith('feed-') || n.startsWith('pyrate-art-')) && e.statSync().modified.isBefore(old)) {
+        try {
+          e.deleteSync();
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
+}
+
 void shareStation(Map s) {
   if (s['pocket'] == true) return;
   ship.invokeMethod('share_text', {
