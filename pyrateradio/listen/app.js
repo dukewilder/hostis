@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=827b00f847';
+import init, { Radio } from './pkg/pyrate_browser.js?v=4bf7bc505e';
 
 const HARBOUR = 'a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442';
 const RELAYS = '';
@@ -10,7 +10,7 @@ const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let radio = null, stations = [], cur = null, playing = false, gen = 0;
-let ctx = null, gain = null, sources = [];
+let ctx = null, gain = null, sources = [], meter = null;
 const pics = new Map();
 
 function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v) } catch (e) { return null } }
@@ -86,6 +86,7 @@ function audio() {
   if (ctx) return;
   ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000, latencyHint: 'playback' });
   gain = ctx.createGain();
+  meter = ctx.createAnalyser(); meter.fftSize = 1024; gain.connect(meter); vu();
   // On iPhones a page's own audio stops when the screen locks. Sent through an audio
   // element instead, it keeps playing and shows on the lock screen.
   if (/iPhone|iPad|iPod/.test(navigator.userAgent) && ctx.createMediaStreamDestination) {
@@ -108,7 +109,82 @@ function schedule(chs, skipMs, when) {
   return when + n / 48000;
 }
 
-function status(t) { $('np').textContent = t; $('by').textContent = '' }
+function status(t) { $('np').textContent = t; $('by').textContent = ''; $('slot').textContent = ''; $('prog').style.width = '0'; $('time').textContent = '' }
+
+// ---- The set: frequencies, the dial glass, the lamps and the meter ----------------------
+// Every station sits at the same place on every dial: its frequency comes from its key.
+const fq = id => (875 + parseInt(id.slice(0, 6), 16) % 206) / 10;
+// Inset from the glass's edges, so the end numerals and names stay readable.
+const at = f => 3 + (f - 87.5) / 20.5 * 94;
+let dialIds = '', order = [];
+function scale() {
+  let h = '';
+  for (let f = 88; f <= 108; f += 0.5) h += '<i style="left:' + at(f) + '%"' + (f % 2 === 0 ? ' class="major"' : '') + '></i>' + (f % 4 === 0 ? '<b style="left:' + at(f) + '%">' + f + '</b>' : '');
+  $('scale').innerHTML = h;
+  let t = ''; for (let a = -48; a <= 48; a += 12) { const r = a * Math.PI / 180; t += '<line x1="' + (60 + 46 * Math.sin(r)) + '" y1="' + (64 - 46 * Math.cos(r)) + '" x2="' + (60 + 52 * Math.sin(r)) + '" y2="' + (64 - 52 * Math.cos(r)) + '"/>' }
+  $('ticks').innerHTML = t;
+}
+function dial(list) {
+  const ids = list.map(s => s.id + (s.live ? '*' : '')).join();
+  if (ids === dialIds) return;
+  dialIds = ids; order = [...list].sort((a, b) => fq(a.id) - fq(b.id));
+  $('track').style.width = Math.max($('glass').clientWidth, order.length * 92) + 'px';
+  $('names').innerHTML = '';
+  order.forEach((s, i) => {
+    const b = document.createElement('button'); b.textContent = s.name || s.call_sign; b.dataset.id = s.id; b.title = fq(s.id).toFixed(1) + '  ' + (s.name || '');
+    b.style.left = at(fq(s.id)) + '%'; b.style.top = (i % 3) * 20 + 'px'; b.classList.toggle('live', !!s.live); b.setAttribute('role', 'option');
+    b.onclick = e => { e.stopPropagation(); tuneTo(s) };
+    $('names').appendChild(b);
+  });
+  if (cur) needle(cur.id, false);
+}
+function needle(id, smooth = true) {
+  $('needle').style.left = at(fq(id)) + '%';
+  document.querySelectorAll('#names button').forEach(b => { const on = b.dataset.id === id; b.classList.toggle('on', on); b.setAttribute('aria-selected', on) });
+  const g = $('glass'), x = $('track').clientWidth * at(fq(id)) / 100;
+  if (g.scrollWidth > g.clientWidth) g.scrollTo({ left: x - g.clientWidth / 2, behavior: smooth ? 'smooth' : 'auto' });
+  $('freq').textContent = fq(id).toFixed(1);
+}
+function tuneTo(s) { if (playing) listen(s); else show(s) }
+$('glass').addEventListener('click', e => {
+  if (!order.length) return;
+  const r = $('track').getBoundingClientRect(), f = 87.5 + ((e.clientX - r.left) / r.width * 100 - 3) / 94 * 20.5;
+  tuneTo(order.reduce((a, b) => Math.abs(fq(b.id) - f) < Math.abs(fq(a.id) - f) ? b : a));
+});
+$('glass').addEventListener('keydown', e => {
+  if (!order.length || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+  e.preventDefault();
+  const i = order.findIndex(s => s.id === cur?.id), n = e.key === 'ArrowRight' ? i + 1 : i - 1;
+  tuneTo(order[(n + order.length) % order.length]);
+});
+function lamps(live) { $('lamp').classList.toggle('on', !!live); $('air').classList.toggle('on', !!live); $('rx').classList.toggle('on', playing && sources.length > 0) }
+// The meter follows the sound, with a needle's weight.
+let vuAngle = -48;
+function vu() {
+  const buf = new Float32Array(meter.fftSize);
+  const step = () => {
+    let rms = 0;
+    if (playing) { meter.getFloatTimeDomainData(buf); for (const x of buf) rms += x * x; rms = Math.sqrt(rms / buf.length) }
+    const want = -48 + Math.min(96, Math.max(0, (20 * Math.log10(rms + 1e-6) + 42) / 42 * 96));
+    vuAngle += (want - vuAngle) * (want > vuAngle ? 0.35 : 0.08);
+    $('vun').style.transform = 'rotate(' + vuAngle.toFixed(1) + 'deg)';
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+const mmss = ms => { const s = Math.floor(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') };
+
+// ---- Times, in the listener's own clock ------------------------------------------------
+const hm = ms => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+function dayOf(ms) {
+  const d = new Date(ms), t = new Date(), a = new Date(d.getFullYear(), d.getMonth(), d.getDate()), b = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  const n = Math.round((a - b) / 86400000);
+  return n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : DAYS[d.getDay()];
+}
+const when = ms => { const d = dayOf(ms); return d === 'Today' || d === 'Tomorrow' ? d.toLowerCase() : 'on ' + d };
+const offAir = back => back ? 'Off the air. Back ' + when(back) + ' at ' + hm(back) + '.' : 'Off the air';
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 // Fills twelve seconds ahead and keeps to the station's clock, the way the app does.
 async function play(id, g) {
@@ -124,7 +200,7 @@ async function play(id, g) {
     const at = playhead ?? radio.now() + 400;
     const p = JSON.parse(radio.plan(id, at));
     if (p.kind === 'searching') { if (!queued) status('Searching the Log'); await radio.sync(id).catch(() => { }); await sleep(1200); continue }
-    if (p.kind === 'dead air') { reset(); status('Dead air'); await sleep(4000); continue }
+    if (p.kind === 'dead air' || p.kind === 'off air') { if (!queued) { reset(); status(p.kind === 'off air' ? offAir(p.back_at) : 'Dead air') } await sleep(4000); continue }
     let chunk, ch, ms, seq = null;
     if (p.kind === 'live') {
       const t = p.tail;
@@ -168,12 +244,66 @@ async function play(id, g) {
 async function nowPlaying() {
   if (!cur || !radio) return;
   const p = JSON.parse(radio.plan(cur.id, radio.now()));
-  if (p.kind === 'live') { $('np').textContent = 'Live'; $('by').textContent = ''; $('air').innerHTML = '<span class="air">ON AIR</span>' }
+  lamps(p.kind === 'live');
+  if (p.kind === 'live') { $('np').textContent = 'Live from the station'; $('by').textContent = ''; $('slot').textContent = ''; $('prog').style.width = '100%'; $('time').textContent = '' }
   else if (p.kind === 'track') {
-    $('np').textContent = p.title || ''; $('by').textContent = p.by || '';
+    $('np').textContent = p.title || ''; $('by').textContent = p.by || ''; $('slot').textContent = p.slot || '';
+    $('prog').style.width = Math.min(100, p.position_ms / p.duration_ms * 100) + '%'; $('time').textContent = mmss(p.position_ms) + ' of ' + mmss(p.duration_ms);
     const url = await pic(cur.id, p.art || cur.cover); art(url);
     if ('mediaSession' in navigator && playing) navigator.mediaSession.metadata = new MediaMetadata({ title: p.title || cur.name, artist: p.by || '', album: cur.name, artwork: url ? [{ src: url, sizes: '512x512', type: 'image/jpeg' }] : [] });
-  } else if (!playing) status(p.kind === 'dead air' ? 'Dead air' : '');
+  } else if (p.kind === 'off air') status(offAir(p.back_at));
+  else if (!playing) status(p.kind === 'dead air' ? 'Dead air' : '');
+}
+
+// ---- The station's page: notices, up next and the week, from its own log ---------------
+function howItPlays(p) {
+  if (!p) return 'Plays its whole library shuffled, round the clock.';
+  const z = p.zone_name ? ' ' + p.zone_name : '', m = p.mode || {}, at = String(Math.floor((m.start_min || 0) / 60)).padStart(2, '0') + ':' + String((m.start_min || 0) % 60).padStart(2, '0');
+  const WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  let s = { in_order: 'Plays its library in order, from the top each Monday', newest_first: 'Plays its newest recordings first', daily: 'Plays its library in order, from the top every day at ' + at + z, weekly: 'Plays its library in order, from the top every ' + WEEK[(m.day || 0) % 7] + ' at ' + at + z }[m.kind] || 'Plays its whole library shuffled';
+  s += (p.hours || []).length ? ', on the air for set hours' + z + '.' : ', round the clock.';
+  if ((p.slots || []).length) s += ' ' + p.slots.length + (p.slots.length === 1 ? ' regular show.' : ' regular shows.');
+  return s;
+}
+
+// A show for the listener's own calendar: a small .ics, made here, sent nowhere.
+function ics(l, name) {
+  const f = ms => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const t = s => String(s || '').replace(/[\\;,]/g, c => '\\' + c).replace(/\n/g, '\\n');
+  const body = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Pyrate Radio//EN', 'BEGIN:VEVENT', 'UID:' + l.start_ms + '-' + cur.id.slice(0, 16) + '@pyrateradio', 'DTSTAMP:' + f(Date.now()), 'DTSTART:' + f(l.start_ms), 'DTEND:' + f(l.end_ms),
+    'SUMMARY:' + t(l.title + ' on ' + name), 'DESCRIPTION:' + t((l.about ? l.about + '\n' : '') + location.origin + location.pathname + '#' + cur.id), 'URL:' + location.origin + location.pathname + '#' + cur.id, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([body], { type: 'text/calendar' })); a.download = (l.title || 'show').replace(/[^\w ]+/g, '').trim().slice(0, 40) + '.ics'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+let pageFor = null, pageAt = 0, pageV = null;
+function page(force) {
+  if (!cur || !radio) return;
+  if (force || pageFor !== cur.id || Date.now() - pageAt > 30000) { pageV = JSON.parse(radio.page(cur.id, 7)); pageFor = cur.id; pageAt = Date.now() }
+  const v = pageV;
+  if (!v) { $('page').hidden = true; return }
+  $('page').hidden = false;
+  $('notices').innerHTML = (v.notices || []).map(n => '<div class="notice">' + esc(n.text) + '<small>' + esc(dayOf(n.at_ms) + ' ' + hm(n.at_ms)) + '</small></div>').join('');
+  const next = (v.next || []).filter(n => n.start_ms > radio.now()).slice(0, 5);
+  $('nexth').hidden = !next.length;
+  $('next').innerHTML = next.map(n => '<div class="li"><span class="t">' + hm(n.start_ms) + '</span><span class="w">' + esc(n.title) + (n.by ? ' <em>' + esc(n.by) + '</em>' : '') + '</span></div>').join('');
+  $('how').textContent = (!v.now && v.back_at ? offAir(v.back_at) + ' ' : '') + howItPlays(v.programme);
+  const now = radio.now(); let last = null, h = '', days = 0;
+  const ls = (v.listings || []).filter(l => l.kind !== 'hours');
+  for (const [i, l] of ls.entries()) {
+    const d = dayOf(l.start_ms);
+    // Today and tomorrow show; the rest of the week waits behind a button.
+    if (d !== last) { if (++days === 3) h += '<button class="small" id="week">THE WHOLE WEEK</button><div id="later" hidden>'; h += '<div class="day">' + d + '</div>'; last = d }
+    const on = l.start_ms <= now && now < l.end_ms;
+    h += '<div class="li' + (on ? ' on' : '') + '"><span class="t">' + hm(l.start_ms) + '–' + hm(l.end_ms) + '</span><span class="w">' + esc(l.title) +
+      (l.live ? ' <b class="lv">LIVE</b>' : '') + (l.kind === 'show' ? ' <b class="pr">PREMIERE</b>' : '') + (l.about ? '<em>' + esc(l.about) + '</em>' : '') + '</span>' +
+      (l.start_ms > now ? '<button class="small cal" data-i="' + i + '" title="Add to your calendar">+ CAL</button>' : '') + '</div>';
+  }
+  if (days >= 3) h += '</div>';
+  const open = !$('later')?.hidden && $('later') !== null;
+  $('listings').innerHTML = h || '<p>No shows on the bill this week.</p>';
+  if ($('week')) { if (open) { $('later').hidden = false; $('week').hidden = true } $('week').onclick = () => { $('later').hidden = false; $('week').hidden = true } }
+  $('listings').querySelectorAll('.cal').forEach(b => b.onclick = () => ics(ls[+b.dataset.i], v.name || cur.name));
 }
 
 function art(url) { const c = $('cover'); if (url) { if (c.src !== url) c.src = url; c.hidden = false; $('flag').hidden = true } else { c.hidden = true; $('flag').hidden = false } }
@@ -182,29 +312,30 @@ async function show(s) {
   cur = s;
   flag($('flag'), s.id, s.live); art(await pic(s.id, s.cover));
   const b = await pic(s.id, s.banner); $('banner').style.backgroundImage = b ? 'url(' + b + ')' : '';
-  $('name').textContent = s.name || s.call_sign; $('cs').textContent = s.call_sign + (s.aboard !== undefined ? ' · ' + s.aboard + ' aboard' : '');
-  $('air').innerHTML = s.live ? '<span class="air">ON AIR</span>' : '';
-  $('go').hidden = false; $('go').textContent = playing ? '■ STOP' : '▶ LISTEN';
+  $('name').textContent = s.name || s.call_sign; $('cs').textContent = s.call_sign + (s.aboard !== undefined ? '  ' + s.aboard + ' aboard' : '');
+  lamps(s.live); needle(s.id); power();
   $('pass').hidden = false; $('maroon').hidden = false;
   document.querySelectorAll('.row').forEach(r => r.classList.toggle('on', r.dataset.id === s.id));
   if (location.hash.slice(1) !== s.id) history.replaceState(null, '', '#' + s.id);
   radio.tune(s.id);
-  nowPlaying();
+  nowPlaying(); page(true); chatter();
 }
 
 function listen(s) {
   audio(); ctx.resume();
-  const g = ++gen; stopAll(); playing = true; show(s); $('go').textContent = '■ STOP';
+  const g = ++gen; stopAll(); playing = true; show(s); power();
   play(s.id, g);
 }
 
-function stop() { gen++; stopAll(); playing = false; $('go').textContent = '▶ LISTEN'; ctx?.suspend() }
+function stop() { gen++; stopAll(); playing = false; power(); lamps(false); ctx?.suspend() }
+function power() { const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■' : '▶'; g.querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen' }
 
 function rows() {
   const m = marooned();
   const shown = stations.filter(s => !m.has(s.id) && allowed(s));
   const box = $('rows'); box.innerHTML = '';
-  if (!shown.length) { box.innerHTML = '<p>Listening for station cards. The first come in within a minute.</p>'; return }
+  dial(shown);
+  if (!shown.length) { box.innerHTML = '<p class="fine">Listening for station cards. The first come in within a minute.</p>'; return }
   for (const s of shown) {
     const r = document.createElement('div'); r.className = 'row'; r.dataset.id = s.id;
     r.innerHTML = '<div class="mini"></div><div class="meta"><div class="name"></div><div class="cs"></div><div class="about"></div></div><div class="count"></div>';
@@ -212,7 +343,7 @@ function rows() {
     if (s.cover) { mini.classList.add('pic'); pic(s.id, s.cover).then(u => { if (u) mini.innerHTML = '<img alt="" src="' + u + '">'; else flag(mini, s.id, s.live) }) } else flag(mini, s.id, s.live);
     r.querySelector('.name').textContent = s.name + (s.live ? '  · ON AIR' : '') + (s.explicit ? '  · EXPLICIT' : s.mature ? '  · MATURE' : '');
     r.querySelector('.cs').textContent = s.call_sign; r.querySelector('.about').textContent = s.about || '';
-    r.querySelector('.count').innerHTML = s.aboard + '<small>ABOARD</small>';
+    r.querySelector('.count').innerHTML = s.aboard + '<small>ABOARD</small><span class="fq">' + fq(s.id).toFixed(1) + '</span>';
     r.classList.toggle('on', cur?.id === s.id);
     r.onclick = () => listen(s);
     box.appendChild(r);
@@ -225,7 +356,7 @@ function refresh() {
   const n = radio.neighbours();
   $('signal').textContent = n ? n + (n === 1 ? ' neighbour' : ' neighbours') + ' · ' + stations.length + ' on the air' : 'Coming aboard';
   rows();
-  if (cur) { const u = stations.find(x => x.id === cur.id); if (u) { const pic0 = cur.cover, ban0 = cur.banner; cur = u; $('cs').textContent = u.call_sign + ' · ' + u.aboard + ' aboard'; $('name').textContent = u.name; if (u.cover !== pic0 || u.banner !== ban0) show(u) } }
+  if (cur) { const u = stations.find(x => x.id === cur.id); if (u) { const pic0 = cur.cover, ban0 = cur.banner; cur = u; $('cs').textContent = u.call_sign + '  ' + u.aboard + ' aboard'; $('name').textContent = u.name; if (u.cover !== pic0 || u.banner !== ban0) show(u) } }
   else { const id = location.hash.slice(1); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations.find(x => allowed(x) && !marooned().has(x.id))); if (s) show(s) }
 }
 
@@ -238,11 +369,49 @@ function followLink() {
 }
 
 $('go').onclick = () => { if (playing) stop(); else if (cur) listen(cur) };
-$('pass').onclick = async () => {
-  const url = location.origin + location.pathname + '#' + cur.id;
-  if (navigator.share) { try { await navigator.share({ title: cur.name, url }); return } catch (e) { } }
-  try { await navigator.clipboard.writeText(url); $('pass').textContent = 'LINK COPIED'; setTimeout(() => $('pass').textContent = 'PASS IT ON', 2000) } catch (e) { prompt('Pass on this link', url) }
+$('spin').onclick = () => {
+  const m = marooned(), pool = stations.filter(s => !m.has(s.id) && allowed(s) && s.id !== cur?.id);
+  if (pool.length) { listen(pool[Math.floor(Math.random() * pool.length)]); scrollTo({ top: 0, behavior: 'smooth' }) }
 };
+// ---- Chatter: talk in the station's room, kept by nobody --------------------------------
+const myName = () => store('pyrate.name') || '';
+function chatter() {
+  if (!cur || !radio) return;
+  const c = JSON.parse(radio.chat_read(cur.id));
+  $('chatjoin').hidden = c.joined; $('chatroom').hidden = !c.joined;
+  if (!c.joined) return;
+  let mutes; try { mutes = new Set(JSON.parse(store('pyrate.mutes') || '[]')) } catch (e) { mutes = new Set() }
+  $('chatwho').textContent = 'You speak here as ' + (myName() || c.voice) + '. ' + (c.neighbours ? 'Linked to ' + c.neighbours + ' in the room.' : 'Looking for others in the room.');
+  const box = $('lines'), atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
+  const shown = c.lines.filter(l => !mutes.has(l.voice));
+  box.innerHTML = shown.map(l => '<div class="line' + (l.keeper ? ' keeper' : '') + (l.mine ? ' mine' : '') + '"><button class="who" data-v="' + esc(l.voice) + '" title="' + esc(l.voice) + '">' + esc(l.name || l.voice) + (l.keeper ? ' (the station)' : '') + '</button><small>' + hm(l.at_ms) + '</small><div class="said">' +
+    (l.kind === 'cheer' ? '<span class="cheer">Cheers to what is on</span>' : l.kind === 'request' ? '<span class="req">Asks for ' + esc(l.title || 'a recording') + '</span>' + (l.text ? ', <em>' + esc(l.text) + '</em>' : '') : esc(l.text)) + '</div></div>').join('') || '<p class="fine">Nobody has said anything yet.</p>';
+  if (atEnd) box.scrollTop = box.scrollHeight;
+  box.querySelectorAll('.who').forEach(w => w.onclick = () => { if (!w.closest('.mine') && confirm('Mute ' + w.textContent + '? Only you stop hearing them, in this browser.')) { mutes.add(w.dataset.v); store('pyrate.mutes', JSON.stringify([...mutes])); chatter() } });
+}
+const speak = (kind, text, track) => radio.chat_send(cur.id, kind, text || '', track || '', myName()).then(chatter, e => { $('chatwho').textContent = String(e) });
+$('chatgo').onclick = async () => { $('chatgo').textContent = 'Joining'; try { await radio.chat_join(cur.id) } catch (e) { $('chatgo').textContent = 'Join the chatter'; return } chatter() };
+$('say').onsubmit = e => { e.preventDefault(); const t = $('sayt').value.trim(); if (!t) return; $('sayt').value = ''; speak('text', t) };
+$('cheer').onclick = () => speak('cheer');
+$('myname').value = myName(); $('myname').onchange = () => { store('pyrate.name', $('myname').value.trim()); chatter() };
+$('askfor').onclick = () => {
+  const lib = JSON.parse(radio.library(cur.id));
+  $('asktrack').innerHTML = lib.map(t => '<option value="' + t.track + '">' + esc(t.title) + (t.by ? ', ' + esc(t.by) : '') + '</option>').join('');
+  $('askbox').hidden = !$('askbox').hidden || !lib.length;
+};
+$('asksend').onclick = () => { speak('request', $('asknote').value.trim(), $('asktrack').value); $('asknote').value = ''; $('askbox').hidden = true };
+setInterval(() => { if (!$('chatroom').hidden || !$('chatjoin').hidden) chatter() }, 2000);
+
+// Pass it on: the station's code to scan, its link to copy or share.
+$('pass').onclick = () => {
+  const url = 'https://hostis.black/pyrateradio/listen/#' + cur.id, q = JSON.parse(radio.qr(url)), n = q.size;
+  let d = ''; for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.bits[y * n + x] === '1') d += 'M' + (x + 4) + ' ' + (y + 4) + 'h1v1h-1z';
+  $('qr').innerHTML = '<svg viewBox="0 0 ' + (n + 8) + ' ' + (n + 8) + '" role="img" aria-label="QR code for this station"><rect width="100%" height="100%" fill="#fbf8f1"/><path d="' + d + '" fill="#0a0a0a"/></svg>';
+  $('plink').textContent = url; $('passbox').hidden = false; $('passbox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  $('pcopy').onclick = async () => { try { await navigator.clipboard.writeText(url); $('pcopy').textContent = 'Copied' } catch (e) { prompt('The link', url) } };
+  $('pshare').hidden = !navigator.share; $('pshare').onclick = () => navigator.share({ title: cur.name, text: 'Tune in to ' + cur.name + ' on Pyrate Radio', url }).catch(() => { });
+};
+$('pclose').onclick = () => { $('passbox').hidden = true; $('pcopy').textContent = 'Copy the link' };
 $('maroon').onclick = () => {
   if (!cur || !confirm('Maroon ' + cur.name + '? It leaves this browser\'s Log and stays gone until you bring it back.')) return;
   const m = marooned(); m.add(cur.id); setMarooned(m); stop(); cur = null; history.replaceState(null, '', location.pathname); refresh();
@@ -265,16 +434,22 @@ for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-expl
 $('mclear').onclick = () => { setMarooned(new Set()); $('mnote').textContent = 'Every station is back in the Log.'; refresh() };
 
 async function boot() {
+  scale();
   $('signal').textContent = 'Coming aboard';
   try { await init() } catch (e) { $('name').textContent = 'This browser cannot run the radio'; return }
   let key = store('pyrate.token');
   if (!/^[0-9a-f]{64}$/.test(key || '')) { const b = new Uint8Array(32); crypto.getRandomValues(b); key = [...b].map(x => x.toString(16).padStart(2, '0')).join(''); store('pyrate.token', key) }
   try { radio = await Radio.start(HARBOUR, key, RELAYS) } catch (e) { console.warn(e); $('name').textContent = 'Could not reach a relay'; $('signal').textContent = String(e); return }
   followLink(); refresh();
-  setInterval(refresh, 4000); setInterval(nowPlaying, 1000);
+  setInterval(refresh, 4000); setInterval(nowPlaying, 1000); setInterval(() => page(false), 5000);
   window.addEventListener('hashchange', followLink);
   if ('mediaSession' in navigator) { navigator.mediaSession.setActionHandler('play', () => cur && listen(cur)); navigator.mediaSession.setActionHandler('pause', stop); navigator.mediaSession.setActionHandler('stop', stop) }
 }
 // For anyone looking under the hood: what the player is doing.
 window.pyrate = { tap: () => { const d = ctx.createMediaStreamDestination(); gain.connect(d); return d.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, station: cur?.id, scheduled: sources.length, ahead_ms: ctx ? Math.round(Math.max(0, (sources.length ? 1 : 0) * 1)) : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, webcodecs }) };
+// Inside the landing page, the set tells its host how tall it is.
+if (document.documentElement.classList.contains('embed') && parent !== window) {
+  const tell = () => parent.postMessage({ pyrate: 'height', h: document.documentElement.scrollHeight }, location.origin);
+  new ResizeObserver(tell).observe(document.body); addEventListener('load', tell);
+}
 boot();
