@@ -315,6 +315,8 @@ html.embed .set{margin:0}
 .say input,.sayrow input,#askbox input,#askbox select{flex:1;min-width:0;height:44px;background:var(--black);color:var(--bone);border:1px solid var(--bone-faint);padding:0 .9rem;font-family:var(--serif);font-size:1rem}
 .sayrow,#askbox{display:flex;gap:.6rem;flex-wrap:wrap;margin:0 0 .6rem}
 .sayrow input{flex:1 1 10rem}
+#clipbox video{flex:0 0 auto;width:min(200px,46vw);aspect-ratio:9/16;background:var(--black);border:1px solid var(--bone-ghost)}
+a.plain{text-decoration:none}
 </style>
 <script>if(/[?&]embed/.test(location.search))document.documentElement.classList.add('embed')</script>
 </head>
@@ -350,11 +352,13 @@ html.embed .set{margin:0}
 <div class="buttons">
 <button id="spin" class="plain">Spin the dial</button>
 <button id="pass" class="plain" hidden>Pass it on</button>
+<button id="clip" class="plain" hidden>Clip it</button>
 <button id="maroon" class="plain quiet" hidden>Maroon</button>
 </div>
 <svg class="vu" viewBox="0 0 120 70" aria-hidden="true"><path class="arc" d="M14 62 A50 50 0 0 1 106 62"/><path class="hot" d="M88 27 A50 50 0 0 1 106 62"/><g class="ticks" id="ticks"></g><line id="vun" class="vun" x1="60" y1="64" x2="60" y2="18"/><circle cx="60" cy="64" r="3.5" class="hub"/><text x="60" y="58" class="vulabel">VU</text></svg>
 </div>
 <div id="passbox" class="passbox" hidden><div class="qr" id="qr"></div><div class="passtext"><p>Scan it with a phone camera and the station plays a tap later, in the browser or the app. No account, no store.</p><p class="link" id="plink"></p><button id="pcopy" class="plain">Copy the link</button><button id="pshare" class="plain">Share</button><button id="pclose" class="plain quiet">Close</button></div></div>
+<div id="clipbox" class="passbox" hidden><video id="clipv" playsinline controls></video><div class="passtext"><p>Twenty seconds of what is on, with the station's name, its place on the dial and a code to scan. Post it anywhere.</p><a id="clipsave" class="plain" download>Save the clip</a> <button id="clipshare" class="plain">Share</button> <button id="clipclose" class="plain quiet">Close</button></div></div>
 <audio id="a" playsinline></audio>
 </section>
 
@@ -397,6 +401,6 @@ html.embed .set{margin:0}
 </section>
 </div>
 <footer><a href="../">Pyrate Radio</a> <a href="../#set">Take the set</a> <a href="../#faq">Questions</a> <span>No rights reserved</span></footer>
-<script type="module" src="app.js?v=4bf7bc505e"></script>
+<script type="module" src="app.js?v=4ced0658b5"></script>
 </body>
 </html>
