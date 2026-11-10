@@ -137,3 +137,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - A keeper's Lantern keeps hails sealed under its own key rather than writing them out, and opens them only when the keeper asks.
 - The Lantern's page and the browser set both run under a strict content policy with no referrer, and a Lantern's /player/ copy links home properly.
 - A Lantern's web listener reconnects by itself when its stream breaks.
+- A browser tab whose node faults says so and comes back aboard by itself, once.
