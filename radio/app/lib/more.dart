@@ -134,6 +134,11 @@ class _LogPageState extends State<LogPage> {
   bool onNow = false;
   Map nowOn = {};
   int _nowTick = 0;
+  @override
+  void dispose() {
+    search.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -441,7 +446,7 @@ class _WatchBillState extends State<WatchBill> {
   Future<void> load() async {
     final r = await Native.callAway({'cmd': 'schedule', 'station': widget.station['id'], 'hours': 72});
     final b = await ship.invokeMethod<String>('bells').catchError((_) => '[]') ?? '[]';
-    setState(() {
+    if (mounted) setState(() {
       loading = false;
       if (r is List) {
         bill = r;
@@ -495,7 +500,7 @@ class _WatchBillState extends State<WatchBill> {
                     onPressed: () async {
                       if (ringing) {
                         await ship.invokeMethod('bell_cancel', {'id': id, 'station': s['id'], 'at': start});
-                        setState(() => bells.remove(id));
+                        if (mounted) setState(() => bells.remove(id));
                       } else {
                         await ringAt(context, id: id, at: start, title: (item['title'] ?? 'A show').toString(), station: s['id'] as String, name: (s['name'] ?? '').toString());
                         if (mounted) setState(() => bells.add(id));
@@ -686,6 +691,11 @@ class _TipSheetState extends State<TipSheet> {
   final memo = TextEditingController();
 
   bool get lightning => tipUri(widget.addr, '').startsWith('lightning:');
+  @override
+  void dispose() {
+    memo.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -956,6 +966,12 @@ class _DetailsPanelState extends State<DetailsPanel> {
   final port = TextEditingController();
   final tip = TextEditingController();
   String? saved;
+  @override
+  void dispose() {
+    port.dispose();
+    tip.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -1303,7 +1319,7 @@ class _ShipPapersState extends State<ShipPapers> {
     await ship.invokeMethod('wake_set', {'on': true, 'hour': t.hour, 'minute': t.minute, 'station': st, 'name': name});
     final exact = await ship.invokeMethod<bool>('exact_ok').catchError((_) => true) ?? true;
     final v = await ship.invokeMethod<String>('wake_get');
-    setState(() {
+    if (mounted) setState(() {
       wake = jsonDecode(v ?? '{}');
       msg = exact ? null : 'Android asks permission for alarms that ring on the minute. Without it the radio may wake you a minute late.';
     });
@@ -1376,7 +1392,7 @@ class _ShipPapersState extends State<ShipPapers> {
         if (wakeOn)
           pyrateButton('NO ALARM', () async {
             await ship.invokeMethod('wake_set', {'on': false, 'hour': 7, 'minute': 0});
-            setState(() => wake = {'on': false});
+            if (mounted) setState(() => wake = {'on': false});
           }, color: boneFaint),
       ]),
       const SizedBox(height: 26),
@@ -1451,6 +1467,7 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    pin.dispose();
     super.dispose();
   }
 

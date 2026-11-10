@@ -767,6 +767,14 @@ class _ColoursPageState extends State<ColoursPage> {
         enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: boneGhost)),
         focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: bone)),
       );
+  @override
+  void dispose() {
+    name.dispose();
+    about.dispose();
+    restoreWords.dispose();
+    super.dispose();
+  }
+
 
   Widget button(String label, VoidCallback? onTap, {Color color = bone}) => OutlinedButton(
         onPressed: onTap,
@@ -848,7 +856,7 @@ class _ColoursPageState extends State<ColoursPage> {
   Future<void> _setArt(String station, String kind, String path) async {
     setState(() => artNote = 'Redrawing the picture');
     final r = await Native.callAway({'cmd': 'art_set', 'station': station, 'kind': kind, 'path': path});
-    setState(() => artNote = r is Map && r['error'] != null ? 'That picture would not take: ${r['error']}' : null);
+    if (mounted) setState(() => artNote = r is Map && r['error'] != null ? 'That picture would not take: ${r['error']}' : null);
   }
 
   Future<void> pickArt(String station, String kind) async {
@@ -1127,7 +1135,7 @@ class _ColoursPageState extends State<ColoursPage> {
     }
     Future<void> after(Future<void> f) async {
       await f;
-      setState(() => programmeFor = null);
+      if (mounted) setState(() => programmeFor = null);
     }
 
     return [

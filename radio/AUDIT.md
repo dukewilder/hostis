@@ -71,7 +71,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
 
 - **P31** (low) Android App Links are not verified, so scanned posters open the browser. `AndroidManifest.xml:43-54`
-- **P39** (low) `setState` after await without `mounted`, and controllers that are never disposed. `more.dart:394-406`
 ## Fixed
 
 **B1. The stem names its origin.** `hop.rs` starts every stem at `hops: 0` and each relay adds one, so the guard that receives `hops: 0` knows its peer is the broadcaster. Does not hold. Fixed: every node, broadcaster and relay alike, now sends the count as zero and nothing reads it. A stem ends by the fluff draw alone (four hops on average), and a node that sees the same cargo come round again spreads it. Older nodes still count up from zero, which tells a new node only that its sender was a relay. Checked by the voyage test (18 of 18). (ae5aa7b)
@@ -232,4 +231,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **P17. Blocking native calls on the UI thread, in Dart and in the service.** (medium) Fixed: The dial's poll and every slow command (go on air, end, strike, tape, maroon, keep, flock join, clearing art, importing a maroon list) run off the screen's thread, the poll one at a time. In the playback service every call into the node, its start included, runs on one thread of its own; the lock screen, the speaker and the notification are touched only on the main thread, the service goes to the foreground before the node is asked anything, and the car's list of stations is built in the background. Built, not yet run on a phone: this build is in the APK for Dylan to sign and try. (79ce351)
 
-**P27. The numbers kit decodes and rewrites WAV files sample by sample on the UI isolate.** (medium) Fixed: The message and its interval signal are read, joined and written in a background isolate from typed buffers in two writes, not sample by sample on the screen's thread. A round trip against Python's wave module (a stereo file in, its first channel out after the signal) matches sample for sample. (pending)
+**P27. The numbers kit decodes and rewrites WAV files sample by sample on the UI isolate.** (medium) Fixed: The message and its interval signal are read, joined and written in a background isolate from typed buffers in two writes, not sample by sample on the screen's thread. A round trip against Python's wave module (a stereo file in, its first channel out after the signal) matches sample for sample. (b96e1d4)
+
+**P39. `setState` after await without `mounted`, and controllers that are never disposed.** (low) Fixed: Every setState that follows an await, twenty-six of them found by a scan of the three screens, now checks the screen is still there first, and the twenty text controllers that screens own are disposed with them. (pending)
