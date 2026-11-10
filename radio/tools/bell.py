@@ -50,8 +50,11 @@ def main():
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
         f.write(text)
     tmp = o.out + ".part.wav"
-    with open(f.name, encoding="utf-8") as src:
-        subprocess.run(["piper", "--model", o.voice, "--output_file", tmp], stdin=src, check=True)
+    try:
+        with open(f.name, encoding="utf-8") as src:
+            subprocess.run(["piper", "--model", o.voice, "--output_file", tmp], stdin=src, check=True)
+    finally:
+        os.remove(f.name)
     os.replace(tmp, o.out)
     print(f"bell written to {o.out}")
 
