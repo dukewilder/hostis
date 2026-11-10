@@ -20,7 +20,7 @@ def main():
     a.add_argument("--keep", type=int, default=50, help="newest episodes to hold")
     o = a.parse_args()
     os.makedirs(o.folder, exist_ok=True)
-    req = urllib.request.Request(o.feed, headers={"User-Agent": "Pyrate Radio feed2folder"})
+    req = urllib.request.Request(o.feed, headers={"User-Agent": "Mozilla/5.0"})
     root = ET.fromstring(urllib.request.urlopen(req, timeout=60).read())
     channel = root.find("channel")
     show = safe(channel.findtext("title") or "Podcast")
@@ -36,7 +36,22 @@ def main():
         if os.path.exists(path):
             continue
         tmp = path + ".part"
-        urllib.request.urlretrieve(url, tmp)
+        # A minute's patience for each read and a gigabyte at most, so a feed that stalls or
+        # sends without end cannot hang the Lantern or fill its disk.
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as out:
+                n = 0
+                while chunk := r.read(1 << 16):
+                    n += len(chunk)
+                    if n > 1 << 30:
+                        raise ValueError("over a gigabyte")
+                    out.write(chunk)
+        except Exception as e:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            print("skipped:", name, "-", e)
+            continue
         os.replace(tmp, path)
         with open(os.path.join(o.folder, name + ".source.txt"), "w", encoding="utf-8") as f:
             f.write(f"From the feed of {show}: {item.findtext('link') or o.feed}")
