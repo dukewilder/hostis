@@ -189,17 +189,17 @@ impl Inner {
     fn line_json(&self, st: &StationId, s: &Signed, me: &[u8; 32]) -> Value {
         let keeper = s.line.from == st.0 || self.store.lock().unwrap().logs.get(st).is_some_and(|a| a.deputies().contains(&s.line.from));
         let (kind, text, track, title) = match &s.line.say {
-            Say::Text(t) => ("text", t.clone(), None, None),
+            Say::Text(t) => ("text", chat::shown(t), None, None),
             Say::Cheer => ("cheer", String::new(), None, None),
             Say::Request { track, note } => {
                 let title = self.store.lock().unwrap().logs.get(st).map(|a| describe_track(a, track).0).filter(|t| !t.is_empty());
-                ("request", note.clone(), Some(hex(track)), title)
+                ("request", chat::shown(note), Some(hex(track)), title)
             }
             Say::Hail { .. } => ("hail", String::new(), None, None),
         };
         json!({
             "id": hex(&chat::id(s)), "from": hex(&s.line.from), "voice": StationId(s.line.from).call_sign(),
-            "name": s.line.name, "at_ms": s.line.at_ms, "kind": kind, "text": text, "track": track, "title": title,
+            "name": chat::shown_name(&s.line.name), "at_ms": s.line.at_ms, "kind": kind, "text": text, "track": track, "title": title,
             "keeper": keeper, "mine": s.line.from == *me,
         })
     }

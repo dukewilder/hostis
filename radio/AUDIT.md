@@ -35,23 +35,11 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 - **C12** (low) Lantern page and tower have no recovery when the stream ends. `node/src/web.rs:442-449`
 - **C13** (low) /player/ mirror: broken home links, no redirect, no hardening headers. `node/src/web.rs:62-63`
-- **C23** (low) Flock: no way to leave, relay URL taken from the link without checks. `browser/src/lib.rs:944-982`
-- **C24** (low) Chat: the keeper label can be imitated, and bidi controls are not stripped. `browser/www/app.js:453; core/src/chat.rs:166-168`
 - **C25** (low) Wasm traps are unrecoverable. `Cargo.toml `[profile.web] panic = "abort"`; browser/www/app.js:608-611`
-- **C26** (low) Console logs identify the fresh node and the station being synced. `browser/src/lib.rs:49-51`
 - **C28** (medium) No CSP, no Referrer-Policy, inline script in head. `node/src/web/listen.html:1-9`
 - **C29** (medium) Storage and URL inventory (what ties a visit to the next, and what stays in history). `browser/www/app.js:22-35`
 - **C34** (medium) Background and Safari playback: iPad detection, interruptions, meter, hidden tab buffer. `browser/www/app.js:100-111`
-- **C35** (medium) Hail: wrong target after switching station, stale stop timer, mic left on. `browser/www/app.js:472-486`
-- **C36** (medium) Chatter and rows are re-rendered wholesale on a timer. `browser/www/app.js:369-377`
-- **C37** (medium) Cover art is fetched for every listed station, retried every 4 s, with no size cap. `browser/www/app.js:43-49`
-- **C38** (low) Object URLs and animation work never released. `browser/www/app.js:46`
-- **C39** (low) Second tap on Listen while booting starts a second node (embed). `browser/www/app.js:407-412`
-- **C41** (low) ICS export can be injected with a bare CR in a title or about text. `browser/www/app.js:285-291`
-- **C42** (low) Pass-it-on, clip QR and ICS links are hard-wired to hostis.black. `browser/www/app.js:494`
 - **C43** (low) Station chart, harbour merge and debug hook small defects. `browser/www/app.js:26-31`
-- **C44** (medium) Build: wasm is not cache-busted, so a deploy can mix new glue with old wasm. `browser/build.py:18`
-- **C45** (low) Build embeds env/config strings unescaped. `browser/build.py:13-17`
 - **C46** (medium) Android "open in the app" fallback goes to a 404. `landing/index.html:84`
 - **C47** (low) Landing build can publish placeholder text. `landing/build.py:21-22`
 - **C48** (low) Embedded set cannot record a hail and the copy there overpromises. `landing/index.html:79; browser/www/app.js:473-475`
@@ -228,18 +216,42 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **P31. Android App Links are not verified, so scanned posters open the browser.** (low) Fixed: The app now asks Android to verify both hostis.black link filters, and tools/assetlinks.py writes the site file from the Android certificate. Until hostis.black serves it, links open in the browser as before, so nothing regresses. What remains is Dylan's: the certificate and a yes to a file at the domain root (brief, section 8). (c9f3dae)
 
-**C16. Chunk fetch is serial, has no failure memory, and retries dead peers every time.** (medium) Fixed: A chunk is asked of two carriers at once and the first good answer wins; carriers that failed lately are asked only after the rest, and at most eight are tried. (pending)
+**C16. Chunk fetch is serial, has no failure memory, and retries dead peers every time.** (medium) Fixed: A chunk is asked of two carriers at once and the first good answer wins; carriers that failed lately are asked only after the rest, and at most eight are tried. (f2e0e41)
 
-**C20. Unbounded growth: cards, listings, archives, rooms, connections, seen set.** (medium) Fixed: Once a minute a tab trims what it no longer needs: cards quiet for six hours, logs beyond the eight last played (the tuned station and pockets stay), their clocks, closed connections and old token marks. At most three chatter rooms stay open; joining a fourth leaves the oldest. (pending)
+**C20. Unbounded growth: cards, listings, archives, rooms, connections, seen set.** (medium) Fixed: Once a minute a tab trims what it no longer needs: cards quiet for six hours, logs beyond the eight last played (the tuned station and pockets stay), their clocks, closed connections and old token marks. At most three chatter rooms stay open; joining a fourth leaves the oldest. (f2e0e41)
 
-**C21. plan() re-hashes the whole log on every call.** (medium) Fixed: Each station's clock is kept and rebuilt only when its log grows, instead of on every one of the player's calls. (pending)
+**C21. plan() re-hashes the whole log on every call.** (medium) Fixed: Each station's clock is kept and rebuilt only when its log grows, instead of on every one of the player's calls. (f2e0e41)
 
-**C22. Struck station leaves the tab stuck "Searching the Log" and hammering carriers.** (low) Fixed: A struck station is remembered as struck: its card and log go, its cards are ignored from then on, and the set says the station has ended and stops asking for it. A log not found yet is looked for less often, up to every fifteen seconds. (pending)
+**C22. Struck station leaves the tab stuck "Searching the Log" and hammering carriers.** (low) Fixed: A struck station is remembered as struck: its card and log go, its cards are ignored from then on, and the set says the station has ended and stops asking for it. A log not found yet is looked for less often, up to every fifteen seconds. (f2e0e41)
 
-**C31. Playback loop can die silently (exception, empty decode, missing decoder script).** (medium) Fixed: Every step of the player loop is caught: a stumble resets and starts again with a word on the set, a chunk that decodes to nothing is skipped like a missing one, and only after six stumbles in a row does the set stop and say this browser could not play the station. Played in Chromium through both decoders. (pending)
+**C31. Playback loop can die silently (exception, empty decode, missing decoder script).** (medium) Fixed: Every step of the player loop is caught: a stumble resets and starts again with a word on the set, a chunk that decodes to nothing is skipped like a missing one, and only after six stumbles in a row does the set stop and say this browser could not play the station. Played in Chromium through both decoders. (f2e0e41)
 
-**C32. Going live after a track leaves silence and extra latency.** (medium) Fixed: Going from a track to live clears what was queued ahead, the end of the queue included, so the broadcast starts at once rather than after the track's twelve seconds of lead. (pending)
+**C32. Going live after a track leaves silence and extra latency.** (medium) Fixed: Going from a track to live clears what was queued ahead, the end of the queue included, so the broadcast starts at once rather than after the track's twelve seconds of lead. (f2e0e41)
 
-**C33. The "No carrier answered yet" message is overwritten within a second.** (low) Fixed: A trouble (no carrier answered, a stumble) stays on the set until it clears, instead of being overwritten by the title within a second. (pending)
+**C33. The "No carrier answered yet" message is overwritten within a second.** (low) Fixed: A trouble (no carrier answered, a stumble) stays on the set until it clears, instead of being overwritten by the title within a second. (f2e0e41)
 
-**C40. No relay or no stations is a dead end with no message.** (medium) Fixed: A relay that does not answer is tried again, more slowly each time, with a line saying the network may block the radio; after ninety seconds with no station the list says whether the network is there but quiet or nothing has answered at all. (pending)
+**C40. No relay or no stations is a dead end with no message.** (medium) Fixed: A relay that does not answer is tried again, more slowly each time, with a line saying the network may block the radio; after ninety seconds with no station the list says whether the network is there but quiet or nothing has answered at all. (f2e0e41)
+
+**C23. Flock: no way to leave, relay URL taken from the link without checks.** (low) Fixed: The tab has LEAVE THE FLOCK beside the signal line, which hands it back to the network's clock and its own station. A relay named in a flock or pocket link is used only if it is HTTPS (loopback allowed for tests), and a flock host can move the tab's clock by five minutes at most. (pending)
+
+**C24. Chat: the keeper label can be imitated, and bidi controls are not stripped.** (low) Fixed: Chat lines are shown, on the phone and in the tab, without control characters, bidi overrides and isolates or zero-width marks, and a name can never carry the words (the station), which only the keeper's key earns. Unit tested in core. (pending)
+
+**C26. Console logs identify the fresh node and the station being synced.** (low) Fixed: The tab writes its notes to the console only when the page is opened with ?debug; otherwise nothing names its node or the stations it syncs. (pending)
+
+**C35. Hail: wrong target after switching station, stale stop timer, mic left on.** (medium) Fixed: A hail goes to the station it was started for, switching station mid-hail drops it, its twenty-second stop belongs to that recording alone, and the microphone is let go however it ends, a browser that cannot record included. (pending)
+
+**C36. Chatter and rows are re-rendered wholesale on a timer.** (medium) Fixed: The list is rebuilt only when something in it changed, and the chatter only when its lines or mutes did. (pending)
+
+**C37. Cover art is fetched for every listed station, retried every 4 s, with no size cap.** (medium) Fixed: A row's cover is fetched once the row comes into view; a picture that will not come is not asked for again for two minutes; none over 2 MB is shown. (pending)
+
+**C38. Object URLs and animation work never released.** (low) Fixed: The tab keeps its last two hundred pictures and revokes the rest, revokes all of them when the art switch changes, and the meter's animation rests once nothing plays. (pending)
+
+**C39. Second tap on Listen while booting starts a second node (embed).** (low) Fixed: Listen while the tab is still coming aboard waits for the one boot under way rather than starting another node. (pending)
+
+**C41. ICS export can be injected with a bare CR in a title or about text.** (low) Fixed: Every line break in a calendar entry, a bare CR included, becomes the calendar's own escape. (pending)
+
+**C42. Pass-it-on, clip QR and ICS links are hard-wired to hostis.black.** (low) Fixed: Passed-on links, the clip's code and calendar entries point at the copy of the radio they were made on when it is a public HTTPS name, so they outlive hostis.black; a copy reached by a bare address, plain HTTP or a private name is never named, and those links go to hostis.black. (pending)
+
+**C44. Build: wasm is not cache-busted, so a deploy can mix new glue with old wasm.** (medium) Fixed: The wasm takes the build's version in its file name and the glue is rewritten to load that name, so a cached wasm can never meet newer glue. (pending)
+
+**C45. Build embeds env/config strings unescaped.** (low) Fixed: The build writes the harbour, relays and harbour stations into the page as JSON strings, and fails if a placeholder is missing. (pending)
