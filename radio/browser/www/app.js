@@ -20,6 +20,15 @@ let ctx = null, gain = null, sources = [], meter = null;
 const pics = new Map();
 
 function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v) } catch (e) { return null } }
+
+// Every harbour this tab has ever been handed, kept so a returning listener never loses a
+// door even if a later build ships a different set. Dead entries just fail to resolve.
+function rememberHarbours() {
+  let saved = []; try { saved = JSON.parse(store('pyrate.harbours') || '[]') } catch (e) {}
+  const union = [...new Set(HARBOUR.split(/[,\s]+/).filter(Boolean).concat(saved))];
+  try { store('pyrate.harbours', JSON.stringify(union)) } catch (e) {}
+  return union.join(',');
+}
 function marooned() { try { return new Set(JSON.parse(store('pyrate.maroon') || '[]')) } catch (e) { return new Set() } }
 function setMarooned(s) { store('pyrate.maroon', JSON.stringify([...s])) }
 // The listener's own switches. Explicit stays off and art stays on until they say otherwise.
@@ -591,7 +600,7 @@ async function boot() {
   try { await init() } catch (e) { $('name').textContent = 'This browser cannot run the radio'; return }
   let key = store('pyrate.token');
   if (!/^[0-9a-f]{64}$/.test(key || '')) { const b = new Uint8Array(32); crypto.getRandomValues(b); key = [...b].map(x => x.toString(16).padStart(2, '0')).join(''); store('pyrate.token', key) }
-  try { radio = await Radio.start(HARBOUR, key, RELAYS) } catch (e) { console.warn(e); $('name').textContent = 'Could not reach a relay'; $('signal').textContent = String(e); return }
+  try { radio = await Radio.start(rememberHarbours(), key, RELAYS) } catch (e) { console.warn(e); $('name').textContent = 'Could not reach a relay'; $('signal').textContent = String(e); return }
   for (const l of savedPockets()) pocketJoin(l, false);
   if (location.hash.includes('pocket=')) pocketJoin(location.hash, true);
   else if (!flockFollow()) followLink();
