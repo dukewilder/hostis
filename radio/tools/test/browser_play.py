@@ -11,6 +11,10 @@ with sync_playwright() as p:
         time.sleep(1)
         if "Gangway" in (pg.text_content("#name") or ""): break
     print("station:", pg.text_content("#name"))
-    pg.click("#go"); time.sleep(25)
+    # A fresh tab may need a carrier's harbour note before it can reach it: up to a minute.
+    pg.click("#go")
+    for i in range(60):
+        time.sleep(1)
+        if i >= 20 and pg.evaluate("window.pyrate.state().scheduled") > 0: break
     print("np:", pg.text_content("#np"), "| state:", pg.evaluate("window.pyrate.state()"))
     print("errors:", E[:3]); b.close()
