@@ -49,7 +49,7 @@ python3 "$R/tools/torrent.py" "pyrateradio/source/$SRC" "pyrateradio/source/$SRC
 : > pyrateradio/ipfs/files.txt
 for f in pyrateradio/*.apk pyrateradio/pyrate-radio-*.zip pyrateradio/pyrate-radio-*.tar.gz "pyrateradio/source/$SRC"; do
   [ -e "$f" ] || continue
-  echo "$(ipfs add --only-hash --cid-version=1 -Q "$f") ${f#pyrateradio/}" >> pyrateradio/ipfs/files.txt
+  echo "$(IPFS_PATH="$R/browser/www/.ipfs" ipfs add --only-hash --cid-version=1 -Q "$f") ${f#pyrateradio/}" >> pyrateradio/ipfs/files.txt
 done
 # An unsigned draft of the bearings, for the release keys to sign (release sign-paper).
 python3 "$R/tools/bearings.py" "$R" pyrateradio > pyrateradio/ipfs/bearings-draft.json
