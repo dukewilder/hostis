@@ -362,3 +362,30 @@ fn the_hour_that_comes_twice_neither_rewinds_a_tape_nor_cuts_a_slot() {
     let l: Vec<_> = c.listings(FALL_BACK - 3 * 3_600_000, FALL_BACK + 3 * 3_600_000).into_iter().filter(|l| l.kind == "slot").collect();
     assert!(l.iter().any(|l| l.start_ms == FALL_BACK - 30 * MIN && l.end_ms == FALL_BACK + 30 * MIN), "{l:?}");
 }
+
+#[test]
+fn the_watch_bill_cuts_where_the_air_changes_hands() {
+    let k = StationKey::from_seed([44; 32]);
+    let (mut a, h, t) = station(&k);
+    let z = chicago();
+    // In order, 20-minute recordings, and a ten-minute slot at 01:05 that plays the third.
+    let slot = Slot { title: "Spot".into(), about: "".into(), span: Span::every_day(65, 10), fill: Fill::Tracks { tracks: vec![h[2]], shuffle: false }, live: false };
+    a.write(&k, t, Body::Programme(Programme { zone: z.clone(), mode: Mode::InOrder, slots: vec![slot], hours: vec![Span::every_day(60, 120)], ..Default::default() })).unwrap();
+    let c = Clock::new(&a).unwrap();
+    let one = at(&z, NEAR, 2, 60);
+    let bill = c.upcoming(one, one + 3 * 3_600_000);
+    // Every piece is what the air says at its middle, and the pieces meet end to end.
+    for (i, (start, track, len)) in bill.iter().enumerate() {
+        assert_eq!(c.now(start + len / 2).map(|n| n.track), Some(*track), "piece {i} at {start}");
+        if let Some(next) = bill.get(i + 1) {
+            assert!(start + len <= next.0, "piece {i} overlaps the next");
+        }
+    }
+    let starts: Vec<i64> = bill.iter().map(|b| (b.0 as i64 - one as i64) / MIN as i64).collect();
+    assert!(starts.contains(&5) && starts.contains(&15), "the slot is listed and the cut recording resumes after it: {starts:?}");
+    let slotted = bill.iter().find(|b| b.0 == one + 5 * MIN).unwrap();
+    assert_eq!((slotted.1, slotted.2), (h[2], 10 * MIN));
+    // Off the air at 03:00: nothing on the bill runs past it.
+    let off = one + 2 * 3_600_000;
+    assert!(bill.iter().all(|b| b.0 >= off || b.0 + b.2 <= off), "{bill:?}");
+}
