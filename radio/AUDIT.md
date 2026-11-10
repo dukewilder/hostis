@@ -40,12 +40,6 @@ Reported by a reader of the code; each is checked against the code before it is 
 - **C29** (medium) Storage and URL inventory (what ties a visit to the next, and what stays in history). `browser/www/app.js:22-35`
 - **C34** (medium) Background and Safari playback: iPad detection, interruptions, meter, hidden tab buffer. `browser/www/app.js:100-111`
 - **C43** (low) Station chart, harbour merge and debug hook small defects. `browser/www/app.js:26-31`
-- **C46** (medium) Android "open in the app" fallback goes to a 404. `landing/index.html:84`
-- **C47** (low) Landing build can publish placeholder text. `landing/build.py:21-22`
-- **C48** (low) Embedded set cannot record a hail and the copy there overpromises. `landing/index.html:79; browser/www/app.js:473-475`
-- **C49** (low) Red used as a general accent, pill buttons, and emoji-capable glyphs. `browser/player.css:4`
-- **C50** (low) Informational text set in the ghost tone and at sub-10px sizes. `browser/player.css:30`
-
 ### Track A and B: the phone app, its Android shell and the FFI
 
 Reported by a reader of the code; each is checked against the code before it is fixed or set down.
@@ -232,26 +226,36 @@ Reported by a reader of the code; each is checked against the code before it is 
 
 **C40. No relay or no stations is a dead end with no message.** (medium) Fixed: A relay that does not answer is tried again, more slowly each time, with a line saying the network may block the radio; after ninety seconds with no station the list says whether the network is there but quiet or nothing has answered at all. (f2e0e41)
 
-**C23. Flock: no way to leave, relay URL taken from the link without checks.** (low) Fixed: The tab has LEAVE THE FLOCK beside the signal line, which hands it back to the network's clock and its own station. A relay named in a flock or pocket link is used only if it is HTTPS (loopback allowed for tests), and a flock host can move the tab's clock by five minutes at most. (pending)
+**C23. Flock: no way to leave, relay URL taken from the link without checks.** (low) Fixed: The tab has LEAVE THE FLOCK beside the signal line, which hands it back to the network's clock and its own station. A relay named in a flock or pocket link is used only if it is HTTPS (loopback allowed for tests), and a flock host can move the tab's clock by five minutes at most. (6c6c113)
 
-**C24. Chat: the keeper label can be imitated, and bidi controls are not stripped.** (low) Fixed: Chat lines are shown, on the phone and in the tab, without control characters, bidi overrides and isolates or zero-width marks, and a name can never carry the words (the station), which only the keeper's key earns. Unit tested in core. (pending)
+**C24. Chat: the keeper label can be imitated, and bidi controls are not stripped.** (low) Fixed: Chat lines are shown, on the phone and in the tab, without control characters, bidi overrides and isolates or zero-width marks, and a name can never carry the words (the station), which only the keeper's key earns. Unit tested in core. (6c6c113)
 
-**C26. Console logs identify the fresh node and the station being synced.** (low) Fixed: The tab writes its notes to the console only when the page is opened with ?debug; otherwise nothing names its node or the stations it syncs. (pending)
+**C26. Console logs identify the fresh node and the station being synced.** (low) Fixed: The tab writes its notes to the console only when the page is opened with ?debug; otherwise nothing names its node or the stations it syncs. (6c6c113)
 
-**C35. Hail: wrong target after switching station, stale stop timer, mic left on.** (medium) Fixed: A hail goes to the station it was started for, switching station mid-hail drops it, its twenty-second stop belongs to that recording alone, and the microphone is let go however it ends, a browser that cannot record included. (pending)
+**C35. Hail: wrong target after switching station, stale stop timer, mic left on.** (medium) Fixed: A hail goes to the station it was started for, switching station mid-hail drops it, its twenty-second stop belongs to that recording alone, and the microphone is let go however it ends, a browser that cannot record included. (6c6c113)
 
-**C36. Chatter and rows are re-rendered wholesale on a timer.** (medium) Fixed: The list is rebuilt only when something in it changed, and the chatter only when its lines or mutes did. (pending)
+**C36. Chatter and rows are re-rendered wholesale on a timer.** (medium) Fixed: The list is rebuilt only when something in it changed, and the chatter only when its lines or mutes did. (6c6c113)
 
-**C37. Cover art is fetched for every listed station, retried every 4 s, with no size cap.** (medium) Fixed: A row's cover is fetched once the row comes into view; a picture that will not come is not asked for again for two minutes; none over 2 MB is shown. (pending)
+**C37. Cover art is fetched for every listed station, retried every 4 s, with no size cap.** (medium) Fixed: A row's cover is fetched once the row comes into view; a picture that will not come is not asked for again for two minutes; none over 2 MB is shown. (6c6c113)
 
-**C38. Object URLs and animation work never released.** (low) Fixed: The tab keeps its last two hundred pictures and revokes the rest, revokes all of them when the art switch changes, and the meter's animation rests once nothing plays. (pending)
+**C38. Object URLs and animation work never released.** (low) Fixed: The tab keeps its last two hundred pictures and revokes the rest, revokes all of them when the art switch changes, and the meter's animation rests once nothing plays. (6c6c113)
 
-**C39. Second tap on Listen while booting starts a second node (embed).** (low) Fixed: Listen while the tab is still coming aboard waits for the one boot under way rather than starting another node. (pending)
+**C39. Second tap on Listen while booting starts a second node (embed).** (low) Fixed: Listen while the tab is still coming aboard waits for the one boot under way rather than starting another node. (6c6c113)
 
-**C41. ICS export can be injected with a bare CR in a title or about text.** (low) Fixed: Every line break in a calendar entry, a bare CR included, becomes the calendar's own escape. (pending)
+**C41. ICS export can be injected with a bare CR in a title or about text.** (low) Fixed: Every line break in a calendar entry, a bare CR included, becomes the calendar's own escape. (6c6c113)
 
-**C42. Pass-it-on, clip QR and ICS links are hard-wired to hostis.black.** (low) Fixed: Passed-on links, the clip's code and calendar entries point at the copy of the radio they were made on when it is a public HTTPS name, so they outlive hostis.black; a copy reached by a bare address, plain HTTP or a private name is never named, and those links go to hostis.black. (pending)
+**C42. Pass-it-on, clip QR and ICS links are hard-wired to hostis.black.** (low) Fixed: Passed-on links, the clip's code and calendar entries point at the copy of the radio they were made on when it is a public HTTPS name, so they outlive hostis.black; a copy reached by a bare address, plain HTTP or a private name is never named, and those links go to hostis.black. (6c6c113)
 
-**C44. Build: wasm is not cache-busted, so a deploy can mix new glue with old wasm.** (medium) Fixed: The wasm takes the build's version in its file name and the glue is rewritten to load that name, so a cached wasm can never meet newer glue. (pending)
+**C44. Build: wasm is not cache-busted, so a deploy can mix new glue with old wasm.** (medium) Fixed: The wasm takes the build's version in its file name and the glue is rewritten to load that name, so a cached wasm can never meet newer glue. (6c6c113)
 
-**C45. Build embeds env/config strings unescaped.** (low) Fixed: The build writes the harbour, relays and harbour stations into the page as JSON strings, and fails if a placeholder is missing. (pending)
+**C45. Build embeds env/config strings unescaped.** (low) Fixed: The build writes the harbour, relays and harbour stations into the page as JSON strings, and fails if a placeholder is missing. (6c6c113)
+
+**C46. Android "open in the app" fallback goes to a 404.** (medium) Fixed: The Android fallback now resolves against the page itself, so it lands on hostis.black/pyrateradio/listen/ and not a 404. (pending)
+
+**C47. Landing build can publish placeholder text.** (low) Fixed: The landing build refuses to run without an APK and its version; a local look with placeholders needs --draft. (pending)
+
+**C48. Embedded set cannot record a hail and the copy there overpromises.** (low) Fixed: The landing says what the embedded set holds (HOSTIS's own stations) and that the full player has the whole Log, its chatter and its hails; a hail tried from inside another page says why the microphone cannot be lent and sends the listener to the full player. (pending)
+
+**C49. Red used as a general accent, pill buttons, and emoji-capable glyphs.** (low) Fixed: The pill buttons and blood-deep buttons stay, being the site's own compass and download buttons. Bright red is kept to ON AIR, LIVE, the live dot, the tuned needle with its blood diamond and the meter's hot end: section heads, the slot name, the keeper's name, the Stop state, the chart's chosen dot, checkboxes and the clip's progress bar are bone, and the focus ring is the site's own dashed blood. The play, stop and record glyphs carry the text selector so no phone draws them as emoji, in the app as in the tab. (pending)
+
+**C50. Informational text set in the ghost tone and at sub-10px sizes.** (low) Fixed: No text in the set is under .65rem, the site's own smallest, and times, notices, chat times and the meter's label are in the faint tone rather than the ghost. (pending)

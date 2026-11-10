@@ -77,11 +77,11 @@ footer a{color:inherit}
 </section>
 
 <div class="setframe"><iframe id="radio" src="listen/?embed" title="Pyrate Radio, playing in this page" allow="autoplay; clipboard-write; web-share"></iframe>
-<p class="under">Press Listen and it plays, in this page, from whoever carries the station. Sweep the dial for the rest of the Log.</p></div>
+<p class="under">Press Listen and it plays, in this page, from whoever carries the station. The dial here holds HOSTIS's own stations; the full player has the whole Log, its chatter and its hails.</p></div>
 <script>
 // A station link: hostis.black/pyrateradio/#<station id>. It plays here in the browser, or in the app.
 (function(){var id=(location.hash||'').slice(1).toLowerCase();if(!/^[0-9a-f]{64}$/.test(id))return;var b=document.getElementById('passed');
-var app=/Android/.test(navigator.userAgent)?' <a href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url='+encodeURIComponent(location.origin+'/listen/#'+id)+';end">Open in the app</a>':'';
+var app=/Android/.test(navigator.userAgent)?' <a href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url='+encodeURIComponent(new URL('listen/#'+id,location.href).href)+';end">Open in the app</a>':'';
 document.getElementById('radio').src='listen/?embed#'+id;
 b.innerHTML='Someone passed you a station. It is on the dial below.'+(app?'<br>'+app:'');b.hidden=false})();
 </script>
