@@ -1054,11 +1054,7 @@ class _ColoursPageState extends State<ColoursPage> {
       else
         Row(children: [
           button('GO ON AIR', () async {
-            final ok = await _service.invokeMethod<bool>('mic').catchError((_) => false) ?? false;
-            if (!ok) {
-              setState(() => error = 'Allow the microphone, then press again.');
-              return;
-            }
+            if (!await askMic(context)) return;
             final r = Native.call({'cmd': 'go_live', 'station': id});
             if (r is Map && r['error'] != null) {
               setState(() => error = r['error']);

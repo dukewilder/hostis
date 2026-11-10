@@ -44,6 +44,31 @@ class MainActivity : FlutterActivity() {
         u.fragment?.takeIf { it.startsWith("flock=") || it.startsWith("pocket=") }?.let { pendingLink = it }
     }
 
+    private val micWait = mutableListOf<(String) -> Unit>()
+
+    /** Asks for the microphone and answers once the owner has: never before. */
+    private fun withMic(then: (String) -> Unit) {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) return then("ok")
+        micWait.add(then)
+        if (micWait.size == 1) requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2)
+    }
+
+    override fun onRequestPermissionsResult(code: Int, perms: Array<out String>, grants: IntArray) {
+        super.onRequestPermissionsResult(code, perms, grants)
+        if (code != 2) return
+        val state = when {
+            grants.firstOrNull() == PackageManager.PERMISSION_GRANTED -> "ok"
+            grants.isEmpty() -> "denied"
+            // After a refusal the phone still offers the question; after "don't ask again",
+            // or a second refusal on newer phones, it does not, and only settings can allow it.
+            shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) -> "denied"
+            else -> "blocked"
+        }
+        val w = micWait.toList()
+        micWait.clear()
+        w.forEach { it(state) }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         takeLink(intent)
@@ -72,13 +97,13 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                 }
-                "mic" -> {
-                    if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                        result.success(true)
-                    } else {
-                        requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2)
-                        result.success(false)
-                    }
+                // "ok", "denied" (it can be asked again) or "blocked" (only the phone's settings can allow it).
+                "mic" -> withMic { result.success(it) }
+                "app_settings" -> {
+                    try {
+                        startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", packageName, null)))
+                    } catch (e: Exception) {}
+                    result.success(null)
                 }
                 "hold_key" -> result.success(Hold.key(applicationContext))
                 "build_code" -> {
@@ -150,7 +175,6 @@ class MainActivity : FlutterActivity() {
                 }
                 "record_start" -> {
                     if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                        requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2)
                         result.success(null)
                     } else {
                         try { result.success(Ship.recordStart(this, call.argument<Int>("bitrate") ?: 128_000)) } catch (e: Exception) { result.success(null) }

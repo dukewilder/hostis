@@ -1188,9 +1188,10 @@ class _ChatterPanelState extends State<ChatterPanel> {
   /// A hail: up to twenty seconds of the listener's voice, sealed so only the keeper hears it.
   Future<void> hail() async {
     if (!hailing) {
+      if (!await askMic(context)) return;
       final p = await ship.invokeMethod<String>('record_start', {'bitrate': 24000}).catchError((_) => null);
       if (p == null) {
-        if (mounted) setState(() => err = 'Allow the microphone, then press again.');
+        if (mounted) setState(() => err = 'The microphone would not start. Another app may have it.');
         return;
       }
       setState(() => hailing = true);
