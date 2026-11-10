@@ -130,3 +130,4 @@ A full read of every line, findings kept in `AUDIT.md` as they are found and fix
 - Passing the app on by QR serves it under a secret path on one address for fifteen minutes, and selected text is never offered to other apps.
 - The screen and the playback service never wait on the node: the dial polls in the background and the service has a thread of its own for every call.
 - The numbers kit builds its messages in the background.
+- App 0.8.2 (build 15) built with the whole app audit, every phone finding closed. It waits on Dylan's Android key, as 0.8.1 did; the 0.8.1 build is superseded.
