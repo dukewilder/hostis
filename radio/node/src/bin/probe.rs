@@ -11,10 +11,15 @@ fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let get = |flag: &str| args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1)).cloned();
     let dir = PathBuf::from(get("--dir").unwrap_or_else(|| "probe-data".into()));
-    let bootstrap = get("--bootstrap").map(|b| b.split(',').filter_map(|s| s.trim().parse().ok()).collect()).unwrap_or_default();
+    let bootstrap = get("--bootstrap").map(|b| pyrate_node::doors_from(&b)).unwrap_or_default();
     let wait: u64 = get("--wait").and_then(|w| w.parse().ok()).unwrap_or(45);
     let node = Node::start(Config { dir, quota: 1_000_000_000, lantern: false, bootstrap, public_dns: args.iter().any(|a| a == "--public-dns"), private: args.iter().any(|a| a == "--private"), ballast: 0, carry_all: false, release_keys: get("--release-keys").map(|p| std::fs::read_to_string(p).unwrap_or_default().lines().filter_map(|l| pyrate_core::StationId::from_hex(l.trim()).ok().map(|i| i.0)).collect()).unwrap_or_default() })?;
     println!("probe node {}", node.id());
+    if let Some(p) = get("--diag").and_then(|p| p.parse().ok()) {
+        std::thread::sleep(Duration::from_secs(8));
+        println!("{}", node.diag(p));
+        return Ok(());
+    }
     let t0 = std::time::Instant::now();
     let mut stations = serde_json::Value::Null;
     while t0.elapsed() < Duration::from_secs(wait) {
@@ -28,6 +33,8 @@ fn main() -> anyhow::Result<()> {
     if args.iter().any(|a| a == "--release-keys") {
         std::thread::sleep(Duration::from_secs(5));
         println!("update: {}", node.call(&serde_json::json!({ "cmd": "update", "code": 1 })));
+        println!("papers: {}", node.call(&serde_json::json!({ "cmd": "papers" })));
+        println!("update now: {}", node.call(&serde_json::json!({ "cmd": "update", "code": 1, "now": true })));
         println!("lists: {}", node.call(&serde_json::json!({ "cmd": "lists" })));
         return Ok(());
     }

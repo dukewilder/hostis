@@ -75,6 +75,25 @@ fn main() -> anyhow::Result<()> {
             println!("Write android-key.txt on paper, keep it apart from the release keys, then delete the file.");
             println!("android-cert.der is public: keep it with the release folder and send a copy to Claude.");
         }
+        Some("sign-paper") => {
+            // Bearings take two of the three keys, a canary any one: run once per key.
+            let words = std::fs::read_to_string(a.get(2).ok_or_else(|| anyhow::anyhow!("words file"))?)?;
+            let n: u8 = a.get(3).and_then(|s| s.parse().ok()).filter(|n| (1..=3).contains(n)).ok_or_else(|| anyhow::anyhow!("key number 1-3"))?;
+            let path = a.get(4).ok_or_else(|| anyhow::anyhow!("bearings.json or canary.json"))?;
+            let mut doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path)?)?;
+            let key = StationKey::from_phrase(&words)?;
+            pyrate_core::papers::sign(&key, n - 1, &mut doc).ok_or_else(|| anyhow::anyhow!("not a paper: it needs \"pyrate\": \"bearings\" or \"canary\""))?;
+            std::fs::write(path, serde_json::to_string_pretty(&doc)? + "\n")?;
+            println!("Signed {path} with key {n}: {} signature(s) on it.", doc["sigs"].as_array().map(|s| s.len()).unwrap_or(0));
+        }
+        Some("canary") => {
+            // A fresh canary for this month, unsigned: sign it with sign-paper.
+            let path = a.get(2).cloned().unwrap_or_else(|| "canary.json".into());
+            let text = a.get(3).cloned().unwrap_or_else(|| "HOSTIS has received no order to hide, change or stop anything, and no order to keep quiet about one.".into());
+            let doc = serde_json::json!({ "pyrate": "canary", "at": pyrate_node::now_ms(), "text": text });
+            std::fs::write(&path, serde_json::to_string_pretty(&doc)? + "\n")?;
+            println!("Wrote {path}. Sign it: release sign-paper <words> <1-3> {path}");
+        }
         Some("sign-apk") => {
             let words = std::fs::read_to_string(a.get(2).ok_or_else(|| anyhow::anyhow!("android-key.txt"))?)?;
             let cert = std::fs::read(a.get(3).ok_or_else(|| anyhow::anyhow!("android-cert.der"))?)?;
@@ -84,7 +103,7 @@ fn main() -> anyhow::Result<()> {
             std::fs::write(out, apksign::sign(&apk, &key, &cert)?)?;
             println!("Signed: {out}");
         }
-        _ => eprintln!("release init <folder> | sign <words> <1-3> <apk> <code> | genesis <words 1> <folder> | android-init <folder> | sign-apk <key> <cert> <in> <out>"),
+        _ => eprintln!("release init <folder> | sign <words> <1-3> <apk> <code> | genesis <words 1> <folder> | android-init <folder> | sign-apk <key> <cert> <in> <out> | canary [file] [text] | sign-paper <words> <1-3> <bearings.json|canary.json>"),
     }
     Ok(())
 }

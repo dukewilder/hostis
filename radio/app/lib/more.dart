@@ -1317,6 +1317,7 @@ class _ShipPapersState extends State<ShipPapers> {
   bool plainLock = false;
   bool pinSet = false;
   String? sig;
+  Map? canary;
   Map wake = {};
   String? msg;
 
@@ -1329,6 +1330,8 @@ class _ShipPapersState extends State<ShipPapers> {
     ship.invokeMethod<bool>('plain_get').then((v) => setState(() => plain = v == true)).catchError((_) {});
     ship.invokeMethod<bool>('plain_lock_get').then((v) => setState(() => plainLock = v == true)).catchError((_) {});
     signer().then((v) { if (mounted) setState(() => sig = v); });
+    final p = Native.call({'cmd': 'papers'});
+    if (p is Map && p['canary'] is Map) canary = p['canary'] as Map;
     ship.invokeMethod<String>('wake_get').then((v) => setState(() => wake = jsonDecode(v ?? '{}'))).catchError((_) {});
   }
 
@@ -1432,6 +1435,13 @@ class _ShipPapersState extends State<ShipPapers> {
         note('Signed with the key below. A copy signed with any other is not ours, whatever it calls itself. hostis.black/pyrateradio shows the same fingerprint.'),
         const SizedBox(height: 6),
         SelectableText(sig!, style: mono(10, color: boneDim)),
+      ],
+      if (canary != null) ...[
+        const SizedBox(height: 26),
+        heading('THE CANARY'),
+        note((canary!['age_days'] as num) > 45
+            ? 'The canary is ${canary!['age_days']} days old. HOSTIS renews it every month, and one that is not renewed may mean HOSTIS can no longer say what it would.'
+            : 'Signed ${shortDate((canary!['at_ms'] as num).toInt())} by a HOSTIS release key: ${canary!['text']}'),
       ],
       const SizedBox(height: 26),
       heading('MAROON LISTS'),

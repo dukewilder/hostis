@@ -6,6 +6,8 @@
 import re, os, shutil, subprocess, sys, hashlib
 R = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 W = f"{R}/browser/www"
+# The vendored Opus files must match their recorded fingerprints before anything ships.
+subprocess.run([sys.executable, f"{R}/tools/vendor_check.py"], check=True, stdout=subprocess.DEVNULL)
 sys.path.insert(0, f"{R}/brand")
 import fonts
 # The page is one more HOSTIS page: the site's faces and sheet (brand/), then the set's own.

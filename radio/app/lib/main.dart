@@ -131,6 +131,13 @@ bool nodeStarted = true;
 
 /// This build's version code, as the installed package says it, so it can never disagree with
 /// the build. A release is offered only when its code is higher.
+/// A day as the masthead writes it: 14 NOV.
+String shortDate(int ms) {
+  const m = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  final d = DateTime.fromMillisecondsSinceEpoch(ms);
+  return '${d.day} ${m[d.month - 1]}';
+}
+
 Future<int> buildCode() async => await _service.invokeMethod<int>('build_code').catchError((_) => 0) ?? 0;
 
 /// The stations a first open lands on when no station has yet earned it: HOSTIS's own.
@@ -231,18 +238,21 @@ class Tuner extends ChangeNotifier {
     return null;
   }
 
-  Future<void> _checkUpdate() async {
-    // Releases come down only on Wi-Fi or another unmetered network.
+  Future<void> _checkUpdate({bool now = false}) async {
+    // Releases come down only on Wi-Fi or another unmetered network, unless asked for.
     final c = await _service.invokeMethod<Map>('conditions').catchError((_) => <dynamic, dynamic>{}) ?? {};
-    if (c['unmetered'] != true) return;
+    if (c['unmetered'] != true && !now) return;
     final code = await buildCode();
     if (code == 0) return;
-    final r = await Native.callAway({'cmd': 'update', 'code': code});
-    if (r is Map && r['available'] == true) {
+    final r = await Native.callAway({'cmd': 'update', 'code': code, 'now': now});
+    if (r is Map && (r['available'] == true || r['coming'] is Map)) {
       update = r.cast<String, dynamic>();
       notifyListeners();
     }
   }
+
+  /// A release seen less than three days ago, taken now at its listener's word.
+  Future<void> takeUpdateNow() => _checkUpdate(now: true);
 
   Future<void> _checkFeeds() async {
     if (Feeds.load().isEmpty) return;
@@ -662,7 +672,17 @@ class Dial extends StatelessWidget {
             TextButton(onPressed: radio.declineInvite, child: Text('NO', style: carved(10, color: boneFaint))),
           ]),
         ),
-      if (up != null)
+      if (up != null && up['coming'] is Map)
+        InkWell(
+          onTap: () => radio.takeUpdateNow(),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: boneFaint, width: 1))),
+            child: Text('${up['coming']['version']} ARRIVES ${shortDate((up['coming']['from_ms'] as num).toInt())} · TAP TO TAKE IT NOW', textAlign: TextAlign.center, style: carved(10, color: boneDim, spacing: 0.2)),
+          ),
+        ),
+      if (up != null && up['available'] == true)
         InkWell(
           onTap: () => _service.invokeMethod('install', {'path': up['path']}).catchError((_) {}),
           child: Container(

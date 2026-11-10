@@ -91,9 +91,40 @@ impl Inner {
     }
 
     /// The newest release this build can trust and install, fetched and checked.
-    pub async fn check_update(self: &Arc<Self>, current: u32) -> Result<Value> {
+    /// The newest bearings and canary the release keys signed, from the Releases station's
+    /// notices. Bearings this node has checked are kept, so its next start uses their doors.
+    pub(crate) fn papers(&self) -> (Option<Value>, Option<Value>) {
+        let Some(st) = self.release_station() else { return (None, None) };
+        let (mut bearings, mut canary): (Option<Value>, Option<Value>) = (None, None);
+        {
+            let s = self.store.lock().unwrap();
+            let Some(a) = s.logs.get(&st) else { return (None, None) };
+            for e in a.entries() {
+                let Body::Notice { text, .. } = e.entry.body() else { continue };
+                let Ok(doc) = serde_json::from_str::<Value>(text) else { continue };
+                if !pyrate_core::papers::trusted(&self.cfg.release_keys, &doc) {
+                    continue;
+                }
+                let slot = if doc["pyrate"] == "bearings" { &mut bearings } else { &mut canary };
+                if slot.as_ref().is_none_or(|o| doc["at"].as_u64() > o["at"].as_u64()) {
+                    *slot = Some(doc);
+                }
+            }
+        }
+        if let Some(b) = &bearings {
+            let kept = self.hold.read_note(&self.cfg.dir, "bearings", None).and_then(|t| serde_json::from_slice::<Value>(&t).ok());
+            if kept.as_ref().is_none_or(|k| b["at"].as_u64() > k["at"].as_u64()) {
+                let _ = self.hold.write_note(&self.cfg.dir, "bearings", b.to_string().as_bytes());
+            }
+        }
+        (bearings, canary)
+    }
+
+    pub async fn check_update(self: &Arc<Self>, current: u32, now_please: bool) -> Result<Value> {
         let st = self.release_station().ok_or_else(|| anyhow!("this build trusts no release keys yet"))?;
         let _ = self.sync_log(st).await;
+        // The papers ride the same log: newer bearings are kept for the next start.
+        let _ = self.papers();
         let best = {
             let s = self.store.lock().unwrap();
             let a = s.logs.get(&st).ok_or_else(|| anyhow!("no releases heard yet"))?;
@@ -105,6 +136,20 @@ impl Inner {
             }).max_by_key(|r| r.1)
         };
         let Some((version, code, sha, chunks, notes)) = best else { return Ok(json!({ "available": false })) };
+        // A release waits three days from the moment this node first hears of it, counted
+        // here, not from the time it says it was signed. One the keys' holders were forced to
+        // sign is seen by everyone before it lands anywhere. Anyone can take it sooner.
+        const WAIT_MS: u64 = 72 * 3_600_000;
+        let note = format!("release-seen/{code}");
+        let seen = self.hold.read_note(&self.cfg.dir, &note, None).and_then(|b| String::from_utf8(b).ok()).and_then(|s| s.trim().parse::<u64>().ok());
+        let seen = seen.unwrap_or_else(|| {
+            let t = now_ms();
+            let _ = self.hold.write_note(&self.cfg.dir, &note, t.to_string().as_bytes());
+            t
+        });
+        if !now_please && now_ms().saturating_sub(seen) < WAIT_MS {
+            return Ok(json!({ "available": false, "coming": { "version": version, "code": code, "notes": notes, "from_ms": seen + WAIT_MS } }));
+        }
         let dir = self.cfg.dir.join("updates");
         std::fs::create_dir_all(&dir)?;
         let path: PathBuf = dir.join(format!("pyrate-{code}.apk"));
@@ -153,7 +198,32 @@ impl Inner {
             if let Err(e) = self.publish_releases(st) {
                 say(&format!("releases: {e}"));
             }
+            if let Err(e) = self.publish_papers(st) {
+                say(&format!("papers: {e}"));
+            }
         }
+    }
+
+    /// releases/bearings.json and releases/canary.json, once signed, go into the Releases
+    /// station's log as notices, so they travel wherever the station does.
+    fn publish_papers(&self, st: StationId) -> Result<()> {
+        let dir = self.cfg.dir.join("releases");
+        for name in ["bearings.json", "canary.json"] {
+            let Ok(text) = std::fs::read_to_string(dir.join(name)) else { continue };
+            let Ok(doc) = serde_json::from_str::<Value>(&text) else { continue };
+            if !pyrate_core::papers::trusted(&self.cfg.release_keys, &doc) {
+                say(&format!("{name} skipped: it is not signed by enough release keys"));
+                continue;
+            }
+            let text = doc.to_string();
+            let mut s = self.store.lock().unwrap();
+            let have = s.logs.get(&st).is_some_and(|a| a.entries().iter().any(|e| matches!(e.entry.body(), Body::Notice { text: t, .. } if *t == text)));
+            if !have {
+                s.write(st, now_ms(), Body::Notice { text, until_ms: 0 })?;
+                say(&format!("published {name}"));
+            }
+        }
+        Ok(())
     }
 
     /// releases/<code>-<version>.apk with releases/<code>-<version>.sigs beside it.

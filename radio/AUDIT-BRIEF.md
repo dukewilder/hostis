@@ -118,6 +118,7 @@ Known now:
 - Send DNS screenshots, and `station.jpg` / `banner.jpg` if still wanted.
 - Approve any change to the hostis.black front page, including a link to the radio.
 - Approved by Dylan on 10 November: one file at the root of hostis.black, `/.well-known/assetlinks.json`, goes up as soon as the Android cert arrives, so a scanned poster or a shared link opens the app rather than the browser. It names only the app and its signing certificate's fingerprint. Once the Android cert is here, `tools/assetlinks.py android-cert.der` writes it; the app already asks Android to verify (P31).
+- Once the release keys exist: each month, `release canary canary.json`, then `release sign-paper <a release key's words> <its number> canary.json`; for new bearings, sign `bearings-draft.json` from hostis.black/pyrateradio/ipfs/ with two keys. Both go in the releases folder of the Lantern holding the Releases deputy.
 - Sign each APK with the Android key on his PC (`release sign-apk android-key.txt android-cert.der <apk> "Pyrate Radio.apk"`). The debug key that signed 0.8.0 went with an earlier container, so no build from here can install over it: the first build he signs needs one uninstall of 0.8.0. Before that, write down each station's 24 words and copy any pocket invitations, since uninstalling clears the phone's deputy key and pockets. Every build after installs as an update. 0.8.6 (build 19) is the first to sign; the 0.8.1 to 0.8.5 builds sent earlier can be thrown away.
 
 ## 9. Standing constraints (hard rules)

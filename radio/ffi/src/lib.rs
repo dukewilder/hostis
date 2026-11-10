@@ -82,16 +82,7 @@ fn start(dir: *const c_char, bootstrap: *const c_char) -> i32 {
     }
     let dir = text(dir);
     // A door may name its relay ("id@relay"): the node then reaches it without a lookup.
-    let doors = text(bootstrap);
-    let mut bootstrap = Vec::new();
-    for item in doors.split(|c: char| c == ',' || c.is_whitespace()).filter(|s| !s.is_empty()) {
-        let (id, relay) = item.split_once('@').map(|(a, b)| (a, Some(b))).unwrap_or((item, None));
-        let Ok(id) = id.parse::<pyrate_node::EndpointIdOf>() else { continue };
-        if let Some(r) = relay {
-            pyrate_node::DOOR_RELAYS.lock().unwrap().push((id, r.to_string()));
-        }
-        bootstrap.push(id);
-    }
+    let bootstrap = pyrate_node::doors_from(&text(bootstrap));
     let cfg = Config {
         dir: dir.into(),
         quota: 2_000_000_000,
