@@ -188,8 +188,9 @@ pub fn release_trusted(keys: &[[u8; 32]], code: u32, sha256: &[u8; 32], sigs: &[
     let mut good = std::collections::HashSet::new();
     for (i, sig) in sigs {
         let (Some(k), Ok(sig)) = (keys.get(*i as usize), <[u8; 64]>::try_from(sig.as_slice())) else { continue };
+        // Counted by key, not by place in the list: one key named twice is still one key.
         if StationId(*k).verify(&msg, &sig).is_ok() {
-            good.insert(*i);
+            good.insert(*k);
         }
     }
     good.len() >= 2
