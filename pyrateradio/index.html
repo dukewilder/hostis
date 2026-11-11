@@ -312,7 +312,7 @@ html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doo
 // A station link: hostis.black/pyrateradio/#<station id>. One of HOSTIS's own plays here, in
 // the browser or the app. Anything else (another station, an invitation, a flock) goes straight
 // on to the open player before this page reads it: the part after the # never reaches a server.
-(function(){var H=["f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"],P=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeiegiftlyydvzpmcg4agazx3qm75rfqo6jdmy56ddurnuxlgg5cklm.ipfs.inbrowser.link/", "https://bafybeiegiftlyydvzpmcg4agazx3qm75rfqo6jdmy56ddurnuxlgg5cklm.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeiegiftlyydvzpmcg4agazx3qm75rfqo6jdmy56ddurnuxlgg5cklm/"],h=(location.hash||'').toLowerCase(),id=h.slice(1);
+(function(){var H=["f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a", "1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069", "8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd", "23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a"],P=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeif77aymlawb4i7c4vzsinwkvmg4grb3moazus7zil4y4u3wb46pxi.ipfs.inbrowser.link/", "https://bafybeif77aymlawb4i7c4vzsinwkvmg4grb3moazus7zil4y4u3wb46pxi.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeif77aymlawb4i7c4vzsinwkvmg4grb3moazus7zil4y4u3wb46pxi/"],h=(location.hash||'').toLowerCase(),id=h.slice(1);
 if(/pocket=|flock=/.test(h)||(/^[0-9a-f]{64}$/.test(id)&&H.indexOf(id)<0)){history.replaceState(null,'',location.pathname);
 document.documentElement.className+=' leaving';var go=function(u){location.replace(u+h)},done=0;
 var ping=function(u){return fetch(u+'favicon.png',{mode:'no-cors',cache:'no-store'}).then(function(){return u})};
@@ -324,7 +324,7 @@ if(!/^[0-9a-f]{64}$/.test(id))return;var b=document.getElementById('passed');
 var app=/Android/.test(navigator.userAgent)?' <a href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url='+encodeURIComponent(new URL('listen/#'+id,location.href).href)+';end">Open in the app</a>':'';
 document.getElementById('radio').src='listen/?embed#'+id;
 b.innerHTML='Someone passed you a HOSTIS station. It is on the dial below.'+(app?'<br>'+app:'');b.hidden=false})();
-document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeiegiftlyydvzpmcg4agazx3qm75rfqo6jdmy56ddurnuxlgg5cklm.ipfs.inbrowser.link/", "https://bafybeiegiftlyydvzpmcg4agazx3qm75rfqo6jdmy56ddurnuxlgg5cklm.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeiegiftlyydvzpmcg4agazx3qm75rfqo6jdmy56ddurnuxlgg5cklm/"][0]});
+document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeif77aymlawb4i7c4vzsinwkvmg4grb3moazus7zil4y4u3wb46pxi.ipfs.inbrowser.link/", "https://bafybeif77aymlawb4i7c4vzsinwkvmg4grb3moazus7zil4y4u3wb46pxi.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeif77aymlawb4i7c4vzsinwkvmg4grb3moazus7zil4y4u3wb46pxi/"][0]});
 </script>
 
 <nav class="doors wide">
@@ -351,6 +351,9 @@ document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51
 <div class="cards">
 <a class="station" href="listen/#f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f" data-id="f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f"><span class="flag"></span><span class="fq"></span><b>The Public Domain</b><span class="cs">GAHAGU·3695</span><i>Recordings published in 1925 or earlier, free in the United States since 1 January 2026. Every January the fence moves back another year.</i></a>
 <a class="station" href="listen/#110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a" data-id="110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"><span class="flag"></span><span class="fq"></span><b>Readings</b><span class="cs">DEVAKA·F42C</span><i>LibriVox recordings, every one in the public domain, read aloud around the clock. Johnson's General History of the Pyrates first.</i></a>
+<a class="station" href="listen/#1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069" data-id="1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069"><span class="flag"></span><span class="fq"></span><b>The Numbers</b><span class="cs">LOGEHO·95A5</span><i>Five figures on the hour, every hour. Every group is a word, and the key is a book this radio reads.</i></a>
+<a class="station" href="listen/#8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd" data-id="8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd"><span class="flag"></span><span class="fq"></span><b>Netlabel</b><span class="cs">KAMANO·62C1</span><i>Creative Commons electronic, ambient and experimental music, from the netlabels that gave it away.</i></a>
+<a class="station" href="listen/#23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a" data-id="23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a"><span class="flag"></span><span class="fq"></span><b>Poets&rsquo; Corner</b><span class="cs">VOVUFE·F376</span><i>Short public domain poems, read aloud by LibriVox volunteers. A poem everyone should hear once, on the hour.</i></a>
 </div>
 <p class="note">Every other station belongs to whoever holds its key. The Log sorts by how many are aboard.</p>
 </section>
@@ -359,12 +362,12 @@ document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51
 <section id="set">
 <div class="sechead"><h2>Take the Set</h2><span class="cap">android &#183; computers &#183; any browser</span></div>
 <div class="getset">
-<a class="lead-btn" href="pyrate-radio-0.9.10.apk"><span class="fc-lead">Pyrate Radio for Android</span><span class="fc-sub">version 0.9.10 &#183; 45 MB &#183; arm64</span></a>
+<a class="lead-btn" href="pyrate-radio-0.9.11.apk"><span class="fc-lead">Pyrate Radio for Android</span><span class="fc-sub">version 0.9.11 &#183; 45 MB &#183; arm64</span></a>
 </div>
 <h3 class="small">On a computer</h3>
-<div class="desk"><a href="pyrate-radio-0.9.10-windows.zip"><b>Windows</b><small>10 and 11 · zip</small></a><a href="pyrate-radio-0.9.10-macos.zip"><b>Mac</b><small>Apple and Intel · zip</small></a><a href="pyrate-radio-0.9.10-linux-x64.tar.gz"><b>Linux</b><small>x86-64 · tar.gz</small></a></div>
-<p class="note">Version 0.9.10. On a Mac, open it the first time with a right-click and Open. Computers take new versions from this page.</p>
-<div class="alt"><a class="btn openlink" href="listen/">Any browser</a><a class="btn" href="magnet:?xt=urn:btih:1dabd8e809cdf2789d865d0ab99e1d1d5a2052e4&amp;dn=pyrate-radio-0.9.10.apk&amp;tr=udp:%2F%2Ftracker.opentrackr.org:1337%2Fannounce&amp;tr=udp:%2F%2Fopen.demonii.com:1337%2Fannounce&amp;tr=udp:%2F%2Ftracker.torrent.eu.org:451%2Fannounce&amp;ws=https:%2F%2Fhostis.black%2Fpyrateradio%2Fpyrate-radio-0.9.10.apk">Magnet link</a><a class="btn" href="pyrate-radio-0.9.10.apk.torrent">.torrent</a><a class="btn" href="https://github.com/dukewilder/hostis/tree/radio/radio" target="_blank" rel="noopener noreferrer">Source</a></div>
+<div class="desk"><a href="pyrate-radio-0.9.11-windows.zip"><b>Windows</b><small>10 and 11 · zip</small></a><a href="pyrate-radio-0.9.11-macos.zip"><b>Mac</b><small>Apple and Intel · zip</small></a><a href="pyrate-radio-0.9.11-linux-x64.tar.gz"><b>Linux</b><small>x86-64 · tar.gz</small></a></div>
+<p class="note">Version 0.9.11. On a Mac, open it the first time with a right-click and Open. Computers take new versions from this page.</p>
+<div class="alt"><a class="btn openlink" href="listen/">Any browser</a><a class="btn" href="magnet:?xt=urn:btih:179b2e01838e6c96d8142dc119fa472c2db5b93a&amp;dn=pyrate-radio-0.9.11.apk&amp;tr=udp:%2F%2Ftracker.opentrackr.org:1337%2Fannounce&amp;tr=udp:%2F%2Fopen.demonii.com:1337%2Fannounce&amp;tr=udp:%2F%2Ftracker.torrent.eu.org:451%2Fannounce&amp;ws=https:%2F%2Fhostis.black%2Fpyrateradio%2Fpyrate-radio-0.9.11.apk">Magnet link</a><a class="btn" href="pyrate-radio-0.9.11.apk.torrent">.torrent</a><a class="btn" href="https://github.com/dukewilder/hostis/tree/radio/radio" target="_blank" rel="noopener noreferrer">Source</a></div>
 <p class="note">Once you have it, the app passes itself on from phone to phone, in Settings.</p>
 <div class="folds">
 <details class="fold"><summary>Installing on stock Android</summary><div>
@@ -377,7 +380,7 @@ document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51
 <p>GrapheneOS, LineageOS and other de-Googled phones skip all of this, and so does an install over ADB.</p>
 </div></details>
 <details class="fold"><summary>Checksums and the signing certificate</summary><div>
-<p class="sums">android c74ac9e02b164f98893728680b8819dd0f6cc09b3a8223d0a1022a85375a1d6a<br>windows 6577f62240c00938f4c6d4091c6e1aa6d43ff65950ae2c511f5e0d9ea45f38aa · <a href="pyrate-radio-0.9.10-windows.zip.torrent">torrent</a><br>mac cf31e0825f1bda0dde7a68b36d21fecb7478f15e020ed77942c76b3b71435506 · <a href="pyrate-radio-0.9.10-macos.zip.torrent">torrent</a><br>linux 524a255d43bb4cac0afdfed5d6def5f73bcb45acb44c4d6423382d0525a5c8cd · <a href="pyrate-radio-0.9.10-linux-x64.tar.gz.torrent">torrent</a><br>signing certificate AF:4C:08:F6:0C:06:87:5C:84:9F:74:59:6B:BB:99:62:DC:A8:EB:33:E2:22:8E:72:BC:A9:BD:06:4E:6D:8A:14</p>
+<p class="sums">android 537abe87af7410df0b777ff76ebaceb73fb06ab60973856ec7f0615c835e51e2<br>windows fbe6cb2d0040b512d92c9bc130e290833715bfdb2164b2d9ce862d235f98e5e5 · <a href="pyrate-radio-0.9.11-windows.zip.torrent">torrent</a><br>mac a3cb380c0fb1ad239f84e92df96f613ec1afca5aea98aadb8ee288bea01b5b04 · <a href="pyrate-radio-0.9.11-macos.zip.torrent">torrent</a><br>linux dd1b64772c2c20690a8cb0fee9d47606b9f9508bb3859767a3bb8bf4ea2e801a · <a href="pyrate-radio-0.9.11-linux-x64.tar.gz.torrent">torrent</a><br>signing certificate AF:4C:08:F6:0C:06:87:5C:84:9F:74:59:6B:BB:99:62:DC:A8:EB:33:E2:22:8E:72:BC:A9:BD:06:4E:6D:8A:14</p>
 <p>The app shows the same certificate in Settings, under Advanced, and takes an update only when two of the three HOSTIS release keys have signed it. The source is CC0, so you can build it yourself and compare.</p>
 </div></details>
 </div>
