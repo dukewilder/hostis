@@ -24,8 +24,10 @@ for f in "$R"/landing/out/pyrate-radio-*-windows.zip* "$R"/landing/out/pyrate-ra
 done
 rm -rf pyrateradio/listen
 cp -r "$R/landing/out/listen" pyrateradio/listen
-rm -rf pyrateradio/handbook
-cp -r "$R/landing/out/handbook" pyrateradio/handbook
+for d in handbook how-it-works; do
+  rm -rf "pyrateradio/$d"
+  cp -r "$R/landing/out/$d" "pyrateradio/$d"
+done
 # The open player's CAR, kept beside every earlier one still on the site (the newest twelve),
 # with the list of every open player ever published, for pinners (tools/pin_player.sh).
 CID=$(python3 -c "import json;print(json.load(open('$R/browser/www/open.json'))['cid'])")
