@@ -105,6 +105,28 @@ fn main() -> anyhow::Result<()> {
             }
         }
     }
+    // --words <file>: writes the 24 words of every station this Lantern holds the master key
+    // for into <file>, readable by its owner only, and stops. For the keeper to copy onto
+    // paper; never print the file.
+    if let Some(out) = get("--words") {
+        let list = node.call(&serde_json::json!({ "cmd": "own_words" }));
+        let mut text = String::from("Pyrate Radio station keys. Copy each set of words onto paper, in order, then delete this file.\n\n");
+        let mut n = 0;
+        for s in list.as_array().into_iter().flatten() {
+            if s["master"] == true {
+                text += &format!("{}\n{}\n{}\n\n", s["name"].as_str().unwrap_or(""), s["id"].as_str().unwrap_or(""), s["words"].as_str().unwrap_or(""));
+                n += 1;
+            }
+        }
+        std::fs::write(&out, text)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&out, std::fs::Permissions::from_mode(0o600))?;
+        }
+        println!("the 24 words of {n} stations are in {out}: copy them onto paper, then delete the file");
+        return Ok(());
+    }
     seed_all(&node, &seeds)?;
     // The seeded stations by name and id, once at start: what the harbour list needs.
     for name in seeds.iter().filter_map(|s| s.split('|').next()) {
