@@ -230,6 +230,7 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 .field{display:block;margin:0 0 1rem}
 .field>span{display:block;font:400 10.5px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin-bottom:.35rem}
 .field input{width:100%}
+input[type=password]{background:var(--panel);color:var(--ink);border:1px solid rgba(237,228,206,.24);border-radius:0;font:400 1rem var(--serif);padding:0 .9rem;min-height:44px}
 .studio .switches{flex-direction:row;flex-wrap:wrap;gap:.6rem 1.6rem;justify-content:center;width:auto}
 .studio textarea{min-height:5.5rem}
 .st-show{border:1px solid var(--red);background:rgba(197,40,40,.04);padding:1.2rem 1.2rem 1rem;margin:0 0 1rem}

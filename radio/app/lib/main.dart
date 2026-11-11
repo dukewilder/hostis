@@ -567,6 +567,7 @@ class _PyrateAppState extends State<PyrateApp> {
               Dial(radio: radio),
               LogPage(radio: radio, onTune: () => setState(() => tab = 0)),
               PinGate(child: ColoursPage(radio: radio)),
+              PinGate(child: SettingsPage(radio: radio)),
               ])),
             ]),
           ))),
@@ -576,7 +577,7 @@ class _PyrateAppState extends State<PyrateApp> {
               decoration: const BoxDecoration(border: Border(top: BorderSide(color: line, width: 1))),
               height: 60,
               child: Row(children: [
-                for (final (i, label) in ['THE DIAL', 'THE LOG', 'COLOURS'].indexed)
+                for (final (i, label) in ['THE DIAL', 'THE LOG', 'MY STATION', 'SETTINGS'].indexed)
                   Expanded(
                     child: Semantics(
                       selected: tab == i,
@@ -707,7 +708,7 @@ class Dial extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
             decoration: const BoxDecoration(color: Color(0x0EC52828), border: Border(bottom: BorderSide(color: red, width: 1))),
-            child: Text('A NEW VERSION IS ABOARD · ${up['version']} · TAP TO INSTALL', textAlign: TextAlign.center, style: carved(10, color: bone, spacing: 0.2)),
+            child: Text('A NEW VERSION IS READY · ${up['version']} · TAP TO INSTALL', textAlign: TextAlign.center, style: carved(10, color: bone, spacing: 0.2)),
           ),
         ),
       const SizedBox(height: 16),
@@ -800,11 +801,11 @@ class _StationMore extends StatelessWidget {
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text((s['name'] ?? '').toString(), style: pica(24)),
         const SizedBox(height: 10),
-        row('WATCH BILL', 'What plays today and this week, and a bell for any of it.', () => pyrateSheet(context, WatchBill(station: s))),
-        if (tuned) row('TAPE IT', 'Keep what is playing as a recording on this device.', () => tapeIt(context)),
-        row('FLOCK', 'Phones in one room playing as one.', () => pyrateSheet(context, const FlockSheet())),
-        row('LIGHTS OUT', radio.sleepAt == null ? 'Fade out and stop after a while.' : 'Fades out at ${clockTime(radio.sleepAt!.millisecondsSinceEpoch)}.', () => sleepSheet(context, radio)),
-        row('HEARD TONIGHT', 'What has played since the app opened.', () => historySheet(context, radio)),
+        row('SCHEDULE', 'What plays today and this week, with a reminder for any of it.', () => pyrateSheet(context, WatchBill(station: s))),
+        if (tuned) row('RECORD THIS', 'Save what is playing to this device.', () => tapeIt(context)),
+        row('PLAY ON SEVERAL PHONES', 'Phones in one room playing in step, like one speaker.', () => pyrateSheet(context, const FlockSheet())),
+        row('SLEEP TIMER', radio.sleepAt == null ? 'Fade out and stop after a while.' : 'Fades out at ${clockTime(radio.sleepAt!.millisecondsSinceEpoch)}.', () => sleepSheet(context, radio)),
+        row('RECENTLY PLAYED', 'What has played since the app opened.', () => historySheet(context, radio)),
       ]),
     );
   }
@@ -900,7 +901,7 @@ class _StationFace extends StatelessWidget {
           child: !isTuned
               ? const SizedBox()
               : state == 'searching' && title.isEmpty
-                  ? Text('Finding a carrier', style: serif(16, color: boneFaint, italic: true))
+                  ? Text('Tuning in', style: serif(16, color: boneFaint, italic: true))
                   : state == 'dead air'
                       ? Text('Dead air', style: serif(16, color: boneFaint, italic: true))
                       : state == 'off air'
@@ -922,7 +923,7 @@ class _StationFace extends StatelessWidget {
                           ],
                         ]),
         ),
-        Text('${s['aboard'] ?? 0} ABOARD', style: caps(11, color: boneFaint, spacing: 0.2)),
+        Text('${s['aboard'] ?? 0} LISTENING', style: caps(11, color: boneFaint, spacing: 0.2)),
       ]),
       )),
     ]);
@@ -1006,7 +1007,7 @@ class _ColoursPageState extends State<ColoursPage> {
               title: Text('Write these down', style: serif(24)),
               content: SingleChildScrollView(
                 child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('These 24 words are the station. This phone keeps only a deputy key, which can broadcast but cannot strike. If the phone is lost or taken, the words take the station back and shut the deputy out. They are shown once and kept nowhere. Nobody from Pyrate Radio or HOSTIS will ever ask for them.',
+                  Text('These 24 words are your station. If this phone is lost or taken, they bring the station back on any phone and lock this one out. They are shown once and saved nowhere, so write them on paper. Nobody from Pyrate Radio or HOSTIS will ever ask for them.',
                       style: serif(15, color: boneFaint, italic: true)),
                   const SizedBox(height: 14),
                   Container(
@@ -1099,10 +1100,8 @@ class _ColoursPageState extends State<ColoursPage> {
   }
 
   List<Widget> _art(String id, Map mine) => [
-        Text('THE ART', style: carved(14)),
-        const SizedBox(height: 8),
-        Text('A cover for the Log and the dial, a banner across the top of your page. Any picture works. It is redrawn on this phone before it sails, stripped of where and when it was taken. Album covers inside your recordings show while they play.',
-            style: serif(14, color: boneFaint, italic: true)),
+        heading('PICTURES'),
+        note('A cover for the dial and the Log, and a banner for your station\'s page. Where and when a photo was taken is wiped before it goes out.'),
         const SizedBox(height: 14),
         if (mine['banner'] != null)
           Padding(
@@ -1120,9 +1119,9 @@ class _ColoursPageState extends State<ColoursPage> {
             child: Wrap(spacing: 10, runSpacing: 10, children: [
               button('COVER', () => pickArt(id, 'cover')),
               button('BANNER', () => pickArt(id, 'banner')),
-              button('COVER FROM A LINK', () => linkArt(id, 'cover')),
+              button('FROM A LINK', () => linkArt(id, 'cover')),
               if (mine['cover'] != null || mine['banner'] != null)
-                button('TAKE IT DOWN', () async {
+                button('REMOVE', () async {
                   await Native.callAway({'cmd': 'art_clear', 'station': id, 'kind': 'cover'});
                   await Native.callAway({'cmd': 'art_clear', 'station': id, 'kind': 'banner'});
                 }, color: boneFaint),
@@ -1163,179 +1162,58 @@ class _ColoursPageState extends State<ColoursPage> {
     final mine = widget.radio.mine;
     return ListView(padding: const EdgeInsets.fromLTRB(24, 26, 24, 40), children: [
       if (mine == null) ...[
-        masthead('Raise Colours'),
+        masthead('Start a station'),
         const SizedBox(height: 10),
-        Text('A station is a key made on this phone. Name it, put recordings on its clock, and it plays all day and all night, carried by every listener.',
-            style: serif(16, color: boneFaint, italic: true)),
-        const SizedBox(height: 22),
-        TextField(enableIMEPersonalizedLearning: false, controller: name, style: serif(20), decoration: field('Name'), maxLength: 40),
-        TextField(enableIMEPersonalizedLearning: false, controller: about, style: serif(16), decoration: field('What it broadcasts'), maxLength: 140),
-        Theme(
-          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            title: Text('A passphrase on top of the words', style: serif(14, color: boneFaint, italic: true)),
-            children: [
-              Text('With a passphrase, the 24 words alone open a different, empty station, so a photograph of them gives nothing away and words given up under force open that one instead. Lose the passphrase and the station is lost with it.',
-                  style: serif(13, color: boneFaint, italic: true)),
-              TextField(controller: pass, obscureText: true, style: mono(12, color: bone), decoration: field('Passphrase (optional)'),
-                  enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
-            ],
-          ),
-        ),
+        note('Give it a name, add some recordings, and it plays day and night. Nobody can take it down.'),
         const SizedBox(height: 18),
+        TextField(enableIMEPersonalizedLearning: false, controller: name, style: serif(20), decoration: field('Station name'), maxLength: 40),
+        TextField(enableIMEPersonalizedLearning: false, controller: about, style: serif(16), decoration: field('What it plays, in a line'), maxLength: 140),
+        const SizedBox(height: 14),
         StartShapePicker(shape: shape),
-        Row(children: [
-          Switch(value: pocket, onChanged: (v) => setState(() => pocket = v), activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel),
-          Flexible(child: Text('A pocket station for listeners you invite', style: serif(15, color: boneDim))),
-        ]),
-        if (pocket)
-          Text('It never shows on the Log. Whoever holds an invitation can find it, hear it and carry it; nobody else can tell it exists.',
-              style: serif(13, color: boneFaint, italic: true)),
-        const SizedBox(height: 10),
-        Text('All of it can change later. Once it is set, the station keeps to it for as long as anyone carries it.',
-            style: serif(13, color: boneFaint, italic: true)),
-        const SizedBox(height: 18),
-        Row(children: [LeadButton(label: raising ? 'Raising' : 'Raise colours', onPressed: raising ? null : raise)]),
-        if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: serif(14, color: bone, italic: true))),
-        const SizedBox(height: 28),
-        Text('Your phone hands its broadcasts to the network along a chain of other nodes, so the first node to show them is never yours. Listening goes through two hops. One sees who is asking, the other what is asked for, and neither sees both.',
-            style: serif(13, color: boneFaint, italic: true)),
-        const SizedBox(height: 34),
-        Text('TAKE BACK A STATION', style: carved(14)),
         const SizedBox(height: 8),
-        Text('Lost the phone, or had it taken? The 24 words bring the station to this phone and shut the old one out.',
-            style: serif(14, color: boneFaint, italic: true)),
-        TextField(controller: restoreWords, style: mono(12, color: bone), maxLines: 3, decoration: field('The 24 words'),
-            enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, keyboardType: TextInputType.visiblePassword),
-        TextField(controller: restorePass, obscureText: true, style: mono(12, color: bone), decoration: field('Passphrase, if you set one'),
-                enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
-        const SizedBox(height: 12),
-        Row(children: [
-          button('TAKE IT BACK', () async {
-            final phrase = restoreWords.text, pp = restorePass.text;
-            restoreWords.clear();
-            restorePass.clear();
-            final r = await Native.callAway({'cmd': 'restore', 'phrase': phrase, 'passphrase': pp});
-            if (!context.mounted) return;
-            toast(context, r is Map && r['error'] != null ? 'Not taken back: ${r['error']}' : 'The station is back on this phone, and the old one is shut out.');
-          }),
+        fold('More options', sub: 'Invite-only, and an extra passphrase', [
+          setting('Invite-only', pocket, (v) => setState(() => pocket = v), sub: 'Hidden from the Log. Only people you send an invitation can find it or hear it.'),
+          const SizedBox(height: 10),
+          note('A passphrase adds a lock to your 24 words. Someone who sees the words still cannot open the station. Forget the passphrase and the station is gone for good.'),
+          TextField(controller: pass, obscureText: true, style: mono(13, color: bone), decoration: field('Passphrase (optional)'),
+              enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
         ]),
-        const SizedBox(height: 34),
-        const HandsPanel(),
+        const SizedBox(height: 14),
+        Row(children: [LeadButton(label: raising ? 'Starting' : 'Raise colours', onPressed: raising ? null : raise)]),
+        const SizedBox(height: 8),
+        note('You can change all of this later.'),
+        if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: serif(14, color: bone, italic: true))),
+        const SizedBox(height: 30),
+        fold('Bring back a station', sub: 'Have your 24 words? Move your station to this phone.', [
+          note('This also locks out the old phone, if it was lost or taken.'),
+          TextField(controller: restoreWords, style: mono(12, color: bone), maxLines: 3, decoration: field('The 24 words'),
+              enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, keyboardType: TextInputType.visiblePassword),
+          TextField(controller: restorePass, obscureText: true, style: mono(12, color: bone), decoration: field('Passphrase, if you set one'),
+              enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
+          const SizedBox(height: 12),
+          Row(children: [
+            button('BRING IT BACK', () async {
+              final phrase = restoreWords.text, pp = restorePass.text;
+              restoreWords.clear();
+              restorePass.clear();
+              final r = await Native.callAway({'cmd': 'restore', 'phrase': phrase, 'passphrase': pp});
+              if (!context.mounted) return;
+              toast(context, r is Map && r['error'] != null ? 'That did not work: ${r['error']}' : 'Your station is on this phone, and the old phone is locked out.');
+            }),
+          ]),
+        ]),
+        fold('Co-host someone else\'s station', sub: 'Broadcast for a friend\'s station from this phone.', [const HandsPanel()]),
       ] else
         ..._station(mine),
-      ..._chart(),
     ]);
-  }
-
-  List<Widget> _chart() {
-    final all = Native.call({'cmd': 'stations', 'marooned': true});
-    final marooned = all is List ? all.where((x) => x['marooned'] == true).toList() : [];
-    return [
-      const SizedBox(height: 34),
-      if (marooned.isNotEmpty) ...[
-        Text('MAROONED', style: carved(14)),
-        const SizedBox(height: 6),
-        for (final m in marooned)
-          Row(children: [
-            Expanded(child: Text(m['name'] ?? '', style: serif(16, color: boneDim))),
-            TextButton(
-              onPressed: () async {
-                await Native.callAway({'cmd': 'maroon', 'station': m['id'], 'value': false});
-                if (mounted) setState(() {});
-              },
-              child: Text('BRING BACK', style: carved(10, color: boneFaint)),
-            ),
-          ]),
-        const SizedBox(height: 26),
-      ],
-      Text('ART', style: carved(14)),
-      const SizedBox(height: 8),
-      Text('Pictures you see while browsing live in memory and are gone when the app closes. Only the art of stations you keep or listen to is kept, sealed like the recordings.',
-          style: serif(14, color: boneFaint, italic: true)),
-      Row(children: [
-        Switch(
-          value: (Native.call({'cmd': 'art_kept_only'}) as Map)['value'] == true,
-          onChanged: (v) => setState(() => Native.call({'cmd': 'art_kept_only', 'value': v})),
-          activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel,
-        ),
-        Flexible(child: Text('Show art only for stations I keep', style: serif(15, color: boneDim))),
-      ]),
-      const SizedBox(height: 26),
-      Text('MATURE AND EXPLICIT', style: carved(14)),
-      const SizedBox(height: 8),
-      Text('Each station says for itself whether it is mature or explicit. A station that lies about it is yours to maroon.',
-          style: serif(14, color: boneFaint, italic: true)),
-      Row(children: [
-        Switch(
-          value: pref('hide_mature') == true,
-          onChanged: (v) => setState(() => pref('hide_mature', v)),
-          activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel,
-        ),
-        Flexible(child: Text('Hide mature stations', style: serif(15, color: boneDim))),
-      ]),
-      Row(children: [
-        Switch(
-          value: pref('show_explicit') == true,
-          onChanged: (v) => setState(() => pref('show_explicit', v)),
-          activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel,
-        ),
-        Flexible(child: Text('Show explicit stations', style: serif(15, color: boneDim))),
-      ]),
-      const SizedBox(height: 26),
-      if (Platform.isAndroid) ...[const DrawerLantern(), const SizedBox(height: 26)],
-      ShipPapers(radio: widget.radio),
-      const SizedBox(height: 26),
-      Text('THE HOLD', style: carved(14)),
-      const SizedBox(height: 8),
-      Text('What you listen to is kept here so your phone can play it without waiting. It is sealed, so nothing on the phone says what any of it is. Clearing it leaves your own station and the ballast you carry for the fleet.',
-          style: serif(14, color: boneFaint, italic: true)),
-      const SizedBox(height: 10),
-      Row(children: [
-        button('CLEAR THE HOLD', () async {
-          final r = await Native.callAway({'cmd': 'clear_hold'});
-          if (!context.mounted) return;
-          final n = r is Map ? (r['cleared'] as num?)?.toInt() : null;
-          toast(context, r is Map && r['error'] != null ? 'Not cleared: ${r['error']}' : (n == null || n == 0 ? 'The hold was already clear.' : 'The hold is clear.'));
-        }),
-      ]),
-      const SizedBox(height: 26),
-      Text('SCUTTLE', style: carved(14)),
-      const SizedBox(height: 8),
-      Text('For a phone about to be taken. One press destroys the key everything the radio keeps here is sealed under, in the phone\'s secure hardware. What you have heard, your chart, pockets, bells and this phone\'s key to your station become noise at once, and the app closes. Your station lives on in the network and comes back to any phone with its 24 words.',
-          style: serif(14, color: boneFaint, italic: true)),
-      const SizedBox(height: 10),
-      Row(children: [
-        button('SCUTTLE', () async {
-          final ok = await showDialog<bool>(
-            context: context,
-            builder: (c) => AlertDialog(
-              title: Text('Scuttle the radio on this phone?', style: serif(20)),
-              content: Text('Everything it keeps becomes unreadable now, and cannot be brought back. Have your 24 words before you do this.', style: serif(14, color: boneFaint, italic: true)),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(c, false), child: Text('NOT NOW', style: carved(11, color: boneFaint))),
-                TextButton(onPressed: () => Navigator.pop(c, true), child: Text('SCUTTLE', style: carved(11))),
-              ],
-            ),
-          );
-          if (ok == true) await _service.invokeMethod('scuttle').catchError((_) {});
-        }),
-      ]),
-    ];
   }
 
   List<Widget> _onAir(String id) {
     final live = widget.radio.status['live'] as Map<String, dynamic>?;
     final on = live != null && live['station'] == id;
     return [
-      Text('ON AIR', style: carved(14, color: bloodBright)),
-      const SizedBox(height: 8),
-      Text('Go live from this phone. Listeners hear you ten to twenty seconds behind, and when you stop, the clock takes back the hour.',
-          style: serif(14, color: boneFaint, italic: true)),
-      const SizedBox(height: 6),
-      Text('The mains hum that would date and place you is taken out. Sirens, bells, trains and voices around you stay in, and they can say where you are. Discretion, in More, can disguise your voice.',
-          style: serif(13, color: boneFaint, italic: true)),
+      heading('GO LIVE', color: bloodBright),
+      note('Talk to your listeners from this phone. They hear you about fifteen seconds behind, and your recordings carry on when you stop. Sirens, bells or voices in the background can give away where you are. Settings can disguise your voice.'),
       const SizedBox(height: 12),
       if (on)
         Row(children: [
@@ -1345,14 +1223,14 @@ class _ColoursPageState extends State<ColoursPage> {
             child: Text('ON AIR  ${fmtTime((live['since_ms'] as num).toInt())}', style: mono(13, color: bloodBright, weight: FontWeight.w700)),
           ),
           const SizedBox(width: 12),
-          button('END BROADCAST', () async {
+          button('STOP', () async {
             await Native.callAway({'cmd': 'end_live'});
             _service.invokeMethod('live', {'on': false}).catchError((_) {});
           }),
         ])
       else
         Row(children: [
-          button('GO ON AIR', () async {
+          button('GO LIVE', () async {
             if (!await askMic(context)) return;
             final r = await Native.callAway({'cmd': 'go_live', 'station': id});
             if (!mounted) return;
@@ -1379,20 +1257,18 @@ class _ColoursPageState extends State<ColoursPage> {
     }
 
     return [
-      Text('THE PROGRAMME', style: carved(14)),
-      const SizedBox(height: 8),
-      Text(programmeSummary(programme), style: serif(14, color: boneFaint, italic: true)),
+      heading('WHEN IT PLAYS'),
+      note(programmeSummary(programme)),
       const SizedBox(height: 12),
       Wrap(spacing: 6, runSpacing: 6, children: [
-        button('SET THE PROGRAMME', () => after(Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(backgroundColor: black, appBar: AppBar(backgroundColor: black), body: ProgrammeEditor(station: id, name: (mine['name'] ?? '').toString())))))),
-        button('A PREMIERE', () => after(pyrateSheet(context, ShowEditor(station: id)))),
-        button('A NOTICE', () => after(pyrateSheet(context, NoticeEditor(station: id)))),
-        button('YOUR PAGE', () => openPage(context, mine, widget.radio)),
+        button('CHANGE THE SCHEDULE', () => after(Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(backgroundColor: black, appBar: AppBar(backgroundColor: black), body: ProgrammeEditor(station: id, name: (mine['name'] ?? '').toString())))))),
+        button('PLAN A PREMIERE', () => after(pyrateSheet(context, ShowEditor(station: id)))),
+        button('POST A NOTICE', () => after(pyrateSheet(context, NoticeEditor(station: id)))),
+        button('SEE YOUR PAGE', () => openPage(context, mine, widget.radio)),
         if (widget.radio.stations.any((x) => x['id'] == id && x['pocket'] == true))
-          button('INVITE', () => pyrateSheet(context, InviteSheet(station: id)))
+          button('INVITE LISTENERS', () => pyrateSheet(context, InviteSheet(station: id)))
         else
-          button('A POSTER', () => pyrateSheet(context, PosterSheet(station: mine))),
-        button('NUMBERS', () => after(pyrateSheet(context, NumbersKit(station: id)))),
+          button('MAKE A POSTER', () => pyrateSheet(context, PosterSheet(station: mine))),
       ]),
     ];
   }
@@ -1410,41 +1286,27 @@ class _ColoursPageState extends State<ColoursPage> {
             Text(mine['name'] ?? '', style: pica(28, spacing: 0.03)),
             Text(mine['call_sign'] ?? '', style: mono(12)),
             const SizedBox(height: 6),
-            Text('${mine['tracks']} ${mine['tracks'] == 1 ? 'recording' : 'recordings'} on the clock', style: serif(14, color: boneFaint, italic: true)),
+            Text('${mine['tracks']} ${mine['tracks'] == 1 ? 'recording' : 'recordings'}', style: serif(14, color: boneFaint, italic: true)),
             if (mine['waiting'] == true)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text('No ship has taken your station along the stem yet, so it waits. It goes out as soon as one does. To send it straight from this phone instead, turn on asking carriers directly, in More, under Discretion.',
+                child: Text('Waiting for another radio to pass your station on, so nobody can trace it to this phone. It goes out as soon as one does.',
                     style: serif(13, color: boneDim, italic: true)),
               ),
             if (mine['direct'] == true)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text('No ship would take your station along the stem, so it is on the air straight from this phone. Listeners\' nodes can see this phone\'s address until the fleet grows.',
+                child: Text('Few radios are online, so your station is going out straight from this phone. Listeners can see this phone\'s address until more radios join.',
                     style: serif(13, color: boneDim, italic: true)),
               ),
           ]),
         ),
       ]),
-      const SizedBox(height: 18),
       AboardChart(station: id),
-      const SizedBox(height: 26),
-      ..._art(id, mine),
-      const SizedBox(height: 26),
-      DetailsPanel(station: id),
-      const SizedBox(height: 26),
-      ..._onAir(id),
-      const SizedBox(height: 26),
-      RecordPanel(station: id),
-      const SizedBox(height: 26),
-      Text('ADD RECORDINGS', style: carved(14)),
-      const SizedBox(height: 8),
-      Text('Recordings join the library, and the programme below decides when each plays. Name files "Artist - Title" and the clock shows both.',
-          style: serif(14, color: boneFaint, italic: true)),
-      Row(children: [
-        Switch(value: talk, onChanged: (v) => setState(() => talk = v), activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel),
-        Text(talk ? 'Talk · mono · 24 kbit/s' : 'Music · stereo · 64 kbit/s', style: mono(11)),
-      ]),
+      const SizedBox(height: 30),
+      heading('ADD RECORDINGS'),
+      note('Music, shows or readings from your files. Name a file "Artist - Title" and both show.'),
+      setting('Spoken word', talk, (v) => setState(() => talk = v), sub: 'For talk and readings. Smaller files, so they reach listeners sooner. Leave it off for music.'),
       Row(children: [button('CHOOSE FILES', () => add(id))]),
       for (final j in jobs)
         Padding(
@@ -1455,9 +1317,9 @@ class _ColoursPageState extends State<ColoursPage> {
               IconButton(icon: const Icon(Icons.close, size: 16, color: boneGhost), onPressed: () => Native.call({'cmd': 'clear_job', 'job': j['id']})),
           ]),
         ),
-      const SizedBox(height: 26),
       if (library.isNotEmpty) ...[
-        Text('THE LIBRARY', style: carved(14)),
+        const SizedBox(height: 22),
+        Text('YOUR RECORDINGS', style: carved(12, color: boneFaint, spacing: 0.3)),
         const SizedBox(height: 6),
         for (final t in library)
           Padding(
@@ -1472,7 +1334,7 @@ class _ColoursPageState extends State<ColoursPage> {
               Text(fmtTime((t['duration_ms'] as num).toInt()), style: mono(11, color: boneGhost)),
               IconButton(
                 icon: const Icon(Icons.remove, size: 16, color: boneGhost),
-                tooltip: 'Withdraw',
+                tooltip: 'Remove',
                 onPressed: () {
                   Native.call({'cmd': 'withdraw', 'station': id, 'track': t['hash']});
                   libraryCount = -1;
@@ -1480,60 +1342,71 @@ class _ColoursPageState extends State<ColoursPage> {
               ),
             ]),
           ),
-        const SizedBox(height: 26),
       ],
+      const SizedBox(height: 30),
       ..._programme(id, mine),
-      const SizedBox(height: 26),
-      FeedsPanel(station: id),
-      const SizedBox(height: 26),
-      HandsPanel(station: id),
-      const SizedBox(height: 26),
-      Text('THE KEY', style: carved(14)),
-      const SizedBox(height: 8),
-      Text('This phone holds a deputy key, which can broadcast and nothing more. The 24 words you wrote down are the station. With them, any phone can take the station back and shut this one out, or strike its colours.',
-          style: serif(14, color: boneFaint, italic: true)),
-      const SizedBox(height: 34),
-      Text('STRIKE COLOURS', style: carved(14)),
-      const SizedBox(height: 8),
-      Text('Ends the station. Every honest node drops its recordings. It takes the 24 words.',
-          style: serif(14, color: boneFaint, italic: true)),
-      const SizedBox(height: 10),
-      Row(children: [
-        button('STRIKE COLOURS', () async {
-          final words = TextEditingController();
-          final wpass = TextEditingController();
-          await secure(true);
-          if (!context.mounted) return;
-          final ok = await showDialog<bool>(
-            context: context,
-            builder: (c) => AlertDialog(
-              backgroundColor: panel,
-              shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
-              title: Text('Strike colours?', style: serif(22)),
-              content: Column(mainAxisSize: MainAxisSize.min, children: [
-                Text('The station ends for good. This cannot be undone.', style: serif(15, color: boneFaint)),
-                TextField(controller: words, style: mono(12, color: bone), maxLines: 3, decoration: field('The 24 words'),
-                    enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, keyboardType: TextInputType.visiblePassword),
-                TextField(controller: wpass, obscureText: true, style: mono(12, color: bone), decoration: field('Passphrase, if you set one'),
-                enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
-              ]),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(c, false), child: Text('KEEP FLYING', style: carved(11))),
-                TextButton(onPressed: () => Navigator.pop(c, true), child: Text('STRIKE', style: carved(11))),
-              ],
-            ),
-          );
-          await secure(false);
-          final phrase = words.text, pp = wpass.text;
-          words.clear();
-          words.dispose();
-          wpass.dispose();
-          if (ok == true) {
-            final r = await Native.callAway({'cmd': 'strike', 'station': id, 'phrase': phrase, 'passphrase': pp});
-            if (!context.mounted) return;
-            toast(context, r is Map && r['error'] != null ? 'Not struck: ${r['error']}' : 'Colours struck.');
-          }
-        }),
+      const SizedBox(height: 30),
+      ..._onAir(id),
+      const SizedBox(height: 30),
+      RecordPanel(station: id),
+      const SizedBox(height: 30),
+      ..._art(id, mine),
+      const SizedBox(height: 30),
+      DetailsPanel(station: id),
+      const SizedBox(height: 30),
+      fold('More', sub: 'Podcast feeds, co-hosts, numbers, ending the station', [
+        FeedsPanel(station: id),
+        const SizedBox(height: 26),
+        HandsPanel(station: id),
+        const SizedBox(height: 26),
+        heading('A NUMBERS STATION'),
+        note('Five-figure groups read out by the phone, like the shortwave numbers stations. They play like any other recording.'),
+        const SizedBox(height: 10),
+        Row(children: [button('SET ONE UP', () => pyrateSheet(context, NumbersKit(station: id)))]),
+        const SizedBox(height: 26),
+        heading('YOUR 24 WORDS'),
+        note('The 24 words you wrote down are the station itself. With them, any phone can take the station back from this one, or end it. This phone can broadcast but cannot end the station.'),
+        const SizedBox(height: 26),
+        heading('END THE STATION'),
+        note('Takes it off the air for good. You need your 24 words.'),
+        const SizedBox(height: 10),
+        Row(children: [
+          button('END THE STATION', () async {
+      final words = TextEditingController();
+      final wpass = TextEditingController();
+      await secure(true);
+      if (!context.mounted) return;
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          backgroundColor: panel,
+          shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+          title: Text('End the station?', style: serif(22)),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('It goes off the air for good, everywhere. This cannot be undone.', style: serif(15, color: boneFaint)),
+            TextField(controller: words, style: mono(12, color: bone), maxLines: 3, decoration: field('The 24 words'),
+                enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, keyboardType: TextInputType.visiblePassword),
+            TextField(controller: wpass, obscureText: true, style: mono(12, color: bone), decoration: field('Passphrase, if you set one'),
+            enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: Text('KEEP IT', style: carved(11))),
+            TextButton(onPressed: () => Navigator.pop(c, true), child: Text('END IT', style: carved(11))),
+          ],
+        ),
+      );
+      await secure(false);
+      final phrase = words.text, pp = wpass.text;
+      words.clear();
+      words.dispose();
+      wpass.dispose();
+      if (ok == true) {
+        final r = await Native.callAway({'cmd': 'strike', 'station': id, 'phrase': phrase, 'passphrase': pp});
+        if (!context.mounted) return;
+        toast(context, r is Map && r['error'] != null ? 'Not ended: ${r['error']}' : 'The station has ended.');
+      }
+          }, color: bloodBright),
+        ]),
       ]),
     ];
   }
@@ -1577,21 +1450,10 @@ class _DrawerLanternState extends State<DrawerLantern> {
 
   @override
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('THE DRAWER LANTERN', style: carved(14)),
-        const SizedBox(height: 8),
-        Text('An old phone in a drawer can keep a share of the fleet afloat all day. Leave it on a charger and Wi-Fi, and it carries sealed sound for whoever asks, with the screen off. It never learns what any of it is.',
-            style: serif(14, color: boneFaint, italic: true)),
-        Row(children: [
-          Switch(
-            value: on,
-            onChanged: (v) => setState(() {
+        setting('Use this as a spare phone', on, (v) => setState(() {
               on = v;
               apply();
-            }),
-            activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel,
-          ),
-          Flexible(child: Text('Keep a Lantern on this phone', style: serif(15, color: boneDim))),
-        ]),
+            }), sub: 'Got an old phone in a drawer? Leave it on a charger and Wi-Fi, and it helps carry stations all day with the screen off. Choose how much space to give.'),
         if (on) Wrap(children: [for (final n in [4, 16, 64, 128]) sizeChip(n)]),
       ]);
 }

@@ -75,21 +75,21 @@ String lengthLabel(int min) => min % 60 == 0 ? '${min ~/ 60} hour${min == 60 ? '
 
 /// One line on how a station plays, from its programme.
 String programmeSummary(Map? p) {
-  if (p == null) return 'Plays its whole library shuffled, round the clock.';
+  if (p == null) return 'Plays everything shuffled, day and night.';
   final zone = (p['zone_name'] ?? '').toString();
   final at = zone.isEmpty ? '' : ' $zone';
   final m = (p['mode'] as Map?) ?? {};
   final start = (m['start_min'] as num?)?.toInt() ?? 0;
   var s = switch (m['kind']) {
-    'in_order' => 'Plays its library in order, from the top each Monday',
+    'in_order' => 'Plays everything in order',
     'newest_first' => 'Plays its newest recordings first',
-    'daily' => 'Plays its library in order, from the top every day at ${hhmm(start)}$at',
-    'weekly' => 'Plays its library in order, from the top every ${weekDayNames[((m['day'] as num?)?.toInt() ?? 0) % 7]} at ${hhmm(start)}$at',
-    _ => 'Plays its whole library shuffled',
+    'daily' => 'Starts from the top every day at ${hhmm(start)}$at',
+    'weekly' => 'Starts from the top every ${weekDayNames[((m['day'] as num?)?.toInt() ?? 0) % 7]} at ${hhmm(start)}$at',
+    _ => 'Plays everything shuffled',
   };
   final hours = (p['hours'] as List?) ?? [];
   if (hours.isEmpty) {
-    s += ', round the clock.';
+    s += ', day and night.';
   } else {
     s += ', on the air ${hours.map((h) => '${daysLabel((h['days'] as num).toInt())} from ${hhmm((h['start_min'] as num).toInt())} for ${lengthLabel((h['len_min'] as num).toInt())}').join(' and ')}$at.';
   }
@@ -262,7 +262,7 @@ class _StationPageState extends State<StationPage> {
               note(p['back_at'] != null
                   ? offAirLabel((p['back_at'] as num).toInt())
                   : ((p['tracks'] as num?) ?? 0) == 0
-                      ? 'Nothing on the clock yet.'
+                      ? 'Nothing scheduled yet.'
                       : 'Off the air.'),
             if (((p['next'] as List?) ?? []).length > 1) ...[
               section('UP NEXT'),
@@ -284,7 +284,7 @@ class _StationPageState extends State<StationPage> {
             section('THE SCHEDULE'),
             note(programmeSummary(p['programme'] as Map?)),
             if (((p['listings'] as List?) ?? []).isEmpty)
-              Padding(padding: const EdgeInsets.only(top: 8), child: note(own ? 'No shows yet. Add a regular show in the programme, or a premiere.' : 'No shows on the bill this week.')),
+              Padding(padding: const EdgeInsets.only(top: 8), child: note(own ? 'No shows yet. Add a regular show in the schedule, or plan a premiere.' : 'No shows on the bill this week.')),
             for (final l in shownListings(p)) ...[
               if (dayLabel((l['start_ms'] as num).toInt()) != lastDay)
                 Builder(builder: (_) {
@@ -462,7 +462,7 @@ class _ShowEditorState extends State<ShowEditor> {
         padding: EdgeInsets.fromLTRB(24, 22, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
         child: ListView(shrinkWrap: true, children: [
           heading('A PREMIERE'),
-          note('A one-off airing at a set minute. Everyone aboard hears it at the same second, and anyone who kept the station can ring a bell for it.'),
+          note('A one-off airing at a set time. Every listener hears it at the same moment, and anyone who keeps the station can set a reminder.'),
           TextField(enableIMEPersonalizedLearning: false, controller: title, maxLength: 80, style: serif(18), decoration: pyrateField('What it is called')),
           TextField(enableIMEPersonalizedLearning: false, controller: about, maxLength: 400, style: serif(15), decoration: pyrateField('A line about it')),
           Row(children: [
@@ -611,14 +611,14 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
           if (last == 0 || last > soon) return const SizedBox();
           return Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: note('Your station knows your time zone\'s changes only until ${DateTime.fromMillisecondsSinceEpoch(last).year}. Set the programme again before then and its local time carries on.'),
+            child: note('Your station knows your time zone\'s changes only until ${DateTime.fromMillisecondsSinceEpoch(last).year}. Save the schedule again before then to keep local times right.'),
           );
         }),
       if (loadError != null)
         Padding(
           padding: const EdgeInsets.only(top: 16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            note('The programme on the air could not be read ($loadError), so nothing here can be set until it is.'),
+            note('The schedule could not be loaded ($loadError). Try again in a moment.'),
             const SizedBox(height: 8),
             pyrateButton('TRY AGAIN', load),
           ]),
@@ -626,15 +626,15 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
       const SizedBox(height: 18),
       heading('HOW IT PLAYS'),
       Wrap(children: [
-        for (final (k, label) in [('shuffle', 'Shuffled'), ('in_order', 'In order'), ('newest_first', 'Newest first'), ('daily', 'A daily loop'), ('weekly', 'A weekly loop')])
+        for (final (k, label) in [('shuffle', 'Shuffle'), ('in_order', 'In order'), ('newest_first', 'Newest first'), ('daily', 'Same time daily'), ('weekly', 'Same time weekly')])
           chip(label, kind == k, () => setState(() => p['mode'] = {'kind': k, 'start_min': start, 'day': mode['day'] ?? 0})),
       ]),
       note(switch (kind) {
-        'in_order' => 'Every recording in the order you added them, round and round, from the top each Monday.',
-        'newest_first' => 'The newest recording first, then back through the rest. Good for a podcast.',
-        'daily' => 'A day\'s tape: from the top at the same time every day. Shorter than a day, it goes round again.',
-        'weekly' => 'A week\'s tape: from the top at the same time every week.',
-        _ => 'Every recording once a round, in a fresh order, before any plays twice.',
+        'in_order' => 'Every recording in the order you added them, over and over.',
+        'newest_first' => 'The newest recording first, then the rest. Good for a podcast.',
+        'daily' => 'Starts from the top at the same time every day, and repeats if it runs short.',
+        'weekly' => 'Starts from the top at the same time every week.',
+        _ => 'Everything in a fresh order. Nothing plays twice until everything has played once.',
       }),
       if (kind == 'daily' || kind == 'weekly')
         Row(children: [
@@ -652,9 +652,9 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
           }),
         ]),
       const SizedBox(height: 22),
-      heading('ON THE AIR'),
+      heading('HOURS'),
       Wrap(children: [
-        chip('Round the clock', hours.isEmpty, () => setState(() => p['hours'] = [])),
+        chip('All day', hours.isEmpty, () => setState(() => p['hours'] = [])),
         chip('Set hours', hours.isNotEmpty, () => setState(() => p['hours'] = [{'days': 0x7f, 'start_min': 18 * 60, 'len_min': 360}])),
       ]),
       for (final (i, h) in hours.indexed) ...[
@@ -677,10 +677,10 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
         ]),
         note('${daysLabel((h['days'] as num).toInt())} from ${hhmm((h['start_min'] as num).toInt())} for ${lengthLabel((h['len_min'] as num).toInt())}, then quiet until the next.'),
       ],
-      if (hours.isNotEmpty) TextButton(onPressed: () => setState(() => hours.add({'days': 0x60, 'start_min': 10 * 60, 'len_min': 240})), child: Text('ANOTHER SPELL', style: carved(9.5, color: boneFaint))),
+      if (hours.isNotEmpty) TextButton(onPressed: () => setState(() => hours.add({'days': 0x60, 'start_min': 10 * 60, 'len_min': 240})), child: Text('ADD MORE HOURS', style: carved(9.5, color: boneFaint))),
       const SizedBox(height: 22),
       heading('REGULAR SHOWS'),
-      note('A slot of the week that is always the same: a show, a hand\'s watch, or the hour you go live. Outside them, the library plays as above.'),
+      note('A show at the same time each week, a co-host\'s slot, or the hour you go live. The rest of the time, everything plays as above.'),
       for (final (i, sl) in slots.indexed)
         ListTile(
           contentPadding: EdgeInsets.zero,
@@ -703,15 +703,15 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
         child: Text('ADD A REGULAR SHOW', style: carved(10, color: bone)),
       ),
       const SizedBox(height: 22),
-      heading('THE BELL'),
-      note('A short recording, your ident, played on the bell.'),
+      heading('STATION NAME ON THE HOUR'),
+      note('A short recording, such as your station\'s name, played on a regular beat.'),
       DropdownButton<String?>(
         isExpanded: true,
         value: library.any((t) => t['track'] == p['ident']) ? p['ident'] as String? : null,
         dropdownColor: panel,
-        hint: Text('No ident', style: serif(15, color: boneFaint)),
+        hint: Text('None', style: serif(15, color: boneFaint)),
         items: [
-          DropdownMenuItem<String?>(value: null, child: Text('No ident', style: serif(15, color: boneFaint))),
+          DropdownMenuItem<String?>(value: null, child: Text('None', style: serif(15, color: boneFaint))),
           for (final t in library) DropdownMenuItem<String?>(value: t['track'], child: Text(t['title'] ?? '', overflow: TextOverflow.ellipsis, style: serif(15))),
         ],
         onChanged: (v) => setState(() => p['ident'] = v),
@@ -719,8 +719,8 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
       if (p['ident'] != null)
         Wrap(children: [for (final m in [15, 30, 60]) chip('Every $m minutes', (p['ident_every_min'] as num?)?.toInt() == m, () => setState(() => p['ident_every_min'] = m))]),
       const SizedBox(height: 6),
-      pyrateButton(speaking ?? 'SPEAK AN IDENT', speaking != null ? null : () async {
-        final text = await askText(context, 'A SPOKEN IDENT', 'What the voice says', 'You\'re listening to ${widget.name.isEmpty ? 'Pyrate Radio' : widget.name}, ${frequency(widget.station).toStringAsFixed(1)} on the dial.');
+      pyrateButton(speaking ?? 'MAKE ONE FROM TEXT', speaking != null ? null : () async {
+        final text = await askText(context, 'YOUR STATION NAME', 'What the voice says', 'You\'re listening to ${widget.name.isEmpty ? 'Pyrate Radio' : widget.name}, ${frequency(widget.station).toStringAsFixed(1)} on the dial.');
         if (text == null || text.trim().isEmpty) return;
         if (mounted) setState(() => speaking = 'SPEAKING');
         final path = await speakToFile(text.trim());
@@ -729,7 +729,7 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
           if (context.mounted) toast(context, 'This phone has no voice to speak with. Install a text-to-speech voice in the phone\'s settings.');
           return;
         }
-        setState(() => speaking = 'SETTING IT');
+        setState(() => speaking = 'ADDING IT');
         final title = 'Ident: ${text.trim().length > 40 ? '${text.trim().substring(0, 40)}…' : text.trim()}';
         final hash = await addAndWait(widget.station, path, title, 'spoken ident');
         final r = await Native.callAway({'cmd': 'programme', 'station': widget.station});
@@ -743,9 +743,9 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
           }
         });
       }),
-      note('The phone\'s own voice reads it, here on the phone. Set the programme to keep it.'),
+      note('The phone reads it aloud in its own voice. Save the schedule to keep it.'),
       const SizedBox(height: 24),
-      pyrateButton('SET THE PROGRAMME', loaded ? save : null),
+      pyrateButton('SAVE THE SCHEDULE', loaded ? save : null),
       if (saved != null) Padding(padding: const EdgeInsets.only(top: 10), child: note(saved!)),
     ]);
   }
@@ -795,10 +795,10 @@ class _SlotEditorState extends State<SlotEditor> {
           ]),
           const SizedBox(height: 8),
           Wrap(children: [for (final m in [15, 30, 60, 90, 120, 180, 240, 360]) chip(lengthLabel(m), len == m, () => setState(() => len = m))]),
-          pyrateSwitch(live, (v) => setState(() => live = v), 'I mean to go live in it'),
-          note(live ? 'Listeners see LIVE on the schedule and can ring a bell. If you are not on air, what follows plays instead.' : 'What plays in it:'),
+          pyrateSwitch(live, (v) => setState(() => live = v), 'I will go live in this slot'),
+          note(live ? 'Listeners see LIVE on the schedule and can set a reminder. If you are not live, your recordings play instead.' : 'What plays in it:'),
           Wrap(children: [
-            for (final (k, label) in [('library', 'The library, shuffled'), ('tracks', 'Chosen recordings'), ('newest', 'The newest'), if (widget.hands.isNotEmpty) ('hand', 'A hand\'s watch')])
+            for (final (k, label) in [('library', 'Everything, shuffled'), ('tracks', 'Chosen recordings'), ('newest', 'The newest'), if (widget.hands.isNotEmpty) ('hand', 'A co-host')])
               chip(label, fill == k, () => setState(() => fill = k)),
           ]),
           if (fill == 'tracks') ...[
@@ -807,10 +807,10 @@ class _SlotEditorState extends State<SlotEditor> {
           ],
           if (fill == 'newest') Wrap(children: [for (final n in [1, 3, 5, 10]) chip('The newest $n', newest == n, () => setState(() => newest = n))]),
           if (fill == 'hand')
-            Wrap(children: [for (final h in widget.hands) chip((h['label'] ?? 'A hand').toString(), hand == h['key'], () => setState(() => hand = h['key']))]),
-          if (fill == 'hand') note('The watch plays what that hand adds from their own phone.'),
+            Wrap(children: [for (final h in widget.hands) chip((h['label'] ?? 'A co-host').toString(), hand == h['key'], () => setState(() => hand = h['key']))]),
+          if (fill == 'hand') note('Plays what that co-host adds from their own phone.'),
           const SizedBox(height: 14),
-          pyrateButton('KEEP IT', () {
+          pyrateButton('DONE', () {
             Navigator.pop(context, <String, dynamic>{
               'title': title.text.trim().isEmpty ? (live ? 'Live' : 'A show') : title.text.trim(),
               'about': about.text.trim(),
@@ -889,19 +889,19 @@ class _StartShapePickerState extends State<StartShapePicker> {
   Widget build(BuildContext context) {
     final s = widget.shape;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('WHAT IT PLAYS', style: carved(12, color: boneFaint, spacing: 0.3)),
+      Text('HOW IT PLAYS', style: carved(12, color: boneFaint, spacing: 0.3)),
       const SizedBox(height: 8),
       Wrap(children: [
-        for (final (k, label) in [('shuffle', 'Round the clock'), ('in_order', 'In order'), ('daily', 'A daily loop'), ('weekly', 'A weekly loop'), ('feed', 'A podcast feed'), ('live', 'Live every day')])
+        for (final (k, label) in [('shuffle', 'Shuffle'), ('in_order', 'In order'), ('daily', 'Same time daily'), ('weekly', 'Same time weekly'), ('feed', 'From a podcast'), ('live', 'With a live show')])
           chip(label, s.kind == k, () => setState(() => s.kind = k)),
       ]),
       note(switch (s.kind) {
-        'in_order' => 'Your recordings in the order you add them, round and round.',
-        'daily' => 'A day\'s tape, from the top at the same time every day.',
-        'weekly' => 'A week of programmes, from the top at the same time every week.',
-        'feed' => 'Paste your own podcast\'s feed, or one that says you may rebroadcast it. The newest come aboard now and new episodes by themselves after. This phone reads the feed itself, so its host sees this phone\'s address as it would any podcast app\'s.',
-        'live' => 'Your recordings fill the day, and the same hour every day is kept for you to go live.',
-        _ => 'Everything you add, shuffled, all day and all night.',
+        'in_order' => 'Your recordings in the order you add them, over and over.',
+        'daily' => 'Your recordings start from the top at the same time every day.',
+        'weekly' => 'Your recordings start from the top at the same time every week.',
+        'feed' => 'Paste the feed link of your podcast, or one you have permission to play. New episodes are added by themselves. The podcast\'s host sees this phone\'s address, as with any podcast app.',
+        'live' => 'Your recordings play all day, and the same hour each day is kept for you to go live.',
+        _ => 'Everything you add, shuffled, day and night.',
       }),
       if (s.kind == 'daily' || s.kind == 'weekly') ...[
         if (s.kind == 'weekly')
@@ -1011,7 +1011,7 @@ class Feeds {
     } finally {
       _busy = false;
     }
-    final got = added == 0 ? 'Nothing new in the feeds' : '$added new ${added == 1 ? 'episode' : 'episodes'} coming aboard';
+    final got = added == 0 ? 'Nothing new in the feeds' : '$added new ${added == 1 ? 'episode' : 'episodes'} on the way';
     return failed == 0 ? got : '$got. ${failed == 1 ? 'One feed' : '$failed feeds'} could not be read.';
   }
 
@@ -1062,7 +1062,7 @@ class _FeedsPanelState extends State<FeedsPanel> {
     final mine = Feeds.load().where((f) => f['station'] == widget.station).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       heading('PODCAST FEEDS'),
-      note('New episodes come aboard by themselves every few hours on Wi-Fi while the app is open. A Lantern can do it round the clock. The feed\'s host sees this phone\'s address, as it would any podcast app\'s.'),
+      note('New episodes are added by themselves every few hours on Wi-Fi while the app is open. The podcast\'s host sees this phone\'s address, as with any podcast app.'),
       for (final f in mine)
         Row(children: [
           Expanded(child: Text(f['url'], maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(11, color: boneFaint))),
@@ -1275,7 +1275,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
     if (path == null) return;
     await send('hail', track: null, path: path);
     unawaited(File(path).delete().then((_) {}, onError: (_) {}));
-    if (mounted && err == null) toast(context, 'Your hail is on its way, sealed so only the keeper can open it.');
+    if (mounted && err == null) toast(context, 'Sent. Only the station can read it.');
   }
   final say = TextEditingController();
   late final name = TextEditingController(text: (pref('chat_name') ?? '').toString());
@@ -1373,9 +1373,9 @@ class _ChatterPanelState extends State<ChatterPanel> {
     final r = room;
     if (r == null || r['joined'] != true) {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        note('Talk with whoever else is listening, cheer what is on, or ask the station for a recording. Lines pass between the people in the room, and the radio keeps none of them on disk, though anyone in the room can copy what they read. Joining tells the others in the room that this phone is there, and shows them its address unless the radio runs through Tor. Listening alone does neither.'),
+        note('Chat with whoever else is listening, cheer what is on, or ask for a song. Nothing is saved, though anyone in the chat can copy what they read. People in the chat can tell this phone is there, and see its address unless the radio goes through Tor. Just listening shows nobody anything.'),
         const SizedBox(height: 10),
-        pyrateButton(joining ? 'JOINING' : 'JOIN THE CHATTER', joining
+        pyrateButton(joining ? 'JOINING' : 'JOIN THE CHAT', joining
             ? null
             : () async {
                 setState(() => joining = true);
@@ -1440,14 +1440,14 @@ class _ChatterPanelState extends State<ChatterPanel> {
             if (l['kind'] == 'text') Text(l['text'] ?? '', style: serif(15, color: boneDim)),
             if (l['kind'] == 'hail')
               Row(children: [
-                Expanded(child: Text('A hail, for your ears only', style: serif(15, color: bone, italic: true))),
+                Expanded(child: Text('A private message for you', style: serif(15, color: bone, italic: true))),
                 TextButton(
                   onPressed: () async {
                     final r = await Native.callAway({'cmd': 'chat_hail_open', 'station': widget.station, 'id': l['id']});
                     if (r is Map && r['path'] != null) {
                       await ship.invokeMethod('play_file', {'path': r['path']});
                     } else if (context.mounted) {
-                      toast(context, (r is Map ? r['error'] : null) ?? 'That hail would not open.');
+                      toast(context, (r is Map ? r['error'] : null) ?? 'That message would not open.');
                     }
                   },
                   child: Text('PLAY IT', style: carved(9, color: bone)),
@@ -1473,12 +1473,12 @@ class _ChatterPanelState extends State<ChatterPanel> {
       Wrap(spacing: 6, runSpacing: 6, children: [
         pyrateButton('CHEERS', () => send('cheer')),
         pyrateButton('ASK FOR ONE', ask),
-        if (!widget.own) pyrateButton(hailing ? 'SEND THE HAIL' : 'HAIL THE KEEPER', hail, color: hailing ? bloodBright : bone),
+        if (!widget.own) pyrateButton(hailing ? 'SEND' : 'MESSAGE THE STATION', hail, color: hailing ? bloodBright : bone),
       ]),
-      TextField(enableIMEPersonalizedLearning: false, controller: name, maxLength: 32, style: serif(15), decoration: pyrateField('Your name in the room'), onChanged: (v) => pref('chat_name', v.trim())),
+      TextField(enableIMEPersonalizedLearning: false, controller: name, maxLength: 32, style: serif(15), decoration: pyrateField('Your name in the chat'), onChanged: (v) => pref('chat_name', v.trim())),
       if (err != null) note(err!),
       Wrap(spacing: 6, runSpacing: 6, children: [
-        pyrateButton('LEAVE THE CHATTER', () async {
+        pyrateButton('LEAVE THE CHAT', () async {
           await Native.callAway({'cmd': 'chat_leave', 'station': widget.station});
           read();
         }, color: boneFaint),
@@ -1815,12 +1815,12 @@ class _NumbersKitState extends State<NumbersKit> {
         unawaited(File(spoken).delete().then((_) {}, onError: (_) {}));
       }
       if (!mounted) return;
-      setState(() => busy = 'Setting message $m on the clock');
+      setState(() => busy = 'Adding message $m');
       await addAndWait(widget.station, path, 'Message ${m.toString().padLeft(2, '0')}', 'numbers kit');
     }
     if (!mounted) return;
     setState(() => busy = null);
-    toast(context, '$messages messages are on the clock.');
+    toast(context, '$messages messages added to your station.');
     Navigator.pop(context);
   }
 
@@ -1889,8 +1889,8 @@ class _FlockSheetState extends State<FlockSheet> {
       padding: EdgeInsets.fromLTRB(24, 20, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
       child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          heading('A FLOCK'),
-          note('Phones in one room playing as one. Host here, and the others scan the code with their cameras to set their clocks to this phone and play its station in step.'),
+          heading('PLAY ON SEVERAL PHONES'),
+          note('Several phones in one room playing as one speaker. Host here, and the others scan the code with their cameras to play in step.'),
           const SizedBox(height: 12),
           if (st['hosting'] == true) ...[
             if (q is Map)
@@ -1904,23 +1904,23 @@ class _FlockSheetState extends State<FlockSheet> {
               ),
             const SizedBox(height: 10),
             Wrap(spacing: 6, runSpacing: 6, children: [
-              if (link != null) pyrateButton('SHARE THE LINK', () => ship.invokeMethod('share_text', {'text': 'Join my flock on Pyrate Radio: $link'})),
-              pyrateButton('END THE FLOCK', () {
+              if (link != null) pyrateButton('SHARE THE LINK', () => ship.invokeMethod('share_text', {'text': 'Play along with me on Pyrate Radio: $link'})),
+              pyrateButton('STOP HOSTING', () {
                 Native.call({'cmd': 'flock_leave'});
                 setState(() => link = null);
               }),
             ]),
           ] else if (st['joined'] == true) ...[
-            note('In the flock. The host answers in ${st['rtt_ms']} ms; this phone keeps to its clock.'),
+            note('Playing in step with the host.'),
             const SizedBox(height: 8),
-            pyrateButton('LEAVE THE FLOCK', () => Native.call({'cmd': 'flock_leave'})),
+            pyrateButton('LEAVE', () => Native.call({'cmd': 'flock_leave'})),
           ] else ...[
-            pyrateButton('HOST A FLOCK', () {
+            pyrateButton('HOST HERE', () {
               final r = Native.call({'cmd': 'flock_host'});
               if (r is Map) setState(() => link = r['link'] as String?);
             }),
             const SizedBox(height: 12),
-            TextField(enableIMEPersonalizedLearning: false, controller: paste, style: mono(11, color: bone), decoration: pyrateField('Or paste a flock link')),
+            TextField(enableIMEPersonalizedLearning: false, controller: paste, style: mono(11, color: bone), decoration: pyrateField('Or paste a link from the host')),
             const SizedBox(height: 8),
             pyrateButton('JOIN', () async {
               final r = await Native.callAway({'cmd': 'flock_join', 'link': paste.text.trim()});
@@ -1963,7 +1963,7 @@ class InviteSheet extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         heading('AN INVITATION'),
-        note('Whoever holds this can hear the station, carry it and pass the invitation on. Hand it only to people you mean to have it. It works in the app and in any browser.'),
+        note('Anyone with this can listen and pass it on, so send it only to people you trust. It works in the app and in any browser.'),
         const SizedBox(height: 12),
         if (q is Map)
           Center(

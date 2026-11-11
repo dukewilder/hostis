@@ -217,14 +217,14 @@ class _LogPageState extends State<LogPage> {
           Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 8), child: Text('${s['call_sign']}  ·  Nothing here leaves this phone.', style: serif(13, color: boneFaint, italic: true))),
           ListTile(
             title: Text(s['kept'] == true ? 'STOP KEEPING' : 'KEEP', style: carved(12)),
-            subtitle: Text('Kept stations sit at the top of the Log and the dial, and come aboard ahead of time on Wi-Fi.', style: serif(13, color: boneFaint, italic: true)),
+            subtitle: Text('Kept stations sit at the top and are saved ahead on Wi-Fi.', style: serif(13, color: boneFaint, italic: true)),
             onTap: () {
               Native.callAway({'cmd': 'keep', 'station': id, 'value': s['kept'] != true});
               Navigator.pop(context);
             },
           ),
           ListTile(
-            title: Text('THE PAGE', style: carved(12)),
+            title: Text('STATION PAGE', style: carved(12)),
             subtitle: Text('Notices, what is on now and next, and the week\'s shows.', style: serif(13, color: boneFaint, italic: true)),
             onTap: () {
               Navigator.pop(context);
@@ -232,15 +232,15 @@ class _LogPageState extends State<LogPage> {
             },
           ),
           ListTile(
-            title: Text('THE WATCH BILL', style: carved(12)),
-            subtitle: Text('What plays today and this week, and a bell for any of it.', style: serif(13, color: boneFaint, italic: true)),
+            title: Text('SCHEDULE', style: carved(12)),
+            subtitle: Text('What plays today and this week, with a reminder for any of it.', style: serif(13, color: boneFaint, italic: true)),
             onTap: () {
               Navigator.pop(context);
               pyrateSheet(context, WatchBill(station: s));
             },
           ),
           if (s['pocket'] != true) ListTile(
-            title: Text('PASS THE STATION ON', style: carved(12)),
+            title: Text('SHARE', style: carved(12)),
             subtitle: Text('A link that opens it in Pyrate Radio.', style: serif(13, color: boneFaint, italic: true)),
             onTap: () {
               Navigator.pop(context);
@@ -249,8 +249,8 @@ class _LogPageState extends State<LogPage> {
           ),
           if (s['pocket'] == true && id != widget.radio.mine?['id'])
             ListTile(
-              title: Text('LEAVE THIS POCKET', style: carved(12)),
-              subtitle: Text('Its key, its log and its sound go from this phone. Only a fresh invitation brings it back.', style: serif(13, color: boneFaint, italic: true)),
+              title: Text('LEAVE THIS STATION', style: carved(12)),
+              subtitle: Text('It goes from this phone. Only a new invitation brings it back.', style: serif(13, color: boneFaint, italic: true)),
               onTap: () {
                 Native.callAway({'cmd': 'pocket_leave', 'station': id});
                 if (widget.radio.tuned == id) widget.radio.stop();
@@ -258,8 +258,8 @@ class _LogPageState extends State<LogPage> {
               },
             ),
           ListTile(
-            title: Text('MAROON', style: carved(12)),
-            subtitle: Text('Gone from your Log and your dial, and dropped from your hold. Undo it under Colours.', style: serif(13, color: boneFaint, italic: true)),
+            title: Text('HIDE THIS STATION', style: carved(12)),
+            subtitle: Text('Gone from your Log and dial. Bring it back in Settings.', style: serif(13, color: boneFaint, italic: true)),
             onTap: () {
               Native.callAway({'cmd': 'maroon', 'station': id, 'value': true});
               if (widget.radio.tuned == id) widget.radio.stop();
@@ -285,11 +285,11 @@ class _LogPageState extends State<LogPage> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             masthead('The Log'),
             const SizedBox(height: 8),
-            note('Every station on the air, your kept stations first. Hold a station to keep it, see its watch bill, pass it on or maroon it.'),
+            note('Every station on the air, the ones you keep first. Press and hold a station for more.'),
             if (radio.carrying > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
-                child: Text('Your ballast keeps part of ${radio.carrying} ${radio.carrying == 1 ? 'station' : 'stations'} afloat for the fleet${radio.carriedBytes >= 100000000 ? ', ${(radio.carriedBytes / 1e9).toStringAsFixed(1)} GB' : ''}.', style: mono(11, color: boneFaint)),
+                child: Text('This device helps keep ${radio.carrying} ${radio.carrying == 1 ? 'station' : 'stations'} on the air.', style: mono(11, color: boneFaint)),
               ),
             const SizedBox(height: 10),
             Row(children: [
@@ -310,7 +310,7 @@ class _LogPageState extends State<LogPage> {
             ]),
             const SizedBox(height: 12),
             Wrap(children: [
-              for (final (k, label) in [('aboard', 'Most aboard'), ('longest', 'Longest on air'), ('newest', 'Newest'), ('carried', 'Most carried')])
+              for (final (k, label) in [('aboard', 'Most listened'), ('longest', 'Longest on air'), ('newest', 'Newest'), ('carried', 'Most backed up')])
                 chip(label, sort == k, () => setState(() {
                       sort = k;
                       pref('sort', k);
@@ -434,8 +434,8 @@ Future<void> ringAt(BuildContext context, {required int id, required int at, req
     builder: (c) => AlertDialog(
       backgroundColor: panel,
       shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
-      title: Text('The bell is set, but it cannot ring', style: serif(20)),
-      content: Text('Notifications are off for the app or for its bells. Turn them on in its settings and the bell rings when the show starts.', style: serif(14, color: boneFaint, italic: true)),
+      title: Text('The reminder is set, but it cannot ring', style: serif(20)),
+      content: Text('Notifications are off for the app. Turn them on in your phone\'s settings and the reminder rings when the show starts.', style: serif(14, color: boneFaint, italic: true)),
       actions: [
         TextButton(onPressed: () => Navigator.pop(c, false), child: Text('NOT NOW', style: carved(11, color: boneFaint))),
         TextButton(onPressed: () => Navigator.pop(c, true), child: Text('OPEN SETTINGS', style: carved(11))),
@@ -472,7 +472,7 @@ class _WatchBillState extends State<WatchBill> {
       if (r is List) {
         bill = r;
       } else {
-        error = (r is Map ? r['error'] : null) ?? 'The watch bill has not arrived yet.';
+        error = (r is Map ? r['error'] : null) ?? 'The schedule has not arrived yet.';
       }
       bells = bellIds(b);
     });
@@ -485,13 +485,13 @@ class _WatchBillState extends State<WatchBill> {
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(24, 22, 24, 4),
-        child: Text('THE WATCH BILL', style: carved(16)),
+        child: Text('SCHEDULE', style: carved(16)),
       ),
       Padding(
         padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
-        child: note('${s['name']}, worked out on this phone from the station\'s own clock. Ring a bell and the phone tells you when it starts.'),
+        child: note('${s['name']}. Set a reminder and the phone tells you when a show starts.'),
       ),
-      if (loading) Padding(padding: const EdgeInsets.all(24), child: note('Reading the clock')),
+      if (loading) Padding(padding: const EdgeInsets.all(24), child: note('Loading the schedule')),
       if (error != null) Padding(padding: const EdgeInsets.all(24), child: note(error!)),
       Flexible(
         child: ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(24, 0, 12, 24), children: [
@@ -516,7 +516,7 @@ class _WatchBillState extends State<WatchBill> {
                 ),
                 if (!past)
                   IconButton(
-                    tooltip: ringing ? 'Silence the bell' : 'Ring a bell when it starts',
+                    tooltip: ringing ? 'Cancel the reminder' : 'Remind me when it starts',
                     icon: Icon(ringing ? Icons.notifications_active : Icons.notifications_none, size: 18, color: ringing ? bone : boneGhost),
                     onPressed: () async {
                       if (ringing) {
@@ -551,7 +551,7 @@ Future<void> tapeIt(BuildContext context) async {
   final tmp = '${share.path}/tape-${DateTime.now().millisecondsSinceEpoch}.ogg';
   final r = await Native.callAway({'cmd': 'tape', 'seconds': 120, 'path': tmp});
   if (r is! Map || r['error'] != null) {
-    if (context.mounted) toast(context, 'Nothing to tape yet. Let it play a moment.');
+    if (context.mounted) toast(context, 'Nothing to record yet. Let it play a moment.');
     return;
   }
   final name = '${share.path}/${safeName('${r['station']} - ${r['title']}').isEmpty ? 'Pyrate Radio' : safeName('${r['station']} - ${r['title']}')}.ogg';
@@ -828,7 +828,7 @@ Future<void> sleepSheet(BuildContext context, Tuner radio) => pyrateSheet(
       Padding(
         padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('LIGHTS OUT', style: carved(16)),
+          Text('SLEEP TIMER', style: carved(16)),
           const SizedBox(height: 8),
           note(radio.sleepAt == null ? 'The radio fades and stops on its own.' : 'Fades out at ${clockTime(radio.sleepAt!.millisecondsSinceEpoch)}.'),
           const SizedBox(height: 14),
@@ -851,8 +851,8 @@ Future<void> sleepSheet(BuildContext context, Tuner radio) => pyrateSheet(
 Future<void> historySheet(BuildContext context, Tuner radio) => pyrateSheet(
       context,
       Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(padding: const EdgeInsets.fromLTRB(24, 22, 24, 4), child: Text('HEARD TONIGHT', style: carved(16))),
-        Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 10), child: note('Kept in memory only, and gone when the app closes. Tape what you want to keep.')),
+        Padding(padding: const EdgeInsets.fromLTRB(24, 22, 24, 4), child: Text('RECENTLY PLAYED', style: carved(16))),
+        Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 10), child: note('Forgotten when the app closes. Use Record this to keep something.')),
         Flexible(
           child: ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(24, 0, 24, 24), children: [
             if (radio.heard.isEmpty) note('Nothing yet.'),
@@ -938,8 +938,8 @@ class _RecordPanelState extends State<RecordPanel> {
   Widget build(BuildContext context) {
     final running = started == null ? 0 : DateTime.now().difference(started!).inMilliseconds;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      heading('RECORD A SEGMENT'),
-      note('Talk into the phone and put it on the clock, as a show, a reading or a word between records.'),
+      heading('RECORD SOMETHING'),
+      note('Talk into the phone. A show, a reading, or a few words between songs.'),
       const SizedBox(height: 12),
       Row(children: [
         pyrateButton(recording ? '■︎  STOP  ${fmtTime(running)}' : '●︎  RECORD', toggle, color: recording ? bloodBright : bone),
@@ -950,7 +950,7 @@ class _RecordPanelState extends State<RecordPanel> {
         TextField(enableIMEPersonalizedLearning: false, controller: title, style: serif(17), decoration: pyrateField('Title')),
         const SizedBox(height: 10),
         Row(children: [
-          pyrateButton('PUT IT ON THE CLOCK', () {
+          pyrateButton('ADD IT TO THE STATION', () {
             setTrack({
               'station': widget.station,
               'path': path,
@@ -1010,8 +1010,8 @@ class _DetailsPanelState extends State<DetailsPanel> {
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      heading('THE STATION\'S PAPERS'),
-      note('What your station is, in your own words. The Log\'s filters read them; nobody else can set them.'),
+      heading('ABOUT THE STATION'),
+      note('Helps listeners find you in the Log.'),
       const SizedBox(height: 10),
       Wrap(spacing: 8, runSpacing: 8, children: [
         for (final k in stationKinds)
@@ -1024,18 +1024,19 @@ class _DetailsPanelState extends State<DetailsPanel> {
             ),
           ),
       ]),
-      pyrateSwitch(mature, (v) => setState(() => mature = v), 'Mature: strong language or themes. Listeners who hide mature stations will not see it'),
-      pyrateSwitch(explicit, (v) => setState(() => explicit = v), 'Explicit: sexual or graphic material. Only listeners who turn explicit stations on will see it'),
-      TextField(enableIMEPersonalizedLearning: false, controller: port, style: serif(16), decoration: pyrateField('Home port (a city, for Local)')),
-      note('Everyone can read the home port. Leave it empty, or name a city that is not yours.'),
-      TextField(enableIMEPersonalizedLearning: false, controller: tip, style: mono(12, color: bone), decoration: pyrateField('Tips: a Lightning address, Bitcoin or Monero')),
-      note('A Bitcoin address shows every payment to anyone who looks it up. Monero shows none.'),
+      const SizedBox(height: 6),
+      setting('Mature', mature, (v) => setState(() => mature = v), sub: 'Strong language or themes. Hidden from listeners who hide mature stations.'),
+      setting('Explicit', explicit, (v) => setState(() => explicit = v), sub: 'Sexual or graphic material. Only listeners who choose to see explicit stations will.'),
+      TextField(enableIMEPersonalizedLearning: false, controller: port, style: serif(16), decoration: pyrateField('Town or city (optional)')),
+      note('Everyone can see it. Leave it empty, or pick a city that is not yours.'),
+      TextField(enableIMEPersonalizedLearning: false, controller: tip, style: mono(12, color: bone), decoration: pyrateField('Tips: a Lightning, Bitcoin or Monero address')),
+      note('Anyone can look up Bitcoin payments. Monero keeps them private.'),
       const SizedBox(height: 12),
       Row(children: [
-        pyrateButton('SET THE PAPERS', () {
+        pyrateButton('SAVE', () {
           Native.call({'cmd': 'details_set', 'station': widget.station, 'kinds': kinds.toList(), 'mature': mature, 'explicit': explicit});
           final r = Native.call({'cmd': 'colours_set', 'station': widget.station, 'port': port.text, 'tip': tip.text});
-          setState(() => saved = r is Map && r['error'] != null ? r['error'] : 'Set. The Log hears it within a minute.');
+          setState(() => saved = r is Map && r['error'] != null ? r['error'] : 'Saved. Listeners see it within a minute.');
         }),
       ]),
       if (saved != null) Padding(padding: const EdgeInsets.only(top: 8), child: note(saved!)),
@@ -1050,16 +1051,17 @@ class AboardChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final r = Native.call({'cmd': 'aboard_history', 'station': station});
     final pts = r is List ? r.map((p) => ((p as List)[0] as num, p[1] as num)).toList() : <(num, num)>[];
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      heading('ABOARD, HOUR BY HOUR'),
-      if (pts.length < 2)
-        note('The chart fills in as the hours pass.')
-      else ...[
+    // A new station has nothing to chart yet, and an empty chart is only noise.
+    if (pts.length < 2) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 18),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        heading('LISTENERS, HOUR BY HOUR'),
         SizedBox(height: 70, width: double.infinity, child: CustomPaint(painter: _Spark(pts.map((p) => p.$2.toDouble()).toList()))),
         const SizedBox(height: 4),
         Text('most ${pts.map((p) => p.$2).reduce((a, b) => a > b ? a : b)} · now ${pts.last.$2}', style: mono(10)),
-      ],
-    ]);
+      ]),
+    );
   }
 }
 
@@ -1109,10 +1111,10 @@ class _HandsPanelState extends State<HandsPanel> {
       builder: (c) => AlertDialog(
         backgroundColor: panel,
         shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
-        title: Text('ADD A HAND', style: carved(13)),
+        title: Text('ADD A CO-HOST', style: carved(13)),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            note('Your co-host opens Colours, presses JOIN A CREW and sends you the code it shows. Their phone can then broadcast for this station. Your words can take it back at any time.'),
+            note('Ask your co-host to open My Station on their phone, press BE A CO-HOST and send you the code it shows.'),
             TextField(enableIMEPersonalizedLearning: false, controller: code, style: mono(12, color: bone), decoration: pyrateField('Their code')),
             TextField(enableIMEPersonalizedLearning: false, controller: label, style: serif(16), decoration: pyrateField('Their name, for your own record')),
             TextField(controller: words, style: mono(12, color: bone), maxLines: 3, decoration: pyrateField('Your 24 words'),
@@ -1121,7 +1123,7 @@ class _HandsPanelState extends State<HandsPanel> {
                 enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
           ]),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(c, true), child: Text('APPOINT', style: carved(11)))],
+        actions: [TextButton(onPressed: () => Navigator.pop(c, true), child: Text('ADD', style: carved(11)))],
       ),
     );
     await secure(false);
@@ -1131,7 +1133,7 @@ class _HandsPanelState extends State<HandsPanel> {
     if (ok != true) return;
     final r = await Native.callAway({'cmd': 'hand_appoint', 'station': widget.station, 'words': phrase, 'passphrase': pp, 'code': code.text, 'label': label.text});
     if (!mounted) return;
-    setState(() => msg = r is Map && r['error'] != null ? r['error'] : 'Appointed. Tell them your station\'s call sign and id.');
+    setState(() => msg = r is Map && r['error'] != null ? r['error'] : 'Added. Send them your station\'s id, shown below.');
   }
 
   Future<void> join() async {
@@ -1146,34 +1148,34 @@ class _HandsPanelState extends State<HandsPanel> {
       builder: (c) => AlertDialog(
         backgroundColor: panel,
         shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
-        title: Text('JOIN THE CREW', style: carved(13)),
-        content: TextField(enableIMEPersonalizedLearning: false, controller: id, style: mono(12, color: bone), decoration: pyrateField('The station\'s id, from its captain')),
+        title: Text('JOIN AS A CO-HOST', style: carved(13)),
+        content: TextField(enableIMEPersonalizedLearning: false, controller: id, style: mono(12, color: bone), decoration: pyrateField('The station\'s id, from its owner')),
         actions: [TextButton(onPressed: () => Navigator.pop(c, true), child: Text('JOIN', style: carved(11)))],
       ),
     );
     if (ok != true) return;
     final r = Native.call({'cmd': 'hand_join', 'station': id.text.trim()});
-    setState(() => msg = r is Map && r['error'] != null ? r['error'] : 'Aboard. The station arrives within a minute.');
+    setState(() => msg = r is Map && r['error'] != null ? r['error'] : 'Joined. The station arrives within a minute.');
   }
 
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      heading('HANDS'),
-      note('A show with more than one voice. A co-host broadcasts from their own phone; only the captain\'s words can appoint or dismiss them.'),
+      heading('CO-HOSTS'),
+      note('Let someone broadcast for your station from their own phone. Only your 24 words can add or remove a co-host.'),
       const SizedBox(height: 12),
       Wrap(spacing: 10, runSpacing: 10, children: [
-        if (widget.station != null) pyrateButton('ADD A HAND', appoint),
-        pyrateButton('JOIN A CREW', join),
-        if (myCode != null) pyrateButton('I HAVE BEEN APPOINTED', board),
+        if (widget.station != null) pyrateButton('ADD A CO-HOST', appoint),
+        if (widget.station == null) pyrateButton('BE A CO-HOST', join),
+        if (myCode != null) pyrateButton('I HAVE BEEN ADDED', board),
       ]),
       if (widget.station != null)
         Padding(padding: const EdgeInsets.only(top: 10), child: SelectableText('This station\'s id: ${widget.station}', style: mono(10))),
       if (myCode != null) ...[
         const SizedBox(height: 10),
-        note('Send this code to the captain:'),
+        note('Send this code to the station\'s owner:'),
         SelectableText(myCode!, style: mono(11, color: bone)),
-        Row(children: [pyrateButton('SEND IT', () => ship.invokeMethod('share_text', {'text': 'My Pyrate Radio hand code: $myCode'}))]),
+        Row(children: [pyrateButton('SEND IT', () => ship.invokeMethod('share_text', {'text': 'My Pyrate Radio co-host code: $myCode'}))]),
       ],
       if (msg != null) Padding(padding: const EdgeInsets.only(top: 8), child: note(msg!)),
     ]);
@@ -1257,7 +1259,7 @@ class _RotaEditorState extends State<RotaEditor> {
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       heading('THE CLOCK'),
-      note('Give hours of the day to chosen recordings, talk in the morning and music after dark. Outside every block the whole library plays. The bell plays one recording on a fixed beat, such as a station ident on the hour, and that recording leaves the ordinary rotation.'),
+      note('Give hours of the day to chosen recordings, such as talk in the morning and music after dark. Outside those hours everything plays. You can also play one short recording on a regular beat, such as your station\'s name on the hour.'),
       const SizedBox(height: 10),
       for (final (i, b) in blocks.indexed)
         Row(children: [
@@ -1293,7 +1295,7 @@ class _RotaEditorState extends State<RotaEditor> {
         ]),
       const SizedBox(height: 8),
       Row(children: [
-        pyrateButton('SET THE CLOCK', () {
+        pyrateButton('SAVE', () {
           final r = Native.call({'cmd': 'rota_set', 'station': widget.station, 'blocks': blocks, 'ident': ident, 'ident_every_min': every});
           setState(() => msg = r is Map && r['error'] != null ? r['error'] : 'Set. Every listener\'s clock follows it.');
         }),
@@ -1306,14 +1308,76 @@ class _RotaEditorState extends State<RotaEditor> {
 // ---------------------------------------------------------------------------------------
 // The ship's papers: settings that belong to this phone alone
 
-class ShipPapers extends StatefulWidget {
+/// A setting in plain words: a switch, what it does, and one line more when that helps.
+Widget setting(String title, bool value, ValueChanged<bool> onChanged, {String? sub}) => InkWell(
+      onTap: () => onChanged(!value),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: serif(17, color: bone)),
+              if (sub != null) Padding(padding: const EdgeInsets.only(top: 3), child: Text(sub, style: serif(14, color: boneFaint, italic: true))),
+            ]),
+          ),
+          const SizedBox(width: 12),
+          Switch(value: value, onChanged: onChanged, activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel),
+        ]),
+      ),
+    );
+
+/// A row that does something when tapped, with a line saying what.
+Widget action(String title, VoidCallback onTap, {String? sub, Color color = bone}) => InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: serif(17, color: color)),
+              if (sub != null) Padding(padding: const EdgeInsets.only(top: 3), child: Text(sub, style: serif(14, color: boneFaint, italic: true))),
+            ]),
+          ),
+          const Icon(Icons.chevron_right, size: 20, color: boneGhost),
+        ]),
+      ),
+    );
+
+/// A group of settings under a carved heading, set off from the next by a hairline.
+Widget section(String title, List<Widget> children) => Padding(
+      padding: const EdgeInsets.only(top: 30),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title, style: carved(12, color: boneFaint, spacing: 0.3)),
+        const SizedBox(height: 4),
+        const Divider(height: 1, color: lineSoft),
+        ...children,
+      ]),
+    );
+
+/// Something most people never need, folded away under a plain title.
+Widget fold(String title, List<Widget> children, {String? sub}) => Theme(
+      data: ThemeData.dark().copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(top: 8, bottom: 8),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        iconColor: boneFaint,
+        collapsedIconColor: boneFaint,
+        title: Text(title, style: serif(17, color: bone)),
+        subtitle: sub == null ? null : Text(sub, style: serif(14, color: boneFaint, italic: true)),
+        children: children,
+      ),
+    );
+
+/// The radio's settings, in the words of someone who has never heard of a relay.
+class SettingsPage extends StatefulWidget {
   final Tuner radio;
-  const ShipPapers({super.key, required this.radio});
+  const SettingsPage({super.key, required this.radio});
   @override
-  State<ShipPapers> createState() => _ShipPapersState();
+  State<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _ShipPapersState extends State<ShipPapers> {
+class _SettingsPageState extends State<SettingsPage> {
   bool strict = false;
   bool provisions = true;
   bool plain = false;
@@ -1377,15 +1441,15 @@ class _ShipPapersState extends State<ShipPapers> {
       builder: (c) => AlertDialog(
         backgroundColor: panel,
         shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
-        title: Text(duress ? 'A PIN TO GIVE UP' : 'LOCK COLOURS', style: carved(13)),
+        title: Text(duress ? 'An emergency PIN' : 'Choose a PIN', style: serif(22)),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (duress) ...[
-            note('If you are made to open Colours, give this one. The radio scuttles itself and closes, and opens next time as if newly installed. Your 24 words bring your stations back.'),
-            const SizedBox(height: 10),
-          ],
-          TextField(controller: pin, autofocus: true, keyboardType: TextInputType.number, obscureText: true, enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, style: mono(16, color: bone), decoration: pyrateField('Four or more digits, not your PIN')),
+          note(duress
+              ? 'If someone forces you to unlock the radio, give them this one. It wipes the radio from this phone and closes. Your 24 words bring your station back later.'
+              : 'Asked for before your station and these settings open.'),
+          const SizedBox(height: 10),
+          TextField(controller: pin, autofocus: true, keyboardType: TextInputType.number, obscureText: true, enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, style: mono(16, color: bone), decoration: pyrateField('Four or more digits, not your phone\'s PIN')),
         ]),
-        actions: [TextButton(onPressed: () => Navigator.pop(c, true), child: Text(duress ? 'SET IT' : 'LOCK', style: carved(11)))],
+        actions: [TextButton(onPressed: () => Navigator.pop(c, true), child: Text('SET IT', style: carved(11)))],
       ),
     );
     if (ok != true || pin.text.length < 4) return;
@@ -1402,10 +1466,10 @@ class _ShipPapersState extends State<ShipPapers> {
       builder: (c) => AlertDialog(
         backgroundColor: panel,
         shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
-        title: Text('TAKE A LIST ABOARD', style: carved(13)),
+        title: Text('Add a hidden-stations list', style: serif(22)),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            note('Paste a maroon list someone shared with you. Every station on it leaves your Log. It is a copy: nobody can change it afterwards.'),
+            note('Paste a list someone shared. Every station on it is hidden from your dial and the Log.'),
             TextField(enableIMEPersonalizedLearning: false, controller: text, maxLines: 6, style: mono(11, color: bone), decoration: pyrateField('The list')),
           ]),
         ),
@@ -1418,63 +1482,131 @@ class _ShipPapersState extends State<ShipPapers> {
             },
             child: Text('FROM A FILE', style: carved(11, color: boneFaint)),
           ),
-          TextButton(onPressed: () => Navigator.pop(c, true), child: Text('MAROON THEM', style: carved(11))),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: Text('HIDE THEM', style: carved(11))),
         ],
       ),
     );
     if (ok != true) return;
     final r = await Native.callAway({'cmd': 'maroon_import', 'text': text.text});
     if (!mounted) return;
-    setState(() => msg = r is Map && r['added'] != null ? '${r['added']} stations marooned.' : 'That list would not read.');
+    setState(() => msg = r is Map && r['added'] != null ? '${r['added']} stations hidden.' : 'That list would not read.');
+  }
+
+  Future<void> scuttle() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Wipe the radio from this phone?', style: serif(22)),
+        content: Text('Everything it keeps here becomes unreadable at once and cannot be brought back. Your station stays on the air, and your 24 words bring it to any phone.', style: serif(15, color: boneFaint, italic: true)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text('NOT NOW', style: carved(11, color: boneFaint))),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: Text('WIPE IT', style: carved(11))),
+        ],
+      ),
+    );
+    if (ok == true) await ship.invokeMethod('scuttle').catchError((_) {});
   }
 
   @override
   Widget build(BuildContext context) {
     final wakeOn = wake['on'] == true;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      if (Platform.isAndroid) ...[
-      heading('WAKE TO THE RADIO'),
-      note(wakeOn
-          ? 'Every morning at ${(wake['hour'] as num).toInt().toString().padLeft(2, '0')}:${(wake['minute'] as num).toInt().toString().padLeft(2, '0')}, ${wake['name'] ?? 'the station'} rises from quiet. If no sound comes, the phone\'s own alarm rings instead.'
-          : 'Wake to a station rising from quiet. If the network is down, the phone\'s own alarm rings instead.'),
-      const SizedBox(height: 10),
-      Wrap(spacing: 10, runSpacing: 10, children: [
-        pyrateButton(wakeOn ? 'CHANGE THE TIME' : 'SET A TIME', setWake),
-        if (wakeOn)
-          pyrateButton('NO ALARM', () async {
+    final all = Native.call({'cmd': 'stations', 'marooned': true});
+    final hidden = all is List ? all.where((x) => x['marooned'] == true).toList() : [];
+    final carried = widget.radio.carriedBytes;
+    return ListView(padding: const EdgeInsets.fromLTRB(24, 26, 24, 40), children: [
+      masthead('Settings'),
+      section('LISTENING', [
+        setting('Hide mature stations', pref('hide_mature') == true, (v) => setState(() => pref('hide_mature', v)), sub: 'Strong language or themes, as each station says of itself.'),
+        setting('Show explicit stations', pref('show_explicit') == true, (v) => setState(() => pref('show_explicit', v)), sub: 'Sexual or graphic material. Hidden until you turn this on.'),
+        setting('Pictures only from stations I keep', (Native.call({'cmd': 'art_kept_only'}) as Map)['value'] == true, (v) => setState(() => Native.call({'cmd': 'art_kept_only', 'value': v})), sub: 'Other stations show by name alone.'),
+        setting('Save ahead on Wi-Fi', provisions, (v) {
+          Native.call({'cmd': 'provisions', 'value': v});
+          setState(() => provisions = v);
+        }, sub: 'The next few hours of your kept stations, ready for when you have no signal.'),
+        if (Platform.isAndroid)
+          action(wakeOn ? 'Wake to the radio at ${(wake['hour'] as num).toInt().toString().padLeft(2, '0')}:${(wake['minute'] as num).toInt().toString().padLeft(2, '0')}' : 'Wake to the radio', setWake,
+              sub: wakeOn ? '${wake['name'] ?? 'The station'} rises from quiet each morning. Tap to change.' : 'A station instead of an alarm. If no sound comes, the phone\'s alarm rings.'),
+        if (Platform.isAndroid && wakeOn)
+          action('Turn the wake-up off', () async {
             await ship.invokeMethod('wake_set', {'on': false, 'hour': 7, 'minute': 0});
             if (mounted) setState(() => wake = {'on': false});
-          }, color: boneFaint),
+          }, color: boneDim),
+        fold('Hidden stations', sub: hidden.isEmpty ? 'None. Press and hold a station in the Log to hide it.' : '${hidden.length} hidden', [
+          for (final m in hidden)
+            Row(children: [
+              Expanded(child: Text(m['name'] ?? '', style: serif(16, color: boneDim))),
+              TextButton(
+                onPressed: () async {
+                  await Native.callAway({'cmd': 'maroon', 'station': m['id'], 'value': false});
+                  if (mounted) setState(() {});
+                },
+                child: Text('SHOW AGAIN', style: carved(10, color: boneFaint)),
+              ),
+            ]),
+          const SizedBox(height: 6),
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            pyrateButton('SHARE MY LIST', () {
+              final r = Native.call({'cmd': 'maroon_export'});
+              if (r is Map) ship.invokeMethod('share_text', {'text': r['text']});
+            }),
+            pyrateButton('ADD A LIST', importList),
+          ]),
+        ]),
+        if (msg != null) Padding(padding: const EdgeInsets.only(top: 6), child: note(msg!)),
       ]),
-      const SizedBox(height: 26),
-      ],
-      heading('OFF THE GRID'),
-      note('For when the internet is cut or watched.'),
-      pyrateSwitch(lan, (v) {
-        final r = Native.call({'cmd': 'lan', 'value': v});
-        setState(() {
-          lan = (r as Map?)?['value'] == true;
-          gridMsg = v && r is Map && r['dark'] == true ? 'Off while the radio runs through Tor, which leaves it no address on this network to give.' : null;
-        });
-      }, 'Find radios on this Wi-Fi, with or without the internet. Anyone on the same network can tell a radio is here.'),
-      pyrateSwitch(tor.isNotEmpty, (v) async {
-        final r = await Native.callAway({'cmd': 'tor', 'url': v ? 'http://127.0.0.1:8118' : ''});
-        if (!mounted) return;
-        setState(() {
-          tor = (r is Map ? r['url'] ?? '' : '').toString();
-          gridMsg = r is Map && r['error'] != null
-              ? 'Not set: ${r['error']}.'
-              : v
-                  ? 'From the next time the radio starts, it reaches the network only through Tor, and no peer or relay learns this device\'s address.'
-                  : 'From the next time the radio starts, it reaches the network directly.';
-        });
-      }, 'Through Tor (Orbot, or Tor\'s HTTP tunnel on 127.0.0.1:8118)'),
-      if (gridMsg != null) Padding(padding: const EdgeInsets.only(top: 6), child: note(gridMsg!)),
-      const SizedBox(height: 10),
-      note('A station passed as a file, by SD card, Bluetooth or a share, plays here with no network, and this phone then carries it to every radio it meets.'),
-      const SizedBox(height: 10),
-      Row(children: [
-        pyrateButton('OPEN A STATION FILE', () async {
+      section('KEEPING STATIONS ON THE AIR', [
+        const SizedBox(height: 10),
+        note('Pyrate Radio has no servers. Every device that runs it keeps a small, sealed share of the stations so they stay on the air.${carried >= 100000000 ? ' This one is carrying ${(carried / 1e9).toStringAsFixed(1)} GB.' : ''}'),
+        setting('Help carry stations', !mineOnly, (v) {
+          pref('carry_mine_only', !v);
+          if (!v) Native.call({'cmd': 'ballast_ok', 'value': false, 'unmetered': false});
+          setState(() => mineOnly = !v);
+        }, sub: Platform.isAndroid ? 'Only on Wi-Fi while the phone charges, so it costs no data or battery.' : 'Uses up to 20 GB, less on a fuller disk.'),
+        if (Platform.isAndroid) const DrawerLantern(),
+      ]),
+      section('PRIVACY AND SAFETY', [
+        setting('Lock with a PIN', pinSet, (v) {
+          if (v) {
+            setPin();
+          } else {
+            Native.call({'cmd': 'pin_set'});
+            setState(() => pinSet = duressSet = false);
+          }
+        }, sub: 'Asked for before your station and these settings open.'),
+        if (pinSet)
+          setting('Emergency PIN', duressSet, (v) {
+            if (v) {
+              setPin(duress: true);
+            } else {
+              Native.call({'cmd': 'pin_set', 'duress': true});
+              setState(() => duressSet = false);
+            }
+          }, sub: 'A second PIN to give if you are forced to unlock the radio. It wipes the radio from this phone.'),
+        setting('Disguise my voice', disguise, (v) {
+          pref('disguise', v ? -4 : 0);
+          setState(() => disguise = v);
+        }, sub: 'Lower and harder to recognise, when you go live or record.'),
+        if (Platform.isAndroid) ...[
+          setting('Plain icon', plain, (v) {
+            ship.invokeMethod('plain_set', {'value': v});
+            setState(() => plain = v);
+          }, sub: 'Shows as "Radio" with an ordinary icon.'),
+          setting('Hide from the lock screen', plainLock, (v) {
+            ship.invokeMethod('plain_lock_set', {'value': v});
+            setState(() => plainLock = v);
+          }, sub: 'The lock screen says only "Radio", and recent apps show nothing.'),
+        ],
+        action('Clear what I have listened to', () async {
+          final r = await Native.callAway({'cmd': 'clear_hold'});
+          if (!context.mounted) return;
+          final n = r is Map ? (r['cleared'] as num?)?.toInt() : null;
+          toast(context, r is Map && r['error'] != null ? 'Not cleared: ${r['error']}' : (n == null || n == 0 ? 'Nothing to clear.' : 'Cleared.'));
+        }, sub: 'Removes the sound saved from stations you played. Your own station is kept.'),
+        action('Wipe the radio from this phone', scuttle, sub: 'For a phone about to be taken. Everything it keeps becomes unreadable at once.', color: bloodBright),
+      ]),
+      section('SHARING', [
+        action('Send the app to someone nearby', () => pyrateSheet(context, const PassItOn()), sub: 'Phone to phone, no internet needed.'),
+        action('Open a station file', () async {
           final picked = await FilePicker.platform.pickFiles();
           final path = picked?.files.single.path;
           if (path == null) return;
@@ -1482,99 +1614,59 @@ class _ShipPapersState extends State<ShipPapers> {
           if (!mounted) return;
           if (r is Map && r['station'] is String) {
             await Native.callAway({'cmd': 'keep', 'station': r['station'], 'value': true});
-            if (mounted) setState(() => gridMsg = 'The station is aboard and kept, on the dial.');
+            if (context.mounted) toast(context, 'The station is on your dial.');
           } else {
-            setState(() => gridMsg = 'Not opened: ${r is Map ? r['error'] : 'not a station file'}.');
+            toast(context, 'That file would not open: ${r is Map ? r['error'] : 'not a station file'}.');
           }
-        }),
+        }, sub: 'A station someone sent you as a file plays with no connection.'),
       ]),
-      const SizedBox(height: 26),
-      heading('PASS IT ON'),
-      note('Hand the app to someone beside you, with no internet needed.'),
-      const SizedBox(height: 10),
-      Row(children: [pyrateButton('PASS IT ON', () => pyrateSheet(context, const PassItOn()))]),
-      if (sig != null) ...[
-        const SizedBox(height: 26),
-        heading('THIS COPY'),
-        note('Signed with the key below. A copy signed with any other is not ours, whatever it calls itself. hostis.black/pyrateradio shows the same fingerprint.'),
-        const SizedBox(height: 6),
-        SelectableText(sig!, style: mono(10, color: boneDim)),
-      ],
-      if (canary != null) ...[
-        const SizedBox(height: 26),
-        heading('THE CANARY'),
-        note((canary!['age_days'] as num) > 45
-            ? 'The canary is ${canary!['age_days']} days old. HOSTIS renews it every month, and one that is not renewed may mean HOSTIS can no longer say what it would.'
-            : 'Signed ${shortDate((canary!['at_ms'] as num).toInt())} by a HOSTIS release key: ${canary!['text']}'),
-      ],
-      const SizedBox(height: 26),
-      heading('MAROON LISTS'),
-      note('Share the stations you have marooned, or take aboard someone else\'s list. Each phone keeps its own copy; nobody can change yours.'),
-      const SizedBox(height: 10),
-      Wrap(spacing: 10, runSpacing: 10, children: [
-        pyrateButton('SHARE MY LIST', () {
-          final r = Native.call({'cmd': 'maroon_export'});
-          if (r is Map) ship.invokeMethod('share_text', {'text': r['text']});
-        }),
-        pyrateButton('TAKE A LIST ABOARD', importList),
+      section('ADVANCED', [
+        fold('Connections', sub: 'For when the internet is watched or cut', [
+          setting('Go through Tor', tor.isNotEmpty, (v) async {
+            final r = await Native.callAway({'cmd': 'tor', 'url': v ? 'http://127.0.0.1:8118' : ''});
+            if (!mounted) return;
+            setState(() {
+              tor = (r is Map ? r['url'] ?? '' : '').toString();
+              gridMsg = r is Map && r['error'] != null
+                  ? 'Not set: ${r['error']}.'
+                  : v
+                      ? 'From the next time the radio starts, every connection goes through Tor.'
+                      : 'From the next time the radio starts, it connects as usual.';
+            });
+          }, sub: '${Platform.isAndroid ? 'Needs the Orbot app running.' : 'Needs Tor running on this computer, with its HTTP port on 8118.'} Nobody on the network learns this device\'s address.'),
+          setting('Find radios on this Wi-Fi', lan, (v) {
+            final r = Native.call({'cmd': 'lan', 'value': v});
+            setState(() {
+              lan = (r as Map?)?['value'] == true;
+              gridMsg = v && r is Map && r['dark'] == true ? 'This stays off while the radio goes through Tor.' : null;
+            });
+          }, sub: 'Radios nearby find each other with no internet. Anyone on the same Wi-Fi can tell a radio is here.'),
+          setting('Connect directly when needed', !strict, (v) {
+            Native.call({'cmd': 'direct_ok', 'value': v});
+            setState(() => strict = !v);
+          }, sub: 'Off, the radio always goes through two other devices and waits when it cannot. On, it plays sooner on a quiet network, and the device it asks sees this phone\'s address.'),
+          if (gridMsg != null) Padding(padding: const EdgeInsets.only(top: 6), child: note(gridMsg!)),
+        ]),
+        fold('About this copy', [
+          if (sig != null) ...[
+            note('Signed by HOSTIS with the key below. hostis.black/pyrateradio shows the same fingerprint, and a copy signed with any other is not ours.'),
+            const SizedBox(height: 6),
+            SelectableText(sig!, style: mono(10, color: boneDim)),
+          ],
+          if (canary != null) ...[
+            const SizedBox(height: 14),
+            note((canary!['age_days'] as num) > 45
+                ? 'HOSTIS\'s monthly statement is ${canary!['age_days']} days old. A statement left unrenewed may mean HOSTIS can no longer say what it would.'
+                : 'HOSTIS\'s monthly statement, signed ${shortDate((canary!['at_ms'] as num).toInt())}: ${canary!['text']}'),
+          ],
+        ]),
       ]),
-      if (msg != null) Padding(padding: const EdgeInsets.only(top: 8), child: note(msg!)),
-      const SizedBox(height: 26),
-      heading('PROVISIONS'),
-      pyrateSwitch(provisions, (v) {
-        Native.call({'cmd': 'provisions', 'value': v});
-        setState(() => provisions = v);
-      }, 'On Wi-Fi, bring aboard the next six hours of up to three kept stations'),
-      const SizedBox(height: 18),
-      heading('DISCRETION'),
-      if (Platform.isAndroid) ...[
-        pyrateSwitch(plain, (v) {
-          ship.invokeMethod('plain_set', {'value': v});
-          setState(() => plain = v);
-        }, 'A plain icon named Radio in place of the skull'),
-        pyrateSwitch(plainLock, (v) {
-          ship.invokeMethod('plain_lock_set', {'value': v});
-          setState(() => plainLock = v);
-        }, 'The lock screen says only "Radio", and the recents screen shows nothing'),
-      ],
-      pyrateSwitch(disguise, (v) {
-        pref('disguise', v ? -4 : 0);
-        setState(() => disguise = v);
-      }, 'Shift my voice lower on air and in recordings, so it is not quite mine'),
-      pyrateSwitch(pinSet, (v) {
-        if (v) {
-          setPin();
-        } else {
-          Native.call({'cmd': 'pin_set'});
-          setState(() => pinSet = duressSet = false);
-        }
-      }, 'Lock Colours behind a PIN'),
-      pyrateSwitch(mineOnly, (v) {
-        pref('carry_mine_only', v);
-        if (v) Native.call({'cmd': 'ballast_ok', 'value': false, 'unmetered': false});
-        setState(() => mineOnly = v);
-      }, 'Keep only what I play, with no share for the fleet'),
-      if (pinSet)
-        pyrateSwitch(duressSet, (v) {
-          if (v) {
-            setPin(duress: true);
-          } else {
-            Native.call({'cmd': 'pin_set', 'duress': true});
-            setState(() => duressSet = false);
-          }
-        }, 'A second PIN that scuttles the radio, to give up if you are made to open Colours'),
-      pyrateSwitch(!strict, (v) {
-        Native.call({'cmd': 'direct_ok', 'value': v});
-        setState(() => strict = !v);
-      }, 'Ask carriers directly when private routes fail'),
-      note(strict
-          ? 'Sound and logs come through two other devices, and your own station goes out along the stem. On a thin network that can mean waiting.'
-          : 'A thin network plays sooner, and the carrier asked sees this phone\'s address beside the station. Your own station can go on the air straight from this phone after three stems find no taker.'),
     ]);
   }
 }
 
-/// Asks for the PIN before Colours opens, once per time the app comes to the front.
+/// Asks for the PIN before your station or the settings open, once each time the app comes
+/// to the front.
 class PinGate extends StatefulWidget {
   final Widget child;
   const PinGate({super.key, required this.child});
@@ -1583,7 +1675,10 @@ class PinGate extends StatefulWidget {
 }
 
 class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
-  bool open = false;
+  /// One unlock opens both your station and the settings until the app goes to the back.
+  static final unlocked = ValueNotifier(false);
+  bool get open => unlocked.value;
+  set open(bool v) => unlocked.value = v;
   final pin = TextEditingController();
   String? wrong;
 
@@ -1591,11 +1686,17 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unlocked.addListener(_changed);
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unlocked.removeListener(_changed);
     pin.dispose();
     super.dispose();
   }
@@ -1613,7 +1714,7 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
       child: Padding(
         padding: const EdgeInsets.all(40),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Colours', style: pica(24, spacing: 0.06)),
+          Text('Locked', style: pica(24, spacing: 0.06)),
           const SizedBox(height: 14),
           TextField(
             controller: pin,

@@ -337,7 +337,7 @@ async function play(id, g) {
       }
       const at = playhead ?? radio.now() + 400;
       const p = JSON.parse(radio.plan(id, at));
-      if (p.kind === 'struck') { reset(); trouble = null; status('This station has struck its colours.'); refresh(); return }
+      if (p.kind === 'struck') { reset(); trouble = null; status('This station has ended.'); refresh(); return }
       // A log not found yet is looked for less and less often, up to every fifteen seconds.
       if (p.kind === 'searching') { if (!queued) status('Searching the Log'); await radio.sync(id).catch(() => { }); await sleep(wait); wait = Math.min(15000, wait * 1.6); continue }
       wait = 1200;
@@ -357,7 +357,7 @@ async function play(id, g) {
       let bytes;
       try { bytes = await radio.fetch(id, chunk); misses = 0; trouble = null } catch (e) {
         // Said only once the queue is nearly dry: a miss with seconds still queued is not heard.
-        if (++misses > 2 && queued < 4000) trouble = 'No carrier answered yet';
+        if (++misses > 2 && queued < 4000) trouble = 'Still looking for the station';
         await sleep(1500); continue;
       }
       if (g !== gen) return;
@@ -399,7 +399,7 @@ async function nowPlaying() {
   const p = JSON.parse(radio.plan(cur.id, radio.now()));
   lamps(p.kind === 'live');
   if (playing && trouble) { status(trouble); return }
-  if (p.kind === 'struck') { status('This station has struck its colours.'); return }
+  if (p.kind === 'struck') { status('This station has ended.'); return }
   if (p.kind === 'live') { $('np').textContent = 'Live from the station'; $('by').textContent = ''; $('slot').textContent = ''; $('prog').style.width = '100%'; $('time').textContent = '' }
   else if (p.kind === 'track') {
     $('np').textContent = p.title || ''; $('by').textContent = p.by || ''; $('slot').textContent = p.slot || '';
@@ -473,7 +473,7 @@ async function show(s) {
   if (SCOPE === 'harbour') $('chatopen').href = OPEN_PLAYERS[0] + '#' + s.id;
   flag($('flag'), s.id, s.live); art(await pic(s.id, s.cover));
   const b = await pic(s.id, s.banner); $('banner').style.backgroundImage = b ? 'url(' + b + ')' : '';
-  $('name').textContent = s.name || s.call_sign; $('cs').textContent = s.call_sign + (s.aboard !== undefined ? '  ' + s.aboard + ' aboard' : '');
+  $('name').textContent = s.name || s.call_sign; $('cs').textContent = s.call_sign + (s.aboard !== undefined ? '  ' + s.aboard + ' listening' : '');
   lamps(s.live); needle(s.id); power(); $('tip').hidden = !s.tip; $('tipbox').hidden = true;
   // A pocket station is passed on only by its keeper's invitation.
   $('pass').hidden = !!s.pocket; $('maroon').hidden = false; if (s.pocket) $('clip').hidden = true;
@@ -530,7 +530,7 @@ function rows() {
     // What a station says of itself, as hairline tags: the open air in bright red, the rest in bone.
     for (const [t, c] of [[s.live && 'On air', 'lv'], [s.mixed && !isHarbour(s.id) && 'False colours?', ''], [s.pocket && 'Private', ''], [s.explicit ? 'Explicit' : s.mature && 'Mature', '']]) if (t) { const g = document.createElement('span'); g.className = 'tag ' + c; g.textContent = t; nm.append(g) }
     r.querySelector('.cs').textContent = s.call_sign; r.querySelector('.about').textContent = s.about || '';
-    r.querySelector('.count').innerHTML = s.aboard + '<small>ABOARD</small><span class="fq">' + fq(s.id).toFixed(1) + '</span>';
+    r.querySelector('.count').innerHTML = s.aboard + '<small>LISTENING</small><span class="fq">' + fq(s.id).toFixed(1) + '</span>';
     r.classList.toggle('on', cur?.id === s.id);
     r.onclick = () => listen(s);
     box.appendChild(r);
@@ -541,10 +541,10 @@ function refresh() {
   if (!radio) return;
   stations = JSON.parse(radio.stations()).filter(inSet);
   const n = radio.neighbours();
-  $('signal').textContent = (flocking ? 'In a flock, in step with its host · ' : '') + (n ? n + (n === 1 ? ' neighbour' : ' neighbours') + ' · ' + stations.length + ' on the air' : 'Coming aboard');
+  $('signal').textContent = (flocking ? 'Playing in step with the host · ' : '') + (n ? n + (n === 1 ? ' radio nearby' : ' radios nearby') + ' · ' + stations.length + ' on the air' : 'Connecting');
   $('flockleave').hidden = !flocking;
   rows();
-  if (cur) { const u = stations.find(x => x.id === cur.id); if (u) { const pic0 = cur.cover, ban0 = cur.banner; cur = u; $('cs').textContent = u.call_sign + '  ' + u.aboard + ' aboard'; $('name').textContent = u.name; if (u.cover !== pic0 || u.banner !== ban0) show(u) } }
+  if (cur) { const u = stations.find(x => x.id === cur.id); if (u) { const pic0 = cur.cover, ban0 = cur.banner; cur = u; $('cs').textContent = u.call_sign + '  ' + u.aboard + ' listening'; $('name').textContent = u.name; if (u.cover !== pic0 || u.banner !== ban0) show(u) } }
   else { const id = wanted || location.hash.slice(1) || lastId(); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations.find(x => allowed(x) && inSet(x) && !marooned().has(x.id))); if (s) show(s) }
 }
 
@@ -553,7 +553,7 @@ function flockFollow() {
   const h = location.hash; if (!radio || !h.includes('flock=')) return false;
   try { radio.flock_join(h) } catch (e) { return false }
   history.replaceState(null, '', location.pathname);
-  flocking = setInterval(() => { if (!radio) return; const id = radio.flock_station(); if (id && cur?.id !== id) { const s = stations.find(x => x.id === id) || { id, call_sign: '', name: 'The flock\'s station' }; playing ? listen(s) : show(s) } }, 3000);
+  flocking = setInterval(() => { if (!radio) return; const id = radio.flock_station(); if (id && cur?.id !== id) { const s = stations.find(x => x.id === id) || { id, call_sign: '', name: 'The host\'s station' }; playing ? listen(s) : show(s) } }, 3000);
   refresh();
   return true;
 }
@@ -595,7 +595,7 @@ addEventListener('keydown', e => {
 $('go').onclick = async () => {
   if (playing) return stop();
   if (!cur) return;
-  if (!radio) { audio(); ctx.resume(); $('np').textContent = 'Coming aboard'; await (booting ??= boot()); if (!radio) return; cur = stations.find(x => x.id === cur.id) || cur }
+  if (!radio) { audio(); ctx.resume(); $('np').textContent = 'Connecting'; await (booting ??= boot()); if (!radio) return; cur = stations.find(x => x.id === cur.id) || cur }
   listen(cur);
 };
 $('spin').onclick = () => {
@@ -622,7 +622,7 @@ async function chart() {
     const j = parseInt(s.id.slice(0, 4), 16), x = (p[1] + 180) * 2 + (j % 7 - 3) * .6, y = (90 - p[0]) * 2 + ((j >> 3) % 7 - 3) * .6;
     dots += '<g class="dot' + (s.live ? ' live' : '') + (cur?.id === s.id ? ' on' : '') + '" data-id="' + s.id + '" tabindex="0" role="button" aria-label="' + esc(s.name + ', ' + s.port) + '"><circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3.4"/><title>' + esc(s.name + ', ' + s.port) + '</title></g>';
   }
-  $('chart').innerHTML = '<svg viewBox="0 20 720 290" role="img" aria-label="The chart of the seas"><path class="land" d="' + chartData.land + '"/>' + dots + '</svg><p class="fine">' + (n ? n + (n === 1 ? ' station names' : ' stations name') + ' a home port. The rest sail under no port.' : 'No station on the air has named a home port yet.') + '</p>';
+  $('chart').innerHTML = '<svg viewBox="0 20 720 290" role="img" aria-label="The chart of the seas"><path class="land" d="' + chartData.land + '"/>' + dots + '</svg><p class="fine">' + (n ? n + (n === 1 ? ' station names' : ' stations name') + ' a home town. The rest name none.' : 'No station on the air has named a home port yet.') + '</p>';
   $('chart').querySelectorAll('.dot').forEach(d => { const go = () => { const s = stations.find(x => x.id === d.dataset.id); if (s) { tuneTo(s); scrollTo({ top: 0, behavior: 'smooth' }) } }; d.onclick = go; d.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go() } } });
 }
 function view(c) { $('chart').hidden = !c; $('rows').hidden = c; $('vchart').classList.toggle('on', c); $('vlist').classList.toggle('on', !c); $('vchart').setAttribute('aria-pressed', c); $('vlist').setAttribute('aria-pressed', !c); if (c) chart() }
@@ -637,7 +637,7 @@ function chatter() {
   $('chatjoin').hidden = c.joined; $('chatroom').hidden = !c.joined;
   if (!c.joined) return;
   let mutes; try { mutes = new Set(JSON.parse(store('pyrate.mutes') || '[]')) } catch (e) { mutes = new Set() }
-  $('chatwho').textContent = 'You speak here as ' + (myName() || c.voice) + '. ' + (c.neighbours ? 'Linked to ' + c.neighbours + ' in the room.' : 'Looking for others in the room.');
+  $('chatwho').textContent = 'You speak here as ' + (myName() || c.voice) + '. ' + (c.neighbours ? c.neighbours + ' others here.' : 'Looking for others.');
   const box = $('lines'), atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
   const shown = c.lines.filter(l => !mutes.has(l.voice));
   const key = cur.id + shown.map(l => l.id).join() + '#' + [...mutes].join();
@@ -649,7 +649,7 @@ function chatter() {
   box.querySelectorAll('.who').forEach(w => w.onclick = () => { if (!w.closest('.mine') && confirm('Mute ' + w.textContent + '? Only you stop hearing them, in this browser.')) { mutes.add(w.dataset.v); store('pyrate.mutes', JSON.stringify([...mutes])); chatKey = ''; chatter() } });
 }
 const speak = (kind, text, track) => radio.chat_send(cur.id, kind, text || '', track || '', myName()).then(chatter, e => { $('chatwho').textContent = String(e) });
-$('chatgo').onclick = async () => { $('chatgo').textContent = 'Joining'; try { await radio.chat_join(cur.id) } catch (e) { $('chatgo').textContent = 'Join the chatter'; return } chatter() };
+$('chatgo').onclick = async () => { $('chatgo').textContent = 'Joining'; try { await radio.chat_join(cur.id) } catch (e) { $('chatgo').textContent = 'Join the chat'; return } chatter() };
 $('say').onsubmit = e => { e.preventDefault(); const t = $('sayt').value.trim(); if (!t) return; $('sayt').value = ''; speak('text', t) };
 $('cheer').onclick = () => speak('cheer');
 $('myname').value = myName(); $('myname').onchange = () => { store('pyrate.name', $('myname').value.trim()); chatter() };
@@ -668,22 +668,22 @@ let hailRec = null, hailFor = null, hailDrop = false;
 function dropHail() { if (hailRec) { hailDrop = true; hailRec.stop() } }
 $('hail').onclick = async () => {
   if (hailRec) { hailRec.stop(); return }
-  if (!window.MediaRecorder || !navigator.mediaDevices) { $('chatwho').textContent = 'This browser cannot record a hail. The app can.'; return }
-  let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }) } catch (e) { $('chatwho').textContent = window !== parent ? 'A page holding the radio cannot lend it the microphone. Open the full player to send a hail.' : 'Allow the microphone, then press again.'; return }
+  if (!window.MediaRecorder || !navigator.mediaDevices) { $('chatwho').textContent = 'This browser cannot record a message. The app can.'; return }
+  let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }) } catch (e) { $('chatwho').textContent = window !== parent ? 'This page cannot use the microphone. Open the full player to send a message.' : 'Allow the microphone, then press again.'; return }
   const type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find(t => MediaRecorder.isTypeSupported(t)) || '';
   const parts = [], to = cur.id; let rec;
-  try { rec = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 24000 } : { audioBitsPerSecond: 24000 }) } catch (e) { stream.getTracks().forEach(t => t.stop()); $('chatwho').textContent = 'This browser cannot record a hail. The app can.'; return }
+  try { rec = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 24000 } : { audioBitsPerSecond: 24000 }) } catch (e) { stream.getTracks().forEach(t => t.stop()); $('chatwho').textContent = 'This browser cannot record a message. The app can.'; return }
   hailRec = rec; hailFor = to; hailDrop = false;
   rec.ondataavailable = e => e.data.size && parts.push(e.data);
   rec.onstop = async () => {
     stream.getTracks().forEach(t => t.stop());
-    const dropped = hailDrop; hailRec = null; hailFor = null; hailDrop = false; $('hail').textContent = 'Hail the keeper';
+    const dropped = hailDrop; hailRec = null; hailFor = null; hailDrop = false; $('hail').textContent = 'Message the station';
     if (dropped) return;
     const blob = new Blob(parts, { type: (rec.mimeType || type).split(';')[0] }), bytes = new Uint8Array(await blob.arrayBuffer());
-    try { await radio.chat_hail(to, bytes, blob.type, myName()); $('chatwho').textContent = 'Your hail is on its way, sealed so only the keeper can open it. What the keeper does with it after is theirs.' }
+    try { await radio.chat_hail(to, bytes, blob.type, myName()); $('chatwho').textContent = 'Sent. Only the station can hear it.' }
     catch (e) { $('chatwho').textContent = String(e) }
   };
-  rec.start(); $('hail').textContent = 'Send the hail'; setTimeout(() => rec.state === 'recording' && rec.stop(), 20000);
+  rec.start(); $('hail').textContent = 'Send'; setTimeout(() => rec.state === 'recording' && rec.stop(), 20000);
 };
 $('chatleave').onclick = () => { if (cur) radio.chat_leave(cur.id); chatKey = ''; chatter() };
 
@@ -776,19 +776,19 @@ $('pass').onclick = () => {
 };
 $('pclose').onclick = () => { $('passbox').hidden = true; $('pcopy').textContent = 'Copy the link' };
 $('maroon').onclick = () => {
-  if (!cur || !confirm('Maroon ' + cur.name + '? It leaves this browser\'s Log and stays gone until you bring it back.')) return;
+  if (!cur || !confirm('Hide ' + cur.name + '? It leaves this browser\'s Log until you show it again in Settings.')) return;
   const m = marooned(); m.add(cur.id); setMarooned(m); stop(); cur = null; history.replaceState(null, '', location.pathname); refresh();
 };
 $('mlist').onclick = () => {
   const m = marooned();
   const names = new Map(stations.map(s => [s.id, s.name]));
-  $('mtext').value = '# A Pyrate Radio maroon list: one station per line. Take it aboard under Colours, or drop it in a Lantern\'s maroon.txt.\n' + [...m].map(id => names.has(id) ? id + '  # ' + names.get(id) : id).join('\n') + '\n';
+  $('mtext').value = '# Pyrate Radio hidden stations, one per line. Paste into Settings to hide them.\n' + [...m].map(id => names.has(id) ? id + '  # ' + names.get(id) : id).join('\n') + '\n';
   $('mbox').hidden = !$('mbox').hidden;
 };
 $('mtake').onclick = () => {
   const m = marooned(); let n = 0;
   for (const line of $('mtext').value.split('\n')) { const t = (line.trim().split(/\s+/)[0] || '').toLowerCase(); if (/^[0-9a-f]{64}$/.test(t) && !m.has(t)) { m.add(t); n++ } }
-  setMarooned(m); $('mnote').textContent = n + ' taken aboard.'; refresh();
+  setMarooned(m); $('mnote').textContent = n + ' hidden.'; refresh();
 };
 $('sw-direct').checked = store('pyrate.direct') === '1';
 $('sw-direct').onchange = () => { store('pyrate.direct', $('sw-direct').checked ? '1' : '0'); radio?.set_direct_ok($('sw-direct').checked) };
@@ -852,12 +852,12 @@ function studioStatus() {
   if (!radio || !mineCur) return;
   const k = JSON.parse(radio.mine()).find(m => m.id === mineCur);
   const el = $('st-status'); if (!k) { el.textContent = adopted.has(mineCur) ? '' : 'Looking for the station on the network'; return }
-  el.textContent = !k.pow ? 'Working the station’s proof of work · a few seconds'
-    : airing ? 'Setting a recording on the clock'
-    : k.unsent ? 'Sailing · ' + (k.chunks - k.unsent) + ' of ' + k.chunks + ' chunks aboard the network'
-    : k.carriers && !k.tracks ? 'On the Log \u00b7 carried by ' + k.carriers + (k.carriers === 1 ? ' node' : ' nodes') + ' \u00b7 drop recordings in to start it playing'
-    : k.carriers ? 'On the air · carried by ' + k.carriers + (k.carriers === 1 ? ' node' : ' nodes') + ' · ' + k.tracks + (k.tracks === 1 ? ' recording' : ' recordings')
-    : 'Waiting for the first carrier';
+  el.textContent = !k.pow ? 'Getting your station ready · a few seconds'
+    : airing ? 'Adding a recording'
+    : k.unsent ? 'Sending · ' + Math.round(100 * (k.chunks - k.unsent) / k.chunks) + '%'
+    : k.carriers && !k.tracks ? 'On the Log \u00b7 add recordings to start it playing'
+    : k.carriers ? 'On the air · ' + k.tracks + (k.tracks === 1 ? ' recording' : ' recordings') + ' · ' + k.carriers + (k.carriers === 1 ? ' radio helping' : ' radios helping')
+    : 'Waiting for other radios';
 }
 // The proof of work a station shows once, so ten thousand junk stations cost ten thousand times one.
 async function powWork(id) {
@@ -876,18 +876,20 @@ async function studioBoot() {
 function adoptAll() {
   for (const k of kept()) {
     mineCur ??= k.id;
-    radio.adopt(k.id, k.deputy).then(ok => {
-      if (!ok) return;
+    // The station's log may take a few tries to find on a quiet network: try again for a while.
+    const tryAdopt = left => radio.adopt(k.id, k.deputy).then(ok => {
+      if (!ok) { if (left > 0) setTimeout(() => tryAdopt(left - 1), 15000); return }
       adopted.add(k.id);
       if (!(typeof k.pow === 'number' && radio.set_pow(k.id, k.pow))) powWork(k.id);
       studioShow();
-    }, () => { });
+    }, () => { if (left > 0) setTimeout(() => tryAdopt(left - 1), 15000) });
+    tryAdopt(8);
   }
   studioShow();
 }
 $('st-open').onclick = async () => {
   const o = sealed(); if (!o) return;
-  $('st-locknote2').textContent = 'Opening';
+  $('st-locknote2').textContent = 'Unlocking';
   try {
     const k = await sealKey($('st-pass').value, unb64(o.salt));
     const text = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.iv) }, k.key, unb64(o.ct)));
@@ -898,22 +900,22 @@ $('st-open').onclick = async () => {
 $('st-pass').onkeydown = e => { if (e.key === 'Enter') $('st-open').click() };
 $('st-lockit').onclick = async () => {
   const p = $('st-newpass').value; if (p.length < 8) { $('st-locknote').textContent = 'Eight characters at least. A short line of words is best.'; return }
-  $('st-locknote').textContent = 'Sealing';
+  $('st-locknote').textContent = 'Locking';
   try { sessionStorage.removeItem('pyrate.mine') } catch (e) { }
   $('st-tabonly').checked = false;
   mineSeal = await sealKey(p, crypto.getRandomValues(new Uint8Array(16))); keep(kept()); $('st-newpass').value = '';
-  $('st-locknote').textContent = 'Sealed. This browser asks for the passphrase before it broadcasts again.';
+  $('st-locknote').textContent = 'Locked. This browser asks for the passphrase before it broadcasts again.';
 };
 $('st-tabonly').onchange = () => {
   const l = kept(); mineSeal = null;
   if ($('st-tabonly').checked) { try { sessionStorage.setItem('pyrate.mine', JSON.stringify(l)) } catch (e) { } unstore('pyrate.mine'); $('st-locknote').textContent = 'The key goes when this tab closes. The 24 words bring it back.' }
-  else { try { sessionStorage.removeItem('pyrate.mine') } catch (e) { } keepSealed('pyrate.mine', JSON.stringify(l)); $('st-locknote').textContent = 'The key stays in this browser, sealed under a key the browser holds.' }
+  else { try { sessionStorage.removeItem('pyrate.mine') } catch (e) { } keepSealed('pyrate.mine', JSON.stringify(l)); $('st-locknote').textContent = 'The key stays in this browser, locked.' }
 };
 $('raisego').onclick = () => $('studio').scrollIntoView({ behavior: 'smooth', block: 'start' });
 $('st-raise').onclick = async () => {
-  if (sealed() && !mineMem) { stNote('Open the sealed stations first.'); return }
+  if (sealed() && !mineMem) { stNote('Unlock your stations first.'); return }
   const name = $('st-name').value.trim(); if (!name) { stNote('A station needs a name.'); $('st-name').focus(); return }
-  if (!radio) { stNote('Coming aboard first.'); booting ??= boot(); await booting; if (!radio) return }
+  if (!radio) { stNote('Connecting first.'); booting ??= boot(); await booting; if (!radio) return }
   let r; try { r = JSON.parse(radio.raise(name, $('st-about').value, $('st-kinds').value, $('st-mature').checked, $('st-explicit').checked, $('st-ppass').value)) } catch (e) { stNote(String(e)); return }
   const l = kept(); l.push({ id: r.id, deputy: r.deputy, pow: null }); keep(l);
   mineCur = r.id; adopted.add(r.id); powWork(r.id);
@@ -927,11 +929,11 @@ $('st-raise').onclick = async () => {
 $('st-written').onchange = () => { $('st-done').disabled = !$('st-written').checked };
 $('st-done').onclick = () => { $('st-wordlist').innerHTML = ''; $('st-show').hidden = true; studioShow(); studioStatus() };
 $('st-restore').onclick = async () => {
-  if (sealed() && !mineMem) { stNote('Open the sealed stations first.'); return }
+  if (sealed() && !mineMem) { stNote('Unlock your stations first.'); return }
   const words = $('st-words').value.trim().toLowerCase().split(/\s+/).join(' ');
-  if (words.split(' ').length !== 24) { stNote('A station’s key is twenty-four words.'); return }
+  if (words.split(' ').length !== 24) { stNote('That needs all 24 words.'); return }
   if (!radio) { booting ??= boot(); await booting; if (!radio) return }
-  stNote('Looking for the station’s log on the network.');
+  stNote('Looking for your station.');
   try {
     const r = JSON.parse(await radio.restore(words, $('st-rpass').value)); $('st-rpass').value = '';
     $('st-words').value = '';
@@ -1068,7 +1070,7 @@ async function boot() {
   const invite = location.hash.includes('pocket=') ? location.hash : null;
   if (invite) history.replaceState(null, '', location.pathname);
   scale();
-  $('signal').textContent = 'Coming aboard';
+  $('signal').textContent = 'Connecting';
   try { await init() } catch (e) { $('name').textContent = 'This browser cannot run the radio'; return }
   // The sealed secrets come back before anything uses them.
   try { pocketsMem = JSON.parse(await dopen(store('pyrate.pockets') || '[]') || '[]') } catch (e) { pocketsMem = [] }
@@ -1107,7 +1109,7 @@ function wrecked() {
   gen++; stopAll(); playing = false; power(); radio = null;
   let last = 0; try { last = +(sessionStorage.getItem('pyrate.wrecked') || 0) } catch (e) { }
   const again = Date.now() - last > 300000;
-  status(again ? 'The radio stumbled badly. Coming back aboard.' : 'The radio stumbled badly and stopped. Reload the page to come back aboard.');
+  status(again ? 'Something went wrong. Reconnecting.' : 'Something went wrong and the radio stopped. Reload the page.');
   if (!again) return;
   try { sessionStorage.setItem('pyrate.wrecked', String(Date.now())) } catch (e) { }
   const back = cur && !isPocket(cur) ? '#' + cur.id : '';
@@ -1127,7 +1129,7 @@ function dormant(s) {
   cur = s; flag($('flag'), s.id, false); art(null);
   $('name').textContent = s.name; $('cs').textContent = s.call_sign || ''; $('freq').textContent = fq(s.id).toFixed(1);
   dial(HARBOUR_STATIONS);
-  needle(s.id, false); power(); $('pass').hidden = true; $('np').textContent = 'Press Listen to come aboard.'; $('by').textContent = '';
+  needle(s.id, false); power(); $('pass').hidden = true; $('np').textContent = 'Press Listen to tune in.'; $('by').textContent = '';
 }
 // Inside the landing page, the set tells its host how tall it is.
 if (document.documentElement.classList.contains('embed') && parent !== window) {

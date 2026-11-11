@@ -1,4 +1,4 @@
 https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/
-https://bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti.ipfs.inbrowser.link/
-https://bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti.ipfs.dweb.link/
-https://ipfs.io/ipfs/bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti/
+https://bafybeieuifeqsyqyvgg4huby22fjnj3y6cvqmgqtadeuikk7rxhj25evby.ipfs.inbrowser.link/
+https://bafybeieuifeqsyqyvgg4huby22fjnj3y6cvqmgqtadeuikk7rxhj25evby.ipfs.dweb.link/
+https://ipfs.io/ipfs/bafybeieuifeqsyqyvgg4huby22fjnj3y6cvqmgqtadeuikk7rxhj25evby/

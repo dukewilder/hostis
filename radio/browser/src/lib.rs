@@ -517,8 +517,13 @@ impl Ship {
         for _ in 0..3 {
             let from = self.archives.lock().unwrap().get(&station).map(|a| a.len()).unwrap_or(0);
             let Ok(Response::Entries(raw)) = self.ask_privately(&Ask::Log { station, from }).await else { continue };
-            private = true;
             let got = raw.len();
+            // An exit that found no carrier answers with nothing. For a log this tab has never
+            // seen, that is no answer at all, so another exit is asked.
+            if got == 0 && from == 0 {
+                continue;
+            }
+            private = true;
             let (n, struck) = self.take_entries(station, raw);
             added += n;
             if struck || got < 2000 {

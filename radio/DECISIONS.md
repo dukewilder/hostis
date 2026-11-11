@@ -459,3 +459,14 @@ An outside review and a pass of our own found the radio trading privacy for avai
 - **Peers get a budget**: eight requests at once on a connection, forty-eight in all on a phone (512 on a Lantern), 4 MiB a request, twenty seconds to arrive.
 - **The pages say what two hops are.** They keep each device on a route from knowing both who and what; they do not stop someone who runs both hops or watches both ends, and Through Tor is the answer for anyone whose safety rests on it. A Lantern's web page says its keeper sees who listens there. Chatter and hails no longer claim that nobody keeps them.
 
+
+## XXXIX. Plain words for the people who run it (11 November 2026)
+
+Most people who listen or start a station will never read the how-it-works page, and they should never need to. Every screen outside that page now speaks plainly, and anything technical folds away.
+
+- **Four tabs.** The Dial, the Log, My Station, Settings. Settings left the station tab, and one PIN unlocks both until the app goes to the back.
+- **Starting a station is a name, a line and how it plays.** Invite-only and the passphrase sit under More options. Bringing a station back and co-hosting someone else's sit in their own folds below the button.
+- **A station's page runs in the order people use it:** add recordings, when it plays, go live, record something, pictures, about the station. Podcast feeds, co-hosts, the numbers station, the 24 words and ending the station fold under More.
+- **Settings are grouped by what they are for:** listening, keeping stations on the air, privacy and safety, sharing. Tor, finding radios on Wi-Fi, connecting directly and the signing fingerprint sit under Advanced, folded.
+- **The sea words stay in the name and the look,** not in instructions. The Log, the dial and Raise colours stay. Maroon, ballast, hold, hail, chatter, watch bill, flock, aboard, hands and carriers became hide, help carry, what I have listened to, message, chat, schedule, play on several phones, listening, co-hosts and radios.
+- **The open player matches:** Start a Station with the same folds, Settings with Advanced folded, and the same words throughout.
