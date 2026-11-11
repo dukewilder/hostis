@@ -1,0 +1,95 @@
+<header class="masthead">
+<h1>The Keeper's Handbook</h1>
+<p class="mh-sub">Pyrate Radio &#183; keeping a station, and yourself, apart</p>
+<p class="mh-desc">What the radio already does to keep a keeper unknown, what only the keeper can do, and how the network stands.</p>
+</header>
+<main id="main">
+<nav class="toc" aria-label="On this page"><a href="#done">Already done</a><a href="#you">Yours to do</a><a href="#device">Your device</a><a href="#words">Your words</a><a href="#line">Your line</a><a href="#check">Checking</a><a href="#canary">The canary</a><a href="#network">The network</a></nav>
+
+<section id="done">
+<div class="sechead"><h2>Already Done</h2><span class="cap">done by the radio without asking</span></div>
+<div class="prose">
+<p>A phone that broadcasts hands its recordings to another node, which hands them on, and the node that finally shows them to the network waits a while before it does. Nobody watching can tell which phone they came from or when.</p>
+<p>A listening phone publishes no address, asks nobody's directory which peers it wants, and takes a fresh network identity each time the app starts. Every chunk of sound is the same size, so the shape of your traffic does not say what you hear.</p>
+<p>Everything the app keeps is sealed under a key held in the phone's own secure hardware. Station names and titles are cleaned of hidden characters, and a recorder's date and time never become a title. Copies you make leave the clipboard after a minute and a half, and the keyboard is told not to learn what you type.</p>
+</div>
+</section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
+<section id="you">
+<div class="sechead"><h2>Yours to Do</h2><span class="cap">what no software can do for you</span></div>
+<div class="prose">
+<p>The radio cannot hide what you put on the air yourself. A keeper who wants to stay unknown keeps these in mind.</p>
+</div>
+<details class="fold"><summary>Your voice, and the room around it</summary><div>The app takes out mains hum, which can date and place a recording. It cannot take out a siren, a church bell, a train or a neighbour's voice, so record somewhere quiet. Discretion, in More, can shift your voice lower and make it not quite yours. A voice you have used anywhere else in public is a voice that can be matched.</div></details>
+<details class="fold"><summary>Your words</summary><div>How you write and speak is as much yours as your face: turns of phrase, spelling, the subjects you return to. Writing for a station in a voice you use nowhere else keeps the two apart.</div></details>
+<details class="fold"><summary>Your files</summary><div>Copies of music from shops, promotional services and AI music tools can carry marks in the sound itself, tied to the account that downloaded them. Re-encoding does not remove them, and nothing in the app can. Air only what you are content to have traced back to where you got it.</div></details>
+<details class="fold"><summary>What your station says of itself</summary><div>A home port is public, so leave it empty or name a city that is not yours. A programme that keeps clock times carries your time zone with it; one that only shuffles carries none. A Bitcoin tip address shows every payment to anyone who looks it up. Monero shows none.</div></details>
+</section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
+<section id="device">
+<div class="sechead"><h2>Your Device</h2><span class="cap">phone and computer</span></div>
+<div class="prose">
+<p>A phone with a screen lock is encrypted by the phone itself. Keep it locked and keep it updated, since the radio is only as safe as the phone it runs on. GrapheneOS, on a Pixel, is the hardest phone to break into that anyone can buy.</p>
+<p>In More, under Discretion:</p>
+</div>
+<ol class="steps">
+<li>A plain icon named Radio, and a lock screen and recents screen that say nothing.</li>
+<li>A PIN on Colours, and a second PIN to give up if you are made to open it. The second one scuttles the radio, which closes and opens next time as if newly installed.</li>
+<li>Keep only what I play: your phone carries nothing for anyone else.</li>
+</ol>
+<div class="prose">
+<p>On a computer, turn on the disk's own encryption: BitLocker on Windows, FileVault on a Mac, and full-disk encryption when installing Linux. Windows and Mac then keep the radio's key in the system's own keeper as well.</p>
+<p>Before a crossing where the phone may be searched, scuttle the radio in Colours. The 24 words, and the passphrase if you set one, bring every station back afterwards.</p>
+</div>
+</section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
+<section id="words">
+<div class="sechead"><h2>Your Words</h2><span class="cap">the station itself</span></div>
+<div class="prose">
+<p>The 24 words are the station. Write them on paper, in order, and keep the paper somewhere a search of your home would not find it. Nobody from Pyrate Radio or HOSTIS will ever ask for them.</p>
+<p>A passphrase on top of the words, set when you raise the station, makes the words alone open a different, empty station. A photograph of the paper then gives nothing away. Keep the passphrase in your head or apart from the words, because a station whose passphrase is lost is lost with it.</p>
+<p>If a phone is lost or taken, put the words into the app on another phone. The station comes back, and the old phone can no longer speak for it.</p>
+</div>
+</section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
+<section id="line">
+<div class="sechead"><h2>Your Line</h2><span class="cap">what your connection shows</span></div>
+<div class="prose">
+<p>The relay a phone or a tab connects through sees its address, and nothing of what passes. Your internet provider sees that you use the radio, and nothing of what you play or air.</p>
+<p>For more cover, run a VPN you trust on the phone, set to always on, so the radio never touches the network without it. In a browser, open the player in Tor Browser: the relay then sees only Tor.</p>
+</div>
+</section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
+<section id="check">
+<div class="sechead"><h2>Checking</h2><span class="cap">that what you run is ours</span></div>
+<div class="prose">
+<p>Compare what you download with the checksum on <a href="./#set">the main page</a>. The app shows the fingerprint of the key that signed it in More, under This copy, so a copy signed by anyone else can be told apart. The source is public, released as a tarball and a torrent with every version, so anyone can build it and compare.</p>
+<p>A new version waits three days from the moment your phone first hears of it, so a release anyone was forced to sign is in front of everyone before it lands on a phone. The app says when it arrives, and you can tap to take it sooner.</p>
+</div>
+</section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
+<section id="canary">
+<div class="sechead"><h2>The Canary</h2><span class="cap">renewed every month</span></div>
+<div class="prose">
+<p>Once a month HOSTIS signs a line saying it has received no order to hide, change or stop anything, and no order to keep quiet about one. The app shows it in More, under The canary. If it goes more than 45 days without being renewed, the app says so, and you can read that silence for what it may mean.</p>
+</div>
+</section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
+<section id="network">
+<div class="sechead"><h2>The Network</h2><span class="cap">the record of how it stands</span></div>
+<div class="prose">
+<p>Pyrate Radio has no server. Every phone with the app, every open player in a browser and every Lantern is a node, and the nodes keep the Log of stations between them. Each station is a key held by its keeper, and every entry in its log is signed by that key and checked by every node that carries it.</p>
+<p>HOSTIS writes and publishes the software, raises its own stations, and runs one Lantern among any number anyone may run. It keeps no list of stations to refuse, ranks none and features none, and it cannot remove a station or change what one plays: only the holder of a station's key can do that. It holds no accounts, no listening records and no addresses. The stations hostis.black plays are HOSTIS's own; every other station plays in the open player, which belongs to nobody.</p>
+<p>Updates are signed by two of three release keys held in separate places, and carried on the network like any station. The open player lives on IPFS under a name of its own, and the app, the source and the computers' builds travel by IPFS and BitTorrent as well as from this site.</p>
+</div>
+</section>
+<div class="divider"><span class="divider-glyph"></span></div>
+<p class="coda"><a href="./">Back to Pyrate Radio</a></p>
+</main>

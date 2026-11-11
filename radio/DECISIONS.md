@@ -410,3 +410,8 @@ Rulings made while reading every line again. The findings themselves are in `AUD
 - **The hold key leaves no copy in memory.** The keys derived from it sit at one place, kept out of swap where the system allows (Linux, Android, macOS), and are wiped when let go.
 - **The app can be built under another name** (`-PPYRATE_APP_ID=…`), for a phone where the usual one is blocked by name or would be noticed by it.
 
+## XXXIII. The keeper's handbook (10 November 2026)
+
+- **What only the keeper can do is written down.** hostis.black/pyrateradio/handbook/ sets out what the radio already does to keep a keeper unknown, what no software can do for them (their voice and the room, their writing, marks in their source files, what their station says of itself), their device, their words, their line, how to check what they run, and the canary.
+- **The record of how the network stands is on the radio's own pages.** HOSTIS writes the software, raises its own stations and runs one Lantern among any number. It keeps no list, ranks nothing, cannot remove a station and holds no accounts, listening records or addresses. It sits in the handbook, so it exists before anyone needs it. A page or a link on hostis.black's front page waits on Dylan (R1, R2).
+

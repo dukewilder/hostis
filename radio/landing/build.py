@@ -48,6 +48,16 @@ if os.path.isdir(D) and all(os.path.exists(f"{D}/{k[1]}") for k in kinds):
             '<p class="note">Version ' + appver + ', built from the public source by GitHub\'s machines. On a Mac, open it the first time with a right-click and Open: it is signed by nobody. Computers take new versions from this page.</p>')
 page = page.replace("{{DESKTOP}}", desk)
 open(f"{out}/index.html", "w", encoding="utf-8").write(page)
+# The keeper's handbook: the same head and footer, a body of its own.
+head = page[:page.index("<body>")]
+head = head.replace('"https://hostis.black/pyrateradio/"', '"https://hostis.black/pyrateradio/handbook/"')
+head = re.sub(r"<title>.*?</title>", "<title>The Keeper's Handbook · Pyrate Radio · HOSTIS</title>", head)
+head = head.replace('content="Radio that plays all day and all night, that anyone can raise, that every listener carries, and that answers to no server, no store and no account."', 'content="What Pyrate Radio does to keep a station keeper unknown, what only the keeper can do, and how the network stands."')
+flag = page[page.index('<nav class="flagbar"'):page.index("</nav>", page.index('<nav class="flagbar"')) + 6]
+foot = page[page.index("<footer>"):page.index("</footer>") + 9]
+book = open(f"{R}/landing/handbook.body.html", encoding="utf-8").read()
+os.makedirs(f"{out}/handbook", exist_ok=True)
+open(f"{out}/handbook/index.html", "w", encoding="utf-8").write(head.replace('href="favicon.png"', 'href="../favicon.png"').replace('href="apple-touch-icon.png"', 'href="../apple-touch-icon.png"') + '<body>\n<a class="skip-link" href="#main">Skip to content</a>\n' + flag + "\n" + book.replace('href="./', 'href="../') + foot + "\n</body>\n</html>\n")
 shutil.copytree(f"{R}/browser/www/dist", f"{out}/listen")
 # The HOSTIS skull, the same icon as every sibling page.
 for f in ["favicon.png", "apple-touch-icon.png"]:
