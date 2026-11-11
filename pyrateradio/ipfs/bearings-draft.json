@@ -1,14 +1,14 @@
 {
  "pyrate": "bearings",
- "at": 1794386725386,
+ "at": 1794397262008,
  "doors": [
   "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442"
  ],
  "players": [
   "https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/",
-  "https://bafybeighkj6xllz7u7ra37qb23qeereybrdzjmfryt5anbm5kx5qr2uo2e.ipfs.inbrowser.link/",
-  "https://bafybeighkj6xllz7u7ra37qb23qeereybrdzjmfryt5anbm5kx5qr2uo2e.ipfs.dweb.link/",
-  "https://ipfs.io/ipfs/bafybeighkj6xllz7u7ra37qb23qeereybrdzjmfryt5anbm5kx5qr2uo2e/"
+  "https://bafybeieuifeqsyqyvgg4huby22fjnj3y6cvqmgqtadeuikk7rxhj25evby.ipfs.inbrowser.link/",
+  "https://bafybeieuifeqsyqyvgg4huby22fjnj3y6cvqmgqtadeuikk7rxhj25evby.ipfs.dweb.link/",
+  "https://ipfs.io/ipfs/bafybeieuifeqsyqyvgg4huby22fjnj3y6cvqmgqtadeuikk7rxhj25evby/"
  ],
  "ipns": "k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr",
  "onion": "",
@@ -26,20 +26,20 @@
    "cid": "bafybeif736juxf2nquix2g7xpvp3keyqb6owbvkrl7dmnryw5mihpnpjra"
   },
   {
-   "name": "pyrate-radio-0.9.7-macos.zip",
-   "cid": "bafybeih4sdufj7reziu5hrxxil3qug2mf2klmddb2oqzvhde3zvnh5td4y"
+   "name": "pyrate-radio-0.9.8-macos.zip",
+   "cid": "bafybeigmveadfu3lsooo4ak6d4fy5u4rowjl5me6zuuny64emx6vfqvtcm"
   },
   {
-   "name": "pyrate-radio-0.9.7-windows.zip",
-   "cid": "bafybeihoktjhu6a3vdu4prtywhsl4ibal2jvob562m7fdpycr5xcpqfs34"
+   "name": "pyrate-radio-0.9.8-windows.zip",
+   "cid": "bafybeiad3ahc3l5uagivxmeh5vsl54weveadyse5ez5xt4zp7uqpsl4dzi"
   },
   {
-   "name": "pyrate-radio-0.9.7-linux-x64.tar.gz",
-   "cid": "bafybeicl5va6ip6ahz742iotdkhsbuiegneznuo7kk453y3jbjfdx3xidq"
+   "name": "pyrate-radio-0.9.8-linux-x64.tar.gz",
+   "cid": "bafybeic52cmj42wp6j3tsvgej3vclbcs6udqfvu2pef23ilqip24sgl6ea"
   },
   {
-   "name": "source/pyrate-radio-src-66240bd.tar.gz",
-   "cid": "bafybeibbr4nctqqkkuxfu3whbnw5v6fplffdgbb3iicishptrgda6meezy"
+   "name": "source/pyrate-radio-src-4fa68b2.tar.gz",
+   "cid": "bafybeibtfnci4o4gq5bvwvwuy4gc3whaniy5w4k4f4fmbimmqby4tehdva"
   }
  ]
 }
