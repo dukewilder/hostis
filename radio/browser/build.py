@@ -17,7 +17,7 @@ head = """<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Pyrate Radio · Listen · HOSTIS</title>
-<meta name="description" content="Takedown-resistant radio under HOSTIS colours. Plays in the browser, peer to peer.">
+<meta name="description" content="Radio that anyone can raise, that every listener carries, and that nobody can switch off. Plays in the browser.">
 <meta name="theme-color" content="#030303">
 <meta name="color-scheme" content="dark">
 <meta property="og:title" content="Pyrate Radio · Listen">
@@ -91,7 +91,7 @@ def build(scope, dist, open_players):
     # Added to a home screen it opens as an app of its own, on HOSTIS black.
     for f in ["icon-192.png", "icon-512.png"]:
         shutil.copy(f"{W}/{f}", dist)
-    json.dump({"name": "Pyrate Radio", "short_name": "Pyrate", "description": "Radio every listener carries, under HOSTIS colours.",
+    json.dump({"name": "Pyrate Radio", "short_name": "Pyrate", "description": "Radio that every listener carries.",
                "start_url": "./", "scope": "./", "display": "standalone", "background_color": "#030303", "theme_color": "#030303",
                "icons": [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
                          {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}]},

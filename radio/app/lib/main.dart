@@ -707,7 +707,7 @@ class Dial extends StatelessWidget {
       const SizedBox(height: 6),
       Row(mainAxisAlignment: MainAxisAlignment.center, children: [
         if (stations.isNotEmpty) ...[const Diamond(size: 4, color: boneFaint), const SizedBox(width: 9)],
-        Text(stations.isEmpty ? 'UNDER HOSTIS COLOURS' : '${stations.length} ${stations.length == 1 ? 'STATION' : 'STATIONS'} ON THE AIR', style: caps(9.5, color: boneGhost)),
+        Text(stations.isEmpty ? 'ON THE AIR ALL DAY AND ALL NIGHT' : '${stations.length} ${stations.length == 1 ? 'STATION' : 'STATIONS'} ON THE AIR', style: caps(9.5, color: boneGhost)),
       ]),
       Expanded(
         child: stations.isEmpty
@@ -975,7 +975,7 @@ class _ColoursPageState extends State<ColoursPage> {
                   ),
                   if (withPass) Padding(
                     padding: const EdgeInsets.only(top: 10),
-                    child: Text('And your passphrase: keep it apart from the words. Without it, these words open a different station.', style: serif(14, color: boneFaint, italic: true)),
+                    child: Text('Keep your passphrase apart from the words. Without it, these words open a different station.', style: serif(14, color: boneFaint, italic: true)),
                   ),
                   CheckboxListTile(
                     value: written,
@@ -1060,7 +1060,7 @@ class _ColoursPageState extends State<ColoursPage> {
   List<Widget> _art(String id, Map mine) => [
         Text('THE ART', style: carved(14)),
         const SizedBox(height: 8),
-        Text('A cover for the Log and the dial, a banner across the top of your page. Any picture works: it is redrawn on this phone before it sails, stripped of where and when it was taken. Album covers inside your recordings show while they play.',
+        Text('A cover for the Log and the dial, a banner across the top of your page. Any picture works. It is redrawn on this phone before it sails, stripped of where and when it was taken. Album covers inside your recordings show while they play.',
             style: serif(14, color: boneFaint, italic: true)),
         const SizedBox(height: 14),
         if (mine['banner'] != null)
@@ -1135,7 +1135,7 @@ class _ColoursPageState extends State<ColoursPage> {
             tilePadding: EdgeInsets.zero,
             title: Text('A passphrase on top of the words', style: serif(14, color: boneFaint, italic: true)),
             children: [
-              Text('With a passphrase, the 24 words alone open a different, empty station: a photograph of them gives nothing away, and words given up under force open that one instead. Lose the passphrase and the station is lost with it.',
+              Text('With a passphrase, the 24 words alone open a different, empty station, so a photograph of them gives nothing away and words given up under force open that one instead. Lose the passphrase and the station is lost with it.',
                   style: serif(13, color: boneGhost, italic: true)),
               TextField(controller: pass, obscureText: true, style: mono(12, color: bone), decoration: field('Passphrase (optional)'),
                   enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
@@ -1146,19 +1146,19 @@ class _ColoursPageState extends State<ColoursPage> {
         StartShapePicker(shape: shape),
         Row(children: [
           Switch(value: pocket, onChanged: (v) => setState(() => pocket = v), activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel),
-          Flexible(child: Text('A pocket station: only listeners you invite', style: mono(11))),
+          Flexible(child: Text('A pocket station for listeners you invite', style: mono(11))),
         ]),
         if (pocket)
           Text('It never shows on the Log. Whoever holds an invitation can find it, hear it and carry it; nobody else can tell it exists.',
               style: serif(13, color: boneFaint, italic: true)),
         const SizedBox(height: 10),
-        Text('All of it can change later, and none of it needs you once it is set: the station keeps to it for as long as anyone carries it.',
+        Text('All of it can change later. Once it is set, the station keeps to it for as long as anyone carries it.',
             style: serif(13, color: boneGhost, italic: true)),
         const SizedBox(height: 18),
         Row(children: [button(raising ? 'RAISING' : 'RAISE COLOURS', raising ? null : raise)]),
         if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: serif(14, color: bone, italic: true))),
         const SizedBox(height: 28),
-        Text('Your phone hands its broadcasts to the network along a chain of other nodes, so the first node to show them is never yours. Listening goes through two hops: one sees who, the other sees what, neither sees both.',
+        Text('Your phone hands its broadcasts to the network along a chain of other nodes, so the first node to show them is never yours. Listening goes through two hops. One sees who is asking, the other what is asked for, and neither sees both.',
             style: serif(13, color: boneGhost, italic: true)),
         const SizedBox(height: 34),
         Text('TAKE BACK A STATION', style: carved(14)),
@@ -1249,7 +1249,7 @@ class _ColoursPageState extends State<ColoursPage> {
       const SizedBox(height: 26),
       Text('THE HOLD', style: carved(14)),
       const SizedBox(height: 8),
-      Text('What you listen to is kept here so your phone can play it without waiting. It is sealed: nothing on the phone says what any of it is. Clearing it leaves your own station and the ballast you carry for the fleet.',
+      Text('What you listen to is kept here so your phone can play it without waiting. It is sealed, so nothing on the phone says what any of it is. Clearing it leaves your own station and the ballast you carry for the fleet.',
           style: serif(14, color: boneFaint, italic: true)),
       const SizedBox(height: 10),
       Row(children: [
@@ -1263,7 +1263,7 @@ class _ColoursPageState extends State<ColoursPage> {
       const SizedBox(height: 26),
       Text('SCUTTLE', style: carved(14)),
       const SizedBox(height: 8),
-      Text('For a phone about to be taken. One press destroys the key everything the radio keeps here is sealed under, in the phone\'s secure hardware: what you have heard, your chart, pockets, bells and this phone\'s key to your station become noise at once, and the app closes. Your station lives on in the network and comes back to any phone with its 24 words.',
+      Text('For a phone about to be taken. One press destroys the key everything the radio keeps here is sealed under, in the phone\'s secure hardware. What you have heard, your chart, pockets, bells and this phone\'s key to your station become noise at once, and the app closes. Your station lives on in the network and comes back to any phone with its 24 words.',
           style: serif(14, color: boneFaint, italic: true)),
       const SizedBox(height: 10),
       Row(children: [
@@ -1294,7 +1294,7 @@ class _ColoursPageState extends State<ColoursPage> {
       Text('Go live from this phone. Listeners hear you ten to twenty seconds behind, and when you stop, the clock takes back the hour.',
           style: serif(14, color: boneFaint, italic: true)),
       const SizedBox(height: 6),
-      Text('The mains hum that would date and place you is taken out. Sirens, bells, trains and voices around you are not: they can say where you are. Discretion, in More, can disguise your voice.',
+      Text('The mains hum that would date and place you is taken out. Sirens, bells, trains and voices around you stay in, and they can say where you are. Discretion, in More, can disguise your voice.',
           style: serif(13, color: boneFaint, italic: true)),
       const SizedBox(height: 12),
       if (on)
@@ -1444,7 +1444,7 @@ class _ColoursPageState extends State<ColoursPage> {
       const SizedBox(height: 26),
       Text('THE KEY', style: carved(14)),
       const SizedBox(height: 8),
-      Text('This phone holds a deputy key: it broadcasts, and that is all it can do. The 24 words you wrote down are the station. With them, any phone can take the station back and shut this one out, or strike its colours.',
+      Text('This phone holds a deputy key, which can broadcast and nothing more. The 24 words you wrote down are the station. With them, any phone can take the station back and shut this one out, or strike its colours.',
           style: serif(14, color: boneFaint, italic: true)),
       const SizedBox(height: 34),
       Text('STRIKE COLOURS', style: carved(14)),
@@ -1485,7 +1485,7 @@ class _ColoursPageState extends State<ColoursPage> {
           if (ok == true) {
             final r = await Native.callAway({'cmd': 'strike', 'station': id, 'phrase': phrase, 'passphrase': pp});
             if (!context.mounted) return;
-            toast(context, r is Map && r['error'] != null ? 'Not struck: ${r['error']}' : 'Colours struck. The station has ended.');
+            toast(context, r is Map && r['error'] != null ? 'Not struck: ${r['error']}' : 'Colours struck.');
           }
         }),
       ]),

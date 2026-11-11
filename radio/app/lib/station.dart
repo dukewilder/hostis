@@ -1180,7 +1180,7 @@ class _PosterSheetState extends State<PosterSheet> {
       child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           heading('A POSTER'),
-          note('Print it and put it up. Whoever scans the code is listening a tap later: in the browser on any phone, or in the app if they have it. No account, no store.'),
+          note('Print it and put it up. Whoever scans the code is listening a tap later, in the browser on any phone or in the app if they have it.'),
           const SizedBox(height: 10),
           Wrap(children: [chip('For paper', paper, () => setState(() => paper = true)), chip('For screens', !paper, () => setState(() => paper = false))]),
           const SizedBox(height: 8),
@@ -1211,7 +1211,7 @@ class _PosterSheetState extends State<PosterSheet> {
                       child: CustomPaint(painter: QrPainter((q['size'] as num).toInt(), q['bits'] as String, ink)),
                     ),
                   const Spacer(),
-                  Text('Scan to listen. No app, no account.', style: serif(14, color: ink)),
+                  Text('Scan to listen in any browser.', style: serif(14, color: ink)),
                   const SizedBox(height: 4),
                   Text(isHarbour(id) ? 'hostis.black/pyrateradio, or search the call sign in any Pyrate Radio' : 'Or search the call sign in any Pyrate Radio', textAlign: TextAlign.center, style: mono(8.5, color: soft)),
                 ]),
@@ -1373,7 +1373,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
     final r = room;
     if (r == null || r['joined'] != true) {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        note('Talk with whoever else is listening, cheer what is on, or ask the station for a recording. Lines are kept by nobody: they pass between the people in the room and are gone. Joining tells the others in the room that this phone is there, which listening alone never does.'),
+        note('Talk with whoever else is listening, cheer what is on, or ask the station for a recording. Lines pass between the people in the room and are gone. Joining tells the others in the room that this phone is there, which listening alone never does.'),
         const SizedBox(height: 10),
         pyrateButton(joining ? 'JOINING' : 'JOIN THE CHATTER', joining
             ? null
@@ -1890,7 +1890,7 @@ class _FlockSheetState extends State<FlockSheet> {
       child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           heading('A FLOCK'),
-          note('Phones in one room playing as one. Host here, and the others scan the code with their cameras: they set their clocks to this phone and play its station in step.'),
+          note('Phones in one room playing as one. Host here, and the others scan the code with their cameras to set their clocks to this phone and play its station in step.'),
           const SizedBox(height: 12),
           if (st['hosting'] == true) ...[
             if (q is Map)
@@ -1976,7 +1976,7 @@ class InviteSheet extends StatelessWidget {
           ),
         const SizedBox(height: 12),
         if (link != null) pyrateButton('SEND THE INVITATION', () => ship.invokeMethod('share_text', {'text': link})),
-        if (link == null) note('This station has no invitation: it is on the public Log.'),
+        if (link == null) note('This station is on the public Log, so it has no invitation.'),
       ]),
     );
   }
