@@ -81,6 +81,13 @@ impl Hold {
                 anyhow::bail!("the hold key could not be copied to PYRATE_HOLD_KEY");
             }
         }
+        // A key named by PYRATE_HOLD_KEY that is missing while this folder already holds sealed
+        // data means the key's disk is not there (unmounted, or a typo): a new key would make
+        // everything here unreadable for good, so the Lantern stops instead.
+        let sealed_here = ["hold", "keys", "notes"].iter().any(|d| std::fs::read_dir(dir.join(d)).is_ok_and(|mut r| r.next().is_some()));
+        if path != old && sealed_here {
+            anyhow::bail!("PYRATE_HOLD_KEY names {}, which is not there, and this folder already holds sealed data: is the key's disk mounted? Not starting, so nothing is lost", path.display());
+        }
         let mut k = [0u8; 32];
         rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut k);
         std::fs::write(&path, k)?;

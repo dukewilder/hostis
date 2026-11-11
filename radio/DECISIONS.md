@@ -492,3 +492,7 @@ A second outside audit reviewed 0.9.8. AUDIT-2026-11b.md has every finding, chec
   - **Poets' Corner**, six hours of short public domain poems read by LibriVox volunteers, with one of twenty-four poems everyone should hear once at the top of every hour.
   - The archive-built stations are fetched by the Lantern that keeps them, from manifests that fix each file by its checksum (`tools/stations/fetch.py`).
 - **Every HOSTIS station has a cover and a banner**, drawn in the site's faces by `tools/stations/art.py`.
+
+## XLI. A door publishes where it can be reached (11 November 2026)
+
+The harbour reaches its own relay from inside its tunnel at a loopback address, and the lookup service was given that address, so phones and browsers that had never met the harbour were sent to themselves. A Lantern with `PYRATE_RELAY_LOCAL` and `PYRATE_RELAY_URL` now publishes the public address in place of the inside one. Browsers still cannot use a plain-http relay: until the HOSTIS relay answers over https at relay.hostis.black, the open player depends on Lanterns homed on relays it can reach.
