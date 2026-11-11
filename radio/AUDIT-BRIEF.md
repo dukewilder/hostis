@@ -40,6 +40,7 @@ The one line that genuinely matters is not the architecture, it is specific inte
 - **Worktrees in this environment** (a fresh container has neither; section 11 makes them):
   - `/home/claude/hostis` on branch `radio` (the code; `radio/` is the subproject root at `/home/claude/hostis/radio`).
   - `/home/claude/main-wt` on local branch `site-pyrateradio`, which is pushed to `origin main` to deploy. Its `pyrateradio/` folder is the live subsite.
+- **Computers' builds:** CI builds them on every push to radio (radio-desktop.yml). For a new version, wait for that run to pass, then `sh tools/fetch_desktop.sh` before `tools/deploy_site.sh`, or the site publishes the last builds fetched under the new version number.
 - **Deploy topology:** build the landing into `radio/landing/out`, copy it into `main-wt/pyrateradio/`, commit on `site-pyrateradio`, then `git push origin site-pyrateradio:main`. Push code with `git push origin radio` from `/home/claude/hostis`. `local` branch `main` is stale and diverged; ignore it, `origin/main` is the deploy source.
 - **Attribution on commits:** follow the session's own reminder for the Co-Authored-By / Claude-Session lines.
 
