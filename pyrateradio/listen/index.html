@@ -497,7 +497,7 @@ input[type=password]{background:var(--panel);color:var(--ink);border:1px solid r
 <header class="masthead top">
 <p class="mh-title"><a href="../">Pyrate Radio</a></p>
 <p class="mh-sub harbour-only">HOSTIS&#8217;s own stations &#183; every other plays in the <a class="openlink" href="#">open player</a></p>
-<p class="mh-sub open-only">the open player &#183; every station on the Log, from whoever carries it</p>
+<p class="mh-sub open-only">the open player &#183; every station on the air, in any browser</p>
 <p class="signalrow"><span id="signal" class="signal" role="status"></span><button id="flockleave" class="btn quiet" hidden>Stop playing in step</button></p>
 </header>
 
@@ -552,7 +552,7 @@ input[type=password]{background:var(--panel);color:var(--ink);border:1px solid r
 <div class="sechead"><h2>Chat</h2><span class="cap">with whoever is listening</span></div>
 <p class="fine harbour-only">This station&#8217;s chatter, its cheers and its hails are in the <a id="chatopen" class="openlink" href="#">open player</a>, one tap away.</p>
 <div class="open-only">
-<div id="chatjoin"><p class="fine">Chat with whoever else is listening, cheer what is on, or ask for a song. Nothing is saved, though anyone in the chat can copy what they read. Joining lets the others know you are here. Just listening shows nobody anything.</p><p class="centre"><button id="chatgo" class="btn">Join the chat</button></p></div>
+<div id="chatjoin"><p class="fine">Chat with whoever else is listening, cheer what is on, or ask for a song. Nothing is saved, though anyone in the chat can copy what they read. Joining lets the others in the chat see that this browser listens to this station. Just listening shows nobody anything.</p><p class="centre"><button id="chatgo" class="btn">Join the chat</button></p></div>
 <div id="chatroom" class="chat" hidden>
 <p id="chatwho" class="fine"></p>
 <div id="lines" class="lines" aria-live="polite"></div>
@@ -572,7 +572,7 @@ input[type=password]{background:var(--panel);color:var(--ink);border:1px solid r
 <section class="log">
 <div class="sechead harbour-only"><h2>HOSTIS on the Air</h2><span class="cap">the stations HOSTIS raises</span></div>
 <div class="sechead open-only"><h2>On the Air</h2><span class="cap">most listened first</span></div>
-<p class="fine open-only">Every station this tab has heard of. The tab checks each station's signature and plays from whoever carries it.</p>
+<p class="fine open-only">Every station this browser has found so far. Tap one to tune in.</p>
 <div class="views" role="group" aria-label="How to show the Log"><button id="vlist" class="btn on" aria-pressed="true">The list</button><button id="vchart" class="btn" aria-pressed="false">The chart</button></div>
 <div id="chart" class="chart" hidden></div>
 <div id="rows"></div>
@@ -589,6 +589,7 @@ input[type=password]{background:var(--panel);color:var(--ink);border:1px solid r
 <p id="st-locknote2" class="fine" role="status"></p>
 </div>
 <div id="st-new">
+<p id="st-unchecked" class="fine" hidden>This copy of the player comes from a gateway that serves its files unchecked. To start a station, use <a id="st-checked" href="#">a copy your browser checks</a> or the app.</p>
 <p class="fine">Give it a name, add some recordings, and it plays day and night. Nobody can take it down.</p>
 <label class="field"><span>Station name</span><input id="st-name" maxlength="40" autocomplete="off" placeholder="The name on the dial"></label>
 <label class="field"><span>What it plays</span><input id="st-about" maxlength="140" autocomplete="off" placeholder="One line about it"></label>
@@ -656,6 +657,6 @@ input[type=password]{background:var(--panel);color:var(--ink);border:1px solid r
 <p class="f-copy">no rights reserved &#183; all copies welcome</p>
 <p class="f-source"><a href="https://github.com/dukewilder/hostis" target="_blank" rel="noopener noreferrer">source code</a></p>
 </footer>
-<script type="module" src="app.js?v=ef115538b3"></script>
+<script type="module" src="app.js?v=46c43103f5"></script>
 </body>
 </html>
