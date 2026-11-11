@@ -52,7 +52,7 @@ Widget heading(String text, {Color color = bone}) => Padding(
 
 Widget pyrateSwitch(bool value, ValueChanged<bool> onChanged, String label) => Row(children: [
       Switch(value: value, onChanged: onChanged, activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel),
-      Flexible(child: Text(label, style: mono(11))),
+      Flexible(child: Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text(label, style: serif(15, color: boneDim)))),
     ]);
 
 Future<T?> pyrateSheet<T>(BuildContext context, Widget child) => showModalBottomSheet<T>(
@@ -1432,6 +1432,7 @@ class _ShipPapersState extends State<ShipPapers> {
   Widget build(BuildContext context) {
     final wakeOn = wake['on'] == true;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (Platform.isAndroid) ...[
       heading('WAKE TO THE RADIO'),
       note(wakeOn
           ? 'Every morning at ${(wake['hour'] as num).toInt().toString().padLeft(2, '0')}:${(wake['minute'] as num).toInt().toString().padLeft(2, '0')}, ${wake['name'] ?? 'the station'} rises from quiet. If no sound comes, the phone\'s own alarm rings instead.'
@@ -1446,6 +1447,7 @@ class _ShipPapersState extends State<ShipPapers> {
           }, color: boneFaint),
       ]),
       const SizedBox(height: 26),
+      ],
       heading('OFF THE GRID'),
       note('For when the internet is cut or watched.'),
       pyrateSwitch(lan, (v) {
@@ -1466,7 +1468,7 @@ class _ShipPapersState extends State<ShipPapers> {
                   ? 'From the next time the radio starts, it reaches the network only through Tor, and no peer or relay learns this device\'s address.'
                   : 'From the next time the radio starts, it reaches the network directly.';
         });
-      }, 'Through Tor: every connection by way of Orbot, or Tor\'s HTTP tunnel on 127.0.0.1:8118'),
+      }, 'Through Tor (Orbot, or Tor\'s HTTP tunnel on 127.0.0.1:8118)'),
       if (gridMsg != null) Padding(padding: const EdgeInsets.only(top: 6), child: note(gridMsg!)),
       const SizedBox(height: 10),
       note('A station passed as a file, by SD card, Bluetooth or a share, plays here with no network, and this phone then carries it to every radio it meets.'),
@@ -1525,14 +1527,16 @@ class _ShipPapersState extends State<ShipPapers> {
       }, 'On Wi-Fi, bring aboard the next six hours of up to three kept stations'),
       const SizedBox(height: 18),
       heading('DISCRETION'),
-      pyrateSwitch(plain, (v) {
-        ship.invokeMethod('plain_set', {'value': v});
-        setState(() => plain = v);
-      }, 'A plain icon named Radio in place of the skull'),
-      pyrateSwitch(plainLock, (v) {
-        ship.invokeMethod('plain_lock_set', {'value': v});
-        setState(() => plainLock = v);
-      }, 'The lock screen says only "Radio", and the recents screen shows nothing'),
+      if (Platform.isAndroid) ...[
+        pyrateSwitch(plain, (v) {
+          ship.invokeMethod('plain_set', {'value': v});
+          setState(() => plain = v);
+        }, 'A plain icon named Radio in place of the skull'),
+        pyrateSwitch(plainLock, (v) {
+          ship.invokeMethod('plain_lock_set', {'value': v});
+          setState(() => plainLock = v);
+        }, 'The lock screen says only "Radio", and the recents screen shows nothing'),
+      ],
       pyrateSwitch(disguise, (v) {
         pref('disguise', v ? -4 : 0);
         setState(() => disguise = v);

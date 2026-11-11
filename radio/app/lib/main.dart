@@ -400,6 +400,12 @@ class Tuner extends ChangeNotifier {
         tune((pick ?? stations.first)['id'] as String);
       }
     }
+    // A window resized, or a phone turned, can leave the dial between two stations: it settles
+    // back on the one tuned, or the nearest.
+    if (pages.hasClients && stations.isNotEmpty && !pages.position.isScrollingNotifier.value) {
+      final at = pages.page;
+      if (at != null && (at - at.round()).abs() > 0.001) face(tuned ?? stations[at.round().clamp(0, stations.length - 1)]['id'] as String?);
+    }
     notifyListeners();
   }
 
@@ -446,7 +452,9 @@ class Tuner extends ChangeNotifier {
   /// Turns the dial to a station without tuning it.
   void face(String? id) {
     final i = stations.indexWhere((s) => s['id'] == id);
-    if (i < 0 || !pages.hasClients || pages.page?.round() == i || pages.position.isScrollingNotifier.value) return;
+    if (i < 0 || !pages.hasClients || pages.position.isScrollingNotifier.value) return;
+    final at = pages.page;
+    if (at != null && (at - i).abs() < 0.001) return;
     quiet = true;
     pages.jumpToPage(i);
     WidgetsBinding.instance.addPostFrameCallback((_) => quiet = false);
@@ -757,9 +765,48 @@ class Dial extends StatelessWidget {
                 ),
               ]),
       ),
-      Text('swipe to change station · hold to scan', style: serif(12, color: boneGhost, italic: true)),
+      Text('swipe to change station · hold to scan', style: serif(12, color: boneFaint, italic: true)),
       const SizedBox(height: 10),
     ]);
+  }
+}
+
+/// What a station offers beyond the page and passing it on, one tap down from the dial.
+class _StationMore extends StatelessWidget {
+  final Tuner radio;
+  final Map<String, dynamic> s;
+  final bool tuned;
+  const _StationMore({required this.radio, required this.s, required this.tuned});
+  @override
+  Widget build(BuildContext context) {
+    Widget row(String label, String about, VoidCallback act) => InkWell(
+          onTap: () {
+            Navigator.pop(context);
+            act();
+          },
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: lineSoft))),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: carved(13)),
+              const SizedBox(height: 3),
+              Text(about, style: serif(14, color: boneFaint, italic: true)),
+            ]),
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 22, 24, 30),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text((s['name'] ?? '').toString(), style: pica(24)),
+        const SizedBox(height: 10),
+        row('WATCH BILL', 'What plays today and this week, and a bell for any of it.', () => pyrateSheet(context, WatchBill(station: s))),
+        if (tuned) row('TAPE IT', 'Keep what is playing as a recording on this device.', () => tapeIt(context)),
+        row('FLOCK', 'Phones in one room playing as one.', () => pyrateSheet(context, const FlockSheet())),
+        row('LIGHTS OUT', radio.sleepAt == null ? 'Fade out and stop after a while.' : 'Fades out at ${clockTime(radio.sleepAt!.millisecondsSinceEpoch)}.', () => sleepSheet(context, radio)),
+        row('HEARD TONIGHT', 'What has played since the app opened.', () => historySheet(context, radio)),
+      ]),
+    );
   }
 }
 
@@ -791,7 +838,7 @@ class _StationFace extends StatelessWidget {
             child: StationArt(station: id, hash: s['banner'], width: double.infinity, height: 220, fallback: const SizedBox()),
           ),
         ),
-      Padding(
+      Positioned.fill(child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 28),
       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         pic == null
@@ -820,33 +867,27 @@ class _StationFace extends StatelessWidget {
           ]),
         ),
         const SizedBox(height: 6),
-        Text(s['call_sign'] ?? '', style: caps(11, color: boneFaint, spacing: 0.14)),
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(frequency(id).toStringAsFixed(1), style: mono(15, color: bone)),
+          const SizedBox(width: 10),
+          Text(s['call_sign'] ?? '', style: caps(11, color: boneFaint, spacing: 0.14)),
+        ]),
         const SizedBox(height: 8),
-        Wrap(alignment: WrapAlignment.center, spacing: 2, children: [
+        Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, spacing: 2, children: [
           for (final (label, act) in <(String, VoidCallback)>[
             ('THE PAGE', () => openPage(context, s, radio)),
-            ('WATCH BILL', () => pyrateSheet(context, WatchBill(station: s))),
-            ('FLOCK', () => pyrateSheet(context, const FlockSheet())),
-            if (isTuned) ('TAPE IT', () => tapeIt(context)),
             if (s['pocket'] != true) ('PASS IT ON', () => shareStation(s)),
             if ((s['tip'] ?? '').toString().isNotEmpty) ('TIP', () => tipStation(context, s['tip'], name: (s['name'] ?? 'the station').toString())),
           ])
             TextButton(
               onPressed: act,
-              style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8), minimumSize: const Size(0, 30)),
+              style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10), minimumSize: const Size(0, 40)),
               child: Text(label, style: caps(9.5, color: boneFaint, spacing: 0.16)),
             ),
           IconButton(
-            tooltip: 'Lights out',
-            visualDensity: VisualDensity.compact,
-            icon: Icon(radio.sleepAt == null ? Icons.bedtime_outlined : Icons.bedtime, size: 16, color: radio.sleepAt == null ? boneGhost : bone),
-            onPressed: () => sleepSheet(context, radio),
-          ),
-          IconButton(
-            tooltip: 'Heard tonight',
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.history, size: 16, color: boneGhost),
-            onPressed: () => historySheet(context, radio),
+            tooltip: 'More for this station',
+            icon: Icon(Icons.more_horiz, size: 20, color: radio.sleepAt == null ? boneFaint : bone),
+            onPressed: () => pyrateSheet(context, _StationMore(radio: radio, s: s, tuned: isTuned)),
           ),
         ]),
         const SizedBox(height: 14),
@@ -883,7 +924,7 @@ class _StationFace extends StatelessWidget {
         ),
         Text('${s['aboard'] ?? 0} ABOARD', style: caps(11, color: boneFaint, spacing: 0.2)),
       ]),
-      ),
+      )),
     ]);
   }
 }
@@ -1136,7 +1177,7 @@ class _ColoursPageState extends State<ColoursPage> {
             title: Text('A passphrase on top of the words', style: serif(14, color: boneFaint, italic: true)),
             children: [
               Text('With a passphrase, the 24 words alone open a different, empty station, so a photograph of them gives nothing away and words given up under force open that one instead. Lose the passphrase and the station is lost with it.',
-                  style: serif(13, color: boneGhost, italic: true)),
+                  style: serif(13, color: boneFaint, italic: true)),
               TextField(controller: pass, obscureText: true, style: mono(12, color: bone), decoration: field('Passphrase (optional)'),
                   enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
             ],
@@ -1146,20 +1187,20 @@ class _ColoursPageState extends State<ColoursPage> {
         StartShapePicker(shape: shape),
         Row(children: [
           Switch(value: pocket, onChanged: (v) => setState(() => pocket = v), activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel),
-          Flexible(child: Text('A pocket station for listeners you invite', style: mono(11))),
+          Flexible(child: Text('A pocket station for listeners you invite', style: serif(15, color: boneDim))),
         ]),
         if (pocket)
           Text('It never shows on the Log. Whoever holds an invitation can find it, hear it and carry it; nobody else can tell it exists.',
               style: serif(13, color: boneFaint, italic: true)),
         const SizedBox(height: 10),
         Text('All of it can change later. Once it is set, the station keeps to it for as long as anyone carries it.',
-            style: serif(13, color: boneGhost, italic: true)),
+            style: serif(13, color: boneFaint, italic: true)),
         const SizedBox(height: 18),
-        Row(children: [button(raising ? 'RAISING' : 'RAISE COLOURS', raising ? null : raise)]),
+        Row(children: [LeadButton(label: raising ? 'Raising' : 'Raise colours', onPressed: raising ? null : raise)]),
         if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: serif(14, color: bone, italic: true))),
         const SizedBox(height: 28),
         Text('Your phone hands its broadcasts to the network along a chain of other nodes, so the first node to show them is never yours. Listening goes through two hops. One sees who is asking, the other what is asked for, and neither sees both.',
-            style: serif(13, color: boneGhost, italic: true)),
+            style: serif(13, color: boneFaint, italic: true)),
         const SizedBox(height: 34),
         Text('TAKE BACK A STATION', style: carved(14)),
         const SizedBox(height: 8),
@@ -1219,7 +1260,7 @@ class _ColoursPageState extends State<ColoursPage> {
           onChanged: (v) => setState(() => Native.call({'cmd': 'art_kept_only', 'value': v})),
           activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel,
         ),
-        Flexible(child: Text('Show art only for stations I keep', style: mono(11))),
+        Flexible(child: Text('Show art only for stations I keep', style: serif(15, color: boneDim))),
       ]),
       const SizedBox(height: 26),
       Text('MATURE AND EXPLICIT', style: carved(14)),
@@ -1232,7 +1273,7 @@ class _ColoursPageState extends State<ColoursPage> {
           onChanged: (v) => setState(() => pref('hide_mature', v)),
           activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel,
         ),
-        Flexible(child: Text('Hide mature stations', style: mono(11))),
+        Flexible(child: Text('Hide mature stations', style: serif(15, color: boneDim))),
       ]),
       Row(children: [
         Switch(
@@ -1240,11 +1281,10 @@ class _ColoursPageState extends State<ColoursPage> {
           onChanged: (v) => setState(() => pref('show_explicit', v)),
           activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel,
         ),
-        Flexible(child: Text('Show explicit stations', style: mono(11))),
+        Flexible(child: Text('Show explicit stations', style: serif(15, color: boneDim))),
       ]),
       const SizedBox(height: 26),
-      const DrawerLantern(),
-      const SizedBox(height: 26),
+      if (Platform.isAndroid) ...[const DrawerLantern(), const SizedBox(height: 26)],
       ShipPapers(radio: widget.radio),
       const SizedBox(height: 26),
       Text('THE HOLD', style: carved(14)),
@@ -1533,7 +1573,7 @@ class _DrawerLanternState extends State<DrawerLantern> {
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('THE DRAWER LANTERN', style: carved(14)),
         const SizedBox(height: 8),
-        Text('An old phone in a drawer can keep a share of the fleet afloat all day. Leave it on a charger and Wi-Fi, and it carries sealed sound for whoever asks, with the screen off. It never learns what any of it is. Point its microphone out of a window and go on air, and it is a window station too.',
+        Text('An old phone in a drawer can keep a share of the fleet afloat all day. Leave it on a charger and Wi-Fi, and it carries sealed sound for whoever asks, with the screen off. It never learns what any of it is.',
             style: serif(14, color: boneFaint, italic: true)),
         Row(children: [
           Switch(
@@ -1544,7 +1584,7 @@ class _DrawerLanternState extends State<DrawerLantern> {
             }),
             activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel,
           ),
-          Flexible(child: Text('Keep a Lantern on this phone', style: mono(11))),
+          Flexible(child: Text('Keep a Lantern on this phone', style: serif(15, color: boneDim))),
         ]),
         if (on) Wrap(children: [for (final n in [4, 16, 64, 128]) sizeChip(n)]),
       ]);

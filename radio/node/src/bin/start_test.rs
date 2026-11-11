@@ -14,8 +14,10 @@ fn main() -> anyhow::Result<()> {
     let n = Node::start(Config { dir, quota: 1 << 30, lantern: false, bootstrap: vec![], public_dns: false, private, ballast: 0, carry_all: false, release_keys: vec![] })?;
     n.call(&json!({ "cmd": "lan", "value": true }));
     if a[1] == "keeper" {
-        let id = n.call(&json!({ "cmd": "raise", "name": "Quick", "about": "a test" }))["id"].as_str().unwrap().to_string();
-        n.call(&json!({ "cmd": "add_track", "station": id, "path": a[3], "title": "Tone", "by": "Test" }));
+        let name = a.get(4).map(String::as_str).unwrap_or("Quick");
+        let about = a.get(5).map(String::as_str).unwrap_or("a test");
+        let id = n.call(&json!({ "cmd": "raise", "name": name, "about": about }))["id"].as_str().unwrap().to_string();
+        n.call(&json!({ "cmd": "add_track", "station": id, "path": a[3], "title": a.get(6).map(String::as_str).unwrap_or("Tone"), "by": a.get(7).map(String::as_str).unwrap_or("Test") }));
         println!("{id}");
         loop {
             std::thread::sleep(Duration::from_secs(60));
