@@ -925,7 +925,10 @@ impl Inner {
         if said_carrier && !self.dark && now.saturating_sub(self.last_harbour.load(std::sync::atomic::Ordering::Relaxed)) > 120_000 {
             // A Lantern running its own relay names it by its public address (PYRATE_RELAY_URL),
             // even while it reaches it from inside by another.
-            let own = std::env::var("PYRATE_RELAY_URL").ok().filter(|_| std::env::var_os("PYRATE_RELAY_LOCAL").is_some() && self.endpoint.addr().relay_urls().next().is_some());
+            // Only while it really is homed there: a note naming a relay this node is not on
+            // would send every phone to a door that does not open.
+            let local = std::env::var("PYRATE_RELAY_LOCAL").ok().and_then(|u| u.parse::<iroh::RelayUrl>().ok());
+            let own = std::env::var("PYRATE_RELAY_URL").ok().filter(|_| local.is_some() && self.endpoint.addr().relay_urls().next() == local.as_ref());
             if let Some(relay) = own.or_else(|| self.endpoint.addr().relay_urls().next().map(|u| u.to_string())) {
                 self.last_harbour.store(now, std::sync::atomic::Ordering::Relaxed);
                 let note = Gossip::harbour(&self.secret, &relay, now);
@@ -1623,6 +1626,9 @@ impl Node {
                 let ep2 = ep.clone();
                 tokio::spawn(async move {
                     if tokio::time::timeout(Duration::from_secs(15), ep2.online()).await.is_err() {
+                        // What each of our relays said, for whoever reads the log.
+                        use iroh::Watcher;
+                        say(&format!("our relays, after fifteen seconds: {:?}", { let mut w = ep2.home_relay_status(); w.get() }));
                         for url in standby {
                             let _ = ep2.insert_relay(url.clone(), Arc::new(iroh::RelayConfig::from(url))).await;
                         }
