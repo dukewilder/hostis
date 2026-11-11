@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=ef115538b3';
+import init, { Radio } from './pkg/pyrate_browser.js?v=46c43103f5';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -13,7 +13,7 @@ const EMBED = document.documentElement.classList.contains('embed');
 // flock goes straight to an open player, the same set served where no one owns it (IPFS, a
 // Lantern). 'open' is that copy: the whole Log, the chatter and the colours.
 const SCOPE = "harbour";
-const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeie6pzegim3zwpwh4f7344qaen3sv46jlig4vgpoript4le2memrpi.ipfs.inbrowser.link/", "https://bafybeie6pzegim3zwpwh4f7344qaen3sv46jlig4vgpoript4le2memrpi.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeie6pzegim3zwpwh4f7344qaen3sv46jlig4vgpoript4le2memrpi/"];
+const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeiegiftlyydvzpmcg4agazx3qm75rfqo6jdmy56ddurnuxlgg5cklm.ipfs.inbrowser.link/", "https://bafybeiegiftlyydvzpmcg4agazx3qm75rfqo6jdmy56ddurnuxlgg5cklm.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeiegiftlyydvzpmcg4agazx3qm75rfqo6jdmy56ddurnuxlgg5cklm/"];
 const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
 const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
 const lastId = () => { if (SHARED) return ''; try { return sessionStorage.getItem('pyrate.cur') || '' } catch (e) { return '' } };
@@ -21,10 +21,15 @@ const passedId = () => { const id = location.hash.slice(1); return /^[0-9a-f]{64
 const inSet = s => !HOSTIS_ONLY || isHarbour(s.id);
 // The open player's fixed name if it answers within a few seconds, since a browser keeps what it
 // keeps there from one release to the next; otherwise whichever other copy answers first.
-async function openPlayer() {
+// A copy that checks every file against its IPFS name in the visitor's own browser (inbrowser.link),
+// or a test build's own. Other gateways serve whatever they are given, unchecked.
+const checked = u => /\.inbrowser\.link\//.test(u) || /^http:\/\/(127\.0\.0\.1|localhost)[:/]/.test(u);
+// `secret`: the link carries an invitation or a flock, so it goes only to a checked copy.
+async function openPlayer(secret) {
+  const list = secret ? OPEN_PLAYERS.filter(checked) : OPEN_PLAYERS;
   const ping = (u, ms) => fetch(u + 'favicon.png', { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(ms) }).then(() => u);
-  try { return await ping(OPEN_PLAYERS[0], 4000) } catch (e) { }
-  try { return await Promise.any(OPEN_PLAYERS.slice(1).map(u => ping(u, 3500))) } catch (e) { return OPEN_PLAYERS[0] }
+  try { return await ping(list[0], 4000) } catch (e) { }
+  try { return await Promise.any(list.slice(1).map(u => ping(u, 3500))) } catch (e) { return list[0] }
 }
 // A link for anything that is not HOSTIS's own leaves this copy before it is read: the part
 // after the # never reaches a server, and this page never shows, names or plays what it holds.
@@ -33,7 +38,7 @@ function handOff() {
   const h = location.hash; if (!HOSTIS_ONLY || EMBED || !foreign(h)) return false;
   history.replaceState(null, '', location.pathname + location.search);
   document.documentElement.classList.add('leaving');
-  openPlayer().then(u => location.replace(u + h));
+  openPlayer(/pocket=|flock=/.test(h)).then(u => location.replace(u + h));
   return true;
 }
 const RELAYS = "";
@@ -82,8 +87,10 @@ function deviceKey() {
     };
   });
 }
+// With no device key there is nothing to seal under, and nothing is sealed: the caller keeps
+// the secret for the tab's life only, never in lasting storage in the clear.
 async function dseal(text) {
-  const k = await deviceKey(); if (!k) return text;
+  const k = await deviceKey(); if (!k) return null;
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, new TextEncoder().encode(text)));
   return JSON.stringify({ d: 1, iv: b64(iv), ct: b64(ct) });
@@ -95,7 +102,21 @@ async function dopen(text) {
   const k = await deviceKey(); if (!k) return null;
   try { return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.iv) }, k, unb64(o.ct))) } catch (e) { return null }
 }
-async function keepSealed(k, text) { store(k, await dseal(text)) }
+let unsealable = false;
+async function keepSealed(k, text) {
+  const sealedText = SHARED ? text : await dseal(text);
+  if (sealedText !== null) { store(k, sealedText); return }
+  try { sessionStorage.setItem(k, text) } catch (e) { }
+  try { localStorage.removeItem(k) } catch (e) { }
+  if (!unsealable) { unsealable = true; tabOnlyNote() }
+}
+// A secret kept for the tab alone, when this browser could not seal it.
+const keptAnywhere = k => store(k) ?? (() => { try { return sessionStorage.getItem(k) } catch (e) { return null } })();
+function tabOnlyNote() {
+  const n = document.getElementById('st-locknote'); if (!n) return;
+  n.textContent = 'This browser cannot lock keys away, so your station\u2019s key is kept only until this tab closes. Your 24 words bring it back.';
+  const f = document.getElementById('st-safer'); if (f) f.open = true;
+}
 
 // Every harbour this tab has ever been handed, kept so a returning listener never loses a
 // door even if a later build ships a different set. Dead entries just fail to resolve.
@@ -484,6 +505,9 @@ async function show(s) {
   // browser. The tab alone remembers it, for a reload, and forgets it when it closes.
   else { if (location.hash) history.replaceState(null, '', location.pathname + location.search); if (!SHARED) try { sessionStorage.setItem('pyrate.cur', s.id) } catch (e) { } }
   radio.tune(s.id);
+  // The stations either side on the dial come aboard ahead, so turning to one plays at once.
+  const shown = stations.filter(inSet), i = shown.findIndex(x => x.id === s.id);
+  if (i >= 0 && shown.length > 1) for (const d of [1, -1]) { const n = shown[(i + d + shown.length) % shown.length]; if (n.id !== s.id) try { radio.warm(n.id) } catch (e) { } }
   nowPlaying(); page(true); chatter();
 }
 
@@ -661,7 +685,8 @@ $('askfor').onclick = () => {
 $('asksend').onclick = () => { speak('request', $('asknote').value.trim(), $('asktrack').value); $('asknote').value = ''; $('askbox').hidden = true };
 setInterval(() => { if (!$('chatroom').hidden || !$('chatjoin').hidden) chatter() }, 2000);
 // A hail: up to twenty seconds of the listener's voice, sealed in this tab so that only the
-// station's own keys open it. It passes through the room live and nobody keeps it.
+// station's own keys open it. It passes through the room live; the room keeps none of it, though the
+// station may keep what it opens.
 // A hail goes to the station it was started for. Switching station mid-hail drops it, and the
 // microphone is let go however the hail ends.
 let hailRec = null, hailFor = null, hailDrop = false;
@@ -1073,12 +1098,12 @@ async function boot() {
   $('signal').textContent = 'Connecting';
   try { await init() } catch (e) { $('name').textContent = 'This browser cannot run the radio'; return }
   // The sealed secrets come back before anything uses them.
-  try { pocketsMem = JSON.parse(await dopen(store('pyrate.pockets') || '[]') || '[]') } catch (e) { pocketsMem = [] }
+  try { pocketsMem = JSON.parse(await dopen(keptAnywhere('pyrate.pockets') || '[]') || '[]') } catch (e) { pocketsMem = [] }
   if (!sealed() && !tabKeys()) { const m = store('pyrate.mine'); if (m) { const t = await dopen(m); try { const l = validKeys(JSON.parse(t || '[]')); if (l.length) { mineMem = l; if (t === m) keepSealed('pyrate.mine', m) } } catch (e) { } } }
   // The counting key is replaced every thirty days, so a key taken from this browser cannot
   // tie its tokens back further than that.
   let key = null;
-  try { const t = JSON.parse(await dopen(store('pyrate.token') || '') || 'null'); if (t && /^[0-9a-f]{64}$/.test(t.k) && Date.now() - t.at < 30 * 86400e3) key = t.k } catch (e) { }
+  try { const t = JSON.parse(await dopen(keptAnywhere('pyrate.token') || '') || 'null'); if (t && /^[0-9a-f]{64}$/.test(t.k) && Date.now() - t.at < 30 * 86400e3) key = t.k } catch (e) { }
   if (!key) { const b = new Uint8Array(32); crypto.getRandomValues(b); key = [...b].map(x => x.toString(16).padStart(2, '0')).join(''); keepSealed('pyrate.token', JSON.stringify({ k: key, at: Date.now() })) }
   // No relay answering is not the end: the set says so and tries again, more slowly each time.
   for (let tries = 0; !radio; tries++) {
@@ -1138,7 +1163,10 @@ if (document.documentElement.classList.contains('embed') && parent !== window) {
   new ResizeObserver(tell).observe(document.body); addEventListener('load', tell);
 }
 document.querySelectorAll('a.openlink').forEach(a => { if (!a.id) a.href = OPEN_PLAYERS[0] });
-if (SHARED) { const m = location.pathname.match(/^\/ipfs\/([a-z2-7]{20,})\//); $('sharedgo').href = m ? 'https://' + m[1] + '.ipfs.dweb.link/' + location.hash : OPEN_PLAYERS[0] || '#'; $('sharednote').hidden = false }
+// The studio keeps a station's key on this origin: warn before anyone does so on a copy served
+// unchecked, and point to one the browser checks.
+if (SCOPE === 'open' && !EMBED && !checked(location.origin + '/')) { const c = OPEN_PLAYERS.find(checked); if (c) { $('st-checked').href = c; $('st-unchecked').hidden = false } }
+if (SHARED) { const m = location.pathname.match(/^\/ipfs\/([a-z2-7]{20,})\//); $('sharedgo').href = m ? 'https://' + m[1] + '.ipfs.inbrowser.link/' + location.hash : OPEN_PLAYERS[0] || '#'; $('sharednote').hidden = false }
 if (EMBED) { scale(); const p = passedId(); dormant(p && isHarbour(p) ? HARBOUR_STATIONS.find(h => h.id === p) : HARBOUR_STATIONS[0]); $('signal').textContent = '' }
 else booting = boot();
 // In the page, the radio's engine loads from this site while the page is read, so Listen
