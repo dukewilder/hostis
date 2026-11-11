@@ -1856,7 +1856,19 @@ impl Node {
             // outside the tunnel. It reaches peers from its own sealed book, which every signed
             // harbour note it has heard filled in.
             if lantern && !dark {
-                b = b.address_lookup(iroh::address_lookup::PkarrPublisher::n0_dns());
+                // A Lantern homed on its own relay by its inside address (PYRATE_RELAY_LOCAL)
+                // publishes the public one (PYRATE_RELAY_URL) in its place: a record naming
+                // 127.0.0.1 would send every phone and browser that looks it up to itself.
+                let swap = relay_local.clone().zip(own_relay.clone());
+                let filter = iroh::address_lookup::AddrFilter::new(move |addrs| {
+                    std::borrow::Cow::Owned(
+                        addrs.iter().filter(|a| a.is_relay()).map(|a| match (a, &swap) {
+                            (iroh::TransportAddr::Relay(u), Some((local, public))) if u == local => iroh::TransportAddr::Relay(public.clone()),
+                            _ => a.clone(),
+                        }).collect(),
+                    )
+                });
+                b = b.address_lookup(iroh::address_lookup::PkarrPublisher::n0_dns().addr_filter(filter));
             }
             if public_dns {
                 b = b.dns_resolver(

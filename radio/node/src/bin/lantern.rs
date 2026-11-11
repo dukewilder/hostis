@@ -20,6 +20,22 @@ use pyrate_node::{Config, Node, now_ms};
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
+    // An unknown flag stops the Lantern before it starts: a mistyped or test flag must never
+    // bring up a stray node on whatever network the shell happens to be on.
+    const VALUED: &[&str] = &["--dir", "--quota-gb", "--bootstrap", "--seed", "--http", "--open-hails", "--relay", "--release-keys", "--words", "--withdraw"];
+    const BARE: &[&str] = &["--carry-own", "--public-dns", "--scuttle", "--web-all"];
+    let mut i = 1;
+    while i < args.len() {
+        let a = args[i].as_str();
+        if VALUED.contains(&a) {
+            i += 2;
+        } else if BARE.contains(&a) {
+            i += 1;
+        } else {
+            eprintln!("lantern: {a} is not a flag this Lantern knows. Flags: {} {}. See LANTERN.md.", VALUED.join(" "), BARE.join(" "));
+            std::process::exit(2);
+        }
+    }
     let get = |flag: &str| args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1)).cloned();
     let dir = PathBuf::from(get("--dir").unwrap_or_else(|| "lantern-data".into()));
     let quota = get("--quota-gb").and_then(|q| q.parse::<u64>().ok()).unwrap_or(20) * 1_000_000_000;
