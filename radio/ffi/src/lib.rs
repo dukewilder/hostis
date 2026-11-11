@@ -77,6 +77,8 @@ pub extern "C" fn pyrate_start(dir: *const c_char, bootstrap: *const c_char) -> 
 
 fn start(dir: *const c_char, bootstrap: *const c_char) -> i32 {
     let _one = STARTING.lock().unwrap_or_else(|e| e.into_inner());
+    // The app on a computer keeps no log of stations or peers: a desktop's own logs outlive it.
+    pyrate_node::QUIET.store(std::env::var_os("PYRATE_LOG").is_none(), std::sync::atomic::Ordering::Relaxed);
     if NODE.get().is_some() {
         return 1;
     }

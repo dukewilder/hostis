@@ -55,6 +55,48 @@ function store(k, v) {
   try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v) } catch (e) { return null }
 }
 
+// Secrets this browser keeps (a station's deputy key, pocket invitations, the counting key) are
+// sealed under a key the browser itself holds in IndexedDB and will never hand to a script as
+// bytes. A copy of the profile's files, or anything reading its storage, finds only sealed
+// text. Code running in this page could still ask the browser to open them, as it could ask
+// for anything on the page.
+const b64 = u => btoa(String.fromCharCode(...u)), unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+let devKey = null;
+function deviceKey() {
+  if (SHARED || !window.indexedDB || !crypto.subtle) return Promise.resolve(null);
+  return devKey ??= new Promise(done => {
+    const rq = indexedDB.open('pyrate', 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore('keys');
+    rq.onerror = () => done(null);
+    rq.onsuccess = () => {
+      const db = rq.result, get = db.transaction('keys').objectStore('keys').get('device');
+      get.onerror = () => done(null);
+      get.onsuccess = async () => {
+        if (get.result) return done(get.result);
+        try {
+          const k = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+          const put = db.transaction('keys', 'readwrite').objectStore('keys').put(k, 'device');
+          put.onsuccess = () => done(k); put.onerror = () => done(null);
+        } catch (e) { done(null) }
+      };
+    };
+  });
+}
+async function dseal(text) {
+  const k = await deviceKey(); if (!k) return text;
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, new TextEncoder().encode(text)));
+  return JSON.stringify({ d: 1, iv: b64(iv), ct: b64(ct) });
+}
+// Plain text from an older build comes back as it is, and is sealed the next time it is kept.
+async function dopen(text) {
+  let o; try { o = JSON.parse(text) } catch (e) { return text }
+  if (!o || o.d !== 1) return text;
+  const k = await deviceKey(); if (!k) return null;
+  try { return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.iv) }, k, unb64(o.ct))) } catch (e) { return null }
+}
+async function keepSealed(k, text) { store(k, await dseal(text)) }
+
 // Every harbour this tab has ever been handed, kept so a returning listener never loses a
 // door even if a later build ships a different set. Dead entries just fail to resolve.
 // Only well-formed doors are kept, this build's own first, and at most twenty-four.
@@ -523,12 +565,13 @@ $('flockleave').onclick = () => { clearInterval(flocking); flocking = null; radi
 const pockets = new Set();
 let wanted = null;
 const isPocket = s => !!s && (!!s.pocket || pockets.has(s.id));
-function savedPockets() { try { return JSON.parse(store('pyrate.pockets') || '[]') } catch (e) { return [] } }
+let pocketsMem = [];
+function savedPockets() { return pocketsMem }
 async function pocketJoin(link, open) {
   try {
     const id = await radio.pocket_join(link);
     pockets.add(id);
-    const all = savedPockets(); if (!all.includes(link)) { all.push(link); store('pyrate.pockets', JSON.stringify(all)) }
+    const all = savedPockets(); if (!all.includes(link)) { all.push(link); keepSealed('pyrate.pockets', JSON.stringify(all)) }
     if (open) { wanted = id; followLink() }
   } catch (e) { $('signal').textContent = 'That invitation did not open: ' + e }
 }
@@ -585,7 +628,7 @@ async function chart() {
 function view(c) { $('chart').hidden = !c; $('rows').hidden = c; $('vchart').classList.toggle('on', c); $('vlist').classList.toggle('on', !c); $('vchart').setAttribute('aria-pressed', c); $('vlist').setAttribute('aria-pressed', !c); if (c) chart() }
 $('vlist').onclick = () => view(false); $('vchart').onclick = () => view(true);
 
-// ---- Chatter: talk in the station's room, kept by nobody --------------------------------
+// ---- Chatter: talk in the station's room, kept on no disk by the radio --------------------------------
 const myName = () => store('pyrate.name') || '';
 let chatKey = '';
 function chatter() {
@@ -637,7 +680,7 @@ $('hail').onclick = async () => {
     const dropped = hailDrop; hailRec = null; hailFor = null; hailDrop = false; $('hail').textContent = 'Hail the keeper';
     if (dropped) return;
     const blob = new Blob(parts, { type: (rec.mimeType || type).split(';')[0] }), bytes = new Uint8Array(await blob.arrayBuffer());
-    try { await radio.chat_hail(to, bytes, blob.type, myName()); $('chatwho').textContent = 'Your hail is on its way. Only the keeper can hear it, and nobody keeps it.' }
+    try { await radio.chat_hail(to, bytes, blob.type, myName()); $('chatwho').textContent = 'Your hail is on its way, sealed so only the keeper can open it. What the keeper does with it after is theirs.' }
     catch (e) { $('chatwho').textContent = String(e) }
   };
   rec.start(); $('hail').textContent = 'Send the hail'; setTimeout(() => rec.state === 'recording' && rec.stop(), 20000);
@@ -747,6 +790,8 @@ $('mtake').onclick = () => {
   for (const line of $('mtext').value.split('\n')) { const t = (line.trim().split(/\s+/)[0] || '').toLowerCase(); if (/^[0-9a-f]{64}$/.test(t) && !m.has(t)) { m.add(t); n++ } }
   setMarooned(m); $('mnote').textContent = n + ' taken aboard.'; refresh();
 };
+$('sw-direct').checked = store('pyrate.direct') === '1';
+$('sw-direct').onchange = () => { store('pyrate.direct', $('sw-direct').checked ? '1' : '0'); radio?.set_direct_ok($('sw-direct').checked) };
 for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-explicit', 'pyrate.show_explicit', '1'], ['sw-art', 'pyrate.hide_art', '0']]) {
   const el = $(id); el.checked = on === '1' ? store(key) === '1' : store(key) !== '1';
   el.onchange = () => { store(key, (el.checked ? on : (on === '1' ? '0' : '1'))); forgetPics(); rowsKey = ''; refresh(); if (cur) show(cur) };
@@ -755,7 +800,7 @@ $('forget').onclick = () => {
   if (!confirm('Forget everything this browser keeps for the radio? Pockets go too, unless you still have their invitations. A station raised here stays on the air, but this browser can speak for it again only from its 24 words.')) return;
   try { for (const k of Object.keys(localStorage)) if (k.startsWith('pyrate.')) localStorage.removeItem(k) } catch (e) { }
   try { for (const k of Object.keys(sessionStorage)) if (k.startsWith('pyrate.')) sessionStorage.removeItem(k) } catch (e) { }
-  try { for (const k of Object.keys(sessionStorage)) if (k.startsWith('pyrate.')) sessionStorage.removeItem(k) } catch (e) { }
+  try { indexedDB.deleteDatabase('pyrate') } catch (e) { }
   location.replace(location.pathname + location.search);
 };
 $('mclear').onclick = () => { setMarooned(new Set()); $('mnote').textContent = 'Every station is back in the Log.'; refresh() };
@@ -770,7 +815,7 @@ $('mclear').onclick = () => { setMarooned(new Set()); $('mnote').textContent = '
 // when it closes. The 24 words bring a station back in every case.
 let mineMem = null, mineSeal = null;
 const tabKeys = () => { if (SHARED) return false; try { return sessionStorage.getItem('pyrate.mine') !== null } catch (e) { return false } };
-const sealed = () => { try { const o = JSON.parse(store('pyrate.mine') || 'null'); return o && o.ct ? o : null } catch (e) { return null } };
+const sealed = () => { try { const o = JSON.parse(store('pyrate.mine') || 'null'); return o && o.ct && o.salt ? o : null } catch (e) { return null } };
 const validKeys = l => Array.isArray(l) ? l.filter(k => /^[0-9a-f]{64}$/.test(k.id) && /^[0-9a-f]{64}$/.test(k.deputy)) : [];
 const kept = () => {
   if (mineMem) return mineMem;
@@ -781,9 +826,8 @@ function keep(l) {
   mineMem = l; const s = JSON.stringify(l);
   if (mineSeal) { sealWith(mineSeal, s).then(o => store('pyrate.mine', JSON.stringify(o))); return }
   if (tabKeys()) { try { sessionStorage.setItem('pyrate.mine', s) } catch (e) { } return }
-  store('pyrate.mine', s);
+  keepSealed('pyrate.mine', s);
 }
-const b64 = u => btoa(String.fromCharCode(...u)), unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 async function sealKey(pass, salt) {
   const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
   return { salt, key: await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 600000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']) };
@@ -863,7 +907,7 @@ $('st-lockit').onclick = async () => {
 $('st-tabonly').onchange = () => {
   const l = kept(); mineSeal = null;
   if ($('st-tabonly').checked) { try { sessionStorage.setItem('pyrate.mine', JSON.stringify(l)) } catch (e) { } unstore('pyrate.mine'); $('st-locknote').textContent = 'The key goes when this tab closes. The 24 words bring it back.' }
-  else { try { sessionStorage.removeItem('pyrate.mine') } catch (e) { } store('pyrate.mine', JSON.stringify(l)); $('st-locknote').textContent = 'The key stays in this browser.' }
+  else { try { sessionStorage.removeItem('pyrate.mine') } catch (e) { } keepSealed('pyrate.mine', JSON.stringify(l)); $('st-locknote').textContent = 'The key stays in this browser, sealed under a key the browser holds.' }
 };
 $('raisego').onclick = () => $('studio').scrollIntoView({ behavior: 'smooth', block: 'start' });
 $('st-raise').onclick = async () => {
@@ -1026,8 +1070,14 @@ async function boot() {
   scale();
   $('signal').textContent = 'Coming aboard';
   try { await init() } catch (e) { $('name').textContent = 'This browser cannot run the radio'; return }
-  let key = store('pyrate.token');
-  if (!/^[0-9a-f]{64}$/.test(key || '')) { const b = new Uint8Array(32); crypto.getRandomValues(b); key = [...b].map(x => x.toString(16).padStart(2, '0')).join(''); store('pyrate.token', key) }
+  // The sealed secrets come back before anything uses them.
+  try { pocketsMem = JSON.parse(await dopen(store('pyrate.pockets') || '[]') || '[]') } catch (e) { pocketsMem = [] }
+  if (!sealed() && !tabKeys()) { const m = store('pyrate.mine'); if (m) { const t = await dopen(m); try { const l = validKeys(JSON.parse(t || '[]')); if (l.length) { mineMem = l; if (t === m) keepSealed('pyrate.mine', m) } } catch (e) { } } }
+  // The counting key is replaced every thirty days, so a key taken from this browser cannot
+  // tie its tokens back further than that.
+  let key = null;
+  try { const t = JSON.parse(await dopen(store('pyrate.token') || '') || 'null'); if (t && /^[0-9a-f]{64}$/.test(t.k) && Date.now() - t.at < 30 * 86400e3) key = t.k } catch (e) { }
+  if (!key) { const b = new Uint8Array(32); crypto.getRandomValues(b); key = [...b].map(x => x.toString(16).padStart(2, '0')).join(''); keepSealed('pyrate.token', JSON.stringify({ k: key, at: Date.now() })) }
   // No relay answering is not the end: the set says so and tries again, more slowly each time.
   for (let tries = 0; !radio; tries++) {
     try { radio = await Radio.start(rememberHarbours(), key, RELAYS) } catch (e) {
@@ -1038,6 +1088,7 @@ async function boot() {
     }
   }
   $('name').textContent = '';
+  radio.set_direct_ok(store('pyrate.direct') === '1');
   bootAt = Date.now();
   if (!HOSTIS_ONLY) for (const l of savedPockets()) pocketJoin(l, false);
   if (invite) pocketJoin(invite, true);

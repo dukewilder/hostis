@@ -140,13 +140,15 @@ struct Mine {
 const STEM_CHUNKS: usize = 40;
 const STEM_BYTES: usize = 3 * 1024 * 1024;
 
-/// What a tab asks an exit for. The order is the node's; a tab only sends `Token`.
+/// What a tab asks an exit for. The order is the node's (`node/src/hop.rs`).
 #[allow(dead_code)]
 #[derive(serde::Serialize)]
 enum Ask {
     Log { station: StationId, from: u64 },
     Chunk { station: StationId, hash: Hash },
     Token { station: StationId, hour: u64, token: [u8; 32], nonce: u64 },
+    Sealed { station: StationId, name: Hash },
+    Stem { station: StationId, entries: Vec<Vec<u8>>, chunks: Vec<(Hash, Vec<u8>)>, announce: Option<Announce> },
 }
 
 /// Chunks and pictures this tab has fetched, oldest out first.
@@ -217,6 +219,8 @@ struct Ship {
     listening: std::sync::atomic::AtomicBool,
     /// The first hop of this visit's private route.
     first_hop: Mutex<Option<EndpointId>>,
+    /// Off unless the listener turns it on: carriers asked directly when two hops fail.
+    direct_ok: std::sync::atomic::AtomicBool,
     /// Each station's clock, rebuilt only when its log grows: the player asks every second.
     clocks: Mutex<HashMap<StationId, (u64, Clock)>>,
     /// When each log was last played or synced, so the least used go first when trimming.
@@ -473,12 +477,60 @@ impl Ship {
         out
     }
 
+    /// Entries from a log, checked and appended. True as well when the station has struck.
+    fn take_entries(&self, station: StationId, raw: Vec<Vec<u8>>) -> (usize, bool) {
+        let mut added = 0;
+        let mut archives = self.archives.lock().unwrap();
+        let a = archives.entry(station).or_insert_with(|| Archive::new(station));
+        for b in raw {
+            let Ok(e) = SignedEntry::from_bytes(&b) else { break };
+            if e.entry.seq < a.len() {
+                continue;
+            }
+            if a.append(e).is_err() {
+                break;
+            }
+            added += 1;
+        }
+        if a.is_struck() {
+            archives.remove(&station);
+            drop(archives);
+            self.struck.lock().unwrap().insert(station);
+            self.log.lock().unwrap().remove(&station);
+            self.clocks.lock().unwrap().remove(&station);
+            return (added, true);
+        }
+        if a.len() == 0 {
+            archives.remove(&station);
+        }
+        (added, false)
+    }
+
     async fn sync(&self, station: StationId) -> Result<usize> {
         let pocket = self.pockets.lock().unwrap().get(&station).cloned();
         if let Some((key, hosts)) = pocket {
             return self.pocket_sync(station, key, hosts).await;
         }
+        // Two hops first, as the app does: the carrier that answers never sees this tab.
         let mut added = 0;
+        let mut private = false;
+        for _ in 0..3 {
+            let from = self.archives.lock().unwrap().get(&station).map(|a| a.len()).unwrap_or(0);
+            let Ok(Response::Entries(raw)) = self.ask_privately(&Ask::Log { station, from }).await else { continue };
+            private = true;
+            let got = raw.len();
+            let (n, struck) = self.take_entries(station, raw);
+            added += n;
+            if struck || got < 2000 {
+                break;
+            }
+        }
+        if private {
+            return Ok(added);
+        }
+        if !self.direct_ok.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(anyhow!("no two-hop route yet"));
+        }
         for node in self.carriers(&station) {
             loop {
                 let from = self.archives.lock().unwrap().get(&station).map(|a| a.len()).unwrap_or(0);
@@ -556,6 +608,33 @@ impl Ship {
         if let Some(b) = self.hold.lock().unwrap().get(hash) {
             return Ok(b);
         }
+        // A pocket's sound comes from its members, who know each other already: a route would
+        // hand a stranger at the exit the pocket's id.
+        let pocket = self.pockets.lock().unwrap().contains_key(station);
+        // Two hops first: two routes at once, a third if both fail. The exits see a sealed
+        // name and never this tab; the first hop sees this tab and never the name.
+        let name = pyrate_core::seal::name(hash);
+        let one = || async {
+            match self.ask_privately(&Ask::Sealed { station: *station, name }).await {
+                Ok(Response::Sealed(Some(sealed))) => pyrate_core::seal::unseal(hash, &sealed).ok_or_else(|| anyhow!("unopened")),
+                _ => Err(anyhow!("no answer")),
+            }
+        };
+        let mut tries: n0_future::FuturesUnordered<_> = (0..if pocket { 0 } else { 2 }).map(|_| Box::pin(one())).collect();
+        let mut started = if pocket { 3 } else { 2 };
+        while let Some(r) = n0_future::StreamExt::next(&mut tries).await {
+            if let Ok(b) = r {
+                self.hold.lock().unwrap().put(*hash, b.clone());
+                return Ok(b);
+            }
+            if started < 3 {
+                tries.push(Box::pin(one()));
+                started += 1;
+            }
+        }
+        if !pocket && !self.direct_ok.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(anyhow!("no two-hop route answered"));
+        }
         // Carriers that failed lately go to the back; the rest are asked two at a time, so
         // one dead carrier costs a chunk no more than the other's answer takes.
         let now = self.now();
@@ -627,6 +706,7 @@ impl Ship {
         self.tokens_sent.lock().unwrap().retain(|k, _| live.contains(k) || keep.contains(k));
     }
 
+    #[allow(dead_code)]
     async fn broadcast(&self, g: &Gossip) {
         let tx = self.tx.lock().unwrap().clone();
         if let (Some(tx), Ok(bytes)) = (tx, postcard::to_stdvec(g)) {
@@ -686,6 +766,7 @@ impl Ship {
                 let ours = self.archives.lock().unwrap().get(&s).map(|x| x.len()).unwrap_or(0);
                 (head > ours).then_some(s)
             }
+            Gossip::Carried { .. } => None,
             Gossip::Carrier { station, node, head } => {
                 // A claim for a station with no card here is dropped: junk ids grow nothing.
                 let pocket = self.pockets.lock().unwrap().contains_key(&station);
@@ -760,15 +841,15 @@ impl Ship {
             }
             return;
         }
+        // With no two-hop route the token is not sent at all: it would name the station from
+        // this tab. The hour is let go, and the next hour tries again.
         if self.token_privately(station, hour, token, nonce).await.is_err() {
-            // No second node to route through yet: the harbour hears it, as it would anyway.
-            self.broadcast(&g).await;
+            self.tokens_sent.lock().unwrap().remove(&station);
         }
     }
 
-    /// Sends the hourly token to an exit through a first hop. The first hop is drawn once a
-    /// visit; the exit afresh each hour, never the first hop.
-    async fn token_privately(&self, station: StationId, hour: u64, token: [u8; 32], nonce: u64) -> Result<()> {
+    /// The nodes a route can be drawn from: the harbour and every carrier heard lately.
+    fn route_nodes(&self) -> Vec<EndpointId> {
         let mut nodes: Vec<EndpointId> = self.harbour.clone();
         let now = self.now();
         for l in self.log.lock().unwrap().values() {
@@ -777,6 +858,14 @@ impl Ship {
         nodes.retain(|n| *n != self.ep.id());
         nodes.sort();
         nodes.dedup();
+        nodes
+    }
+
+    /// One request two hops away. The first hop is drawn once a visit and sees this tab but
+    /// not what it asks; the exit, drawn each time and never the first hop, sees what is asked
+    /// and not who by. Fewer than two nodes known, and nothing is sent.
+    async fn ask_privately(&self, ask: &Ask) -> Result<Response> {
+        let nodes = self.route_nodes();
         if nodes.len() < 2 {
             return Err(anyhow!("one node only"));
         }
@@ -789,17 +878,27 @@ impl Ship {
         };
         let exits: Vec<EndpointId> = nodes.into_iter().filter(|n| *n != first).collect();
         let exit = exits[pick(exits.len())];
-        let ask = postcard::to_stdvec(&Ask::Token { station, hour, token, nonce })?;
-        let (eph, ct, c) = pyrate_core::route::seal_to(exit.as_bytes(), &ask).ok_or_else(|| anyhow!("seal"))?;
+        let plain = postcard::to_stdvec(ask)?;
+        let (eph, ct, c) = pyrate_core::route::seal_to(exit.as_bytes(), &plain).ok_or_else(|| anyhow!("seal"))?;
         let blob = postcard::to_stdvec(&Hop::Sealed { eph, ct })?;
         let hop = postcard::to_stdvec(&Hop::Forward { next: *exit.as_bytes(), blob })?;
-        match self.ask(first, &Request::Hop(hop)).await? {
-            Response::Hop(raw) if pyrate_core::route::open_answer(&c, &raw).is_some() => {
-                say("counted aboard through two hops");
-                Ok(())
+        let raw = match timeout(Duration::from_secs(10), self.ask(first, &Request::Hop(hop))).await {
+            Ok(Ok(Response::Hop(raw))) => raw,
+            _ => {
+                // The first hop is gone or slow: the next request draws another.
+                *self.first_hop.lock().unwrap() = None;
+                return Err(anyhow!("no answer"));
             }
-            _ => Err(anyhow!("no answer")),
-        }
+        };
+        let open = pyrate_core::route::open_answer(&c, &raw).ok_or_else(|| anyhow!("unopened"))?;
+        Ok(postcard::from_bytes::<Response>(&open)?)
+    }
+
+    /// Sends the hourly token to an exit through a first hop.
+    async fn token_privately(&self, station: StationId, hour: u64, token: [u8; 32], nonce: u64) -> Result<()> {
+        self.ask_privately(&Ask::Token { station, hour, token, nonce }).await?;
+        say("counted aboard through two hops");
+        Ok(())
     }
 
     /// The card this tab flies for one of its stations, signed by the key it keeps.
@@ -873,6 +972,32 @@ impl Ship {
             }
             (out, hs)
         };
+        // Two hops out first: the first hop forwards a sealed blob it cannot read to a second
+        // node, which starts the stem. Neither learns both this tab and its station.
+        let first = self.stem_guard().or_else(|| self.harbour.first().copied());
+        let others: Vec<EndpointId> = self.route_nodes().into_iter().filter(|n| Some(*n) != first).collect();
+        if let (Some(g), false) = (first, others.is_empty()) {
+            let x = others[pick(others.len())];
+            let ask = Ask::Stem { station: id, entries: entries.clone(), chunks: chunks.clone(), announce: Some(announce.clone()) };
+            if let Some((eph, ct, c)) = postcard::to_stdvec(&ask).ok().and_then(|p| pyrate_core::route::seal_to(x.as_bytes(), &p)) {
+                let fwd = postcard::to_stdvec(&Hop::Sealed { eph, ct }).ok().and_then(|blob| postcard::to_stdvec(&Hop::Forward { next: *x.as_bytes(), blob }).ok());
+                if let Some(fwd) = fwd {
+                    if let Ok(Ok(Response::Hop(raw))) = timeout(Duration::from_secs(30), self.ask(g, &Request::Hop(fwd))).await {
+                        let took = pyrate_core::route::open_answer(&c, &raw).and_then(|p| postcard::from_bytes::<Response>(&p).ok());
+                        if matches!(took, Some(Response::Sealed(Some(_)))) {
+                            let mut mine = self.mine.lock().unwrap();
+                            if let Some(m) = mine.get_mut(&id) {
+                                m.unsent.retain(|h| !batch.contains(h));
+                                if m.unsent.is_empty() && !batch.is_empty() {
+                                    m.passed = raw_now();
+                                }
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
         let hop = match postcard::to_stdvec(&Hop::Stem { station: id, entries, chunks, announce: Some(announce), hops: 0 }) {
             Ok(h) => h,
             Err(_) => return false,
@@ -1173,6 +1298,7 @@ impl Radio {
             failed: Mutex::new(HashMap::new()),
             listening: std::sync::atomic::AtomicBool::new(false),
             first_hop: Mutex::new(None),
+            direct_ok: std::sync::atomic::AtomicBool::new(false),
             clocks: Mutex::new(HashMap::new()),
             touched: Mutex::new(HashMap::new()),
             struck: Mutex::new(HashSet::new()),
@@ -1221,6 +1347,7 @@ impl Radio {
                     _ => continue,
                 };
                 let Ok(g) = postcard::from_bytes::<Gossip>(&msg.content) else { continue };
+                let Some(g) = g.from_network(s2.now(), msg.delivered_from.as_bytes()) else { continue };
                 if let Some(st) = s2.on_gossip(g) {
                     if *s2.tuned.lock().unwrap() == Some(st) {
                         s2.sync_soon(st);
@@ -1367,6 +1494,11 @@ impl Radio {
     }
 
     /// A proof of work found before, as the page kept it. Checked before it is taken.
+    /// Whether carriers may be asked directly when two hops cannot be had.
+    pub fn set_direct_ok(&self, on: bool) {
+        self.ship.direct_ok.store(on, std::sync::atomic::Ordering::Relaxed);
+    }
+
     pub fn set_pow(&self, id: &str, n: f64) -> Result<bool, JsValue> {
         let st = StationId(unhex32(id).map_err(js)?);
         if !net::pow_ok(&st, n as u64) {
@@ -1729,9 +1861,10 @@ impl Radio {
                     let Ok(Event::Received(m)) = ev else { continue };
                     let Some(plain) = pyrate_core::pocket::open(&key, &m.content) else { continue };
                     let Ok(g) = postcard::from_bytes::<Gossip>(&plain) else { continue };
+                    let Some(g) = g.from_network(s2.now(), m.delivered_from.as_bytes()) else { continue };
                     let ok = match &g {
                         Gossip::Station(a) => a.station == st,
-                        Gossip::Carrier { station, .. } => *station == st,
+                        Gossip::Carrier { station, .. } | Gossip::Carried { station, .. } => *station == st,
                         Gossip::Aboard { station, .. } => *station == st,
                         Gossip::Harbour { .. } => true,
                     };

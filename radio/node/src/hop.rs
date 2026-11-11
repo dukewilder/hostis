@@ -63,6 +63,9 @@ pub(crate) enum Ask {
     Token { station: StationId, hour: u64, token: [u8; 32], nonce: u64 },
     /// A chunk by its sealed name: the exit passes it on unopened.
     Sealed { station: StationId, name: Hash },
+    /// A stem's cargo, sealed to the node that starts the stem: the first hop forwards a blob it
+    /// cannot read, so it never learns which station the device in front of it keeps.
+    Stem { station: StationId, entries: Vec<Vec<u8>>, chunks: Vec<(Hash, Vec<u8>)>, announce: Option<Announce> },
 }
 
 fn x_secret(seed: &[u8; 32]) -> x25519_dalek::StaticSecret {
@@ -117,8 +120,9 @@ impl Inner {
     /// with a hostile exit; a guard kept for weeks is either hostile from the start or never.
     /// After Tor's entry guards. Well-known Lanterns are passed over, as for the stem's guard.
     fn fetch_guard(&self, known: &[EndpointId]) -> Option<EndpointId> {
-        let path = self.cfg.dir.join("fetch-guard");
-        if let Some(g) = std::fs::read_to_string(&path).ok().and_then(|s| s.trim().parse::<EndpointId>().ok()) {
+        let old = self.cfg.dir.join("fetch-guard");
+        let held = self.hold.read_note(&self.cfg.dir, "fetch-guard", Some(&old)).and_then(|b| String::from_utf8(b).ok());
+        if let Some(g) = held.and_then(|s| s.trim().parse::<EndpointId>().ok()) {
             if known.contains(&g) {
                 return Some(g);
             }
@@ -129,11 +133,12 @@ impl Inner {
         // cannot make one of their own a guard.
         let veterans: Vec<EndpointId> = others.iter().filter(|n| self.cfg.bootstrap.contains(n)).copied().collect();
         let g = veterans.first().copied().or_else(|| others.first().copied()).or_else(|| known.first().copied())?;
-        let _ = std::fs::write(&path, g.to_string());
+        let _ = self.hold.write_note(&self.cfg.dir, "fetch-guard", g.to_string().as_bytes());
         Some(g)
     }
 
-    /// Two hops when the network allows, one when it has only one other node.
+    /// Two hops. One only when the network has a single other node and the owner has let the
+    /// radio take weaker routes: a lone exit would see both who asks and what for.
     pub(crate) async fn ask_privately(&self, ask: &Ask) -> Result<Vec<u8>> {
         let mut nodes = self.known_nodes();
         if nodes.is_empty() {
@@ -141,6 +146,9 @@ impl Inner {
         }
         nodes.shuffle(&mut rand::thread_rng());
         if nodes.len() < 2 {
+            if self.strict.load(std::sync::atomic::Ordering::Relaxed) {
+                return Err(anyhow!("one node known: no two-hop route yet"));
+            }
             let exit = nodes[0];
             let (sealed, c) = seal(exit.as_bytes(), ask)?;
             let raw = self.hop(exit, &sealed).await?;
@@ -154,7 +162,7 @@ impl Inner {
             Ok(r) => r,
             Err(e) => {
                 // The guard is gone: the next fetch draws another.
-                let _ = std::fs::remove_file(self.cfg.dir.join("fetch-guard"));
+                self.hold.remove_note(&self.cfg.dir, "fetch-guard");
                 return Err(e);
             }
         };
@@ -253,56 +261,66 @@ impl Inner {
                         self.accept_token(station, hour, token, nonce, true);
                         Response::Entries(vec![])
                     }
+                    Ask::Stem { station, entries, chunks, announce } => {
+                        let took = Box::pin(self.on_stem(station, entries, chunks, announce)).await;
+                        Response::Sealed(took.then(|| vec![1]))
+                    }
                 };
                 let out = postcard::to_stdvec(&resp).unwrap_or_default();
                 c.encrypt(Nonce::from_slice(&ANSWER_NONCE), out.as_slice()).unwrap_or_default()
             }
             Hop::Stem { station, entries, chunks, announce, hops: _ } => {
-                // A Lantern that carries only its own stations never ends a stranger's stem: it
-                // hands the cargo on, so nothing of anyone else's lands on its disk. Nor does any
-                // node end a stem for a station its owner chose not to carry.
-                let declines = (self.cfg.lantern && !self.cfg.carry_all && !self.is_own(&station)) || !self.will_carry(&station, Some((&announce, &entries)));
-                // Cargo that has been here before has gone round: it spreads now.
-                let id = cargo_id(&station, &entries, &announce);
-                let again = {
-                    let mut seen = self.stem_seen.lock().unwrap();
-                    let again = seen.contains(&id);
-                    if !again {
-                        seen.push_back(id);
-                        while seen.len() > STEM_MEMORY {
-                            seen.pop_front();
-                        }
-                    }
-                    again
-                };
-                let pass = declines || (!again && rand::random::<f64>() > FLUFF);
-                if pass {
-                    let mut nodes = self.known_nodes();
-                    nodes.shuffle(&mut rand::thread_rng());
-                    let next = Hop::Stem { station, entries: entries.clone(), chunks: chunks.clone(), announce: announce.clone(), hops: 0 };
-                    for n in nodes.into_iter().take(3) {
-                        // An empty answer is a node that declined the cargo.
-                        if self.hop(n, &next).await.is_ok_and(|b| !b.is_empty()) {
-                            return vec![1];
-                        }
-                    }
-                }
-                if declines {
-                    return vec![];
-                }
-                // The end of the stem waits a while before it shows anything, so the moment the
-                // cargo appears says nothing of the moment its keeper sent it: twenty seconds to a
-                // minute and a half for a recording, under a second and a half for the live air.
-                let live = entries.iter().any(|b| SignedEntry::from_bytes(b).is_ok_and(|e| matches!(e.entry.body(), Body::Live { .. })));
-                let wait = if live { rand::random::<u64>() % 1_500 } else { 20_000 + rand::random::<u64>() % 70_000 };
-                let me = self.clone();
-                tokio::spawn(async move {
-                    tokio::time::sleep(Duration::from_millis(wait)).await;
-                    me.fluff(station, entries, chunks, announce).await;
-                });
-                vec![1]
+                if self.on_stem(station, entries, chunks, announce).await { vec![1] } else { vec![] }
             }
         }
+    }
+
+    /// A stem's cargo, arrived plain or sealed: passed on, or kept and shown after a wait.
+    /// True when this node took it.
+    pub(crate) async fn on_stem(self: &Arc<Self>, station: StationId, entries: Vec<Vec<u8>>, chunks: Vec<(Hash, Vec<u8>)>, announce: Option<Announce>) -> bool {
+        // A Lantern that carries only its own stations never ends a stranger's stem: it
+        // hands the cargo on, so nothing of anyone else's lands on its disk. Nor does any
+        // node end a stem for a station its owner chose not to carry.
+        let declines = (self.cfg.lantern && !self.cfg.carry_all && !self.is_own(&station)) || !self.will_carry(&station, Some((&announce, &entries)));
+        // Cargo that has been here before has gone round: it spreads now.
+        let id = cargo_id(&station, &entries, &announce);
+        let again = {
+            let mut seen = self.stem_seen.lock().unwrap();
+            let again = seen.contains(&id);
+            if !again {
+                seen.push_back(id);
+                while seen.len() > STEM_MEMORY {
+                    seen.pop_front();
+                }
+            }
+            again
+        };
+        let pass = declines || (!again && rand::random::<f64>() > FLUFF);
+        if pass {
+            let mut nodes = self.known_nodes();
+            nodes.shuffle(&mut rand::thread_rng());
+            let next = Hop::Stem { station, entries: entries.clone(), chunks: chunks.clone(), announce: announce.clone(), hops: 0 };
+            for n in nodes.into_iter().take(3) {
+                // An empty answer is a node that declined the cargo.
+                if self.hop(n, &next).await.is_ok_and(|b| !b.is_empty()) {
+                    return true;
+                }
+            }
+        }
+        if declines {
+            return false;
+        }
+        // The end of the stem waits a while before it shows anything, so the moment the
+        // cargo appears says nothing of the moment its keeper sent it: twenty seconds to a
+        // minute and a half for a recording, under a second and a half for the live air.
+        let live = entries.iter().any(|b| SignedEntry::from_bytes(b).is_ok_and(|e| matches!(e.entry.body(), Body::Live { .. })));
+        let wait = if live { rand::random::<u64>() % 1_500 } else { 20_000 + rand::random::<u64>() % 70_000 };
+        let me = self.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(wait)).await;
+            me.fluff(station, entries, chunks, announce).await;
+        });
+        true
     }
 
     /// The end of the stem: take the cargo into the hold and show it to the network as a carrier.
@@ -338,14 +356,16 @@ impl Inner {
         let me = *self.endpoint.id().as_bytes();
         let carrier = Gossip::Carrier { station, node: me, head };
         self.on_gossip(carrier.clone());
+        self.broadcast(&Gossip::carried(&self.secret, station, head, now_ms())).await;
         self.broadcast(&carrier).await;
     }
 
     /// The guard: the first hop of every stem, kept for weeks so an attacker cannot wait for a lucky draw.
     fn guard(&self) -> Option<EndpointId> {
-        let path = self.cfg.dir.join("guard");
+        let old = self.cfg.dir.join("guard");
         let known = self.known_nodes();
-        if let Some(g) = std::fs::read_to_string(&path).ok().and_then(|s| s.trim().parse::<EndpointId>().ok()) {
+        let held = self.hold.read_note(&self.cfg.dir, "stem-guard", Some(&old)).and_then(|b| String::from_utf8(b).ok());
+        if let Some(g) = held.and_then(|s| s.trim().parse::<EndpointId>().ok()) {
             if known.contains(&g) {
                 return Some(g);
             }
@@ -358,7 +378,7 @@ impl Inner {
         // cannot make one of their own a guard.
         let veterans: Vec<EndpointId> = others.iter().filter(|n| self.cfg.bootstrap.contains(n)).copied().collect();
         let g = veterans.first().copied().or_else(|| others.first().copied()).or_else(|| known.first().copied())?;
-        let _ = std::fs::write(&path, g.to_string());
+        let _ = self.hold.write_note(&self.cfg.dir, "stem-guard", g.to_string().as_bytes());
         Some(g)
     }
 
@@ -420,6 +440,29 @@ impl Inner {
             }
             e.3 = card_at.max(e.3);
         }
+        // Two hops out first: the guard forwards a sealed blob to a second node, which opens it
+        // and starts the stem from there. The guard sees this device and never the station; the
+        // second node sees the station and never this device.
+        if !resend {
+            if let Some(g) = self.guard() {
+                let others: Vec<EndpointId> = self.known_nodes().into_iter().filter(|n| *n != g).collect();
+                let x = (!others.is_empty()).then(|| others[rand::random::<usize>() % others.len()]);
+                if let Some(x) = x {
+                    let ask = Ask::Stem { station, entries: entries.clone(), chunks: chunks.clone(), announce: announce.clone() };
+                    if let Ok((sealed, c)) = seal(x.as_bytes(), &ask) {
+                        if let Ok(blob) = postcard::to_stdvec(&sealed) {
+                            let r = tokio::time::timeout(Duration::from_secs(25), self.hop(g, &Hop::Forward { next: *x.as_bytes(), blob })).await;
+                            if let Ok(Ok(raw)) = r {
+                                let took = c.decrypt(Nonce::from_slice(&ANSWER_NONCE), raw.as_slice()).ok().and_then(|p| postcard::from_bytes::<Response>(&p).ok());
+                                if matches!(took, Some(Response::Sealed(Some(_)))) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         let hop = Hop::Stem { station, entries, chunks, announce, hops: 0 };
         let mut tried = Vec::new();
         if let Some(g) = self.guard().filter(|_| !resend) {
@@ -437,7 +480,7 @@ impl Inner {
                 if resend {
                     return true;
                 }
-                let _ = std::fs::write(self.cfg.dir.join("guard"), n.to_string());
+                let _ = self.hold.write_note(&self.cfg.dir, "stem-guard", n.to_string().as_bytes());
                 return true;
             }
         }

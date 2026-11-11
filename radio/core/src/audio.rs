@@ -187,7 +187,7 @@ impl ChunkDecoder {
     pub fn decode(&mut self, bytes: &[u8]) -> Result<Vec<i16>> {
         let mut out = Vec::new();
         let mut buf = vec![0i16; FRAME * self.channels];
-        for p in packets(bytes)? {
+        for p in packets(bytes)?.into_iter().take(crate::archive::MAX_FRAMES as usize) {
             let one = !p.is_empty() && opus::packet::get_nb_samples(p, SAMPLE_RATE).ok() == Some(FRAME);
             let n = self.dec.decode(if one { p } else { &[] }, &mut buf, false)?;
             out.extend_from_slice(&buf[..n.min(FRAME) * self.channels]);
@@ -207,11 +207,14 @@ impl ChunkDecoder {
     /// A chunk's sound, always as long as its frames say: one that will not decode, or whose
     /// packets do not number its frames, is concealed for its length instead.
     pub fn decode_as(&mut self, bytes: &[u8], frames: u16) -> Vec<i16> {
+        // Never more than a chunk can hold, whatever a chunk claims.
+        let frames = frames.min(crate::archive::MAX_FRAMES);
         self.decode_frames(bytes, frames).or_else(|_| self.conceal(frames)).unwrap_or_default()
     }
 
     /// Fills a lost chunk with Opus's own concealment, so a gap is a soft dip.
     pub fn conceal(&mut self, frames: u16) -> Result<Vec<i16>> {
+        let frames = frames.min(crate::archive::MAX_FRAMES);
         let mut out = Vec::new();
         let mut buf = vec![0i16; FRAME * self.channels];
         for _ in 0..frames {

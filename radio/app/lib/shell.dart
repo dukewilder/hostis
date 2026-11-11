@@ -184,6 +184,13 @@ class Desktop {
         final r = await Process.run('security', ['add-generic-password', '-U', '-a', _kcAccount, '-s', _kcService, '-w', k]);
         if (r.exitCode == 0) w = 'keychain:$_kcAccount';
       }
+      // Linux: the desktop's Secret Service keyring (GNOME Keyring, KWallet), where one runs.
+      if (Platform.isLinux) {
+        final p = await Process.start('secret-tool', ['store', '--label=$_kcService', 'service', 'pyrate-radio', 'account', _kcAccount]);
+        p.stdin.write(k);
+        await p.stdin.close();
+        if (await p.exitCode == 0) w = 'secret-service:$_kcAccount';
+      }
       if (w != null && await _unwrap(w) == k) return w;
     } catch (_) {}
     return null;
@@ -194,6 +201,10 @@ class Desktop {
       if (t.startsWith('dpapi:') && Platform.isWindows) return utf8.decode(Dpapi.unprotect(base64Decode(t.substring(6))));
       if (t.startsWith('keychain:') && Platform.isMacOS) {
         final r = await Process.run('security', ['find-generic-password', '-a', _kcAccount, '-s', _kcService, '-w']);
+        if (r.exitCode == 0) return (r.stdout as String).trim();
+      }
+      if (t.startsWith('secret-service:') && Platform.isLinux) {
+        final r = await Process.run('secret-tool', ['lookup', 'service', 'pyrate-radio', 'account', _kcAccount]);
         if (r.exitCode == 0) return (r.stdout as String).trim();
       }
     } catch (_) {}
@@ -209,6 +220,7 @@ class Desktop {
       await f.delete();
     }
     if (Platform.isMacOS) await Process.run('security', ['delete-generic-password', '-a', _kcAccount, '-s', _kcService]).catchError((_) => ProcessResult(0, 0, '', ''));
+    if (Platform.isLinux) await Process.run('secret-tool', ['clear', 'service', 'pyrate-radio', 'account', _kcAccount]).catchError((_) => ProcessResult(0, 0, '', ''));
     Timer(const Duration(milliseconds: 300), () => exit(0));
   }
 
