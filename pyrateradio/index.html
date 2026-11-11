@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Pyrate Radio · Under HOSTIS Colours · HOSTIS</title>
-<meta name="description" content="Radio that plays all day and all night, that anyone can raise, that every listener carries, and that answers to no server, no store and no account.">
+<title>Pyrate Radio · HOSTIS</title>
+<meta name="description" content="Radio that plays all day and all night, that anyone can raise and every listener carries, and that nobody can switch off.">
 <meta name="author" content="HOSTIS">
 <link rel="canonical" href="https://hostis.black/pyrateradio/">
 <meta name="theme-color" content="#030303">
 <meta name="color-scheme" content="dark">
-<meta property="og:title" content="Pyrate Radio · Under HOSTIS Colours">
-<meta property="og:description" content="Radio that every listener carries. Listen in the browser or take the set.">
+<meta property="og:title" content="Pyrate Radio">
+<meta property="og:description" content="Radio that anyone can raise, that every listener carries, and that nobody can switch off.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://hostis.black/pyrateradio/">
 <meta property="og:site_name" content="HOSTIS">
@@ -19,8 +19,8 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@hostis_black">
 <meta name="twitter:creator" content="@hostis_black">
-<meta name="twitter:title" content="Pyrate Radio · Under HOSTIS Colours">
-<meta name="twitter:description" content="Radio that every listener carries. Listen in the browser or take the set.">
+<meta name="twitter:title" content="Pyrate Radio">
+<meta name="twitter:description" content="Radio that anyone can raise, that every listener carries, and that nobody can switch off.">
 <meta name="twitter:image" content="https://hostis.black/og-image.png">
 <link rel="icon" type="image/png" sizes="48x48" href="favicon.png">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
@@ -231,17 +231,18 @@ footer .f-contact a:hover,footer .f-source a:hover{color:#c52828;border-color:#c
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
 
 /* The radio's own page: the sibling sheet above, and what only this page needs. */
-main{max-width:66ch;margin:0 auto;padding:0 18px 2rem}
-.prose p{font-size:17px;line-height:1.72;color:var(--dim);margin:0 0 1.35em;text-align:center}
-.prose p b,.prose i{color:var(--ink);font-weight:400}
-.prose a{border-bottom:1px solid var(--faint)}.prose a:hover{border-color:var(--red)}
-section{padding:44px 0 8px}
+main{max-width:68ch;margin:0 auto;padding:0 18px 2rem}
+.prose p{font-size:17px;line-height:1.72;color:var(--dim);margin:0 0 1.2em;text-align:center}
+.prose a,.note a,.fold a{border-bottom:1px solid var(--faint)}.prose a:hover,.note a:hover,.fold a:hover{border-color:var(--red)}
+section{padding:40px 0 4px}
 .passed{max-width:560px;margin:0 auto 1rem;border:1px solid var(--red);background:rgba(197,40,40,.055);padding:1rem 1.25rem;font-style:italic;text-align:center;color:var(--bonedim)}
 .passed a{font:400 .7rem var(--mono);letter-spacing:.13em;text-transform:uppercase;display:inline-block;margin:.8rem .4rem 0;border-bottom:1px solid var(--faint)}
 .setframe{width:min(1000px,calc(100vw - 1rem));margin:0 0 0 50%;transform:translateX(-50%)}
 .setframe iframe{display:block;width:100%;height:640px;border:0;background:transparent;color-scheme:dark}
-.under{text-align:center;color:var(--dim);font-style:italic;font-size:1rem;margin:1rem auto 0;max-width:38em}
-.doors{display:grid;grid-template-columns:repeat(3,1fr);gap:0;width:min(1000px,calc(100vw - 2rem));margin:2.6rem 0 0 50%;transform:translateX(-50%);text-align:left}
+.under{text-align:center;color:var(--dim);font-style:italic;font-size:1rem;margin:1rem auto 0;max-width:36em}
+.under a{border-bottom:1px solid var(--faint)}
+.wide{width:min(1000px,calc(100vw - 2rem));margin-left:50%;transform:translateX(-50%)}
+.doors{display:grid;grid-template-columns:repeat(3,1fr);margin-top:2.6rem;text-align:left}
 .doors a{display:block;padding:1.35rem 1.3rem 1.45rem;color:var(--ink);border:1px solid var(--line);background:var(--panel);transition:border-color .18s,background .18s}
 .doors a+a{margin-left:-1px}
 .doors a:hover,.doors a:focus-visible{border-color:var(--red);background:rgba(197,40,40,.055);position:relative;outline:none}
@@ -250,6 +251,12 @@ section{padding:44px 0 8px}
 .doors .how{display:block;color:var(--dim);font-style:italic;font-size:1rem;line-height:1.5;margin-top:.45rem}
 .toc{display:flex;flex-wrap:wrap;justify-content:center;gap:.3rem 1.4rem;font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;margin:2.2rem 0 0;line-height:2}
 .toc a{color:var(--dim);white-space:nowrap}.toc a:hover{color:var(--redup)}
+.pillars{display:grid;grid-template-columns:repeat(3,1fr);gap:0}
+.pillars div{padding:1.4rem 1.3rem 1.5rem;border:1px solid var(--line-soft);text-align:center}
+.pillars div+div{margin-left:-1px}
+.pillars b{display:block;font:400 1.15rem var(--sc);letter-spacing:.05em;color:var(--ink);margin-bottom:.55rem}
+.pillars p{margin:0;color:var(--dim);font-size:1rem;line-height:1.55;font-style:italic}
+.centre{text-align:center;margin:1.6rem 0 0}
 .cards{display:grid;grid-template-columns:1fr 1fr;gap:0}
 .station{display:block;position:relative;padding:1.3rem 1.2rem;border:1px solid var(--line);background:var(--panel);color:var(--ink);transition:border-color .18s}
 .station+.station{margin-left:-1px}
@@ -261,32 +268,31 @@ section{padding:44px 0 8px}
 .station>b{font-family:var(--sc);font-weight:400;font-size:1.35rem;letter-spacing:.03em;display:block}
 .station .cs{font:400 .68rem var(--mono);letter-spacing:.14em;color:var(--faint);display:block;margin-top:.15rem}
 .station i{color:var(--dim);display:block;font-size:.98rem;line-height:1.5;margin-top:.55rem}
-.note{text-align:center;color:var(--dim);font-style:italic;font-size:1rem;margin:1.2rem auto 0;max-width:40em}
-.desk{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:1.6rem auto .4rem;max-width:620px}
+.note{text-align:center;color:var(--dim);font-style:italic;font-size:1rem;margin:1.2rem auto 0;max-width:38em}
+.getset{text-align:center;margin:0 auto 1rem;max-width:560px}
+.getset .lead-btn{text-align:center}
+.alt{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:center;margin:1rem 0 0}
+h3.small{font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);text-align:center;margin:2.2rem 0 1rem}
+.desk{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0 auto .4rem;max-width:620px}
 .desk a{display:block;padding:.9rem .8rem;border:1px solid var(--line);background:var(--panel);text-align:center;color:var(--ink);transition:border-color .18s,background .18s}
 .desk a+a{margin-left:-1px}.desk a:hover{border-color:var(--red);background:rgba(197,40,40,.055);position:relative}
 .desk b{display:block;font:400 1.05rem var(--sc);letter-spacing:.05em;font-weight:400}.desk small{display:block;font:400 .6rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-top:.3rem}
-.desk-sums{font:400 .62rem var(--mono);color:var(--faint);word-break:break-all;text-align:center;margin:.6rem 0 1.2rem;line-height:1.8}.desk-sums a{white-space:nowrap;border-bottom:1px solid var(--faint)}
-.desk+.desk-sums+.note{margin-bottom:2rem}
-@media (max-width:560px){.desk{grid-template-columns:1fr}.desk a+a{margin:-1px 0 0}}
-.sums{font:400 .7rem var(--mono);letter-spacing:.06em;color:var(--faint);word-break:break-all;text-align:center;margin:1.1rem 0}
-.getset{display:flex;flex-direction:column;gap:0;margin:0 auto 1.2rem;max-width:560px}
-.getset .lead-btn{text-align:center;margin-bottom:.8rem}
-.getset .alt{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:center}
-h3.small{font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);text-align:center;margin:2.4rem 0 1rem}
-ol.steps{counter-reset:s;list-style:none;padding:0;margin:0 0 1.2rem;border-top:1px solid var(--line-soft)}
+.folds{max-width:620px;margin:1.8rem auto 0}
+.sums{font:400 .68rem/1.9 var(--mono);letter-spacing:.04em;color:var(--faint);word-break:break-all;margin:0}
+.sums a{border-bottom:1px solid var(--faint);white-space:nowrap}
+ol.steps{counter-reset:s;list-style:none;padding:0;margin:.6rem 0 .8rem;border-top:1px solid var(--line-soft)}
 ol.steps li{counter-increment:s;padding:.7rem 0 .7rem 2.4rem;border-bottom:1px solid var(--line-soft);position:relative;color:var(--bonedim);line-height:1.5}
 ol.steps li::before{content:counter(s,upper-roman);position:absolute;left:0;top:.8rem;font:400 .72rem var(--mono);color:var(--red);letter-spacing:.1em}
-.articles{counter-reset:a;margin:0;padding:0}
-.articles p{counter-increment:a;position:relative;padding:0 0 0 3rem;margin:0 0 1.3em;color:var(--dim);font-size:17px;line-height:1.7}
-.articles p::before{content:counter(a,upper-roman)'.';position:absolute;left:0;top:.15em;font:400 1rem var(--sc);color:var(--red);letter-spacing:.04em}
+pre.cmd{font:400 .7rem/1.75 var(--mono);color:var(--ink);background:var(--panel);border:1px solid var(--line);padding:1rem 1.15rem;margin:.9rem 0 0;overflow-x:auto;white-space:pre}
 code{font:400 .82em var(--mono);color:var(--ink)}
+.faq{max-width:640px;margin:0 auto}
+.long .prose p{text-align:left}
+.long .lede{margin:2.4rem 0 0}.long .lede p{font-size:19px;line-height:1.7;color:var(--bonedim)}
+.long .toc{margin:0 0 .4rem}
 .leavingnote{display:none;max-width:560px;margin:0 auto 1.6rem;padding:1rem 1.25rem;border:1px solid var(--red);background:rgba(197,40,40,.055);font-style:italic;text-align:center;color:var(--bonedim)}
-html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doors,html.leaving .toc,html.leaving main>section,html.leaving main>.divider,html.leaving .coda{display:none}
-.under a{border-bottom:1px solid var(--faint)}
-.coda{text-align:center;font:italic 400 clamp(17px,2.4vw,20px) var(--serif);color:var(--soft);max-width:34em;margin:0 auto;line-height:1.6}
-@media (max-width:760px){.doors{grid-template-columns:1fr}.doors a+a{margin:-1px 0 0}.setframe iframe{height:760px}}
-@media (max-width:560px){.cards{grid-template-columns:1fr}.station+.station{margin:-1px 0 0}}
+html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doors,html.leaving .toc,html.leaving main>section,html.leaving main>.divider{display:none}
+@media (max-width:760px){.doors,.pillars{grid-template-columns:1fr}.doors a+a,.pillars div+div{margin:-1px 0 0}.setframe iframe{height:760px}}
+@media (max-width:560px){.cards,.desk{grid-template-columns:1fr}.station+.station,.desk a+a{margin:-1px 0 0}}
 </style>
 </head>
 <body>
@@ -294,19 +300,19 @@ html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doo
 <nav class="flagbar" aria-label="HOSTIS"><a class="fb-mark" href="/"><span class="sk" aria-hidden="true">&#9760;&#xFE0E;</span>HOSTIS</a></nav>
 <header class="masthead">
 <h1>Pyrate Radio</h1>
-<p class="mh-sub">under HOSTIS colours &#183; on the air all day and all night</p>
-<p class="mh-desc">Radio that anyone can raise, that every listener carries, and that answers to no server, no store and no account.</p>
+<p class="mh-sub">on the air all day and all night</p>
+<p class="mh-desc">Radio that anyone can raise, that every listener carries, and that nobody can switch off.</p>
 </header>
 <main id="main">
 <div id="passed" class="passed" hidden></div>
 <p class="leavingnote">This station is not one of HOSTIS's. Taking you to the open player.</p>
 <div class="setframe"><iframe id="radio" src="listen/?embed" title="Pyrate Radio, playing in this page" allow="autoplay; clipboard-write; web-share"></iframe>
-<p class="under">Press Listen and it plays, in this page, from whoever carries the station. The dial here holds HOSTIS's own stations. Every other station, the chatter and the hails are in the <a class="openlink" href="listen/">open player</a>.</p></div>
+<p class="under">The dial here holds HOSTIS's own stations. Every other station is in the <a class="openlink" href="listen/">open player</a>.</p></div>
 <script>
 // A station link: hostis.black/pyrateradio/#<station id>. One of HOSTIS's own plays here, in
 // the browser or the app. Anything else (another station, an invitation, a flock) goes straight
 // on to the open player before this page reads it: the part after the # never reaches a server.
-(function(){var H=["f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"],P=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti.ipfs.inbrowser.link/", "https://bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti/"],h=(location.hash||'').toLowerCase(),id=h.slice(1);
+(function(){var H=["f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"],P=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeieuifeqsyqyvgg4huby22fjnj3y6cvqmgqtadeuikk7rxhj25evby.ipfs.inbrowser.link/", "https://bafybeieuifeqsyqyvgg4huby22fjnj3y6cvqmgqtadeuikk7rxhj25evby.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeieuifeqsyqyvgg4huby22fjnj3y6cvqmgqtadeuikk7rxhj25evby/"],h=(location.hash||'').toLowerCase(),id=h.slice(1);
 if(/pocket=|flock=/.test(h)||(/^[0-9a-f]{64}$/.test(id)&&H.indexOf(id)<0)){history.replaceState(null,'',location.pathname);
 document.documentElement.className+=' leaving';var go=function(u){location.replace(u+h)},done=0;
 var ping=function(u){return fetch(u+'favicon.png',{mode:'no-cors',cache:'no-store'}).then(function(){return u})};
@@ -318,129 +324,112 @@ if(!/^[0-9a-f]{64}$/.test(id))return;var b=document.getElementById('passed');
 var app=/Android/.test(navigator.userAgent)?' <a href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url='+encodeURIComponent(new URL('listen/#'+id,location.href).href)+';end">Open in the app</a>':'';
 document.getElementById('radio').src='listen/?embed#'+id;
 b.innerHTML='Someone passed you a HOSTIS station. It is on the dial below.'+(app?'<br>'+app:'');b.hidden=false})();
-document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti.ipfs.inbrowser.link/", "https://bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti/"][0]});
+document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeieuifeqsyqyvgg4huby22fjnj3y6cvqmgqtadeuikk7rxhj25evby.ipfs.inbrowser.link/", "https://bafybeieuifeqsyqyvgg4huby22fjnj3y6cvqmgqtadeuikk7rxhj25evby.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeieuifeqsyqyvgg4huby22fjnj3y6cvqmgqtadeuikk7rxhj25evby/"][0]});
 </script>
 
-<nav class="doors">
-<a class="openlink" href="listen/"><span class="what">Every station</span><span class="how">The open player: the whole Log, the chatter and your own switches, served from IPFS and owned by nobody. Any phone or computer, nothing to install.</span></a>
-<a href="#set"><span class="what">Take the set</span><span class="how">The app for Android 0.9.5. Plays with the screen off and keeps the stations you love.</span></a>
-<a href="#colours"><span class="what">Raise colours</span><span class="how">Your own station from any browser, your phone or your computer: a loop, a schedule, a podcast or live, on the air in a minute.</span></a>
+<nav class="doors wide">
+<a class="openlink" href="listen/"><span class="what">Every station</span><span class="how">The whole Log in any browser, phone or computer, with nothing to install.</span></a>
+<a href="#set"><span class="what">Take the set</span><span class="how">The app for Android, Windows, Mac and Linux. It plays with the screen off.</span></a>
+<a href="#colours"><span class="what">Raise colours</span><span class="how">A station of your own, on the air in a minute.</span></a>
 </nav>
-<nav class="toc" aria-label="On this page"><a href="#how">How it works</a><a href="#air">On the air</a><a href="#set">Take the set</a><a href="#lantern">Keep a Lantern</a><a href="#faq">Questions</a><a href="handbook/">Keeper's handbook</a></nav>
+<nav class="toc" aria-label="On this page"><a href="#how">How it works</a><a href="#air">On the air</a><a href="#set">Take the set</a><a href="#colours">Raise colours</a><a href="#lantern">Light a Lantern</a><a href="#faq">Questions</a><a href="handbook/">Keeper's handbook</a></nav>
 
 <div class="divider"><span class="divider-glyph"></span></div>
 <section id="how">
-<div class="sechead"><h2>Turn It On</h2><span class="cap">how it works</span></div>
-<div class="prose">
-<p>Open it and it plays. Within seconds you are hearing the station with the most aboard, and a swipe takes you to the next.</p>
-<p>Every station runs on a clock. Nobody has to be awake for it to broadcast. Each listener works out what is on from the station's signed log and the hour, and every listener gets the same answer, so you join mid-song, as everyone aboard is hearing it.</p>
-<p>Every phone carries. On Wi-Fi while it charges, each phone keeps a share of the fleet, drawn by lot, and hands it on to whoever asks. Every station is carried in many places whether or not anyone is listening, and none of them is the one to shut.</p>
+<div class="sechead"><h2>How It Works</h2><span class="cap">from the key to the speaker</span></div>
+<div class="pillars wide">
+<div><b>Every device is the network</b><p>Phones, computers, browser tabs and Lanterns pass the stations between them, and each checks what it gets against the station's own key.</p></div>
+<div><b>Every device carries</b><p>Each holds a share of every station, about eight copies across the fleet, so a station plays on with nobody listening and its keeper offline.</p></div>
+<div><b>Nobody sees who listens</b><p>You never give a name. Sound comes through two hops, and the count of who is aboard is made from tokens that change every hour.</p></div>
 </div>
+<p class="centre"><a class="btn" href="how-it-works/">The whole account</a></p>
 </section>
 
 <div class="divider"><span class="divider-glyph"></span></div>
 <section id="air">
 <div class="sechead"><h2>On the Air</h2><span class="cap">the stations HOSTIS raises</span></div>
-
 <div class="cards">
 <a class="station" href="listen/#f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f" data-id="f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f"><span class="flag"></span><span class="fq"></span><b>The Public Domain</b><span class="cs">GAHAGU·3695</span><i>Recordings published in 1925 or earlier, free in the United States since 1 January 2026. Every January the fence moves back another year.</i></a>
 <a class="station" href="listen/#110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a" data-id="110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"><span class="flag"></span><span class="fq"></span><b>Readings</b><span class="cs">DEVAKA·F42C</span><i>LibriVox recordings, every one in the public domain, read aloud around the clock. Johnson's General History of the Pyrates first.</i></a>
 </div>
-<p class="note">These are the stations HOSTIS raises. Every other station on the Log belongs to whoever holds its key. HOSTIS ranks none of them. The Log sorts by how many are aboard, and the listeners decide.</p>
+<p class="note">Every other station belongs to whoever holds its key. The Log sorts by how many are aboard.</p>
 </section>
 
 <div class="divider"><span class="divider-glyph"></span></div>
 <section id="set">
-<div class="sechead"><h2>Take the Set</h2><span class="cap">android, any browser, or the source</span></div>
-
+<div class="sechead"><h2>Take the Set</h2><span class="cap">android &#183; computers &#183; any browser</span></div>
 <div class="getset">
 <a class="lead-btn" href="pyrate-radio-0.9.5.apk"><span class="fc-lead">Pyrate Radio for Android</span><span class="fc-sub">version 0.9.5 &#183; 45 MB &#183; arm64</span></a>
-<div class="alt"><a class="btn openlink" href="listen/">Any browser</a><a class="btn" href="magnet:?xt=urn:btih:0d71e2a15244f6dd7c64d583a8343a0eac58b784&amp;dn=pyrate-radio-0.9.5.apk&amp;tr=udp:%2F%2Ftracker.opentrackr.org:1337%2Fannounce&amp;tr=udp:%2F%2Fopen.demonii.com:1337%2Fannounce&amp;tr=udp:%2F%2Ftracker.torrent.eu.org:451%2Fannounce&amp;ws=https:%2F%2Fhostis.black%2Fpyrateradio%2Fpyrate-radio-0.9.5.apk">Magnet link</a><a class="btn" href="pyrate-radio-0.9.5.apk.torrent">.torrent</a><a class="btn" href="https://github.com/dukewilder/hostis/tree/radio/radio" target="_blank" rel="noopener noreferrer">Source</a></div>
 </div>
-<p class="sums">sha-256 799dccbd48c76dff0c157cbff85d889b9ad258202c249e2290cf6e76f5b9cbb1</p>
-<p class="sums">signed by HOSTIS &#183; signing certificate sha-256 AF:4C:08:F6:0C:06:87:5C:84:9F:74:59:6B:BB:99:62:DC:A8:EB:33:E2:22:8E:72:BC:A9:BD:06:4E:6D:8A:14 &#183; the app shows the same under More, This copy</p>
 <h3 class="small">On a computer</h3>
-<div class="desk"><a href="pyrate-radio-0.9.5-windows.zip"><b>Windows</b><small>10 and 11 · zip</small></a><a href="pyrate-radio-0.9.5-macos.zip"><b>Mac</b><small>Apple and Intel · zip</small></a><a href="pyrate-radio-0.9.5-linux-x64.tar.gz"><b>Linux</b><small>x86-64 · tar.gz</small></a></div>
-<p class="desk-sums">windows 512737016f3bb3c375b7c4d2eaa024fed2c7f5d18bf9379847c1da6d09d4c9d3 · <a href="pyrate-radio-0.9.5-windows.zip.torrent">torrent</a><br>mac 57c372bc70393d38c826c2092e79f2716969a4230db5451f89e8dc9e879044b0 · <a href="pyrate-radio-0.9.5-macos.zip.torrent">torrent</a><br>linux badaa69a705b0e87bff5e723d015b4975b91c08c73061c8308164e66495e2a12 · <a href="pyrate-radio-0.9.5-linux-x64.tar.gz.torrent">torrent</a></p>
-<p class="note">Version 0.9.5, built from the public source by GitHub's machines. On a Mac, open it the first time with a right-click and Open: it is signed by nobody. Computers take new versions from this page.</p>
-<div class="prose">
-<p>The open player runs in any browser, on iPhone and iPad too, and listens, raises stations and goes live with nothing installed. The same app file travels by BitTorrent with no website needed, and anyone who has the app can pass it on, phone to phone, from Colours. The source is Rust and Flutter, CC0: build it yourself and compare.</p>
-<p>Check what you install against the checksum above. Once signing begins, every release will carry HOSTIS's signature, and the app takes an update only when two of the three release keys have signed it.</p>
-</div>
-<h3 class="small">On stock Android</h3>
-<div class="prose"><p>Pyrate Radio does not register with Google. Show no papers. From 2026 in some countries, and everywhere in 2027, Google's phones ask once before installing an app from a developer who will not hand over an identity.</p>
-</div>
+<div class="desk"><a href="pyrate-radio-0.9.7-windows.zip"><b>Windows</b><small>10 and 11 · zip</small></a><a href="pyrate-radio-0.9.7-macos.zip"><b>Mac</b><small>Apple and Intel · zip</small></a><a href="pyrate-radio-0.9.7-linux-x64.tar.gz"><b>Linux</b><small>x86-64 · tar.gz</small></a></div>
+<p class="note">Version 0.9.7. On a Mac, open it the first time with a right-click and Open. Computers take new versions from this page.</p>
+<div class="alt"><a class="btn openlink" href="listen/">Any browser</a><a class="btn" href="magnet:?xt=urn:btih:0d71e2a15244f6dd7c64d583a8343a0eac58b784&amp;dn=pyrate-radio-0.9.5.apk&amp;tr=udp:%2F%2Ftracker.opentrackr.org:1337%2Fannounce&amp;tr=udp:%2F%2Fopen.demonii.com:1337%2Fannounce&amp;tr=udp:%2F%2Ftracker.torrent.eu.org:451%2Fannounce&amp;ws=https:%2F%2Fhostis.black%2Fpyrateradio%2Fpyrate-radio-0.9.5.apk">Magnet link</a><a class="btn" href="pyrate-radio-0.9.5.apk.torrent">.torrent</a><a class="btn" href="https://github.com/dukewilder/hostis/tree/radio/radio" target="_blank" rel="noopener noreferrer">Source</a></div>
+<p class="note">Once you have it, the app passes itself on from phone to phone, in Colours.</p>
+<div class="folds">
+<details class="fold"><summary>Installing on stock Android</summary><div>
+<p>Pyrate Radio does not register with Google. From 2026 in some countries, and everywhere in 2027, Google's phones ask once before installing an app from a developer who keeps their name to themselves.</p>
 <ol class="steps">
 <li>Settings, About phone. Tap Build number seven times.</li>
 <li>Settings, System, Developer options. Allow apps from unverified developers.</li>
-<li>Google makes you wait 24 hours, once. After that it installs like anything else.</li>
+<li>Wait the 24 hours Google asks for, once. After that it installs like any other app.</li>
 </ol>
-<p class="note">GrapheneOS, LineageOS and other de-Googled phones skip all of this, and so does an install over ADB.</p>
+<p>GrapheneOS, LineageOS and other de-Googled phones skip all of this, and so does an install over ADB.</p>
+</div></details>
+<details class="fold"><summary>Checksums and the signing certificate</summary><div>
+<p class="sums">android 799dccbd48c76dff0c157cbff85d889b9ad258202c249e2290cf6e76f5b9cbb1<br>windows e586f863ac35dd93790e250a8559b04162d165b1b3c331f9d9950c3b69da8807 · <a href="pyrate-radio-0.9.7-windows.zip.torrent">torrent</a><br>mac 51c72e097ab050d100e18eecdcdfaeac1d2cdcf59bdfcba42fcdffb89de661e6 · <a href="pyrate-radio-0.9.7-macos.zip.torrent">torrent</a><br>linux 1fc1425fa894df99da3c2d557994af211ef71273fd51e2a28de1f24076b2fc49 · <a href="pyrate-radio-0.9.7-linux-x64.tar.gz.torrent">torrent</a><br>signing certificate AF:4C:08:F6:0C:06:87:5C:84:9F:74:59:6B:BB:99:62:DC:A8:EB:33:E2:22:8E:72:BC:A9:BD:06:4E:6D:8A:14</p>
+<p>The app shows the same certificate under More, This copy, and takes an update only when two of the three HOSTIS release keys have signed it. The source is CC0, so you can build it yourself and compare.</p>
+</div></details>
+</div>
 </section>
 
 <div class="divider"><span class="divider-glyph"></span></div>
 <section id="colours">
-<div class="sechead"><h2>Raise Colours</h2><span class="cap">a station of your own &#183; from anywhere</span></div>
+<div class="sechead"><h2>Raise Colours</h2><span class="cap">a station of your own</span></div>
 <div class="prose">
-<p>Raise it in the <a class="openlink" href="listen/">open player</a>, on any phone or computer with nothing to install, or in the app. Name a station, drop recordings in, and it is on the air. The clock plays them round the hour, the day and the week, at one loudness, with your bell on the hour if you give it one. Press the red button and you are live from your phone's microphone, ten to twenty seconds behind, and when you stop, the clock takes back the hour.</p>
-<p>Give it a cover and a banner, a colour, its kinds and a tip address. Bring hands aboard to run it with you from their own phones, and take them off again whenever you like.</p>
-<p>A station is a key made on your own device. It leaves only if you write down its twenty-four words. Whoever holds them is the station. Nobody can recover them for you, and nobody can take the station from you.</p>
+<p>Name a station and drop recordings in. The clock plays them round the hour, the day and the week, at one loudness, as a loop, a schedule or a podcast's feed. Press the red button and you are live from the microphone, ten to twenty seconds behind.</p>
+<p>The station is a key made on your own device and shown to you once as twenty-four words. Whoever holds the words is the station, and nobody can take it from them.</p>
 </div>
+<p class="centre"><a class="btn openlink" href="listen/">Raise one in the browser</a></p>
+<p class="note"><a href="handbook/">The keeper's handbook</a> covers keeping a station, and yourself, unknown.</p>
 </section>
 
 <div class="divider"><span class="divider-glyph"></span></div>
 <section id="lantern">
-<div class="sechead"><h2>Keep a Lantern</h2><span class="cap">a node that never sleeps</span></div>
+<div class="sechead"><h2>Light a Lantern</h2><span class="cap">a node that never sleeps</span></div>
 <div class="prose">
-<p>A Lantern is the radio on a spare machine that never sleeps. It carries every station it hears of, relays for phones and browsers that cannot reach each other, and can raise stations of its own from folders of recordings. It runs in one Docker command, behind a VPN if you like, with no ports opened.</p>
-<p><a href="https://github.com/dukewilder/hostis/blob/radio/radio/LANTERN.md">How to light one</a>. Every Lantern makes the fleet harder to sink.</p>
+<p>A Lantern is the radio on a machine that stays on. It carries every station, relays for devices that cannot reach each other, and can put stations of its own on the air from folders of recordings. It opens no ports and works the same behind a VPN.</p>
 </div>
-</section>
-
-<div class="divider"><span class="divider-glyph"></span></div>
-<section id="articles">
-<div class="sechead"><h2>The Articles</h2><span class="cap">what the radio holds to</span></div>
-
-<div class="articles">
-<p>The Log is kept by every node and owned by none. Each station's card is signed by its key and paid for in work, so raising ten thousand junk stations costs ten thousand times the effort of raising one.</p>
-<p>Counts are honest and anonymous. Each listener adds a token that changes every hour, worked for and checked by every node, into a sketch nobody can read a name from. HOSTIS cannot see who the forty are.</p>
-<p>A phone never announces what it listened to. What it carries for others sits on it sealed, as noise to anyone without the station's log.</p>
-<p>A broadcaster's phone sends its station out along a stem of other phones before it reaches the Log, so a listener cannot trace the station to the phone that raised it.</p>
-<p>No store, no account, no analytics, no ads, no coin of our own. A thing that watches its bearer is not his.</p>
-</div>
+<ol class="steps">
+<li>Install Docker on any Linux machine, Raspberry Pi or server.</li>
+<li>Run these three lines.<pre class="cmd">git clone --depth 1 --branch radio https://github.com/dukewilder/hostis
+docker build -t pyrate-lantern -f hostis/radio/Dockerfile hostis/radio
+docker run -d --name lantern --restart unless-stopped -v pyrate:/data pyrate-lantern</pre></li>
+<li>It joins the network within a minute and carries from then on. <code>docker logs lantern</code> shows it working.</li>
+</ol>
+<p class="note"><a href="https://github.com/dukewilder/hostis/blob/radio/radio/LANTERN.md">The Lantern guide</a> covers stations from folders, a web page of your own, quotas and the open player.</p>
 </section>
 
 <div class="divider"><span class="divider-glyph"></span></div>
 <section id="faq">
 <div class="sechead"><h2>Questions</h2><span class="cap">asked and answered</span></div>
-
-<details class="fold"><summary>Is it free?</summary><div>Yes, and it stays free. Nothing is sold in it, to you or about you. A station can show a tip address, and a tip goes straight from the listener's wallet to the station.</div></details>
-<details class="fold"><summary>Do I need an account?</summary><div>No. Open it and listen, in the app or in the browser. Nobody asks for a name, an email or a phone number. A station is its key, and the key lives on the phone that made it.</div></details>
-<details class="fold"><summary>Can I broadcast without installing anything?</summary><div>Yes. Open the <a class="openlink" href="listen/">open player</a> in any browser, name a station under Raise Colours, write down its twenty-four words, and drop recordings in or go live from the microphone. The tab sends them out along a stem of other nodes, so no listener can trace them to it, and once a carrier holds them they play whether or not the tab stays open. For the most cover, do it from Tor Browser.</div></details>
-<details class="fold"><summary>Is there an app for my computer?</summary><div>Yes, for Windows, Mac and Linux, under <a href="#set">Take the set</a>. It is the same app as on Android: it listens, raises stations, goes live and, left running on a computer, carries stations for the fleet.</div></details>
-<details class="fold"><summary>Does it work on iPhone?</summary><div>Yes, in the browser, listening and broadcasting both. Open the <a class="openlink" href="listen/">open player</a> in Safari, and add it to your home screen to open it like an app. It plays every station, raises stations of your own and goes live from the microphone. The app adds listening with the screen off, and runs on Android and on computers.</div></details>
-<details class="fold"><summary>How can it run with no server?</summary><div>Every phone with the app and every open Listen page is a node. Nodes keep the Log of stations between them by gossip, check every card and entry against the station's key, and fetch six-second chunks of sound from whoever carries them. Relays help nodes that cannot reach each other directly. A relay passes sealed traffic it cannot read, and anyone can run one.</div></details>
-<details class="fold"><summary>If my phone carries other stations, can I see what they are?</summary><div>No, and that is the point. The stations your phone carries for others sit on it sealed, by fingerprint, without the key to open them. Your phone hands on sealed bytes it cannot read, the way a relay does. It plays in the clear only the stations whose keys you hold, the ones you made or took aboard yourself.</div></details>
-<details class="fold"><summary>Who can see what I listen to?</summary><div>Very little, by design. Phones never tell the network what they hear. Counts are made from anonymous tokens that change every hour. A browser reaches the network through a relay, so the stations it plays from never see its address. The relay sees the address and nothing of what passes. Each visit to the Listen page also starts under a fresh identity.</div></details>
-<details class="fold"><summary>Can a station be taken down?</summary><div>Not from any one place. Every station's log and sound are copied across the phones and Lanterns that carry it, and any one of them can hand it on. Only its keeper can end it, by striking its colours with the station's key.</div></details>
-<details class="fold"><summary>Who decides what is on the air?</summary><div>Whoever holds a station's key decides what that station plays. HOSTIS keeps no list of stations to refuse, and ranks none. You decide what reaches you: maroon a station and it leaves your Log and your dial. Lists of marooned stations pass from hand to hand, and you take aboard the ones you trust.</div></details>
-<details class="fold"><summary>Will I come across explicit material?</summary><div>Only if you choose to. Each station says for itself whether it is mature or explicit. Explicit stations stay out of your Log until you switch them on, and you can hide mature ones too. Art from stations you have never kept can stay hidden as well. A station that lies about itself is yours to maroon.</div></details>
-<details class="fold"><summary>How much data and battery does it use?</summary><div>Music streams at 64 kbit/s, about 29 MB an hour. Talk stations use 24 kbit/s, about 11 MB an hour. On mobile data your phone carries nobody else's traffic. On Wi-Fi it can bring the next six hours of your kept stations aboard ahead of time.</div></details>
-<details class="fold"><summary>What happens if I lose my phone?</summary><div>If you wrote down your station's twenty-four words, put them into the app on a new phone and the station is yours again. The old phone loses the right to speak for it. Without the words the station cannot be recovered by anyone, HOSTIS included.</div></details>
-<details class="fold"><summary>Does my station need my phone to stay on?</summary><div>No. A station's whole programme lives in its signed log, and every listener works out what is playing from the log and the clock. Lanterns carry every station and keep it on the Log, and phones carry a share by lot. Put a song on a loop, uninstall the app, and the song plays on for anyone who tunes in.</div></details>
-<details class="fold"><summary>Can I set a schedule?</summary><div>Yes. A station can play its library shuffled or in order, run a daily or weekly tape from a set hour, stay on the air for set hours, keep regular shows, take a podcast's feed, hold an hour each day for going live, and air one-off premieres. Its page shows the week, and listeners can ring a bell for any show.</div></details>
-<details class="fold"><summary>How do people find my station?</summary><div>Pass on its link, or print its poster: the app makes one with your station's name, its frequency on the dial and a code to scan, and the code opens the station in any phone's browser. Every station also sits on the dial at a frequency drawn from its key, on the Log with how many are aboard, and on the chart of the seas if it names a home port.</div></details>
-<details class="fold"><summary>Can I make a private station?</summary><div>Yes, a pocket station. It never shows on the Log or the dial. Its key is its invitation: whoever you hand it to can find the station, hear it and pass it on, and nobody else can tell it exists. Share it by a link or a scanned code, in the app or any browser.</div></details>
-<details class="fold"><summary>Can listeners talk to each other?</summary><div>Yes, in each station's chatter: talk, cheers, and requests for a recording, which the keeper can play next. Lines pass between the people in the room and are kept by nobody. Joining is your choice, and each listener mutes whoever they like.</div></details>
-<details class="fold"><summary>Can I reach a station's keeper?</summary><div>Yes, by a hail: a short voice note sealed to the station's key, which only the keeper can open. A Lantern can hold it, still sealed, until the keeper is back.</div></details>
-<details class="fold"><summary>Can phones play in sync in one room?</summary><div>Yes, a flock. Phones in the same room fall in on one clock and play as one, down to about a thousandth of a second, with a little trim for a slow speaker. It cannot be set up without real phones in the room.</div></details>
-<details class="fold"><summary>Can I put my station on my own website?</summary><div>Yes. Share its link and it plays in any browser. A Lantern started with <code>--http</code> also serves a page of its own stations and an embed line for any site.</div></details>
-<details class="fold"><summary>Why “Pyrate”?</summary><div>It is the spelling in Captain Charles Johnson's General History of the Pyrates of 1724, read on this radio around the clock. The old law called the pirate <i>hostis humani generis</i>, the enemy of all mankind. HOSTIS takes the name. The rest you can read at <a href="https://hostis.black">hostis.black</a>.</div></details>
-<details class="fold"><summary>How do I know the app is genuine?</summary><div>Compare the checksum under Take the set with the file you downloaded. The source is public, so you can build it yourself and compare. Updates arrive inside the app as a station of their own, and the app installs one only when you tap and two of the three HOSTIS release keys have signed it.</div></details>
-
+<div class="faq">
+<details class="fold"><summary>Is it free?</summary><div>Yes, and it stays free. Nothing is sold in it, to you or about you. A station can show a tip address, and a tip goes straight from your wallet to the station.</div></details>
+<details class="fold"><summary>Do I need an account?</summary><div>No. Open it and listen. A station is its key, and the key lives on the device that made it.</div></details>
+<details class="fold"><summary>Does it work on iPhone?</summary><div>Yes, in Safari, listening and broadcasting both. Open the <a class="openlink" href="listen/">open player</a> and add it to your home screen to open it like an app. Listening with the screen off needs the app, on Android or a computer.</div></details>
+<details class="fold"><summary>Who can see what I listen to?</summary><div>No single device learns both who you are and what you hear. Your phone fetches sound through two other devices, the first knowing who asks and not what, the second what and not who. Counts are made from anonymous tokens that change every hour. What your phone carries for others sits on it sealed, and it cannot tell what it holds.</div></details>
+<details class="fold"><summary>Can a station be taken down?</summary><div>Not from any one place. Its log and its sound are copied across every device that carries it, and any one of them can hand it on. Only the holder of its key can end it.</div></details>
+<details class="fold"><summary>Who decides what is on the air?</summary><div>Whoever holds a station's key decides what it plays. You decide what reaches you. Maroon a station and it leaves your dial. Explicit stations stay off it until you switch them on, and mature ones can be hidden too.</div></details>
+<details class="fold"><summary>How much data, room and battery does it use?</summary><div>Music streams at about 29 MB an hour and talk at about 11. Your phone's share for the fleet takes up to 4 GB, less on a fuller phone, and fills only on Wi-Fi while it charges, so away from the charger it costs you nothing.</div></details>
+<details class="fold"><summary>Does my station need my phone to stay on?</summary><div>No. Its programme lives in its signed log and every listener works out what is playing from the log and the clock. Put a song on a loop, uninstall the app, and the song plays on.</div></details>
+<details class="fold"><summary>What happens if I lose my phone?</summary><div>Put your station's twenty-four words into the app on another device and the station is yours again. The old phone can no longer speak for it. Without the words nobody can recover it, HOSTIS included.</div></details>
+<details class="fold"><summary>How do people find my station?</summary><div>It is on the Log and on the dial, at a frequency drawn from its key. Pass on its link, or print its poster, which carries a code that opens the station in any phone's browser.</div></details>
+<details class="fold"><summary>Can I make a private station?</summary><div>Yes, a pocket station. It never shows on the Log. Its key is its invitation, and only whoever you hand it to can find it.</div></details>
+<details class="fold"><summary>Can listeners talk?</summary><div>Each station has chatter for talk, cheers and requests the keeper can play next, kept by nobody. A listener can also hail the keeper with a voice note only the keeper can open.</div></details>
+<details class="fold"><summary>How do I know the app is genuine?</summary><div>Check the file against the checksum under Take the set, and the signing certificate against the one the app shows. Updates arrive inside the app, signed by two of three HOSTIS release keys, and wait three days before they install unless you take them sooner.</div></details>
+<details class="fold"><summary>Why &#8220;Pyrate&#8221;?</summary><div>It is the spelling in Captain Charles Johnson's General History of the Pyrates of 1724, read on this radio around the clock. The old law called the pirate <i>hostis humani generis</i>, the enemy of all mankind. HOSTIS takes the name. The rest is at <a href="https://hostis.black">hostis.black</a>.</div></details>
+</div>
 </section>
-<div class="divider"><span class="divider-glyph"></span></div>
-<p class="coda">The site will be taken down. The radio is built so that when it is, nothing on the air goes quiet.</p>
 </main>
 <footer>
 <p class="f-contact">Email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>

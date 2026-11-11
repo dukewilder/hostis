@@ -1,14 +1,14 @@
 {
  "pyrate": "bearings",
- "at": 1794368468862,
+ "at": 1794386526821,
  "doors": [
   "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442"
  ],
  "players": [
   "https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/",
-  "https://bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti.ipfs.inbrowser.link/",
-  "https://bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti.ipfs.dweb.link/",
-  "https://ipfs.io/ipfs/bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti/"
+  "https://bafybeighkj6xllz7u7ra37qb23qeereybrdzjmfryt5anbm5kx5qr2uo2e.ipfs.inbrowser.link/",
+  "https://bafybeighkj6xllz7u7ra37qb23qeereybrdzjmfryt5anbm5kx5qr2uo2e.ipfs.dweb.link/",
+  "https://ipfs.io/ipfs/bafybeighkj6xllz7u7ra37qb23qeereybrdzjmfryt5anbm5kx5qr2uo2e/"
  ],
  "ipns": "k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr",
  "onion": "",
@@ -22,20 +22,24 @@
    "cid": "bafybeichldvlwtsryew4tpwi6l2bzn4iqtvsuo4mcve4x7fgwzzibvwpca"
   },
   {
-   "name": "pyrate-radio-0.9.5-macos.zip",
-   "cid": "bafybeibiyhctnlyhuu6jydopksuvw46ht5yo7lfx2wcetpfhk6hmxdqpye"
+   "name": "pyrate-radio-0.9.5.apk",
+   "cid": "bafybeif736juxf2nquix2g7xpvp3keyqb6owbvkrl7dmnryw5mihpnpjra"
   },
   {
-   "name": "pyrate-radio-0.9.5-windows.zip",
-   "cid": "bafybeiehgfamomsk2hkxaoreb5os6bd6lkkpdujcdcom2qrc5qzavd56ai"
+   "name": "pyrate-radio-0.9.7-macos.zip",
+   "cid": "bafybeih4sdufj7reziu5hrxxil3qug2mf2klmddb2oqzvhde3zvnh5td4y"
   },
   {
-   "name": "pyrate-radio-0.9.5-linux-x64.tar.gz",
-   "cid": "bafybeigkqlfjtuc3ocl54xifueqrwqbqzecw2s53vfrmv23ouhki6fhwrm"
+   "name": "pyrate-radio-0.9.7-windows.zip",
+   "cid": "bafybeihoktjhu6a3vdu4prtywhsl4ibal2jvob562m7fdpycr5xcpqfs34"
   },
   {
-   "name": "source/pyrate-radio-src-cc0a75e.tar.gz",
-   "cid": "bafybeickoumrm52umbon5aq6ewyobnv5gbq2yj3lkq67v7mfdocbqiuk6u"
+   "name": "pyrate-radio-0.9.7-linux-x64.tar.gz",
+   "cid": "bafybeicl5va6ip6ahz742iotdkhsbuiegneznuo7kk453y3jbjfdx3xidq"
+  },
+  {
+   "name": "source/pyrate-radio-src-ec06627.tar.gz",
+   "cid": "bafybeicxrar7xpju2puyfsg3phvb3vwv3tsew4xynvsrpvuxqvhs7o4qa4"
   }
  ]
 }
