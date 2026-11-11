@@ -1700,7 +1700,6 @@ impl Node {
                 node_key = Some((b, made));
             }
         }
-        let _ = std::fs::remove_file(&key_path);
         // A phone's address on the network is new every day, so no one can follow one phone
         // from day to day by its id. Lanterns keep theirs: others start from them.
         // A phone that keeps no station and no pocket has nothing anyone needs to reach it by,
@@ -1723,6 +1722,8 @@ impl Node {
         let mut note = secret.to_bytes().to_vec();
         note.extend_from_slice(&made.to_le_bytes());
         hold.write_note(&cfg.dir, "node-key", &note)?;
+        // The clear copy goes only once the sealed one is written: a Lantern's id is its door.
+        let _ = std::fs::remove_file(&key_path);
         let secret_bytes = secret.to_bytes();
         // Every peer met before is a starting point next time, so no single Lantern is the door.
         // They are kept sealed, each with the relay its own signed note named, so the next start
