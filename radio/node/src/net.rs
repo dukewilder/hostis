@@ -256,6 +256,44 @@ impl Gossip {
     }
 }
 
+/// Copies of every chunk the fleet aims to keep between its ballast holds.
+pub const SHARE_COPIES: f64 = 8.0;
+
+/// Where a sealed chunk falls for a node, from 0 to 1: the node holds it as ballast when this
+/// is under its share. Anyone can work it out from the node's id and the chunk's sealed name,
+/// so a listener asks the likely holders first, and nobody had to agree on anything.
+pub fn share_score(node: &[u8; 32], name: &Hash) -> f64 {
+    let mut h = blake3::Hasher::new_derive_key("pyrate/share/v1");
+    h.update(node);
+    h.update(name);
+    let b = h.finalize();
+    u64::from_le_bytes(b.as_bytes()[..8].try_into().unwrap()) as f64 / u64::MAX as f64
+}
+
+/// The share of the Log each node holds so the whole keeps about SHARE_COPIES copies:
+/// everything while the fleet is small, less as it grows.
+pub fn share_of(fleet: usize) -> f64 {
+    // PYRATE_SHARE_COPIES: fewer copies, so a test fleet of five already splits the Log.
+    let copies = std::env::var("PYRATE_SHARE_COPIES").ok().and_then(|v| v.parse().ok()).unwrap_or(SHARE_COPIES);
+    (copies / fleet.max(1) as f64).min(1.0)
+}
+
+/// A node's ballast from the chunks on offer, (sealed name, length): those whose score falls
+/// under the share, lowest first, up to the budget. A node with less room keeps the start of
+/// the same list, so a listener asking by score still finds what it kept.
+pub fn pick_shares(node: &[u8; 32], chunks: &[(Hash, u64)], share: f64, budget: u64) -> Vec<(Hash, u64)> {
+    let mut v: Vec<(f64, Hash, u64)> = chunks.iter().map(|(n, l)| (share_score(node, n), *n, *l)).filter(|(s, _, _)| *s < share).collect();
+    v.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut used = 0u64;
+    v.into_iter()
+        .take_while(|(_, _, l)| {
+            used += l;
+            used <= budget
+        })
+        .map(|(_, n, l)| (n, l))
+        .collect()
+}
+
 /// Carriers a station's listing keeps: the freshest claims, the oldest giving way.
 pub const MAX_CARRIERS: usize = 64;
 /// How long a carrier that failed to answer is tried only after the others.
@@ -348,6 +386,33 @@ mod serde_bytes64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shares_split_the_log_and_shrink_with_the_fleet() {
+        let chunks: Vec<(Hash, u64)> = (0..4000u32).map(|i| (*blake3::hash(&i.to_le_bytes()).as_bytes(), 1000)).collect();
+        assert_eq!(share_of(3), 1.0);
+        let fleet = 80usize;
+        let p = share_of(fleet);
+        let nodes: Vec<[u8; 32]> = (0..fleet as u32).map(|i| *blake3::hash(&(i + 9_000_000).to_le_bytes()).as_bytes()).collect();
+        let mut copies = std::collections::HashMap::<Hash, usize>::new();
+        for n in &nodes {
+            let mine = pick_shares(n, &chunks, p, u64::MAX);
+            // Each node holds about a tenth of the Log, not all of it.
+            assert!(mine.len() > 250 && mine.len() < 550, "{}", mine.len());
+            for (c, _) in mine {
+                *copies.entry(c).or_default() += 1;
+            }
+        }
+        let mean = copies.values().sum::<usize>() as f64 / chunks.len() as f64;
+        assert!((7.0..9.0).contains(&mean), "{mean}");
+        // Nearly every chunk is held somewhere (a Poisson eight leaves about 1 in 3000 bare).
+        assert!(copies.len() >= chunks.len() - 10);
+        // A smaller budget keeps the start of the same list.
+        let full = pick_shares(&nodes[0], &chunks, p, u64::MAX);
+        let half = pick_shares(&nodes[0], &chunks, p, (full.len() as u64 / 2) * 1000);
+        assert_eq!(half[..], full[..half.len()]);
+    }
+
 
     /// A stranger's bytes, random and mutated from real ones, into every decoder the wire
     /// reaches: none may panic, hang or allocate without bound. A small fuzzer that runs with

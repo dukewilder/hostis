@@ -48,5 +48,8 @@ name = "release"
 path = "src/bin/release/main.rs"
 required-features = ["keytool"]
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
+
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

@@ -88,6 +88,36 @@ pub fn now_ms() -> u64 {
     (raw_now_ms() as i64 + clockfix::offset_ms()) as u64
 }
 
+/// `Config::ballast` set to this sizes ballast from the free space, pass by pass.
+pub const BALLAST_AUTO: u64 = u64::MAX;
+
+/// Bytes free on the disk holding `dir`.
+pub fn disk_free(dir: &std::path::Path) -> Option<u64> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let c = std::ffi::CString::new(dir.as_os_str().as_bytes()).ok()?;
+        let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+        if unsafe { libc::statvfs(c.as_ptr(), &mut st) } != 0 {
+            return None;
+        }
+        Some(st.f_bavail as u64 * st.f_frsize as u64)
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        let w: Vec<u16> = dir.as_os_str().encode_wide().chain(Some(0)).collect();
+        let mut free = 0u64;
+        let ok = unsafe { windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(w.as_ptr(), &mut free, std::ptr::null_mut(), std::ptr::null_mut()) };
+        (ok != 0).then_some(free)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = dir;
+        None
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub dir: PathBuf,
@@ -454,6 +484,49 @@ impl Inner {
             .collect()
     }
 
+    /// Every node heard carrying anything in the last twelve hours: the fleet as this node
+    /// sees it, which sets how small each ballast share can be.
+    fn fleet(&self) -> Vec<[u8; 32]> {
+        let now = now_ms();
+        let me = *self.endpoint.id().as_bytes();
+        let log = self.log.lock().unwrap();
+        let mut v: Vec<[u8; 32]> = log.values().flat_map(|l| l.carriers.iter()).filter(|(n, (_, seen))| **n != me && now.saturating_sub(*seen) < 12 * 3_600_000).map(|(n, _)| *n).collect();
+        v.sort_unstable();
+        v.dedup();
+        v
+    }
+
+    /// Carriers to ask for one chunk: the station's two best, then the nodes whose ballast
+    /// share the chunk falls in (anyone can work that out), then the rest.
+    fn carriers_for(&self, station: &StationId, name: &Hash) -> Vec<EndpointId> {
+        let ranked = self.carriers(station);
+        let fleet = self.fleet();
+        let share = net::share_of(fleet.len() + 1);
+        let now = now_ms();
+        let failed = self.failed.lock().unwrap().clone();
+        let mut likely: Vec<(f64, [u8; 32])> = fleet
+            .into_iter()
+            .filter(|n| !failed.get(n).is_some_and(|t| now.saturating_sub(*t) < net::FAILED_MS))
+            .map(|n| (net::share_score(&n, name), n))
+            .filter(|(s, _)| *s < share)
+            .collect();
+        likely.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut out: Vec<EndpointId> = ranked.iter().take(2).copied().collect();
+        for (_, n) in likely.into_iter().take(4) {
+            if let Ok(id) = EndpointId::from_bytes(&n) {
+                if !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+        }
+        for id in ranked {
+            if !out.contains(&id) {
+                out.push(id);
+            }
+        }
+        out
+    }
+
     /// One of our own stations, which another phone (a hand, or the captain) may also write.
     /// Our copy is checked against the network's from the start: newer entries come aboard,
     /// and if two phones wrote at once, ours are rewritten on top of the network's.
@@ -599,7 +672,7 @@ impl Inner {
             return Ok(b);
         }
         let name = pyrate_core::seal::name(hash);
-        for node in self.carriers(station) {
+        for node in self.carriers_for(station, &name) {
             // Sealed first: the carrier hands on bytes it never opened.
             if let Ok(Response::Sealed(Some(s))) = self.ask(node, &Request::SealedChunk { name }).await {
                 let Some(b) = pyrate_core::seal::unseal(hash, &s) else { continue };
@@ -626,7 +699,7 @@ impl Inner {
         if let Some(b) = self.store.lock().unwrap().get_sealed(name) {
             return Ok(b);
         }
-        for node in self.carriers(station) {
+        for node in self.carriers_for(station, name) {
             if let Ok(Response::Sealed(Some(s))) = self.ask(node, &Request::SealedChunk { name: *name }).await {
                 return Ok(s);
             }
@@ -1378,57 +1451,75 @@ impl Inner {
 }
 
 impl Inner {
-    /// Ballast: every node carries the stations nearest its own id by hash, up to what it
-    /// donated, whether or not anyone listens to them. No coordination: each node ranks the
-    /// Log for itself, and the spread falls out of the hashing.
+    /// Ballast: every node holds a share of the whole Log, chunk by chunk, whether or not
+    /// anyone listens. The share is about eight copies spread over the fleet this node can see,
+    /// so it is everything while the fleet is small and shrinks as the fleet grows. Which
+    /// chunks fall to which node comes from hashing the two together: no coordination, and a
+    /// listener can work out where to ask.
     async fn ballast(self: &Arc<Self>) {
-        const PER_STATION: u64 = 300_000_000;
-        let me = blake3::derive_key("pyrate/ballast-seat/v1", &self.seed);
-        let mut stations: Vec<StationId> = self.log.lock().unwrap().iter().filter(|(s, l)| l.announce.is_some() && !self.is_pocket(s)).map(|(s, _)| *s).collect();
-        stations.sort_by_key(|s| {
-            let mut h = blake3::Hasher::new();
-            h.update(b"pyrate/ballast/v1");
-            h.update(&me);
-            h.update(&s.0);
-            *h.finalize().as_bytes()
-        });
-        let mut budget = self.ballast_bytes.load(std::sync::atomic::Ordering::Relaxed);
-        let mut pinned = std::collections::HashSet::new();
+        let budget = self.ballast_budget();
+        let me = *self.endpoint.id().as_bytes();
+        let stations: Vec<StationId> = self.log.lock().unwrap().iter().filter(|(s, l)| l.announce.is_some() && !self.is_pocket(s)).map(|(s, _)| *s).collect();
+        let mut offer: Vec<(Hash, u64)> = Vec::new();
+        let mut whose: HashMap<Hash, (StationId, Hash)> = HashMap::new();
         for st in stations {
-            if budget < 10_000_000 || self.is_own(&st) || !self.will_carry(&st, None) {
+            if self.is_own(&st) || !self.will_carry(&st, None) {
                 continue;
             }
             let _ = self.sync_log_direct(st).await;
-            let wanted: Vec<(Hash, u64)> = {
-                let s = self.store.lock().unwrap();
-                let Some(a) = s.logs.get(&st) else { continue };
-                let mut v = Vec::new();
-                let mut size = 0;
-                for (_, e) in a.library().unwrap_or_default() {
-                    if let Body::Track { chunks, .. } = e.entry.body() {
-                        for c in chunks {
-                            if size + c.len as u64 > PER_STATION.min(budget) {
-                                break;
-                            }
-                            size += c.len as u64;
-                            v.push((c.hash, c.len as u64));
+            let s = self.store.lock().unwrap();
+            let Some(a) = s.logs.get(&st) else { continue };
+            for (_, e) in a.library().unwrap_or_default() {
+                if let Body::Track { chunks, .. } = e.entry.body() {
+                    for c in chunks {
+                        let name = pyrate_core::seal::name(&c.hash);
+                        if whose.insert(name, (st, c.hash)).is_none() {
+                            offer.push((name, c.len as u64));
                         }
                     }
                 }
-                v
-            };
-            for (h, len) in &wanted {
-                budget = budget.saturating_sub(*len);
-                if self.store.lock().unwrap().has_chunk(h) {
-                    continue;
-                }
-                if self.chunk_direct(&st, h, true).await.is_err() || !self.ballast_ok.load(std::sync::atomic::Ordering::Relaxed) {
-                    break;
-                }
             }
-            pinned.insert(st);
         }
-        self.store.lock().unwrap().pinned = pinned;
+        let share = net::share_of(self.fleet().len() + 1);
+        let mine = net::pick_shares(&me, &offer, share, budget);
+        let mut pinned = std::collections::HashSet::new();
+        let mut keep = std::collections::HashSet::new();
+        for (name, _) in &mine {
+            let (st, h) = whose[name];
+            pinned.insert(st);
+            keep.insert(h);
+        }
+        {
+            let mut s = self.store.lock().unwrap();
+            s.pinned = pinned;
+            s.ballast = keep;
+        }
+        for (name, _) in mine {
+            if !self.ballast_ok.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
+            }
+            let (st, h) = whose[&name];
+            if !self.store.lock().unwrap().has_chunk(&h) {
+                let _ = self.chunk_direct(&st, &h, true).await;
+            }
+        }
+    }
+
+    /// The room ballast may take. A drawer Lantern's owner names it; otherwise it follows
+    /// the free space: a phone gives up to 4 GB or 2 percent of what is free, a computer up
+    /// to 20 GB or 5 percent. It is worked out again on every pass, so a filling disk shrinks it.
+    fn ballast_budget(&self) -> u64 {
+        let set = self.ballast_bytes.load(std::sync::atomic::Ordering::Relaxed);
+        if set != BALLAST_AUTO {
+            return set;
+        }
+        let held = self.store.lock().unwrap().ballast_bytes();
+        let free = disk_free(&self.cfg.dir).unwrap_or(0) + held;
+        let (cap, pct) = if cfg!(any(target_os = "android", target_os = "ios")) { (4_000_000_000u64, 50u64) } else { (20_000_000_000u64, 20u64) };
+        let b = cap.min(free / pct);
+        let mut s = self.store.lock().unwrap();
+        s.quota = self.cfg.quota + b;
+        b
     }
 }
 
@@ -1436,6 +1527,10 @@ impl Node {
     /// For harnesses: the chunks a station's log names, and whether one opens here.
     pub fn chunks_named(&self, id: &StationId) -> Vec<pyrate_core::Hash> {
         self.inner.store.lock().unwrap().chunks_of(id)
+    }
+    /// For harnesses: how many chunks this node holds as its ballast share.
+    pub fn ballast_held(&self) -> usize {
+        self.inner.store.lock().unwrap().ballast.len()
     }
     pub fn chunk_here(&self, h: &pyrate_core::Hash) -> bool {
         self.inner.store.lock().unwrap().get_chunk(h).is_some()
@@ -1453,7 +1548,7 @@ impl Node {
 
     pub fn start(cfg: Config) -> Result<Self> {
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build()?;
-        let store = Store::open_with(&cfg.dir, cfg.quota + cfg.ballast, HOLD_KEY.lock().unwrap().take())?;
+        let store = Store::open_with(&cfg.dir, cfg.quota + if cfg.ballast == BALLAST_AUTO { 0 } else { cfg.ballast }, HOLD_KEY.lock().unwrap().take())?;
         let hold = store.hold.clone();
         let key_path = cfg.dir.join("node.key");
         // A seed of its own, kept: what this node carries by lot, its voices in chatter and its
@@ -2419,7 +2514,13 @@ impl Node {
             }
             // A drawer Lantern gives more: 1 to 256 GB, carried on Wi-Fi while it charges.
             "ballast_size" => {
-                let gb = req["gb"].as_u64().unwrap_or(1).clamp(1, 256);
+                // Nought hands the size back to the free space.
+                let gb = req["gb"].as_u64().unwrap_or(0).min(256);
+                if gb == 0 {
+                    inner.ballast_bytes.store(BALLAST_AUTO, std::sync::atomic::Ordering::Relaxed);
+                    let b = inner.ballast_budget();
+                    return Ok(json!({ "gb": 0, "auto": b }));
+                }
                 inner.ballast_bytes.store(gb * 1_000_000_000, std::sync::atomic::Ordering::Relaxed);
                 inner.store.lock().unwrap().quota = inner.cfg.quota + gb * 1_000_000_000;
                 Ok(json!({ "gb": gb }))
@@ -2427,7 +2528,8 @@ impl Node {
             "ballast_ok" => {
                 inner.ballast_ok.store(req["value"].as_bool().unwrap_or(false), std::sync::atomic::Ordering::Relaxed);
                 inner.relay_ok.store(req["unmetered"].as_bool().unwrap_or(false), std::sync::atomic::Ordering::Relaxed);
-                Ok(json!({ "ok": true, "carrying": inner.store.lock().unwrap().pinned.len() }))
+                let s = inner.store.lock().unwrap();
+                Ok(json!({ "ok": true, "carrying": s.pinned.len(), "carried_bytes": s.ballast_bytes() }))
             }
             "papers" => {
                 // What this copy knows of the canary: its line, when it was signed, and how old.

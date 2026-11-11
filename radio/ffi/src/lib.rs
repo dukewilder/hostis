@@ -90,7 +90,7 @@ fn start(dir: *const c_char, bootstrap: *const c_char) -> i32 {
         bootstrap,
         public_dns: cfg!(target_os = "android"),
         private: true,
-        ballast: 1_000_000_000,
+        ballast: pyrate_node::BALLAST_AUTO,
         carry_all: false, release_keys: release_keys(),
     };
     match Node::start(cfg) {

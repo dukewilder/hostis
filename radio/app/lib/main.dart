@@ -201,6 +201,7 @@ class Tuner extends ChangeNotifier {
   int _tunedAt = 0;
 
   int carrying = 0;
+  int carriedBytes = 0;
   Timer? _ballast;
   Timer? _update;
   Timer? _feeds;
@@ -272,6 +273,7 @@ class Tuner extends ChangeNotifier {
     final mine = pref('carry_mine_only') == true && pref('lantern') != true;
     final r = Native.call({'cmd': 'ballast_ok', 'value': !mine && unmetered && c['charging'] == true, 'unmetered': !mine && unmetered});
     if (r is Map && r['carrying'] is int) carrying = r['carrying'];
+    if (r is Map && r['carried_bytes'] is int) carriedBytes = r['carried_bytes'];
   }
 
   /// Fades out and stops after [d]; null cancels.
@@ -1502,7 +1504,7 @@ class _DrawerLanternState extends State<DrawerLantern> {
   void apply() {
     pref('lantern', on);
     pref('lantern_gb', gb);
-    Native.call({'cmd': 'ballast_size', 'gb': on ? gb : 1});
+    Native.call({'cmd': 'ballast_size', 'gb': on ? gb : 0});
     _service.invokeMethod('lantern', {'on': on, 'gb': gb}).catchError((_) {});
   }
 
