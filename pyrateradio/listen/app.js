@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=4f1d27c720';
+import init, { Radio } from './pkg/pyrate_browser.js?v=dfea73884e';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -13,7 +13,7 @@ const EMBED = document.documentElement.classList.contains('embed');
 // flock goes straight to an open player, the same set served where no one owns it (IPFS, a
 // Lantern). 'open' is that copy: the whole Log, the chatter and the colours.
 const SCOPE = "harbour";
-const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti.ipfs.inbrowser.link/", "https://bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti/"];
+const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeieuifeqsyqyvgg4huby22fjnj3y6cvqmgqtadeuikk7rxhj25evby.ipfs.inbrowser.link/", "https://bafybeieuifeqsyqyvgg4huby22fjnj3y6cvqmgqtadeuikk7rxhj25evby.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeieuifeqsyqyvgg4huby22fjnj3y6cvqmgqtadeuikk7rxhj25evby/"];
 const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
 const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
 const lastId = () => { if (SHARED) return ''; try { return sessionStorage.getItem('pyrate.cur') || '' } catch (e) { return '' } };
@@ -295,7 +295,7 @@ async function play(id, g) {
       }
       const at = playhead ?? radio.now() + 400;
       const p = JSON.parse(radio.plan(id, at));
-      if (p.kind === 'struck') { reset(); trouble = null; status('This station has struck its colours. It has ended.'); refresh(); return }
+      if (p.kind === 'struck') { reset(); trouble = null; status('This station has struck its colours.'); refresh(); return }
       // A log not found yet is looked for less and less often, up to every fifteen seconds.
       if (p.kind === 'searching') { if (!queued) status('Searching the Log'); await radio.sync(id).catch(() => { }); await sleep(wait); wait = Math.min(15000, wait * 1.6); continue }
       wait = 1200;
@@ -357,7 +357,7 @@ async function nowPlaying() {
   const p = JSON.parse(radio.plan(cur.id, radio.now()));
   lamps(p.kind === 'live');
   if (playing && trouble) { status(trouble); return }
-  if (p.kind === 'struck') { status('This station has struck its colours. It has ended.'); return }
+  if (p.kind === 'struck') { status('This station has struck its colours.'); return }
   if (p.kind === 'live') { $('np').textContent = 'Live from the station'; $('by').textContent = ''; $('slot').textContent = ''; $('prog').style.width = '100%'; $('time').textContent = '' }
   else if (p.kind === 'track') {
     $('np').textContent = p.title || ''; $('by').textContent = p.by || ''; $('slot').textContent = p.slot || '';
@@ -1033,7 +1033,7 @@ async function boot() {
     try { radio = await Radio.start(rememberHarbours(), key, RELAYS) } catch (e) {
       console.warn(e);
       $('name').textContent = 'Could not reach a relay';
-      $('signal').textContent = 'Trying again. If it never comes, this network may block the radio: try another, or the app.';
+      $('signal').textContent = 'Trying again. If it never connects, this network may block the radio. Try another network, or the app.';
       await sleep(Math.min(60000, 5000 * 2 ** tries));
     }
   }
@@ -1088,3 +1088,6 @@ document.querySelectorAll('a.openlink').forEach(a => { if (!a.id) a.href = OPEN_
 if (SHARED) { const m = location.pathname.match(/^\/ipfs\/([a-z2-7]{20,})\//); $('sharedgo').href = m ? 'https://' + m[1] + '.ipfs.dweb.link/' + location.hash : OPEN_PLAYERS[0] || '#'; $('sharednote').hidden = false }
 if (EMBED) { scale(); const p = passedId(); dormant(p && isHarbour(p) ? HARBOUR_STATIONS.find(h => h.id === p) : HARBOUR_STATIONS[0]); $('signal').textContent = '' }
 else booting = boot();
+// In the page, the radio's engine loads from this site while the page is read, so Listen
+// starts at once. Nothing goes to the network itself until Listen is pressed.
+if (EMBED) { const warm = () => init().catch(() => { }); if ('requestIdleCallback' in window) requestIdleCallback(warm, { timeout: 2500 }); else setTimeout(warm, 1200) }

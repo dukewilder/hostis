@@ -1,7 +1,7 @@
 {
  "name": "Pyrate Radio",
  "short_name": "Pyrate",
- "description": "Radio every listener carries, under HOSTIS colours.",
+ "description": "Radio that every listener carries.",
  "start_url": "./",
  "scope": "./",
  "display": "standalone",

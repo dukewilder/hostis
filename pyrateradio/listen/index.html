@@ -6,7 +6,7 @@
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Pyrate Radio · Listen · HOSTIS</title>
-<meta name="description" content="Takedown-resistant radio under HOSTIS colours. Plays in the browser, peer to peer.">
+<meta name="description" content="Radio that anyone can raise, that every listener carries, and that nobody can switch off. Plays in the browser.">
 <meta name="theme-color" content="#030303">
 <meta name="color-scheme" content="dark">
 <meta property="og:title" content="Pyrate Radio · Listen">
@@ -503,7 +503,7 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 <p class="leavingnote" role="status">This station is not one of HOSTIS&#8217;s. Taking you to the open player.</p>
 <section class="set" id="set" aria-label="The radio" tabindex="-1">
 <div id="banner" class="banner"></div>
-<div class="plate" aria-hidden="true"><span>Receiver</span><span class="band">88 to 108</span><span>Under HOSTIS colours</span></div>
+<div class="plate" aria-hidden="true"><span>Receiver</span><span class="band">88 to 108</span><span>Pyrate Radio</span></div>
 <div class="face">
 <div class="art"><img id="cover" class="cover" alt="" hidden><div id="flag" class="flag"></div></div>
 <div class="tell">
@@ -534,7 +534,7 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 </div>
 <svg class="vu" viewBox="0 0 120 70" aria-hidden="true"><path class="arc" d="M14 62 A50 50 0 0 1 106 62"/><path class="hot" d="M88 27 A50 50 0 0 1 106 62"/><g class="ticks" id="ticks"></g><line id="vun" class="vun" x1="60" y1="64" x2="60" y2="18"/><circle cx="60" cy="64" r="3.5" class="hub"/><text x="60" y="58" class="vulabel">VU</text></svg>
 </div>
-<div id="passbox" class="passbox" hidden><div class="qr" id="qr"></div><div class="passtext"><p class="boxhead">Pass it on</p><p>Scan it with a phone camera and the station plays a tap later, in the browser or the app. No account, no store.</p><p class="link" id="plink"></p><div class="row-btns"><button id="pcopy" class="btn">Copy the link</button><button id="pshare" class="btn">Share</button><button id="pclose" class="btn quiet">Close</button></div></div></div>
+<div id="passbox" class="passbox" hidden><div class="qr" id="qr"></div><div class="passtext"><p class="boxhead">Pass it on</p><p>Scan it with a phone camera and the station plays a tap later, in the browser or the app.</p><p class="link" id="plink"></p><div class="row-btns"><button id="pcopy" class="btn">Copy the link</button><button id="pshare" class="btn">Share</button><button id="pclose" class="btn quiet">Close</button></div></div></div>
 <div id="clipbox" class="passbox" hidden><video id="clipv" playsinline controls></video><div class="passtext"><p class="boxhead">Clip it</p><p>Twenty seconds of what is on, with the station's name, its place on the dial and a code to scan. Post it anywhere.</p><div class="row-btns"><a id="clipsave" class="btn" download>Save the clip</a><button id="clipshare" class="btn">Share</button><button id="clipclose" class="btn quiet">Close</button></div></div></div>
 <div id="tipbox" class="passbox" hidden><div class="passtext"><p class="boxhead">Tip the station</p><p>A tip goes from your own wallet straight to the station. Pyrate Radio moves no money and sees none of it.</p><p class="link" id="tipaddr"></p><input id="tipnote" maxlength="140" placeholder="A note for the keeper" aria-label="A note for the keeper"><p class="fine" id="tiphow"></p><div class="row-btns"><a id="tipgo" class="btn">Open my wallet</a><button id="tipcopy" class="btn">Copy the address</button><button id="tipclose" class="btn quiet">Close</button></div></div></div>
 <audio id="a" playsinline></audio>
@@ -542,7 +542,7 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 
 <p id="sharednote" class="appnote" hidden>This gateway shares one address with every page it serves, so this tab keeps nothing past the visit. <a id="sharedgo" href="#">Open the player at its own address</a></p>
 <p id="appnote" class="appnote" hidden>Pyrate Radio on this phone? <a id="appopen" href="#">Open this station in the app</a></p>
-<p class="takeset open-only"><a href="../#set"><span class="ts-lead">Take the set</span><span class="ts-sub">the app for android &#183; plays with the screen off &#183; raise your own station</span></a></p>
+<p class="takeset open-only"><a href="../#set"><span class="ts-lead">Take the set</span><span class="ts-sub">android &#183; windows &#183; mac &#183; linux &#183; plays with the screen off</span></a></p>
 <div class="divider"><span class="divider-glyph"></span></div>
 
 <div class="below">
@@ -576,7 +576,7 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 <div id="chart" class="chart" hidden></div>
 <div id="rows"></div>
 <div class="harbour-only everyone">
-<p class="fine">Every other station on the Log plays in the open player: the same set, served from IPFS and from Lanterns, owned by nobody.</p>
+<p class="fine">Every other station on the Log plays in the open player, the same set served from IPFS and from Lanterns and owned by nobody.</p>
 <p class="centre"><a class="lead-btn openlink" href="#"><span class="fc-lead">Every station</span><span class="fc-sub">the open player &#183; the whole Log</span></a></p>
 </div>
 <div class="open-only studio" id="studio">
@@ -588,12 +588,12 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 <p id="st-locknote2" class="fine" role="status"></p>
 </div>
 <div id="st-new">
-<p class="fine">Name it, drop recordings in, and it plays all day and all night, carried by every listener. The station is a key made in this tab. Nobody can take it from you, and nobody can give it back if you lose its twenty-four words.</p>
+<p class="fine">Name it, drop recordings in, and it plays all day and all night, carried by every listener. The station is a key made in this tab, and its twenty-four words are the only way back to it.</p>
 <label class="field"><span>Name</span><input id="st-name" maxlength="40" autocomplete="off" placeholder="The name on the dial"></label>
 <label class="field"><span>What it broadcasts</span><input id="st-about" maxlength="140" autocomplete="off" placeholder="A line for the Log"></label>
 <label class="field"><span>Its kinds</span><input id="st-kinds" maxlength="80" autocomplete="off" placeholder="Up to three, by commas: jazz, talk, sea shanties"></label>
 <div class="switches"><label><input type="checkbox" id="st-mature"><span>It is mature</span></label><label><input type="checkbox" id="st-explicit"><span>It is explicit</span></label></div>
-<details class="fold"><summary>A passphrase on top of the words</summary><div><p>With a passphrase, the 24 words alone open a different, empty station: a photograph of them gives nothing away, and words given up under force open that one instead. Lose the passphrase and the station is lost with it.</p><label class="field"><span>Passphrase</span><input id="st-ppass" type="password" autocomplete="new-password" placeholder="Optional"></label></div></details>
+<details class="fold"><summary>A passphrase on top of the words</summary><div><p>With a passphrase, the 24 words alone open a different, empty station, so a photograph of them gives nothing away and words given up under force open that one instead. Lose the passphrase and the station is lost with it.</p><label class="field"><span>Passphrase</span><input id="st-ppass" type="password" autocomplete="new-password" placeholder="Optional"></label></div></details>
 <p class="centre"><button id="st-raise" class="lead-btn"><span class="fc-lead">Raise colours</span><span class="fc-sub">a key made here &#183; nothing leaves until it sails</span></button></p>
 <p id="st-note" class="fine" role="status"></p>
 <details class="fold"><summary>Take back a station from its 24 words</summary><div><textarea id="st-words" spellcheck="false" autocomplete="off" aria-label="The station's 24 words"></textarea><label class="field"><span>Passphrase, if you set one</span><input id="st-rpass" type="password" autocomplete="off"></label><p class="centre"><button id="st-restore" class="btn">Take it back</button></p></div></details>
@@ -601,9 +601,9 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 </div>
 <div id="st-show" class="st-show" hidden>
 <p class="boxhead">Write these down</p>
-<p class="fine">These twenty-four words are the station. Whoever holds them can speak for it, strike it or take it to another device. They are shown once, never sent anywhere and never kept here. Write them on paper, in order. Nobody from Pyrate Radio or HOSTIS will ever ask for them.</p>
+<p class="fine">These twenty-four words are the station. Whoever holds them can speak for it, strike it or take it to another device. They are shown once and kept nowhere. Write them on paper, in order. Nobody from Pyrate Radio or HOSTIS will ever ask for them.</p>
 <ol id="st-wordlist" class="wordlist"></ol>
-<p id="st-passnote" class="fine" hidden>And your passphrase: keep it apart from the words. Without it, these words open a different station.</p>
+<p id="st-passnote" class="fine" hidden>Keep your passphrase apart from the words. Without it, these words open a different station.</p>
 <div class="switches"><label><input type="checkbox" id="st-written"><span>I have written them down, in order</span></label></div>
 <p class="centre"><button id="st-done" class="btn" disabled>On to the station</button></p>
 </div>
@@ -621,9 +621,11 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 <div class="row-btns"><button id="st-another" class="btn quiet">Raise another</button></div>
 </div>
 </div>
-<div class="sechead gap"><h2>Take the Set</h2><span class="cap">android &#183; no store, no account</span></div>
-<p class="fine">The app plays with the screen off, keeps the stations you love on your phone and raises stations of your own.</p>
-<p class="centre"><a class="lead-btn" href="../#set"><span class="fc-lead">Take the set</span><span class="fc-sub">the app for android</span></a></p>
+<div class="harbour-only">
+<div class="sechead gap"><h2>Take the Set</h2><span class="cap">android &#183; windows &#183; mac &#183; linux</span></div>
+<p class="fine">The app plays with the screen off, keeps the stations you love and carries its share for the fleet.</p>
+<p class="centre"><a class="lead-btn" href="../#set"><span class="fc-lead">Take the set</span><span class="fc-sub">the app for phones and computers</span></a></p>
+</div>
 <div class="open-only">
 <div class="sechead gap"><h2>Your Colours</h2><span class="cap">kept in this browser</span></div>
 <p class="fine">What reaches you is your own choice. A marooned station leaves this browser's Log. Lists of marooned stations pass from hand to hand: paste one in to take it aboard, or copy yours out to share.</p>
@@ -645,6 +647,6 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 <p class="f-copy">no rights reserved &#183; all copies welcome</p>
 <p class="f-source"><a href="https://github.com/dukewilder/hostis" target="_blank" rel="noopener noreferrer">source code</a></p>
 </footer>
-<script type="module" src="app.js?v=4f1d27c720"></script>
+<script type="module" src="app.js?v=dfea73884e"></script>
 </body>
 </html>
