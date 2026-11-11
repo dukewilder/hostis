@@ -4,7 +4,7 @@ Paste this to the Claude on dukewilder. It supersedes `tools/dukewilder-0.9.8.md
 
 ---
 
-Rebuild the three Pyrate Radio Lanterns (pyrate-lantern, pyrate-hold, pyrate-releases) from the radio branch of github.com/dukewilder/hostis at commit {{COMMIT}} or later, then add three new stations to the harbour. Work through the steps in order and report at the end.
+Rebuild the three Pyrate Radio Lanterns (pyrate-lantern, pyrate-hold, pyrate-releases) from the radio branch of github.com/dukewilder/hostis at commit 63527d8 or later, then add three new stations to the harbour. Work through the steps in order and report at the end.
 
 ## Rules, as before
 
@@ -15,7 +15,7 @@ Rebuild the three Pyrate Radio Lanterns (pyrate-lantern, pyrate-hold, pyrate-rel
 
 ## 1. Fetch and build
 
-1. Fetch the radio branch through the tunnel, the same way as the last rebuild in `~/pyrate-rebuild-report.txt`, and check out {{COMMIT}} or later.
+1. Fetch the radio branch through the tunnel, the same way as the last rebuild in `~/pyrate-rebuild-report.txt`, and check out 63527d8 or later.
 2. Tag the running image first: `docker tag pyrate-lantern:latest pyrate-lantern:prev-2026-11-11b`.
 3. Build the new image the same way as last time, in the rust:bookworm container.
 
