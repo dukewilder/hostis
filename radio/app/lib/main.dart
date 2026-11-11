@@ -218,7 +218,11 @@ class Tuner extends ChangeNotifier {
       _service.invokeMethod('lantern', {'on': true, 'gb': gb}).catchError((_) {});
     }
     _checkBallast();
+    // A radio left playing comes back on where it was, the moment the app opens.
+    final resume = pref('resume');
+    if (firstTuneDone && resume is String && resume.length == 64 && Native.call({'cmd': 'status'})?['tuned'] == null) pendingLink = resume;
     unawaited(sweepTemp());
+    unawaited(_refresh());
     // Podcast feeds are read every few hours, on Wi-Fi only, while the app is open.
     _feeds = Timer.periodic(const Duration(minutes: 20), (_) => _checkFeeds());
     Future.delayed(const Duration(seconds: 90), _checkFeeds);
@@ -428,6 +432,7 @@ class Tuner extends ChangeNotifier {
     playing = true;
     _tunedAt = DateTime.now().millisecondsSinceEpoch;
     _service.invokeMethod('remember', {'station': id}).catchError((_) {});
+    pref('resume', id);
     Native.call({'cmd': 'tune', 'station': id});
     final name = station(id)?['name'] ?? 'Pyrate Radio';
     _service.invokeMethod('start', {'title': name}).catchError((_) {});
@@ -451,6 +456,7 @@ class Tuner extends ChangeNotifier {
     playing = false;
     _tunedAt = DateTime.now().millisecondsSinceEpoch;
     stopScan();
+    pref('resume', '');
     Native.call({'cmd': 'stop'});
     _service.invokeMethod('stop').catchError((_) {});
     notifyListeners();

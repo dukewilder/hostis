@@ -173,17 +173,46 @@ impl Inner {
     }
 
     pub(crate) async fn private_chunk(&self, station: StationId, hash: Hash, keep: bool) -> Result<Vec<u8>> {
+        use n0_future::StreamExt;
         let name = pyrate_core::seal::name(&hash);
-        for _ in 0..3 {
-            let Ok(raw) = self.ask_privately(&Ask::Sealed { station, name }).await else { continue };
-            if let Ok(Response::Sealed(Some(s))) = postcard::from_bytes::<Response>(&raw) {
-                let Some(b) = pyrate_core::seal::unseal(&hash, &s) else { continue };
-                if !keep || self.store.lock().unwrap().put_sealed(&hash, &s).is_ok() {
-                    return Ok(b);
+        let one = || async {
+            let raw = tokio::time::timeout(Duration::from_secs(8), self.ask_privately(&Ask::Sealed { station, name })).await.map_err(|_| anyhow!("slow route"))??;
+            match postcard::from_bytes::<Response>(&raw) {
+                Ok(Response::Sealed(Some(s))) => pyrate_core::seal::unseal(&hash, &s).map(|b| (b, s)).ok_or_else(|| anyhow!("unopened")),
+                _ => Err(anyhow!("no answer")),
+            }
+        };
+        // A route that has not answered in two and a half seconds gets a second beside it, by
+        // another exit, and the first answer wins: three at most. Each exit sees what it always
+        // saw, a sealed name from a guard.
+        let mut tries = n0_future::FuturesUnordered::new();
+        tries.push(one());
+        let mut started = 1;
+        loop {
+            let wait = tokio::time::sleep(Duration::from_millis(2_500));
+            tokio::select! {
+                r = tries.next() => match r {
+                    Some(Ok((b, s))) => {
+                        if !keep || self.store.lock().unwrap().put_sealed(&hash, &s).is_ok() {
+                            return Ok(b);
+                        }
+                    }
+                    Some(Err(_)) if started < 3 => {
+                        tries.push(one());
+                        started += 1;
+                    }
+                    Some(Err(_)) => {}
+                    None => return Err(anyhow!("no private route answered")),
+                },
+                _ = wait, if started < 3 => {
+                    tries.push(one());
+                    started += 1;
                 }
             }
+            if tries.is_empty() {
+                return Err(anyhow!("no private route answered"));
+            }
         }
-        Err(anyhow!("no private route answered"))
     }
 
     pub(crate) async fn private_token(&self, station: StationId, hour: u64, token: [u8; 32], nonce: u64) {

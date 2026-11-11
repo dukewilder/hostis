@@ -1156,6 +1156,45 @@ impl Inner {
         self.hold.read_note(&self.cfg.dir, "prefs.json", Some(&self.cfg.dir.join("prefs.json"))).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(Value::Null)
     }
 
+    /// The Log as last heard, sealed in the hold, so the dial is full the moment the app opens
+    /// and the tuned station's carriers are known before gossip has said a word. Cards are
+    /// public and signed by their stations; nothing here says what this device played.
+    fn save_log(&self) {
+        let now = now_ms();
+        let v: Vec<(Announce, Vec<([u8; 32], u64)>)> = {
+            let log = self.log.lock().unwrap();
+            log.iter()
+                .filter(|(id, l)| l.fresh(now) && !self.is_pocket(id))
+                .filter_map(|(_, l)| Some((l.announce.clone()?, l.carriers.iter().map(|(n, (h, _))| (*n, *h)).collect())))
+                .collect()
+        };
+        if let Ok(b) = postcard::to_stdvec(&v) {
+            let _ = self.hold.write_note(&self.cfg.dir, "log-cache", &b);
+        }
+    }
+
+    /// Takes the Log back from the hold at start, every card checked again. Cards older than
+    /// three days stay out. Each restored carrier counts as heard just now and fades in ten
+    /// minutes unless the network says it again.
+    fn load_log(&self) {
+        let Some(b) = self.hold.read_note(&self.cfg.dir, "log-cache", None) else { return };
+        let Ok(v) = postcard::from_bytes::<Vec<(Announce, Vec<([u8; 32], u64)>)>>(&b) else { return };
+        let now = now_ms();
+        let mut n = 0;
+        for (a, carriers) in v {
+            if now.saturating_sub(a.at_ms) > 3 * 86_400_000 {
+                continue;
+            }
+            let st = a.station;
+            self.on_gossip(Gossip::Station(a));
+            for (node, head) in carriers.into_iter().take(net::MAX_CARRIERS) {
+                self.on_gossip(Gossip::Carrier { station: st, node, head });
+            }
+            n += 1;
+        }
+        say(&format!("{n} stations from the Log as last heard"));
+    }
+
     /// An hourly note of how many are aboard each of our own stations, for the owner's chart.
     fn log_aboard(&self) {
         let own = self.store.lock().unwrap().own();
@@ -1796,6 +1835,7 @@ impl Node {
         *proto.0.lock().unwrap() = Some(inner.clone());
         {
             let i2 = inner.clone();
+            inner.load_log();
             rt.spawn(async move { i2.open_pockets().await });
         }
 
@@ -1888,6 +1928,9 @@ impl Node {
                 }
                 if n % 360 == 7 {
                     i2.log_aboard();
+                }
+                if n % 6 == 1 {
+                    i2.save_log();
                 }
                 if n % 30 == 0 {
                     {
@@ -2727,6 +2770,7 @@ mod playout {
         let mut last_sync = 0u64;
         // Off the air: when the station comes back, worked out at most once a minute.
         let mut off_air: Option<(StationId, u64, Option<u64>)> = None;
+        let syncing = Arc::new(std::sync::atomic::AtomicBool::new(false));
         loop {
             tokio::time::sleep(Duration::from_millis(250)).await;
             if RESET.swap(false, std::sync::atomic::Ordering::SeqCst) {
@@ -2740,7 +2784,18 @@ mod playout {
             let now = inner.play_now();
             if now.saturating_sub(last_sync) > if st.live_seq.is_some() { 2_500 } else { 8_000 } {
                 last_sync = now;
-                let _ = inner.sync_log(station).await;
+                // With the log already on this disk the sound starts from it at once and the
+                // log catches up beside it. Only a station never heard waits for its log.
+                let have = inner.store.lock().unwrap().logs.get(&station).is_some_and(|a| a.len() > 0);
+                if !have {
+                    let _ = inner.sync_log(station).await;
+                } else if !syncing.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                    let (i, f) = (inner.clone(), syncing.clone());
+                    tokio::spawn(async move {
+                        let _ = i.sync_log(station).await;
+                        f.store(false, std::sync::atomic::Ordering::SeqCst);
+                    });
+                }
             }
             let archive = inner.store.lock().unwrap().logs.get(&station).cloned();
             let Some(archive) = archive else {
@@ -2760,6 +2815,19 @@ mod playout {
                     inner.queue.lock().unwrap().samples.clear();
                     st.playhead = None;
                     st.track = None;
+                }
+            }
+
+            // Tuning in: the title is on the screen before the first chunk lands.
+            if st.playhead.is_none() && st.live_seq.is_none() && queued_ms(&inner) == 0 {
+                if let Some(np) = clock.now(now) {
+                    let (title, by) = describe(&archive, &np.track);
+                    let pic = archive.track_art(&np.track).map(|a| hex(&a.hash));
+                    *inner.np.lock().unwrap() = json!({
+                        "station": station.to_hex(), "state": "searching",
+                        "title": shown(&title), "by": shown(&by), "art": pic, "slot": np.slot,
+                        "position_ms": np.offset_ms, "duration_ms": np.duration_ms,
+                    });
                 }
             }
 
@@ -2802,7 +2870,26 @@ mod playout {
                 let entry = archive.entries().iter().find(|e| e.hash().ok() == Some(np.track));
                 let Some(Body::Track { chunks, channels, .. }) = entry.map(|e| e.entry.body()) else { break };
                 let Some(chunk) = chunks.get(np.chunk).copied() else { break };
-                let Ok(bytes) = inner.chunk(&station, &chunk.hash).await else {
+                // Tuning in, the chunk after this one is asked for at the same time, so the first
+                // sound has a full chunk behind it and never stops to wait for the second.
+                let next = clock.now(at - np.chunk_offset_ms + chunk.duration_ms() + 1).and_then(|n2| {
+                    let e = archive.entries().iter().find(|e| e.hash().ok() == Some(n2.track))?;
+                    match e.entry.body() {
+                        Body::Track { chunks, .. } => chunks.get(n2.chunk).map(|c| c.hash),
+                        _ => None,
+                    }
+                });
+                let ahead = next.filter(|h| st.playhead.is_none() && !inner.store.lock().unwrap().has_chunk(h)).map(|h| {
+                    let i = inner.clone();
+                    tokio::spawn(async move { i.chunk(&station, &h).await.map(|_| ()) })
+                });
+                let got = inner.chunk(&station, &chunk.hash).await;
+                if st.playhead.is_none() {
+                    if let Some(a) = ahead {
+                        let _ = tokio::time::timeout(Duration::from_secs(8), a).await;
+                    }
+                }
+                let Ok(bytes) = got else {
                     say("no carrier answered for the chunk on now");
                     *inner.np.lock().unwrap() = json!({ "station": station.to_hex(), "state": "searching" });
                     break;
