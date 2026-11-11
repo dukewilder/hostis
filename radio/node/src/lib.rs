@@ -1087,9 +1087,16 @@ impl Inner {
         }
     }
 
-    /// Ingests a file and adds it to one of our stations' libraries.
+    /// How far the keeper asked for their voice to be shifted on air, in semitones (the
+    /// "disguise" setting; 0, the default, leaves it as it is).
+    pub(crate) fn disguise(&self) -> f64 {
+        self.prefs()["disguise"].as_f64().unwrap_or(0.0).clamp(-12.0, 12.0)
+    }
+
+    /// Ingests a file and adds it to one of our stations' libraries. Talk loses its mains hum
+    /// and takes the keeper's voice disguise; music goes as it is.
     pub fn add_track(&self, station: StationId, path: &std::path::Path, title: &str, by: &str, source: &str, profile: Profile) -> Result<Hash> {
-        let got = pyrate_core::ingest::ingest(path, profile)?;
+        let got = pyrate_core::ingest::ingest_voiced(path, profile, self.disguise())?;
         let mut s = self.store.lock().unwrap();
         for (c, bytes) in &got.chunks {
             s.put_chunk(&c.hash, bytes)?;
@@ -1309,11 +1316,14 @@ impl Inner {
                 None
             };
             let file_pcm: Option<Vec<i16>> = file.and_then(|p| {
-                let got = pyrate_core::ingest::ingest(&p, Profile::Talk).ok()?;
+                let got = pyrate_core::ingest::ingest_voiced(&p, Profile::Talk, me.disguise()).ok()?;
                 let mut d = pyrate_core::audio::ChunkDecoder::new(1).ok()?;
                 Some(got.chunks.iter().flat_map(|(_, b)| d.decode(b).unwrap_or_default()).collect())
             });
             let Ok(mut enc) = pyrate_core::ChunkEncoder::new(Profile::Talk) else { return };
+            // The microphone loses its mains hum, which would date and place the broadcast, and
+            // takes the keeper's voice disguise if one is set. A file was treated when ingested.
+            let mut voice = pyrate_core::voice::Voice::new(true, me.disguise());
             let mut fed = 0usize;
             say(&format!("ON AIR {}", station.call_sign()));
             while me.live.lock().unwrap().is_some_and(|(s, t)| s == station && t == started) {
@@ -1329,7 +1339,11 @@ impl Inner {
                         }
                         out
                     }
-                    None => std::mem::take(&mut *b2.lock().unwrap()),
+                    None => {
+                        let mut p = std::mem::take(&mut *b2.lock().unwrap());
+                        voice.run(&mut p);
+                        p
+                    }
                 };
                 let Ok(chunks) = enc.push(&pcm) else { break };
                 for (c, bytes) in chunks {

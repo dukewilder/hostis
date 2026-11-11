@@ -952,7 +952,7 @@ async function airFile(f, row) {
     for (let i = 0; i < frames; i += BLOCK) { radio.level_feed(block(chans, i, Math.min(BLOCK, frames - i), ch)); if ((i / BLOCK) % 8 === 7) await sleep(0) }
     const lv = JSON.parse(radio.level_end());
     st('Encoding', 0.2);
-    await encode('begin', { channels: ch, bitrate, talk });
+    await encode('begin', { channels: ch, bitrate, talk, disguise: $('st-disguise').checked ? -4 : 0 });
     for (let i = lv.start; i < lv.end; i += BLOCK) {
       const fb = block(chans, i, Math.min(BLOCK, lv.end - i), ch, lv.gain), pcm = new Int16Array(fb.length);
       for (let j = 0; j < fb.length; j++) pcm[j] = Math.max(-1, Math.min(1, fb[j])) * 32767;
@@ -986,7 +986,7 @@ $('st-live').onclick = async () => {
   const ac = new AudioContext({ sampleRate: 48000 }), src = ac.createMediaStreamSource(stream), proc = ac.createScriptProcessor(4096, 1, 1), mute = ac.createGain();
   mute.gain.value = 0; src.connect(proc); proc.connect(mute); mute.connect(ac.destination);
   w.onmessage = e => { if (e.data.live || (e.data.out && e.data.frames !== undefined)) { try { if (e.data.out?.length) radio.live_chunk(id, e.data.out, 1, 24000) } catch (err) { console.warn(err) } } if (e.data.out && !e.data.live) w.terminate() };
-  w.postMessage({ id: 0, kind: 'begin', channels: 1, bitrate: 24000, talk: true, live: true });
+  w.postMessage({ id: 0, kind: 'begin', channels: 1, bitrate: 24000, talk: true, live: true, disguise: $('st-disguise').checked ? -4 : 0 });
   proc.onaudioprocess = ev => { const f = ev.inputBuffer.getChannelData(0), pcm = new Int16Array(f.length); for (let i = 0; i < f.length; i++) pcm[i] = Math.max(-1, Math.min(1, f[i])) * 32767; w.postMessage({ id: 0, kind: 'feed', pcm }, [pcm.buffer]) };
   const t0 = Date.now();
   live = { stream, ac, proc, w, timer: setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); $('st-livetime').textContent = 'ON AIR ' + String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0') }, 500) };

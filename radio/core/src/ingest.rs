@@ -173,6 +173,12 @@ fn measure(path: &Path, out_ch: usize) -> Result<Level> {
 }
 
 pub fn ingest(path: &Path, profile: Profile) -> Result<Ingested> {
+    ingest_voiced(path, profile, 0.0)
+}
+
+/// As [`ingest`]; talk also loses its mains hum (see [`crate::voice`]) and, if asked, has the
+/// voice shifted by `semitones`. Music goes through as it is.
+pub fn ingest_voiced(path: &Path, profile: Profile, semitones: f64) -> Result<Ingested> {
     let level = measure(path, profile.channels() as usize)?;
     let file = File::open(path)?;
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
@@ -217,6 +223,7 @@ pub fn ingest(path: &Path, profile: Profile) -> Result<Ingested> {
     let mut mapped: Vec<f32> = Vec::new();
     let mut resampled: Vec<f32> = Vec::new();
     let mut pcm: Vec<i16> = Vec::new();
+    let mut voice = crate::voice::Voice::new(profile == Profile::Talk, if profile == Profile::Talk { semitones } else { 0.0 });
     let mut total_frames: u64 = 0;
     let mut src_at: u64 = 0;
 
@@ -272,6 +279,7 @@ pub fn ingest(path: &Path, profile: Profile) -> Result<Ingested> {
             },
         }
         *total_frames += (pcm.len() / out_ch) as u64;
+        voice.run(&mut pcm);
         chunks.extend(encoder.push(&pcm)?);
         Ok(())
     };

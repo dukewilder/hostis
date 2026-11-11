@@ -24,6 +24,7 @@ pub mod programme;
 pub mod route;
 pub mod seal;
 pub mod tape;
+pub mod voice;
 
 pub use archive::{ArtRef, Archive, Body, Chunk, Entry, SignedEntry, release_message, release_trusted};
 pub use clock::{NowPlaying, Rota};
