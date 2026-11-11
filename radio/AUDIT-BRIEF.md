@@ -116,6 +116,7 @@ Also weigh new features or improvements that would strengthen either track while
 ## 8. What only Dylan can do (keep this list, add to it)
 
 Known now:
+- Sign `pyrate-radio-0.9.10-to-sign.apk` (in the pyrate-keys folder on his PC), then paste `tools/dukewilder-0.9.10.md` into the Claude on dukewilder and send back its report: the five HOSTIS station ids go into `browser/harbour.json`, `app/assets/harbour.txt` and the landing.
 - Generate the signing keys on his PC with `pyrate-keys.exe` and send `release_keys.txt` and the Android cert; the release and Android signing keys never enter this workspace.
 - Test on real devices: a flock of several phones, the drawer Lantern over days (and after a reboot), iPhone and iPad lock-screen playback through a phone call, the playback service from the lock screen and the car (its threading is new in 0.8.4 and has only been built, never run), a bell, and SCUTTLE on a phone you can spare.
 - Try the computers' builds on hostis.black/pyrateradio: the Windows zip on his PC (run pyrate.exe), and the Mac zip if a Mac is to hand (right-click, Open). They were built in CI and have only been run on Linux here.
