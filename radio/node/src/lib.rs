@@ -1625,10 +1625,14 @@ impl Node {
             if !standby.is_empty() && !private_net {
                 let ep2 = ep.clone();
                 tokio::spawn(async move {
-                    if tokio::time::timeout(Duration::from_secs(15), ep2.online()).await.is_err() {
+                    // A Lantern's own relay starts in the same process once the node is up, which
+                    // on a big data folder can take a while: it gets two minutes, a phone fifteen
+                    // seconds.
+                    let wait = if std::env::var_os("PYRATE_RELAY_LOCAL").is_some() { 120 } else { 15 };
+                    if tokio::time::timeout(Duration::from_secs(wait), ep2.online()).await.is_err() {
                         // What each of our relays said, for whoever reads the log.
                         use iroh::Watcher;
-                        say(&format!("our relays, after fifteen seconds: {:?}", { let mut w = ep2.home_relay_status(); w.get() }));
+                        say(&format!("our relays, after {wait} seconds: {:?}", { let mut w = ep2.home_relay_status(); w.get() }));
                         for url in standby {
                             let _ = ep2.insert_relay(url.clone(), Arc::new(iroh::RelayConfig::from(url))).await;
                         }
