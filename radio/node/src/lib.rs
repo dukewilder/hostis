@@ -923,7 +923,10 @@ impl Inner {
         // Having said it carries something, this node says where it can be reached, every
         // couple of minutes: the network's own address book, in place of anyone's directory.
         if said_carrier && !self.dark && now.saturating_sub(self.last_harbour.load(std::sync::atomic::Ordering::Relaxed)) > 120_000 {
-            if let Some(relay) = self.endpoint.addr().relay_urls().next().map(|u| u.to_string()) {
+            // A Lantern running its own relay names it by its public address (PYRATE_RELAY_URL),
+            // even while it reaches it from inside by another.
+            let own = std::env::var("PYRATE_RELAY_URL").ok().filter(|_| std::env::var_os("PYRATE_RELAY_LOCAL").is_some() && self.endpoint.addr().relay_urls().next().is_some());
+            if let Some(relay) = own.or_else(|| self.endpoint.addr().relay_urls().next().map(|u| u.to_string())) {
                 self.last_harbour.store(now, std::sync::atomic::Ordering::Relaxed);
                 let note = Gossip::harbour(&self.secret, &relay, now);
                 self.broadcast(&note).await;
@@ -1552,7 +1555,11 @@ impl Node {
             let n0 = iroh::defaults::prod::default_relay_map();
             let mine = iroh::RelayMap::empty();
             let own_relay: Option<iroh::RelayUrl> = std::env::var("PYRATE_RELAY_URL").ok().and_then(|u| u.parse().ok());
-            for url in CREW_RELAYS.iter().filter_map(|r| r.parse::<iroh::RelayUrl>().ok()).chain(ours.iter().cloned()).chain(own_relay.clone()) {
+            // PYRATE_RELAY_LOCAL: how the Lantern reaches its own relay from inside its tunnel,
+            // which often cannot reach its own public address. It homes there and tells the
+            // network the public one.
+            let relay_local: Option<iroh::RelayUrl> = std::env::var("PYRATE_RELAY_LOCAL").ok().and_then(|u| u.parse().ok());
+            for url in CREW_RELAYS.iter().filter_map(|r| r.parse::<iroh::RelayUrl>().ok()).chain(ours.iter().cloned()).chain(relay_local.clone().or(own_relay.clone())) {
                 mine.insert(url.clone(), Arc::new(iroh::RelayConfig::from(url)));
             }
             let prefer_ours = !ours.is_empty() || own_relay.is_some();
