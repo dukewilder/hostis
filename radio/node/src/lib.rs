@@ -5,6 +5,8 @@
 
 pub mod art;
 mod chat;
+mod lan;
+mod pack;
 pub mod hold;
 mod flock;
 mod pocket;
@@ -248,6 +250,8 @@ pub struct Inner {
     log: Mutex<HashMap<StationId, Listing>>,
     conns: Mutex<HashMap<EndpointId, Connection>>,
     gossip_tx: Mutex<Option<GossipSender>>,
+    /// Whether the nearby-radios beacon is running (see `lan.rs`).
+    lan_running: std::sync::atomic::AtomicBool,
     gossip: GossipNet,
     /// Station chatter this node has joined, held in memory only.
     chats: Mutex<HashMap<StationId, chat::Room>>,
@@ -1423,6 +1427,14 @@ impl Inner {
 }
 
 impl Node {
+    /// For harnesses: the chunks a station's log names, and whether one opens here.
+    pub fn chunks_named(&self, id: &StationId) -> Vec<pyrate_core::Hash> {
+        self.inner.store.lock().unwrap().chunks_of(id)
+    }
+    pub fn chunk_here(&self, h: &pyrate_core::Hash) -> bool {
+        self.inner.store.lock().unwrap().get_chunk(h).is_some()
+    }
+
     /// For harnesses: this node's own address, and the outcome of dialling a peer by id.
     pub fn diag(&self, peer: EndpointId) -> String {
         let ep = self.inner.endpoint.clone();
@@ -1518,7 +1530,11 @@ impl Node {
         let public_dns = cfg.public_dns;
         // PYRATE_OPEN_PLAYER: where this node's invitations and flock links point.
         if let Ok(u) = std::env::var("PYRATE_OPEN_PLAYER") { pyrate_core::set_open_player(&u); }
-        let dark = std::env::var_os("PYRATE_DARK").is_some_and(|v| v != "0");
+        // Through Tor, set in the app (a sealed note, "tor") or by PYRATE_PROXY: every relay
+        // connection goes through Tor's HTTP tunnel, and the node runs dark, so no peer and no
+        // relay ever learns its address.
+        let tor: Option<String> = std::env::var("PYRATE_PROXY").ok().or_else(|| hold.read_note(&cfg.dir, "tor", None).and_then(|b| String::from_utf8(b).ok())).filter(|u| !u.trim().is_empty());
+        let dark = std::env::var_os("PYRATE_DARK").is_some_and(|v| v != "0") || tor.is_some();
         // The network's own address book, filled from carriers' signed harbour notes.
         let book = iroh::address_lookup::MemoryLookup::new();
         for (id, r) in &met {
@@ -1560,7 +1576,10 @@ impl Node {
             // A Lantern is a public door: it publishes its relay and looks anyone up. A phone
             // publishes nothing (its signed notes in gossip say where it can be reached, when it
             // carries anything) and asks number0 only about its doors.
+            // Connections are keyed with X25519 and ML-KEM-768 together, so traffic recorded today
+            // cannot be opened by a quantum computer later. A peer without it falls back to X25519.
             let mut b = Endpoint::builder(presets::Minimal)
+                .crypto_provider(Arc::new(rustls::crypto::aws_lc_rs::default_provider()))
                 .secret_key(secret)
                 .address_lookup(book2)
                 .relay_mode(iroh::RelayMode::Custom(relays));
@@ -1587,7 +1606,7 @@ impl Node {
                 b = b.clear_ip_transports();
                 say("dark running: relays only, no address published");
             }
-            if let Some(url) = std::env::var("PYRATE_PROXY").ok().and_then(|u| u.parse().ok()) {
+            if let Some(url) = tor.as_deref().and_then(|u| u.trim().parse().ok()) {
                 b = b.proxy_url(url).ca_tls_config(iroh::tls::CaTlsConfig::system());
             } else if std::env::var_os("HTTPS_PROXY").is_some() && !private_net {
                 b = b.proxy_from_env().ca_tls_config(iroh::tls::CaTlsConfig::system());
@@ -1621,6 +1640,7 @@ impl Node {
             log: Mutex::new(HashMap::new()),
             conns: Mutex::new(HashMap::new()),
             gossip_tx: Mutex::new(None),
+            lan_running: std::sync::atomic::AtomicBool::new(false),
             gossip: gossip.clone(),
             chats: Mutex::new(HashMap::new()),
             flock_host: Mutex::new(None),
@@ -1681,6 +1701,8 @@ impl Node {
             };
             let (tx, mut rx) = sub.split();
             *i2.gossip_tx.lock().unwrap() = Some(tx.clone());
+            // Nearby radios, if the keeper turned them on.
+            i2.lan_start();
             let boot = i2.cfg.bootstrap.clone();
             let i3 = i2.clone();
             tokio::spawn(async move {
@@ -2148,6 +2170,54 @@ impl Node {
                     Some(json!([t.parse::<u64>().ok()?, c.parse::<u64>().ok()?]))
                 }).collect();
                 Ok(json!(pts))
+            }
+            "pack_export" => {
+                // A station as one file, for an SD card, Bluetooth or the share sheet.
+                let st = StationId::from_hex(req["station"].as_str().context("station")?)?;
+                let path = PathBuf::from(req["path"].as_str().context("path")?);
+                let (entries, chunks, missing) = self.rt.block_on(inner.pack_export(st, &path))?;
+                Ok(json!({ "path": path.to_string_lossy(), "entries": entries, "chunks": chunks, "missing": missing }))
+            }
+            "pack_import" => {
+                let st = inner.pack_import(&PathBuf::from(req["path"].as_str().context("path")?))?;
+                Ok(json!({ "station": st.to_hex() }))
+            }
+            "lan" => {
+                // Nearby radios on this network, with no internet: on or off, and on at once.
+                if let Some(on) = req["value"].as_bool() {
+                    if on {
+                        inner.hold.write_note(&inner.cfg.dir, "lan", b"1")?;
+                        let i2 = inner.clone();
+                        self.rt.spawn(async move { i2.lan_start() });
+                    } else {
+                        let _ = std::fs::remove_file(inner.hold.note_path(&inner.cfg.dir, "lan"));
+                    }
+                }
+                Ok(json!({ "value": inner.lan_on(), "dark": inner.dark }))
+            }
+            "tor" => {
+                // Set or clear the route through Tor's HTTP tunnel (Orbot gives one at
+                // 127.0.0.1:8118). It is tried first and refused if nothing answers; it takes
+                // effect when the app next starts.
+                if let Some(url) = req["url"].as_str() {
+                    if url.is_empty() {
+                        let _ = std::fs::remove_file(inner.hold.note_path(&inner.cfg.dir, "tor"));
+                    } else {
+                        // http://host:port, as Orbot and Tor's HTTPTunnelPort give it.
+                        let hp = url.trim().trim_start_matches("http://").trim_end_matches('/');
+                        if !url.trim().starts_with("http://") || !hp.contains(':') {
+                            return Ok(json!({ "error": "the tunnel's address, as http://127.0.0.1:8118" }));
+                        }
+                        let addr = hp.to_string();
+                        let ok = addr.parse::<std::net::SocketAddr>().ok().is_some_and(|a| std::net::TcpStream::connect_timeout(&a, Duration::from_secs(2)).is_ok());
+                        if !ok {
+                            return Ok(json!({ "error": format!("nothing answers at {addr}: start Orbot, or Tor with its HTTP tunnel there") }));
+                        }
+                        inner.hold.write_note(&inner.cfg.dir, "tor", url.as_bytes())?;
+                    }
+                }
+                let set = inner.hold.read_note(&inner.cfg.dir, "tor", None).and_then(|b| String::from_utf8(b).ok()).unwrap_or_default();
+                Ok(json!({ "url": set, "active": inner.dark && !set.is_empty() }))
             }
             "strict" => {
                 if let Some(on) = req["value"].as_bool() {

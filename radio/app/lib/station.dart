@@ -1150,6 +1150,23 @@ class _PosterSheetState extends State<PosterSheet> {
     await ship.invokeMethod('share_file', {'path': f.path, 'mime': 'image/png'});
   }
 
+  /// The whole station as one file, for an SD card, Bluetooth or the share sheet: it plays on
+  /// any phone that opens it, with no network at all.
+  Future<void> shareFile() async {
+    setState(() => msg = 'Packing the station: its log, its sound and its art.');
+    final dir = Directory('${(await scratchDir()).path}/share');
+    if (!dir.existsSync()) dir.createSync(recursive: true);
+    final path = '${dir.path}/${safeName(widget.station['name'] ?? 'Pyrate Radio')}.pyrate';
+    final r = await Native.callAway({'cmd': 'pack_export', 'station': widget.station['id'], 'path': path});
+    if (!mounted) return;
+    if (r is! Map || r['error'] != null) {
+      setState(() => msg = 'Not packed: ${r is Map ? r['error'] : 'try again'}');
+      return;
+    }
+    setState(() => msg = (r['missing'] as num? ?? 0) > 0 ? '${r['missing']} pieces could not be found yet, so the file plays with gaps. The rest is in it.' : null);
+    await ship.invokeMethod('share_file', {'path': path, 'mime': 'application/octet-stream'});
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.station;
@@ -1206,6 +1223,8 @@ class _PosterSheetState extends State<PosterSheet> {
             pyrateButton('SHARE THE POSTER', share),
             const SizedBox(width: 8),
             pyrateButton('THE LINK', () => ship.invokeMethod('share_text', {'text': 'Tune in to ${s['name']} on Pyrate Radio: ${stationLink(id)}'})),
+            const SizedBox(width: 8),
+            pyrateButton('AS A FILE', shareFile),
           ]),
           if (msg != null) Padding(padding: const EdgeInsets.only(top: 8), child: note(msg!)),
         ]),

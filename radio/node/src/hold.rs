@@ -95,7 +95,7 @@ impl Hold {
         *h.finalize().as_bytes()
     }
 
-    fn note_path(&self, dir: &Path, name: &str) -> PathBuf {
+    pub(crate) fn note_path(&self, dir: &Path, name: &str) -> PathBuf {
         dir.join("notes").join(self.name(format!("note/{name}").as_bytes()))
     }
 
