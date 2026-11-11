@@ -3424,6 +3424,7 @@ dependencies = [
 name = "pyrate-core"
 version = "0.1.0"
 dependencies = [
+ "argon2",
  "bip39",
  "blake3",
  "chacha20poly1305",
@@ -3468,6 +3469,7 @@ dependencies = [
  "iroh",
  "iroh-gossip",
  "iroh-relay",
+ "libc",
  "mp3lame-encoder",
  "n0-future",
  "p256",
@@ -3482,6 +3484,7 @@ dependencies = [
  "tokio",
  "tracing",
  "x25519-dalek",
+ "zeroize",
 ]
 
 [[package]]

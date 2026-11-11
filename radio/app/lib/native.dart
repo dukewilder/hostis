@@ -115,3 +115,47 @@ class Native {
   /// For calls that work hard (raising colours does its proof of work).
   static Future<dynamic> callAway(Map<String, dynamic> req) => Isolate.run(() => Native.call(req));
 }
+
+// ---------------------------------------------------------------------------------------
+// Windows: the hold key under DPAPI, bound to the user's own login
+
+final class _Blob extends Struct {
+  @Uint32()
+  external int cbData;
+  external Pointer<Uint8> pbData;
+}
+
+typedef _CryptC = Int32 Function(Pointer<_Blob>, Pointer<Void>, Pointer<_Blob>, Pointer<Void>, Pointer<Void>, Uint32, Pointer<_Blob>);
+typedef _CryptD = int Function(Pointer<_Blob>, Pointer<Void>, Pointer<_Blob>, Pointer<Void>, Pointer<Void>, int, Pointer<_Blob>);
+typedef _LocalFree = Pointer<Void> Function(Pointer<Void>);
+
+/// Windows' own data protection: what it seals opens only for the same user on the same
+/// computer, with that user's password behind it. A copied disk gives up nothing.
+class Dpapi {
+  static List<int> protect(List<int> data) => _run('CryptProtectData', data);
+  static List<int> unprotect(List<int> data) => _run('CryptUnprotectData', data);
+
+  static List<int> _run(String fn, List<int> data) {
+    final f = DynamicLibrary.open('crypt32.dll').lookupFunction<_CryptC, _CryptD>(fn);
+    final free = DynamicLibrary.open('kernel32.dll').lookupFunction<_LocalFree, _LocalFree>('LocalFree');
+    final input = calloc<_Blob>();
+    final out = calloc<_Blob>();
+    final buf = calloc<Uint8>(data.length);
+    try {
+      buf.asTypedList(data.length).setAll(0, data);
+      input.ref.cbData = data.length;
+      input.ref.pbData = buf;
+      // 1: CRYPTPROTECT_UI_FORBIDDEN, never a prompt.
+      if (f(input, nullptr, nullptr, nullptr, nullptr, 1, out) == 0) throw StateError('$fn failed');
+      final r = List<int>.from(out.ref.pbData.asTypedList(out.ref.cbData));
+      out.ref.pbData.asTypedList(out.ref.cbData).fillRange(0, out.ref.cbData, 0);
+      free(out.ref.pbData.cast());
+      return r;
+    } finally {
+      buf.asTypedList(data.length).fillRange(0, data.length, 0);
+      calloc.free(buf);
+      calloc.free(input);
+      calloc.free(out);
+    }
+  }
+}

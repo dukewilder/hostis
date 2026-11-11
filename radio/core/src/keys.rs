@@ -43,6 +43,17 @@ impl std::fmt::Display for StationId {
     }
 }
 
+/// The seed the words make when a passphrase stands on top of them.
+fn passed(seed: &[u8; 32], pass: &str) -> Result<[u8; 32]> {
+    let params = argon2::Params::new(64 * 1024, 3, 1, Some(32)).map_err(|_| Error::Key)?;
+    let mut out = [0u8; 32];
+    let salt = blake3::derive_key("pyrate/passphrase/v1", seed);
+    argon2::Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params)
+        .hash_password_into(pass.as_bytes(), &salt, &mut out)
+        .map_err(|_| Error::Key)?;
+    Ok(blake3::derive_key("pyrate/passphrase/seed/v1", &[seed.as_slice(), &out].concat()))
+}
+
 /// The private half. Whoever holds it is the station.
 pub struct StationKey(SigningKey);
 
@@ -78,11 +89,42 @@ impl StationKey {
         Ok(Self::from_seed(seed))
     }
 
+    /// The key from 24 words and a passphrase, which may be empty. With a passphrase the words
+    /// alone are another station: a photograph of the words gives nothing away, and words given
+    /// up under force can open that other, empty one instead. The passphrase is stretched with
+    /// Argon2id, so guessing it costs a second or so a try.
+    pub fn from_words(phrase: &str, pass: &str) -> Result<Self> {
+        let base = Self::from_phrase(phrase)?;
+        Ok(if pass.is_empty() { base } else { Self::from_seed(passed(&base.seed(), pass)?) })
+    }
+
+    /// A fresh key and the 24 words that, with `pass`, make it.
+    pub fn generate_with(pass: &str) -> Result<(Self, String)> {
+        let words = Self::generate()?;
+        let phrase = words.phrase();
+        Ok((if pass.is_empty() { words } else { Self::from_seed(passed(&words.seed(), pass)?) }, phrase))
+    }
+
     pub fn id(&self) -> StationId {
         StationId(self.0.verifying_key().to_bytes())
     }
 
     pub fn sign(&self, msg: &[u8]) -> [u8; 64] {
         self.0.sign(msg).to_bytes()
+    }
+}
+
+#[cfg(test)]
+mod passphrase_tests {
+    use super::*;
+
+    #[test]
+    fn a_passphrase_makes_the_words_another_station() {
+        let (k, words) = StationKey::generate_with("the tide turns at four").unwrap();
+        assert_eq!(StationKey::from_words(&words, "the tide turns at four").unwrap().id(), k.id());
+        assert_ne!(StationKey::from_words(&words, "").unwrap().id(), k.id(), "the words alone are another station");
+        assert_ne!(StationKey::from_words(&words, "the tide turns at five").unwrap().id(), k.id());
+        let (plain, w2) = StationKey::generate_with("").unwrap();
+        assert_eq!(StationKey::from_words(&w2, "").unwrap().id(), plain.id(), "no passphrase is the words as before");
     }
 }

@@ -16,7 +16,9 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "black.hostis.pyrate"
+        // PYRATE_APP_ID builds the same app under another name, for a phone where the usual one
+        // is blocked by name or would be noticed by it (flutter build apk -PPYRATE_APP_ID=org.example.notes).
+        applicationId = (project.findProperty("PYRATE_APP_ID") as String?) ?: "black.hostis.pyrate"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 28

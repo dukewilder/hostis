@@ -870,9 +870,11 @@ $('st-raise').onclick = async () => {
   if (sealed() && !mineMem) { stNote('Open the sealed stations first.'); return }
   const name = $('st-name').value.trim(); if (!name) { stNote('A station needs a name.'); $('st-name').focus(); return }
   if (!radio) { stNote('Coming aboard first.'); booting ??= boot(); await booting; if (!radio) return }
-  let r; try { r = JSON.parse(radio.raise(name, $('st-about').value, $('st-kinds').value, $('st-mature').checked, $('st-explicit').checked)) } catch (e) { stNote(String(e)); return }
+  let r; try { r = JSON.parse(radio.raise(name, $('st-about').value, $('st-kinds').value, $('st-mature').checked, $('st-explicit').checked, $('st-ppass').value)) } catch (e) { stNote(String(e)); return }
   const l = kept(); l.push({ id: r.id, deputy: r.deputy, pow: null }); keep(l);
   mineCur = r.id; adopted.add(r.id); powWork(r.id);
+  const withPass = !!$('st-ppass').value; $('st-ppass').value = '';
+  $('st-passnote').hidden = !withPass;
   $('st-wordlist').innerHTML = r.words.split(/\s+/).map(w => '<li>' + esc(w) + '</li>').join('');
   $('st-written').checked = false; $('st-done').disabled = true;
   $('st-new').hidden = true; $('st-show').hidden = false; stNote('');
@@ -887,7 +889,7 @@ $('st-restore').onclick = async () => {
   if (!radio) { booting ??= boot(); await booting; if (!radio) return }
   stNote('Looking for the station’s log on the network.');
   try {
-    const r = JSON.parse(await radio.restore(words));
+    const r = JSON.parse(await radio.restore(words, $('st-rpass').value)); $('st-rpass').value = '';
     $('st-words').value = '';
     const l = kept().filter(k => k.id !== r.id); l.push({ id: r.id, deputy: r.deputy, pow: null }); keep(l);
     mineCur = r.id; adopted.add(r.id); powWork(r.id); stNote(''); studioShow();

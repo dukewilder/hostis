@@ -1281,12 +1281,13 @@ impl Radio {
     // the network its own station first, and it serves no one.
 
     /// Raises a station. Returns its id, call sign, the master's 24 words and the deputy's seed.
-    pub fn raise(&self, name: &str, about: &str, kinds: &str, mature: bool, explicit: bool) -> Result<String, JsValue> {
+    /// `pass`, if not empty, is a passphrase on top of the words: see `StationKey::from_words`.
+    pub fn raise(&self, name: &str, about: &str, kinds: &str, mature: bool, explicit: bool, pass: &str) -> Result<String, JsValue> {
         let name = name.trim();
         if name.is_empty() || name.chars().count() > 40 {
             return Err(js(anyhow!("a station needs a name of forty letters or fewer")));
         }
-        let master = pyrate_core::StationKey::generate().map_err(|e| js(anyhow!("{e}")))?;
+        let (master, phrase) = pyrate_core::StationKey::generate_with(pass).map_err(|e| js(anyhow!("{e}")))?;
         let deputy = pyrate_core::StationKey::generate().map_err(|e| js(anyhow!("{e}")))?;
         let id = master.id();
         let now = raw_now();
@@ -1306,7 +1307,7 @@ impl Radio {
         self.ship.archives.lock().unwrap().insert(id, a);
         let seed = hex(&deputy.seed());
         self.ship.mine.lock().unwrap().insert(id, Mine { key: deputy, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0 });
-        Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "words": master.phrase(), "deputy": seed }).to_string())
+        Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "words": phrase, "deputy": seed }).to_string())
     }
 
     /// Takes back a station this browser keeps, from its deputy's seed. Resolves once its log is
@@ -1327,8 +1328,8 @@ impl Radio {
 
     /// Takes a station back from its 24 words on a new browser: its log comes aboard, then the
     /// master appoints a fresh deputy here. Resolves to the id and the new deputy's seed.
-    pub fn restore(&self, words: &str) -> Result<js_sys::Promise, JsValue> {
-        let master = pyrate_core::StationKey::from_phrase(words).map_err(|e| js(anyhow!("those are not a station's 24 words: {e}")))?;
+    pub fn restore(&self, words: &str, pass: &str) -> Result<js_sys::Promise, JsValue> {
+        let master = pyrate_core::StationKey::from_words(words, pass).map_err(|e| js(anyhow!("those are not a station's 24 words: {e}")))?;
         let s = self.ship.clone();
         Ok(wasm_bindgen_futures::future_to_promise(async move {
             let id = master.id();
