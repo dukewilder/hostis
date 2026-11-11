@@ -440,3 +440,9 @@ Rulings made while reading every line again. The findings themselves are in `AUD
 - **A slow private route gets company.** A private fetch that has not answered in two and a half seconds is joined by a second route through another exit, and the first answer wins, three routes at most, eight seconds each. Each exit still sees a sealed name from a guard. Measured on a local test network (`start_test`), a warm open went from about nine seconds to the dial, the title and the sound to 0.1, 0.3 and 0.5.
 - **The launch screen carries the skull.** From the tap to the first frame the screen is the black sheet with the HOSTIS mark in place of a blank.
 
+## XXXVII. The radio's pages say less (11 November 2026)
+
+- **The radio's page is for deciding and downloading.** It opens on the set, then three doors (every station, the app, a station of your own), how it works in three lines, HOSTIS's stations, the downloads, raising a station, lighting a Lantern and the questions. The Articles and the closing line went, and the how-it-works page carries the design in full. Checksums, the signing certificate and the stock Android steps sit in folds under the downloads.
+- **How it works is a page of its own** at hostis.black/pyrateradio/how-it-works/. It runs from the station's key to the speaker, through carrying, getting through, staying unseen and what it would take to stop it, and ends on what the radio cannot do for anyone.
+- **"Under HOSTIS colours" is retired** from the radio's pages, the player and the app. The sibling pages name their subject, and the radio's now does the same.
+
