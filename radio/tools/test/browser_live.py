@@ -17,7 +17,7 @@ with sync_playwright() as p:
     if __import__("os").environ.get("PYRATE_DISGUISE"): a.check("#st-disguise")
     a.click("#st-live"); time.sleep(2)
     check("ON AIR" in (a.text_content("#st-livetime") or ""), "the tab is on the air")
-    sid = a.evaluate("JSON.parse(localStorage.getItem('pyrate.mine'))[0].id")
+    sid = a.evaluate("window.pyrate.mine()[0]")
     c = ctx.new_page(); c.on("pageerror", lambda e: errs.append(str(e)))
     c.goto("http://127.0.0.1:8099/#" + sid); c.wait_for_selector("#go:not([hidden])", timeout=90000); time.sleep(2); c.click("#go")
     try:

@@ -22,6 +22,9 @@ with sync_playwright() as p:
     check(a.eval_on_selector_all("#st-wordlist li", "l => l.length") == 0, "the words leave the page")
     kept = a.evaluate("localStorage.getItem('pyrate.mine')")
     check(kept and all(w not in kept for w in words[:6]), "the browser keeps the deputy, never the words")
+    a.wait_for_function("(localStorage.getItem('pyrate.mine') || '').includes('\"d\":1')", timeout=10000)
+    stored = a.evaluate("localStorage.getItem('pyrate.mine')")
+    check('"deputy"' not in stored and '"d":1' in stored, "and keeps it sealed, never in the clear")
     a.wait_for_function("document.getElementById('st-status').textContent.length > 0 && !document.getElementById('st-status').textContent.includes('proof')", timeout=120000)
     check(True, "proof of work done: " + a.text_content("#st-status"))
     a.set_input_files("#st-files", wav)
@@ -30,7 +33,7 @@ with sync_playwright() as p:
     a.wait_for_function("document.getElementById('st-status').textContent.startsWith('On the air')", timeout=180000)
     check(True, "it sailed: " + a.text_content("#st-status"))
     mine = json.loads(a.evaluate("pyrate && JSON.stringify(window.pyrate) && 0") or "0") if False else None
-    sid = json.loads(kept)[0]["id"]
+    sid = a.evaluate("window.pyrate.mine()[0]")
     a.close()
     c = ctx.new_page(); c.on("pageerror", lambda e: errs.append(str(e)))
     c.goto("http://127.0.0.1:8099/#" + sid)
