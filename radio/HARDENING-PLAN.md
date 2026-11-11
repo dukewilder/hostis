@@ -282,6 +282,12 @@ W4 runs on test keys until the release keys exist, then goes live.
 10. Optional: a Codeberg mirror, an IzzyOnDroid listing, free pinning accounts. Each adds copies, and each is a company that can be asked to drop them.
 11. Your own devices: BitLocker, a separate browser profile for HOSTIS work, and an always-on VPN on your phone.
 
+## Rulings made (11 November)
+
+- **R1, R2:** yes. hostis.black's front page carries Pyrate Radio beside On the Account and The Reprints, leading to the radio's page, which links the handbook. The canary goes on the radio's page once the first one is signed.
+- **R3:** no. Pyrate Radio does not register with Google; installs on certified phones go through the advanced flow or ADB.
+- **R5:** settled by the plain disguise (W1).
+
 ## Rulings needed
 
 - **R1** A page on hostis.black explaining how the network works, so the record exists before anyone needs it. This changes the site.
