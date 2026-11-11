@@ -1,6 +1,6 @@
 {
  "pyrate": "bearings",
- "at": 1794397262008,
+ "at": 1794412842628,
  "doors": [
   "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442"
  ],
@@ -26,20 +26,20 @@
    "cid": "bafybeif736juxf2nquix2g7xpvp3keyqb6owbvkrl7dmnryw5mihpnpjra"
   },
   {
-   "name": "pyrate-radio-0.9.8-macos.zip",
+   "name": "pyrate-radio-0.9.9-macos.zip",
    "cid": "bafybeigmveadfu3lsooo4ak6d4fy5u4rowjl5me6zuuny64emx6vfqvtcm"
   },
   {
-   "name": "pyrate-radio-0.9.8-windows.zip",
+   "name": "pyrate-radio-0.9.9-windows.zip",
    "cid": "bafybeiad3ahc3l5uagivxmeh5vsl54weveadyse5ez5xt4zp7uqpsl4dzi"
   },
   {
-   "name": "pyrate-radio-0.9.8-linux-x64.tar.gz",
+   "name": "pyrate-radio-0.9.9-linux-x64.tar.gz",
    "cid": "bafybeic52cmj42wp6j3tsvgej3vclbcs6udqfvu2pef23ilqip24sgl6ea"
   },
   {
-   "name": "source/pyrate-radio-src-4fa68b2.tar.gz",
-   "cid": "bafybeibtfnci4o4gq5bvwvwuy4gc3whaniy5w4k4f4fmbimmqby4tehdva"
+   "name": "source/pyrate-radio-src-f273394.tar.gz",
+   "cid": "bafybeihaut52tvozvvrudfuikff4uh7gugynkqzi3qjydxxzv64silf4m4"
   }
  ]
 }
