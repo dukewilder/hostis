@@ -4,7 +4,7 @@
 <p class="mh-desc">What the radio already does to keep a keeper unknown, what only the keeper can do, and how the network stands.</p>
 </header>
 <main id="main">
-<nav class="toc" aria-label="On this page"><a href="#done">Already done</a><a href="#you">Yours to do</a><a href="#device">Your device</a><a href="#words">Your words</a><a href="#line">Your line</a><a href="#check">Checking</a><a href="#canary">The canary</a><a href="#network">The network</a></nav>
+<nav class="toc" aria-label="On this page"><a href="#done">Already done</a><a href="#you">Yours to do</a><a href="#device">Your device</a><a href="#words">Your words</a><a href="#line">Your line</a><a href="#grid">Off the grid</a><a href="#check">Checking</a><a href="#canary">The canary</a><a href="#network">The network</a></nav>
 
 <section id="done">
 <div class="sechead"><h2>Already Done</h2><span class="cap">done by the radio without asking</span></div>
@@ -61,6 +61,16 @@
 <div class="prose">
 <p>The relay a phone or a tab connects through sees its address, and nothing of what passes. Your internet provider sees that you use the radio, and nothing of what you play or air.</p>
 <p>For more cover, run a VPN you trust on the phone, set to always on, so the radio never touches the network without it. In a browser, open the player in Tor Browser: the relay then sees only Tor.</p>
+<p>The app can go through Tor itself. Install Orbot, start it, and in More, under Off the grid, turn on Through Tor. From the next start the radio reaches the network only by way of Tor and offers no direct path, so no peer and no relay learns where the phone is. On a computer, Tor with its HTTP tunnel on port 8118 does the same.</p>
+</div>
+</section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
+<section id="grid">
+<div class="sechead"><h2>Off the Grid</h2><span class="cap">when the internet is cut</span></div>
+<div class="prose">
+<p>Any station can travel as one file. On its poster, press As a file, and pass the file by SD card, USB stick, Bluetooth or the share sheet. A phone that opens it, in More under Off the grid, plays the station at once with no network, and carries it to every radio it meets. Every entry and every chunk in the file is checked against the station's key, so a file can be carried by anyone and altered by no one.</p>
+<p>Radios on the same Wi-Fi, or on one phone's hotspot, can find each other with no internet at all: turn on Find radios on this Wi-Fi. Leave it off otherwise, because anyone on the same network can tell a radio is there.</p>
 </div>
 </section>
 

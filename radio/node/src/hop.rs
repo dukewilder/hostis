@@ -101,7 +101,7 @@ impl Inner {
         v
     }
 
-    pub(crate) fn known_nodes_pub(&self) -> Vec<EndpointId> {
+    pub fn known_nodes_pub(&self) -> Vec<EndpointId> {
         self.known_nodes()
     }
 

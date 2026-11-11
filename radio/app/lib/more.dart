@@ -1323,6 +1323,9 @@ class _ShipPapersState extends State<ShipPapers> {
   bool pinSet = false;
   bool duressSet = false;
   bool mineOnly = false;
+  bool lan = false;
+  String tor = '';
+  String? gridMsg;
   String? sig;
   Map? canary;
   Map wake = {};
@@ -1337,6 +1340,8 @@ class _ShipPapersState extends State<ShipPapers> {
     pinSet = pc?['set'] == true;
     duressSet = pc?['duress_set'] == true;
     mineOnly = pref('carry_mine_only') == true;
+    lan = (Native.call({'cmd': 'lan'}) as Map?)?['value'] == true;
+    tor = ((Native.call({'cmd': 'tor'}) as Map?)?['url'] ?? '').toString();
     ship.invokeMethod<bool>('plain_get').then((v) => setState(() => plain = v == true)).catchError((_) {});
     ship.invokeMethod<bool>('plain_lock_get').then((v) => setState(() => plainLock = v == true)).catchError((_) {});
     signer().then((v) { if (mounted) setState(() => sig = v); });
@@ -1440,6 +1445,47 @@ class _ShipPapersState extends State<ShipPapers> {
             await ship.invokeMethod('wake_set', {'on': false, 'hour': 7, 'minute': 0});
             if (mounted) setState(() => wake = {'on': false});
           }, color: boneFaint),
+      ]),
+      const SizedBox(height: 26),
+      heading('OFF THE GRID'),
+      note('For when the internet is cut or watched.'),
+      pyrateSwitch(lan, (v) {
+        final r = Native.call({'cmd': 'lan', 'value': v});
+        setState(() {
+          lan = (r as Map?)?['value'] == true;
+          gridMsg = v && r is Map && r['dark'] == true ? 'Not while the radio runs through Tor: there it has no address on this network to give.' : null;
+        });
+      }, 'Find radios on this Wi-Fi, with or without the internet. Anyone on the same network can tell a radio is here.'),
+      pyrateSwitch(tor.isNotEmpty, (v) async {
+        final r = await Native.callAway({'cmd': 'tor', 'url': v ? 'http://127.0.0.1:8118' : ''});
+        if (!mounted) return;
+        setState(() {
+          tor = (r is Map ? r['url'] ?? '' : '').toString();
+          gridMsg = r is Map && r['error'] != null
+              ? 'Not set: ${r['error']}.'
+              : v
+                  ? 'From the next time the radio starts, it reaches the network only through Tor, and no peer or relay learns this device\'s address.'
+                  : 'From the next time the radio starts, it reaches the network directly.';
+        });
+      }, 'Through Tor: every connection by way of Orbot, or Tor\'s HTTP tunnel on 127.0.0.1:8118'),
+      if (gridMsg != null) Padding(padding: const EdgeInsets.only(top: 6), child: note(gridMsg!)),
+      const SizedBox(height: 10),
+      note('A station passed as a file, by SD card, Bluetooth or a share, plays here with no network, and this phone then carries it to every radio it meets.'),
+      const SizedBox(height: 10),
+      Row(children: [
+        pyrateButton('OPEN A STATION FILE', () async {
+          final picked = await FilePicker.platform.pickFiles();
+          final path = picked?.files.single.path;
+          if (path == null) return;
+          final r = await Native.callAway({'cmd': 'pack_import', 'path': path});
+          if (!mounted) return;
+          if (r is Map && r['station'] is String) {
+            await Native.callAway({'cmd': 'keep', 'station': r['station'], 'value': true});
+            if (mounted) setState(() => gridMsg = 'The station is aboard and kept: find it on the dial.');
+          } else {
+            setState(() => gridMsg = 'Not opened: ${r is Map ? r['error'] : 'not a station file'}.');
+          }
+        }),
       ]),
       const SizedBox(height: 26),
       heading('PASS IT ON'),
