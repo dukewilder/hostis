@@ -13,6 +13,8 @@ with sync_playwright() as p:
     a.fill("#st-name", "Open Mic"); a.click("#st-raise"); a.wait_for_selector("#st-show:not([hidden])")
     a.check("#st-written"); a.click("#st-done")
     a.wait_for_function("!document.getElementById('st-status').textContent.includes('proof') && document.getElementById('st-status').textContent.length > 0", timeout=120000)
+    # PYRATE_DISGUISE=1 airs with the voice disguise on, through the same path.
+    if __import__("os").environ.get("PYRATE_DISGUISE"): a.check("#st-disguise")
     a.click("#st-live"); time.sleep(2)
     check("ON AIR" in (a.text_content("#st-livetime") or ""), "the tab is on the air")
     sid = a.evaluate("JSON.parse(localStorage.getItem('pyrate.mine'))[0].id")
