@@ -1100,6 +1100,7 @@ class _HandsPanelState extends State<HandsPanel> {
 
   Future<void> appoint() async {
     final words = TextEditingController();
+    final wpass = TextEditingController();
     final code = TextEditingController();
     final label = TextEditingController();
     await secure(true);
@@ -1117,16 +1118,19 @@ class _HandsPanelState extends State<HandsPanel> {
             TextField(enableIMEPersonalizedLearning: false, controller: label, style: serif(16), decoration: pyrateField('Their name, for your own record')),
             TextField(controller: words, style: mono(12, color: bone), maxLines: 3, decoration: pyrateField('Your 24 words'),
                 enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, keyboardType: TextInputType.visiblePassword),
+            TextField(controller: wpass, obscureText: true, style: mono(12, color: bone), decoration: pyrateField('Passphrase, if you set one'),
+                enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
           ]),
         ),
         actions: [TextButton(onPressed: () => Navigator.pop(c, true), child: Text('APPOINT', style: carved(11)))],
       ),
     );
     await secure(false);
-    final phrase = words.text;
+    final phrase = words.text, pp = wpass.text;
     words.clear();
+    wpass.clear();
     if (ok != true) return;
-    final r = await Native.callAway({'cmd': 'hand_appoint', 'station': widget.station, 'words': phrase, 'code': code.text, 'label': label.text});
+    final r = await Native.callAway({'cmd': 'hand_appoint', 'station': widget.station, 'words': phrase, 'passphrase': pp, 'code': code.text, 'label': label.text});
     if (!mounted) return;
     setState(() => msg = r is Map && r['error'] != null ? r['error'] : 'Appointed. Tell them your station\'s call sign and id.');
   }
@@ -1317,6 +1321,8 @@ class _ShipPapersState extends State<ShipPapers> {
   bool plainLock = false;
   bool disguise = false;
   bool pinSet = false;
+  bool duressSet = false;
+  bool mineOnly = false;
   String? sig;
   Map? canary;
   Map wake = {};
@@ -1327,7 +1333,10 @@ class _ShipPapersState extends State<ShipPapers> {
     super.initState();
     strict = (Native.call({'cmd': 'strict'}) as Map?)?['value'] == true;
     provisions = (Native.call({'cmd': 'provisions'}) as Map?)?['value'] != false;
-    pinSet = (Native.call({'cmd': 'pin_check', 'pin': ''}) as Map?)?['set'] == true;
+    final pc = Native.call({'cmd': 'pin_check', 'pin': ''}) as Map?;
+    pinSet = pc?['set'] == true;
+    duressSet = pc?['duress_set'] == true;
+    mineOnly = pref('carry_mine_only') == true;
     ship.invokeMethod<bool>('plain_get').then((v) => setState(() => plain = v == true)).catchError((_) {});
     ship.invokeMethod<bool>('plain_lock_get').then((v) => setState(() => plainLock = v == true)).catchError((_) {});
     signer().then((v) { if (mounted) setState(() => sig = v); });
@@ -1357,23 +1366,29 @@ class _ShipPapersState extends State<ShipPapers> {
     if (!exact) await ship.invokeMethod('exact_settings');
   }
 
-  Future<void> setPin() async {
+  Future<void> setPin({bool duress = false}) async {
     final pin = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
         backgroundColor: panel,
         shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
-        title: Text('LOCK COLOURS', style: carved(13)),
-        content: TextField(controller: pin, autofocus: true, keyboardType: TextInputType.number, obscureText: true, enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, style: mono(16, color: bone), decoration: pyrateField('Four or more digits')),
-        actions: [TextButton(onPressed: () => Navigator.pop(c, true), child: Text('LOCK', style: carved(11)))],
+        title: Text(duress ? 'A PIN TO GIVE UP' : 'LOCK COLOURS', style: carved(13)),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (duress) ...[
+            note('If you are made to open Colours, give this one. The radio scuttles itself and closes, and opens next time as if newly installed. Your 24 words bring your stations back.'),
+            const SizedBox(height: 10),
+          ],
+          TextField(controller: pin, autofocus: true, keyboardType: TextInputType.number, obscureText: true, enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, style: mono(16, color: bone), decoration: pyrateField('Four or more digits, not your PIN')),
+        ]),
+        actions: [TextButton(onPressed: () => Navigator.pop(c, true), child: Text(duress ? 'SET IT' : 'LOCK', style: carved(11)))],
       ),
     );
     if (ok != true || pin.text.length < 4) return;
-    await Native.callAway({'cmd': 'pin_set', 'pin': pin.text});
+    await Native.callAway({'cmd': 'pin_set', 'pin': pin.text, 'duress': duress});
     pin.clear();
     if (!mounted) return;
-    setState(() => pinSet = true);
+    setState(() => duress ? duressSet = true : pinSet = true);
   }
 
   Future<void> importList() async {
@@ -1482,9 +1497,23 @@ class _ShipPapersState extends State<ShipPapers> {
           setPin();
         } else {
           Native.call({'cmd': 'pin_set'});
-          setState(() => pinSet = false);
+          setState(() => pinSet = duressSet = false);
         }
       }, 'Lock Colours behind a PIN'),
+      pyrateSwitch(mineOnly, (v) {
+        pref('carry_mine_only', v);
+        if (v) Native.call({'cmd': 'ballast_ok', 'value': false, 'unmetered': false});
+        setState(() => mineOnly = v);
+      }, 'Keep only what I play: carry nothing for the fleet, so nothing on this phone was chosen by anyone else'),
+      if (pinSet)
+        pyrateSwitch(duressSet, (v) {
+          if (v) {
+            setPin(duress: true);
+          } else {
+            Native.call({'cmd': 'pin_set', 'duress': true});
+            setState(() => duressSet = false);
+          }
+        }, 'A second PIN, to give up if you are made to open Colours: it scuttles the radio'),
       pyrateSwitch(strict, (v) {
         Native.call({'cmd': 'strict', 'value': v});
         setState(() => strict = v);
@@ -1558,7 +1587,13 @@ class _PinGateState extends State<PinGate> with WidgetsBindingObserver {
 
   Future<void> check() async {
     // The PIN is kept under a deliberately slow hash: worked out off the screen's thread.
-    final ok = (await Native.callAway({'cmd': 'pin_check', 'pin': pin.text}) as Map?)?['ok'] == true;
+    final r = await Native.callAway({'cmd': 'pin_check', 'pin': pin.text}) as Map?;
+    if (r?['duress'] == true) {
+      // The PIN given up under force: everything the radio keeps becomes noise, and it closes.
+      await ship.invokeMethod('scuttle').catchError((_) {});
+      return;
+    }
+    final ok = r?['ok'] == true;
     if (!mounted) return;
     setState(() {
       open = ok;

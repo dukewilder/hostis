@@ -268,7 +268,9 @@ class Tuner extends ChangeNotifier {
   Future<void> _checkBallast() async {
     final c = await _service.invokeMethod<Map>('conditions').catchError((_) => <dynamic, dynamic>{}) ?? {};
     final unmetered = c['unmetered'] == true;
-    final r = Native.call({'cmd': 'ballast_ok', 'value': unmetered && c['charging'] == true, 'unmetered': unmetered});
+    // "Keep only what I play": no ballast, and no serving of others' sealed chunks.
+    final mine = pref('carry_mine_only') == true && pref('lantern') != true;
+    final r = Native.call({'cmd': 'ballast_ok', 'value': !mine && unmetered && c['charging'] == true, 'unmetered': !mine && unmetered});
     if (r is Map && r['carrying'] is int) carrying = r['carrying'];
   }
 
@@ -889,6 +891,8 @@ class _ColoursPageState extends State<ColoursPage> {
   final name = TextEditingController();
   final about = TextEditingController();
   final restoreWords = TextEditingController();
+  final restorePass = TextEditingController();
+  final pass = TextEditingController();
   bool raising = false;
   bool talk = false;
   String? error;
@@ -911,6 +915,8 @@ class _ColoursPageState extends State<ColoursPage> {
     name.dispose();
     about.dispose();
     restoreWords.dispose();
+    restorePass.dispose();
+    pass.dispose();
     super.dispose();
   }
 
@@ -930,7 +936,9 @@ class _ColoursPageState extends State<ColoursPage> {
       raising = true;
       error = null;
     });
-    final r = await Native.callAway({'cmd': 'raise', 'name': name.text, 'about': about.text, 'pocket': pocket});
+    final withPass = pass.text.isNotEmpty;
+    final r = await Native.callAway({'cmd': 'raise', 'name': name.text, 'about': about.text, 'pocket': pocket, 'passphrase': pass.text});
+    pass.clear();
     // The words first: they are shown once, so nothing that can fail comes before them, and
     // neither the back gesture nor a stray tap closes them before the keeper says so.
     if (r is Map && r['words'] is String && mounted) {
@@ -956,6 +964,10 @@ class _ColoursPageState extends State<ColoursPage> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(color: black, border: Border.all(color: boneGhost, width: 0.5)),
                     child: SelectableText(r['words'], style: mono(13, color: bone)),
+                  ),
+                  if (withPass) Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Text('And your passphrase: keep it apart from the words. Without it, these words open a different station.', style: serif(14, color: boneFaint, italic: true)),
                   ),
                   CheckboxListTile(
                     value: written,
@@ -1109,6 +1121,19 @@ class _ColoursPageState extends State<ColoursPage> {
         const SizedBox(height: 22),
         TextField(enableIMEPersonalizedLearning: false, controller: name, style: serif(20), decoration: field('Name'), maxLength: 40),
         TextField(enableIMEPersonalizedLearning: false, controller: about, style: serif(16), decoration: field('What it broadcasts'), maxLength: 140),
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: Text('A passphrase on top of the words', style: serif(14, color: boneFaint, italic: true)),
+            children: [
+              Text('With a passphrase, the 24 words alone open a different, empty station: a photograph of them gives nothing away, and words given up under force open that one instead. Lose the passphrase and the station is lost with it.',
+                  style: serif(13, color: boneGhost, italic: true)),
+              TextField(controller: pass, obscureText: true, style: mono(12, color: bone), decoration: field('Passphrase (optional)'),
+                  enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
+            ],
+          ),
+        ),
         const SizedBox(height: 18),
         StartShapePicker(shape: shape),
         Row(children: [
@@ -1134,12 +1159,15 @@ class _ColoursPageState extends State<ColoursPage> {
             style: serif(14, color: boneFaint, italic: true)),
         TextField(controller: restoreWords, style: mono(12, color: bone), maxLines: 3, decoration: field('The 24 words'),
             enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, keyboardType: TextInputType.visiblePassword),
+        TextField(controller: restorePass, obscureText: true, style: mono(12, color: bone), decoration: field('Passphrase, if you set one'),
+                enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
         const SizedBox(height: 12),
         Row(children: [
           button('TAKE IT BACK', () async {
-            final phrase = restoreWords.text;
+            final phrase = restoreWords.text, pp = restorePass.text;
             restoreWords.clear();
-            final r = await Native.callAway({'cmd': 'restore', 'phrase': phrase});
+            restorePass.clear();
+            final r = await Native.callAway({'cmd': 'restore', 'phrase': phrase, 'passphrase': pp});
             if (!context.mounted) return;
             toast(context, r is Map && r['error'] != null ? 'Not taken back: ${r['error']}' : 'The station is back on this phone, and the old one is shut out.');
           }),
@@ -1419,6 +1447,7 @@ class _ColoursPageState extends State<ColoursPage> {
       Row(children: [
         button('STRIKE COLOURS', () async {
           final words = TextEditingController();
+          final wpass = TextEditingController();
           await secure(true);
           if (!context.mounted) return;
           final ok = await showDialog<bool>(
@@ -1431,6 +1460,8 @@ class _ColoursPageState extends State<ColoursPage> {
                 Text('The station ends for good. This cannot be undone.', style: serif(15, color: boneFaint)),
                 TextField(controller: words, style: mono(12, color: bone), maxLines: 3, decoration: field('The 24 words'),
                     enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, keyboardType: TextInputType.visiblePassword),
+                TextField(controller: wpass, obscureText: true, style: mono(12, color: bone), decoration: field('Passphrase, if you set one'),
+                enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
               ]),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(c, false), child: Text('KEEP FLYING', style: carved(11))),
@@ -1439,11 +1470,12 @@ class _ColoursPageState extends State<ColoursPage> {
             ),
           );
           await secure(false);
-          final phrase = words.text;
+          final phrase = words.text, pp = wpass.text;
           words.clear();
           words.dispose();
+          wpass.dispose();
           if (ok == true) {
-            final r = await Native.callAway({'cmd': 'strike', 'station': id, 'phrase': phrase});
+            final r = await Native.callAway({'cmd': 'strike', 'station': id, 'phrase': phrase, 'passphrase': pp});
             if (!context.mounted) return;
             toast(context, r is Map && r['error'] != null ? 'Not struck: ${r['error']}' : 'Colours struck. The station has ended.');
           }

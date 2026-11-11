@@ -23,10 +23,10 @@ use anyhow::Result;
 use chacha20poly1305::aead::{Aead, Payload};
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit, Nonce};
 
-#[derive(Clone)]
 pub struct Hold {
-    name: [u8; 32],
-    seal: [u8; 32],
+    // Boxed, so the keys stay at one address that can be locked out of swap, and wiped there.
+    name: Box<[u8; 32]>,
+    seal: Box<[u8; 32]>,
 }
 
 impl std::fmt::Debug for Hold {
@@ -37,7 +37,14 @@ impl std::fmt::Debug for Hold {
 
 impl Hold {
     pub fn new(key: &[u8; 32]) -> Self {
-        Self { name: blake3::derive_key("pyrate/hold/name/v2", key), seal: blake3::derive_key("pyrate/hold/seal/v2", key) }
+        Self::from_parts(blake3::derive_key("pyrate/hold/name/v2", key), blake3::derive_key("pyrate/hold/seal/v2", key))
+    }
+
+    fn from_parts(name: [u8; 32], seal: [u8; 32]) -> Self {
+        let h = Self { name: Box::new(name), seal: Box::new(seal) };
+        lock_pages(&*h.name);
+        lock_pages(&*h.seal);
+        h
     }
 
     /// The hold key for a node's folder: the one given, else `PYRATE_HOLD_KEY` (a file), else
@@ -60,14 +67,14 @@ impl Hold {
 
     /// The name a thing is filed under: nobody without the key can compute it.
     pub fn name(&self, what: &[u8]) -> String {
-        blake3::keyed_hash(&self.name, what).to_hex().to_string()
+        blake3::keyed_hash(&*self.name, what).to_hex().to_string()
     }
 
     /// Sealed bytes: a fresh nonce, then the bytes under the hold key, bound to `what`.
     pub fn seal(&self, what: &[u8], plain: &[u8]) -> Vec<u8> {
         let mut nonce = [0u8; 12];
         rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut nonce);
-        let ct = ChaCha20Poly1305::new(&self.seal.into()).encrypt(Nonce::from_slice(&nonce), Payload { msg: plain, aad: what }).expect("sealing cannot fail");
+        let ct = ChaCha20Poly1305::new(&(*self.seal).into()).encrypt(Nonce::from_slice(&nonce), Payload { msg: plain, aad: what }).expect("sealing cannot fail");
         let mut out = nonce.to_vec();
         out.extend(ct);
         out
@@ -77,12 +84,12 @@ impl Hold {
         if sealed.len() < 12 {
             return None;
         }
-        ChaCha20Poly1305::new(&self.seal.into()).decrypt(Nonce::from_slice(&sealed[..12]), Payload { msg: &sealed[12..], aad: what }).ok()
+        ChaCha20Poly1305::new(&(*self.seal).into()).decrypt(Nonce::from_slice(&sealed[..12]), Payload { msg: &sealed[12..], aad: what }).ok()
     }
 
     /// A key of its own for one station's log records, drawn from the hold key and the id.
     pub fn log_key(&self, station: &[u8; 32]) -> [u8; 32] {
-        let mut h = blake3::Hasher::new_keyed(&self.seal);
+        let mut h = blake3::Hasher::new_keyed(&*self.seal);
         h.update(b"pyrate/hold/log/v2");
         h.update(station);
         *h.finalize().as_bytes()
@@ -145,3 +152,39 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+impl Clone for Hold {
+    fn clone(&self) -> Self {
+        Self::from_parts(*self.name, *self.seal)
+    }
+}
+
+/// The keys leave no copy behind: wiped where they lay, and the pages let go.
+impl Drop for Hold {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.name.zeroize();
+        self.seal.zeroize();
+        unlock_pages(&*self.name);
+        unlock_pages(&*self.seal);
+    }
+}
+
+/// Keeps a key's page out of swap where the system allows it (Linux, Android, macOS). A refusal,
+/// such as a low locked-memory limit, leaves the key working as before.
+#[cfg(unix)]
+fn lock_pages(k: &[u8; 32]) {
+    unsafe {
+        libc::mlock(k.as_ptr() as *const libc::c_void, k.len());
+    }
+}
+#[cfg(unix)]
+fn unlock_pages(k: &[u8; 32]) {
+    unsafe {
+        libc::munlock(k.as_ptr() as *const libc::c_void, k.len());
+    }
+}
+#[cfg(not(unix))]
+fn lock_pages(_: &[u8; 32]) {}
+#[cfg(not(unix))]
+fn unlock_pages(_: &[u8; 32]) {}

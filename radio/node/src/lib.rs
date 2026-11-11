@@ -1793,10 +1793,9 @@ impl Node {
     /// Raises colours with the master key in hand: it flies them, appoints this
     /// device's deputy, and is then forgotten. Returns the station and the master's
     /// 24 words, shown once. A Lantern (`keep_master`) keeps the master itself.
-    pub fn raise_with(&self, name: &str, about: &str, port: Option<String>, keep_master: bool) -> Result<(StationId, String)> {
-        let master = pyrate_core::StationKey::generate()?;
+    pub fn raise_with(&self, name: &str, about: &str, port: Option<String>, keep_master: bool, pass: &str) -> Result<(StationId, String)> {
+        let (master, words) = pyrate_core::StationKey::generate_with(pass)?;
         let id = master.id();
-        let words = master.phrase();
         {
             let mut s = self.inner.store.lock().unwrap();
             let mut a = s.logs.remove(&id).unwrap_or_else(|| Archive::new(id));
@@ -1817,13 +1816,13 @@ impl Node {
     }
 
     pub fn raise(&self, name: &str, about: &str, port: Option<String>) -> Result<StationId> {
-        Ok(self.raise_with(name, about, port, true)?.0)
+        Ok(self.raise_with(name, about, port, true, "")?.0)
     }
 
     /// Master acts from the 24 words: strike, or revoke every deputy and appoint this device.
     /// Appoints a co-host's key as a deputy, with the station's 24 words.
-    fn appoint(&self, station: StationId, words: &str, key: Hash, label: &str) -> Result<()> {
-        let master = pyrate_core::StationKey::from_phrase(words)?;
+    fn appoint(&self, station: StationId, words: &str, pass: &str, key: Hash, label: &str) -> Result<()> {
+        let master = pyrate_core::StationKey::from_words(words, pass)?;
         if master.id() != station {
             anyhow::bail!("those words are not this station's key");
         }
@@ -1836,8 +1835,8 @@ impl Node {
         Ok(())
     }
 
-    fn with_master(&self, station: StationId, words: &str, act: &str) -> Result<()> {
-        let master = pyrate_core::StationKey::from_phrase(words)?;
+    fn with_master(&self, station: StationId, words: &str, pass: &str, act: &str) -> Result<()> {
+        let master = pyrate_core::StationKey::from_words(words, pass)?;
         if master.id() != station {
             anyhow::bail!("those words are not this station's key");
         }
@@ -2112,7 +2111,7 @@ impl Node {
             "hand_appoint" => {
                 let st = station()?;
                 let code = unhex(req["code"].as_str().context("code")?.trim())?;
-                self.appoint(st, req["words"].as_str().context("words")?, code, req["label"].as_str().unwrap_or("hand"))?;
+                self.appoint(st, req["words"].as_str().context("words")?, req["passphrase"].as_str().unwrap_or(""), code, req["label"].as_str().unwrap_or("hand"))?;
                 Ok(json!({ "ok": true }))
             }
             "maroon_export" => {
@@ -2166,11 +2165,18 @@ impl Node {
                 Ok(json!({ "value": !p.exists() }))
             }
             "pin_set" => {
-                let p = inner.cfg.dir.join("pin");
+                // With "duress": the second PIN, the one given up under force. It opens nothing:
+                // the app scuttles itself, closes, and opens next time as if newly installed.
+                let duress = req["duress"].as_bool() == Some(true);
+                let p = inner.cfg.dir.join(if duress { "pin-duress" } else { "pin" });
                 match req["pin"].as_str().filter(|s| s.len() >= 4) {
                     Some(pin) => std::fs::write(&p, pin_hash(pin, &rand::random())?)?,
                     None => {
                         let _ = std::fs::remove_file(&p);
+                        // No PIN means no second PIN either.
+                        if !duress {
+                            let _ = std::fs::remove_file(inner.cfg.dir.join("pin-duress"));
+                        }
                     }
                 }
                 Ok(json!({ "ok": true }))
@@ -2179,9 +2185,21 @@ impl Node {
                 let p = inner.cfg.dir.join("pin");
                 let Ok(b) = std::fs::read(&p) else { return Ok(json!({ "ok": true, "set": false })) };
                 let pin = req["pin"].as_str().unwrap_or("");
+                let duress = std::fs::read(inner.cfg.dir.join("pin-duress")).ok().filter(|d| d.starts_with(PIN_V2) && d.len() == PIN_V2.len() + 48);
                 // Asking only whether a PIN is set costs nothing.
                 if pin.is_empty() {
-                    return Ok(json!({ "ok": false, "set": true }));
+                    return Ok(json!({ "ok": false, "set": true, "duress_set": duress.is_some() }));
+                }
+                // Both PINs are always worked out, so the time taken does not say which matched.
+                let forced = match &duress {
+                    Some(d) => pin_hash(pin, d[PIN_V2.len()..PIN_V2.len() + 16].try_into()?)? == *d,
+                    None => {
+                        let _ = pin_hash(pin, &[0u8; 16]);
+                        false
+                    }
+                };
+                if forced {
+                    return Ok(json!({ "ok": false, "set": true, "duress": true }));
                 }
                 let ok = match b.strip_prefix(PIN_V2) {
                     Some(rest) if rest.len() == 48 => pin_hash(pin, rest[..16].try_into()?)? == b,
@@ -2280,7 +2298,7 @@ impl Node {
                 if name.is_empty() {
                     anyhow::bail!("a station needs a name");
                 }
-                let (id, words) = self.raise_with(name, req["about"].as_str().unwrap_or(""), req["port"].as_str().map(String::from), false)?;
+                let (id, words) = self.raise_with(name, req["about"].as_str().unwrap_or(""), req["port"].as_str().map(String::from), false, req["passphrase"].as_str().unwrap_or(""))?;
                 // A pocket station: for invited listeners only, never on the public Log. The words
                 // come back whatever happens here: they are shown once, and the station exists.
                 // (A pocket is marked private before its topic opens, so a failure here leaves it
@@ -2371,12 +2389,13 @@ impl Node {
                 // The station's log comes aboard first, so the revocation follows its last entry;
                 // then every old deputy is shut out and this phone gets a new one.
                 let phrase = req["phrase"].as_str().context("phrase")?;
-                let id = pyrate_core::StationKey::from_phrase(phrase)?.id();
+                let pass = req["passphrase"].as_str().unwrap_or("");
+                let id = pyrate_core::StationKey::from_words(phrase, pass)?.id();
                 let _ = self.rt.block_on(async { tokio::time::timeout(Duration::from_secs(25), inner.sync_log(id)).await });
                 if inner.store.lock().unwrap().logs.get(&id).is_none_or(|a| a.len() == 0) {
                     anyhow::bail!("the station's log could not be found yet; try again in a minute, ideally on Wi-Fi");
                 }
-                self.with_master(id, phrase, "restore")?;
+                self.with_master(id, phrase, pass, "restore")?;
                 Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign() }))
             }
             // A recording from the microphone, on computers (the phone records for itself).
@@ -2405,7 +2424,7 @@ impl Node {
             "strike" => {
                 let st = station()?;
                 match req["phrase"].as_str().filter(|p| !p.trim().is_empty()) {
-                    Some(words) => self.with_master(st, words, "strike")?,
+                    Some(words) => self.with_master(st, words, req["passphrase"].as_str().unwrap_or(""), "strike")?,
                     None => {
                         inner.store.lock().unwrap().write(st, now_ms(), Body::Strike)?;
                     }

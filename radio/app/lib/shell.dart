@@ -4,6 +4,7 @@
 // left undone where a computer has no such thing (bells, a disguised icon). No rights reserved.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -138,20 +139,65 @@ class Desktop {
   static File? _keyFile;
   static Future<File> _key() async => _keyFile ??= File('${(await getApplicationSupportDirectory()).path}${Platform.pathSeparator}hold.key');
 
-  /// A computer has no secure chip the app can reach, so the hold key lives in a file only this
-  /// user can read, apart from the node's own folder. A copy of the node's folder alone is noise.
+  /// A computer has no secure chip the app can reach. The hold key goes to the computer's own
+  /// keeper where there is one that needs no prompt: Windows' data protection, bound to the
+  /// user's login, or the macOS login keychain. Elsewhere it lives in a file only this user can
+  /// read, apart from the node's folder, and the disk's own encryption is what guards it.
   static Future<String> _holdKey() async {
+    final hex = RegExp(r'^[0-9a-f]{64}$');
     final f = await _key();
     if (await f.exists()) {
-      final k = (await f.readAsString()).trim();
-      if (RegExp(r'^[0-9a-f]{64}$').hasMatch(k)) return k;
+      final t = (await f.readAsString()).trim();
+      if (hex.hasMatch(t)) {
+        // A key from before, in the clear: moved into the computer's keeper, if it has one.
+        final w = await _wrap(t);
+        if (w != null) await _write(f, w);
+        return t;
+      }
+      final k = await _unwrap(t);
+      if (k != null && hex.hasMatch(k)) return k;
+      // A key that cannot be opened is set aside, never overwritten.
+      await f.rename('${f.path}.unopened-${DateTime.now().millisecondsSinceEpoch}');
     }
     final r = Random.secure();
     final k = List.generate(32, (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
     await f.parent.create(recursive: true);
-    await f.writeAsString(k, flush: true);
-    if (!Platform.isWindows) await Process.run('chmod', ['600', f.path]);
+    await _write(f, await _wrap(k) ?? k);
     return k;
+  }
+
+  static Future<void> _write(File f, String text) async {
+    await f.writeAsString(text, flush: true);
+    if (!Platform.isWindows) await Process.run('chmod', ['600', f.path]);
+  }
+
+  static const _kcAccount = 'pyrate-radio', _kcService = 'Pyrate Radio hold key';
+
+  /// The key handed to the computer's keeper, and the marker the file keeps in its place. The
+  /// keeper must give the key straight back before the file stops holding it, so a keeper that
+  /// takes but cannot return never costs anyone their radio.
+  static Future<String?> _wrap(String k) async {
+    try {
+      String? w;
+      if (Platform.isWindows) w = 'dpapi:${base64Encode(Dpapi.protect(utf8.encode(k)))}';
+      if (Platform.isMacOS) {
+        final r = await Process.run('security', ['add-generic-password', '-U', '-a', _kcAccount, '-s', _kcService, '-w', k]);
+        if (r.exitCode == 0) w = 'keychain:$_kcAccount';
+      }
+      if (w != null && await _unwrap(w) == k) return w;
+    } catch (_) {}
+    return null;
+  }
+
+  static Future<String?> _unwrap(String t) async {
+    try {
+      if (t.startsWith('dpapi:') && Platform.isWindows) return utf8.decode(Dpapi.unprotect(base64Decode(t.substring(6))));
+      if (t.startsWith('keychain:') && Platform.isMacOS) {
+        final r = await Process.run('security', ['find-generic-password', '-a', _kcAccount, '-s', _kcService, '-w']);
+        if (r.exitCode == 0) return (r.stdout as String).trim();
+      }
+    } catch (_) {}
+    return null;
   }
 
   /// The key is overwritten and gone, then the app ends: everything the node kept is noise.
@@ -162,6 +208,7 @@ class Desktop {
       await f.writeAsBytes(List.generate(4096, (_) => r.nextInt(256)), flush: true);
       await f.delete();
     }
+    if (Platform.isMacOS) await Process.run('security', ['delete-generic-password', '-a', _kcAccount, '-s', _kcService]).catchError((_) => ProcessResult(0, 0, '', ''));
     Timer(const Duration(milliseconds: 300), () => exit(0));
   }
 
