@@ -160,12 +160,23 @@ fn xml(s: &str) -> String {
 }
 
 /// Where this page is reached from, for links inside the feed: the tunnel's name, not ours.
+/// `PYRATE_PUBLIC_URL` settles it outright. Otherwise the request's own Host, and the proxy's
+/// forwarded headers only when `PYRATE_TRUST_PROXY=1` says a proxy in front sets them, so a
+/// stranger reaching the Lantern directly cannot put a host of their choosing into its feeds.
 /// Only a plain host name and http or https are taken from the request.
 fn base(h: &HeaderMap) -> String {
-    let host = h.get("x-forwarded-host").or(h.get(header::HOST)).and_then(|v| v.to_str().ok()).unwrap_or("localhost");
+    if let Ok(u) = std::env::var("PYRATE_PUBLIC_URL") {
+        let u = u.trim().trim_end_matches('/');
+        if (u.starts_with("https://") || u.starts_with("http://")) && u.len() <= 255 && !u.contains(['"', '<', '>', ' ']) {
+            return u.to_string();
+        }
+    }
+    let trust = std::env::var("PYRATE_TRUST_PROXY").is_ok_and(|v| v == "1");
+    let forwarded = |k: &str| if trust { h.get(k) } else { None };
+    let host = forwarded("x-forwarded-host").or(h.get(header::HOST)).and_then(|v| v.to_str().ok()).unwrap_or("localhost");
     let host = if !host.is_empty() && host.len() <= 255 && host.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']')) { host } else { "localhost" };
     let local = host.starts_with("127.") || host.starts_with("localhost") || host.starts_with("[::1]");
-    let proto = match h.get("x-forwarded-proto").and_then(|v| v.to_str().ok()) {
+    let proto = match forwarded("x-forwarded-proto").and_then(|v| v.to_str().ok()) {
         Some("http") => "http",
         Some("https") => "https",
         _ if local => "http",

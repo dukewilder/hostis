@@ -63,6 +63,24 @@ impl Hold {
                 return Ok(Self::new(&k));
             }
         }
+        // A key moved to another disk for the first time: the one beside the data is copied
+        // there, and left for the keeper to remove once the Lantern has opened its hold.
+        let old = dir.join("hold.key");
+        if path != old {
+            if let Ok(k) = std::fs::read(&old).map_err(anyhow::Error::from).and_then(|b| <[u8; 32]>::try_from(b.as_slice()).map_err(anyhow::Error::from)) {
+                std::fs::write(&path, k)?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+                }
+                if std::fs::read(&path).ok().as_deref() == Some(&k[..]) {
+                    crate::say("the hold key is copied to PYRATE_HOLD_KEY; once this Lantern runs, remove the old hold.key beside the data");
+                    return Ok(Self::new(&k));
+                }
+                anyhow::bail!("the hold key could not be copied to PYRATE_HOLD_KEY");
+            }
+        }
         let mut k = [0u8; 32];
         rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut k);
         std::fs::write(&path, k)?;

@@ -55,6 +55,30 @@ fn main() -> anyhow::Result<()> {
         }
     }
     println!("dial {dial:?} s, title {title:?} s, sound {sound:?} s");
+    // With a second station: the swipe to it and back, as a listener turning the dial would,
+    // after the app has warmed the station beside the one playing.
+    if let Some(other) = a.get(4) {
+        n.call(&json!({ "cmd": "warm", "stations": [other] }));
+        std::thread::sleep(Duration::from_secs(8));
+        for (to, label) in [(other.as_str(), "swipe"), (a[3].as_str(), "and back")] {
+            let t = Instant::now();
+            n.call(&json!({ "cmd": "tune", "station": to }));
+            let (mut title, mut sound) = (None, None);
+            while t.elapsed() < Duration::from_secs(20) && sound.is_none() {
+                std::thread::sleep(Duration::from_millis(50));
+                let now = &n.call(&json!({ "cmd": "status" }))["now"];
+                if now["station"] == to {
+                    if title.is_none() && now["title"].as_str().is_some_and(|x| !x.is_empty()) {
+                        title = Some(t.elapsed().as_secs_f64());
+                    }
+                    if now["state"] == "playing" {
+                        sound = Some(t.elapsed().as_secs_f64());
+                    }
+                }
+            }
+            println!("{label}: title {title:?} s, sound {sound:?} s");
+        }
+    }
     // Long enough for the Log to be written down, as it would be in any real listen.
     std::thread::sleep(Duration::from_secs(15));
     if sound.is_none() {

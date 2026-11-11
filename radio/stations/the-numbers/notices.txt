@@ -1,0 +1,1 @@
+Five figures on the hour, every hour, UTC. Each group of five is one word: the first two figures name an article, the last three the word's place in it. The key is the Articles of Bartholomew Roberts, as Charles Johnson printed them in 1724, counting words as printed and leaving out figures.

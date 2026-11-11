@@ -470,3 +470,25 @@ Most people who listen or start a station will never read the how-it-works page,
 - **Settings are grouped by what they are for:** listening, keeping stations on the air, privacy and safety, sharing. Tor, finding radios on Wi-Fi, connecting directly and the signing fingerprint sit under Advanced, folded.
 - **The sea words stay in the name and the look,** not in instructions. The Log, the dial and Raise colours stay. Maroon, ballast, hold, hail, chatter, watch bill, flock, aboard, hands and carriers became hide, help carry, what I have listened to, message, chat, schedule, play on several phones, listening, co-hosts and radios.
 - **The open player matches:** Start a Station with the same folds, Settings with Advanced folded, and the same words throughout.
+
+## XL. The second audit, and three new HOSTIS stations (11 November 2026)
+
+A second outside audit reviewed 0.9.8. AUDIT-2026-11b.md has every finding, checked against the source, and what was done.
+
+- **A broadcaster's station goes out two hops away or not at all.** The phone and the tab used to fall back to a plain stem through their first hop when the sealed push failed, and a resend went plain too. Now, unless the owner allows direct connections, nothing goes but the sealed push, and with no second node the cargo waits and the station page says so. A failed push no longer counts as sent.
+- **A browser that cannot seal a secret does not store it.** With no device key, a station's key, an invitation or the counting key lives only for the tab's life, and the studio says so.
+- **Invite-only stations hide from outsiders, not from their own listeners.** Members share a topic, so routing their fetches through two hops would hide nothing. The app, the open player and the how-it-works page say so where an invitation is made.
+- **Invitations go only to copies of the open player that the browser checks.** inbrowser.link checks every file against its IPFS name in the visitor's own browser; dweb.link, ipfs.io and hand-listed Lanterns serve files unchecked, and now receive public stations only. The studio warns on an unchecked copy.
+- **A peer's advertised relay must be a public http or https host.** Loopback, private, link-local and local-only names are refused, except on a test network of loopback relays.
+- **Lantern feeds name a fixed address.** `PYRATE_PUBLIC_URL`, or the request's Host; forwarded headers only with `PYRATE_TRUST_PROXY=1`.
+- **Requests draw on a byte budget as they arrive**: 256 MiB in all on a Lantern, 48 MiB on a phone.
+- **The network clock eases.** A correction moves at most ten seconds a minute toward its target, so a crowd of new stations can only nudge it.
+- **Moving a Lantern's hold key is one setting.** Pointed at a missing file, `PYRATE_HOLD_KEY` takes a checked copy of the old key.
+- **Logs ahead of the swipe.** The stations either side of the one playing get their logs while it plays, in the app and the open player, so a swipe needs only its first chunk: about half a second on a near network.
+- **Finding a station from its words keeps trying** for forty seconds, through a fresh exit each time.
+- **Three new HOSTIS stations**, built as Lantern seed folders in `stations/`:
+  - **The Numbers**, a numbers station. An original interval signal on a music box over shortwave hiss, a spoken ident every quarter hour, and a transmission at the top of every hour, UTC. Every transmission is a real message in a book cipher keyed to Roberts's articles as Johnson printed them in 1724: each five-figure group is one word, the article and then the word's place in it. `tools/stations/the_numbers.py` builds it; the voice is Piper's LJ Speech model, trained on a public domain recording.
+  - **Netlabel**, seven hours of Creative Commons electronic, ambient and experimental music from long-running netlabels, each recording credited and licensed beside it.
+  - **Poets' Corner**, six hours of short public domain poems read by LibriVox volunteers, with one of twenty-four poems everyone should hear once at the top of every hour.
+  - The archive-built stations are fetched by the Lantern that keeps them, from manifests that fix each file by its checksum (`tools/stations/fetch.py`).
+- **Every HOSTIS station has a cover and a banner**, drawn in the site's faces by `tools/stations/art.py`.

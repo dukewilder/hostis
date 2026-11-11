@@ -445,10 +445,13 @@ impl Inner {
             }
             e.3 = card_at.max(e.3);
         }
-        // Two hops out first: the guard forwards a sealed blob to a second node, which opens it
-        // and starts the stem from there. The guard sees this device and never the station; the
-        // second node sees the station and never this device.
-        if !resend {
+        // Two hops out: the guard forwards a sealed blob to a second node, which opens it and
+        // starts the stem from there. The guard sees this device and never the station; the
+        // second node sees the station and never this device. A phone that never connects
+        // directly sends its station no other way, resends included: with no second node, or
+        // none that takes it, the cargo waits for the next tick.
+        let strict = self.cfg.private && self.strict.load(std::sync::atomic::Ordering::Relaxed);
+        if !resend || strict {
             if let Some(g) = self.guard() {
                 let others: Vec<EndpointId> = self.known_nodes().into_iter().filter(|n| *n != g).collect();
                 let x = (!others.is_empty()).then(|| others[rand::random::<usize>() % others.len()]);
@@ -467,6 +470,12 @@ impl Inner {
                     }
                 }
             }
+        }
+        if strict {
+            // Nothing went, so nothing counts as sent: the next tick sends it all again.
+            self.stem_sent.lock().unwrap().remove(&station);
+            say("stem: no two-hop route took the cargo; it waits for the next tick");
+            return false;
         }
         let hop = Hop::Stem { station, entries, chunks, announce, hops: 0 };
         let mut tried = Vec::new();
@@ -489,6 +498,7 @@ impl Inner {
                 return true;
             }
         }
+        self.stem_sent.lock().unwrap().remove(&station);
         say("stem: no node took the cargo; it waits for the next tick");
         false
     }

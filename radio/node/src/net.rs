@@ -295,7 +295,56 @@ impl Gossip {
             return None;
         }
         StationId(*node).verify(&harbour_message(node, relay, *at_ms), &sig).ok()?;
-        Some((*node, relay.clone()))
+        relay_public(relay).then(|| (*node, relay.clone()))
+    }
+}
+
+/// Set on a node whose own relays are on loopback: a private test network, where the Harbour
+/// notes name loopback relays too.
+pub static LOCAL_RELAYS_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether a relay a peer advertises may go in the address book: http or https, and a public
+/// host. A signed note proves who sent it, not that the address is somewhere this node should
+/// reach, so loopback, private, link-local and local-only names are refused.
+pub fn relay_public(relay: &str) -> bool {
+    let Some(rest) = relay.strip_prefix("https://").or_else(|| relay.strip_prefix("http://")) else { return false };
+    let host_port = rest.split(['/', '?', '#']).next().unwrap_or("");
+    if host_port.is_empty() || host_port.contains('@') {
+        return false;
+    }
+    let host = if let Some(v6) = host_port.strip_prefix('[') { v6.split(']').next().unwrap_or("") } else { host_port.rsplit_once(':').map(|(h, _)| h).unwrap_or(host_port) };
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    let local_ok = LOCAL_RELAYS_OK.load(std::sync::atomic::Ordering::Relaxed);
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        if ip.is_loopback() {
+            return local_ok;
+        }
+        return match ip {
+            std::net::IpAddr::V4(v) => !(v.is_private() || v.is_link_local() || v.is_unspecified() || v.is_broadcast() || v.is_multicast() || v.is_documentation() || v.octets()[0] == 0 || (v.octets()[0] == 100 && (64..128).contains(&v.octets()[1]))),
+            std::net::IpAddr::V6(v) => {
+                let seg = v.segments()[0];
+                !(v.is_unspecified() || v.is_multicast() || (seg & 0xfe00) == 0xfc00 || (seg & 0xffc0) == 0xfe80 || v.to_ipv4_mapped().is_some())
+            }
+        };
+    }
+    if host == "localhost" || host.ends_with(".localhost") {
+        return local_ok;
+    }
+    !host.is_empty() && host.contains('.') && host.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-') && ![".local", ".internal", ".lan", ".home.arpa", ".home", ".corp"].iter().any(|t| host.ends_with(t))
+}
+
+#[cfg(test)]
+mod relay_tests {
+    use super::relay_public;
+
+    #[test]
+    fn only_public_relays_are_taken() {
+        for ok in ["https://relay.hostis.black/", "http://45.87.214.21:42779/", "https://euw1-1.relay.iroh.network./"] {
+            assert!(relay_public(ok), "{ok}");
+        }
+        for bad in ["http://127.0.0.1:3340", "http://localhost:3340/", "http://10.0.0.5/", "http://192.168.1.1:80/", "http://169.254.169.254/", "http://[::1]:3340/", "http://[fd00::1]/", "ftp://relay.example.org/", "http://user@relay.example.org/", "http://printer.local/", "http://100.64.0.1/", "http://0.0.0.0/"] {
+            assert!(!relay_public(bad), "{bad}");
+        }
     }
 }
 
