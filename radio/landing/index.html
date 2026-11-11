@@ -160,7 +160,7 @@ document.querySelectorAll('a.openlink').forEach(function(a){a.href={{OPEN_PLAYER
 </div>
 {{DESKTOP}}
 <div class="alt"><a class="btn openlink" href="listen/">Any browser</a><a class="btn" href="{{MAGNET}}">Magnet link</a><a class="btn" href="pyrate-radio-{{VERSION}}.apk.torrent">.torrent</a><a class="btn" href="https://github.com/dukewilder/hostis/tree/radio/radio" target="_blank" rel="noopener noreferrer">Source</a></div>
-<p class="note">Once you have it, the app passes itself on from phone to phone, in Colours.</p>
+<p class="note">Once you have it, the app passes itself on from phone to phone, in Settings.</p>
 <div class="folds">
 <details class="fold"><summary>Installing on stock Android</summary><div>
 <p>Pyrate Radio does not register with Google. From 2026 in some countries, and everywhere in 2027, Google's phones ask once before installing an app from a developer who keeps their name to themselves.</p>
@@ -173,7 +173,7 @@ document.querySelectorAll('a.openlink').forEach(function(a){a.href={{OPEN_PLAYER
 </div></details>
 <details class="fold"><summary>Checksums and the signing certificate</summary><div>
 <p class="sums">android {{SHA}}<br>{{DESKTOP_SUMS}}signing certificate AF:4C:08:F6:0C:06:87:5C:84:9F:74:59:6B:BB:99:62:DC:A8:EB:33:E2:22:8E:72:BC:A9:BD:06:4E:6D:8A:14</p>
-<p>The app shows the same certificate under More, This copy, and takes an update only when two of the three HOSTIS release keys have signed it. The source is CC0, so you can build it yourself and compare.</p>
+<p>The app shows the same certificate in Settings, under Advanced, and takes an update only when two of the three HOSTIS release keys have signed it. The source is CC0, so you can build it yourself and compare.</p>
 </div></details>
 </div>
 </section>
@@ -214,13 +214,13 @@ docker run -d --name lantern --restart unless-stopped -v pyrate:/data pyrate-lan
 <details class="fold"><summary>Does it work on iPhone?</summary><div>Yes, in Safari, listening and broadcasting both. Open the <a class="openlink" href="listen/">open player</a> and add it to your home screen to open it like an app. Listening with the screen off needs the app, on Android or a computer.</div></details>
 <details class="fold"><summary>Who can see what I listen to?</summary><div>No single device learns both who you are and what you hear. Your phone fetches sound through two other devices, the first knowing who asks and not what, the second what and not who. Counts are made from anonymous tokens that change every hour. What your phone carries for others sits on it sealed, and it cannot tell what it holds.</div></details>
 <details class="fold"><summary>Can a station be taken down?</summary><div>Not from any one place. Its log and its sound are copied across every device that carries it, and any one of them can hand it on. Only the holder of its key can end it.</div></details>
-<details class="fold"><summary>Who decides what is on the air?</summary><div>Whoever holds a station's key decides what it plays. You decide what reaches you. Maroon a station and it leaves your dial. Explicit stations stay off it until you switch them on, and mature ones can be hidden too.</div></details>
-<details class="fold"><summary>How much data, room and battery does it use?</summary><div>Music streams at about 29 MB an hour and talk at about 11. Your phone's share for the fleet takes up to 4 GB, less on a fuller phone, and fills only on Wi-Fi while it charges, so away from the charger it costs you nothing.</div></details>
+<details class="fold"><summary>Who decides what is on the air?</summary><div>Whoever holds a station's key decides what it plays. You decide what reaches you. Hide a station and it leaves your dial. Explicit stations stay off it until you switch them on, and mature ones can be hidden too.</div></details>
+<details class="fold"><summary>How much data, room and battery does it use?</summary><div>Music streams at about 29 MB an hour and talk at about 11. The share your phone carries for others takes up to 4 GB, less on a fuller phone, and fills only on Wi-Fi while it charges, so away from the charger it costs you nothing.</div></details>
 <details class="fold"><summary>Does my station need my phone to stay on?</summary><div>No. Its programme lives in its signed log and every listener works out what is playing from the log and the clock. Put a song on a loop, uninstall the app, and the song plays on.</div></details>
 <details class="fold"><summary>What happens if I lose my phone?</summary><div>Put your station's twenty-four words into the app on another device and the station is yours again. The old phone can no longer speak for it. Without the words nobody can recover it, HOSTIS included.</div></details>
 <details class="fold"><summary>How do people find my station?</summary><div>It is on the Log and on the dial, at a frequency drawn from its key. Pass on its link, or print its poster, which carries a code that opens the station in any phone's browser.</div></details>
-<details class="fold"><summary>Can I make a private station?</summary><div>Yes, a pocket station. It never shows on the Log. Its key is its invitation, and only whoever you hand it to can find it.</div></details>
-<details class="fold"><summary>Can listeners talk?</summary><div>Each station has chatter for talk, cheers and requests the keeper can play next, kept on no disk by the radio. A listener can also hail the keeper with a voice note sealed so only the keeper can open it.</div></details>
+<details class="fold"><summary>Can I make a private station?</summary><div>Yes, an invite-only station. It never shows on the Log. Its key is its invitation, and only whoever you hand it to can find it.</div></details>
+<details class="fold"><summary>Can listeners talk?</summary><div>Each station has a chat for talk, cheers and requests the station can play next, and the radio saves none of it. A listener can also send the station a voice message only the station can open.</div></details>
 <details class="fold"><summary>How do I know the app is genuine?</summary><div>Check the file against the checksum under Take the set, and the signing certificate against the one the app shows. Updates arrive inside the app, signed by two of three HOSTIS release keys, and wait three days before they install unless you take them sooner.</div></details>
 <details class="fold"><summary>Why &#8220;Pyrate&#8221;?</summary><div>It is the spelling in Captain Charles Johnson's General History of the Pyrates of 1724, read on this radio around the clock. The old law called the pirate <i>hostis humani generis</i>, the enemy of all mankind. HOSTIS takes the name. The rest is at <a href="https://hostis.black">hostis.black</a>.</div></details>
 </div>

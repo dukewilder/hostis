@@ -175,6 +175,11 @@ impl Inner {
             let Ok(raw) = self.ask_privately(&Ask::Log { station, from }).await else { continue };
             let Ok(Response::Entries(list)) = postcard::from_bytes::<Response>(&raw) else { continue };
             let entries: Vec<SignedEntry> = list.iter().filter_map(|b| SignedEntry::from_bytes(b).ok()).collect();
+            // An exit that found no carrier answers with nothing. For a log this phone has
+            // never seen, that is no answer at all, so another exit is asked.
+            if entries.is_empty() && from == 0 {
+                continue;
+            }
             return self.store.lock().unwrap().put_entries(station, entries);
         }
         Err(anyhow!("no private route answered"))
