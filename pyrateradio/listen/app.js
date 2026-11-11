@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=ef6bdcdb3f';
+import init, { Radio } from './pkg/pyrate_browser.js?v=4c53338738';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -13,7 +13,7 @@ const EMBED = document.documentElement.classList.contains('embed');
 // flock goes straight to an open player, the same set served where no one owns it (IPFS, a
 // Lantern). 'open' is that copy: the whole Log, the chatter and the colours.
 const SCOPE = "harbour";
-const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeiauxxb3te2fblrihac2yzfofrboqvqfipfurkscjtb3zvu6acnr7q.ipfs.inbrowser.link/", "https://bafybeiauxxb3te2fblrihac2yzfofrboqvqfipfurkscjtb3zvu6acnr7q.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeiauxxb3te2fblrihac2yzfofrboqvqfipfurkscjtb3zvu6acnr7q/"];
+const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeigylfjzel2iucwodziywmj2lfzow462pott2k2uwugn5wzxh3tpzm.ipfs.inbrowser.link/", "https://bafybeigylfjzel2iucwodziywmj2lfzow462pott2k2uwugn5wzxh3tpzm.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeigylfjzel2iucwodziywmj2lfzow462pott2k2uwugn5wzxh3tpzm/"];
 const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
 const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
 const lastId = () => { if (SHARED) return ''; try { return sessionStorage.getItem('pyrate.cur') || '' } catch (e) { return '' } };
@@ -952,7 +952,7 @@ async function airFile(f, row) {
     for (let i = 0; i < frames; i += BLOCK) { radio.level_feed(block(chans, i, Math.min(BLOCK, frames - i), ch)); if ((i / BLOCK) % 8 === 7) await sleep(0) }
     const lv = JSON.parse(radio.level_end());
     st('Encoding', 0.2);
-    await encode('begin', { channels: ch, bitrate, talk });
+    await encode('begin', { channels: ch, bitrate, talk, disguise: $('st-disguise').checked ? -4 : 0 });
     for (let i = lv.start; i < lv.end; i += BLOCK) {
       const fb = block(chans, i, Math.min(BLOCK, lv.end - i), ch, lv.gain), pcm = new Int16Array(fb.length);
       for (let j = 0; j < fb.length; j++) pcm[j] = Math.max(-1, Math.min(1, fb[j])) * 32767;
@@ -986,7 +986,7 @@ $('st-live').onclick = async () => {
   const ac = new AudioContext({ sampleRate: 48000 }), src = ac.createMediaStreamSource(stream), proc = ac.createScriptProcessor(4096, 1, 1), mute = ac.createGain();
   mute.gain.value = 0; src.connect(proc); proc.connect(mute); mute.connect(ac.destination);
   w.onmessage = e => { if (e.data.live || (e.data.out && e.data.frames !== undefined)) { try { if (e.data.out?.length) radio.live_chunk(id, e.data.out, 1, 24000) } catch (err) { console.warn(err) } } if (e.data.out && !e.data.live) w.terminate() };
-  w.postMessage({ id: 0, kind: 'begin', channels: 1, bitrate: 24000, talk: true, live: true });
+  w.postMessage({ id: 0, kind: 'begin', channels: 1, bitrate: 24000, talk: true, live: true, disguise: $('st-disguise').checked ? -4 : 0 });
   proc.onaudioprocess = ev => { const f = ev.inputBuffer.getChannelData(0), pcm = new Int16Array(f.length); for (let i = 0; i < f.length; i++) pcm[i] = Math.max(-1, Math.min(1, f[i])) * 32767; w.postMessage({ id: 0, kind: 'feed', pcm }, [pcm.buffer]) };
   const t0 = Date.now();
   live = { stream, ac, proc, w, timer: setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); $('st-livetime').textContent = 'ON AIR ' + String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0') }, 500) };
