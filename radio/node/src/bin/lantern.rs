@@ -106,6 +106,12 @@ fn main() -> anyhow::Result<()> {
         }
     }
     seed_all(&node, &seeds)?;
+    // The seeded stations by name and id, once at start: what the harbour list needs.
+    for name in seeds.iter().filter_map(|s| s.split('|').next()) {
+        if let Some(id) = node.inner_store_find(name) {
+            println!("station {name}: {}", id.to_hex());
+        }
+    }
     for line in node.call(&serde_json::json!({ "cmd": "status" }))["mine"].as_object().into_iter() {
         let _ = line;
     }

@@ -27,6 +27,12 @@ fn main() -> anyhow::Result<()> {
     l.call(&json!({ "cmd": "lan", "value": true }));
     let strict = l.call(&json!({ "cmd": "direct_ok" }));
     check(strict["value"] == false, "a phone asks carriers directly only when its owner says so");
+    // A broadcasting phone that never connects directly, with one other node in reach.
+    let b = Node::start(cfg("broadcaster", true))?;
+    b.call(&json!({ "cmd": "lan", "value": true }));
+    let bid = b.call(&json!({ "cmd": "raise", "name": "Held Back", "about": "a test" }))["id"].as_str().unwrap().to_string();
+    b.call(&json!({ "cmd": "add_track", "station": bid, "path": a[2], "title": "Tone", "by": "Test" }));
+    let bid = pyrate_core::StationId::from_hex(&bid)?;
     // Wait for the listener to hear of the station, then tune it with only one other node known.
     for _ in 0..60 {
         std::thread::sleep(Duration::from_secs(1));
@@ -39,6 +45,7 @@ fn main() -> anyhow::Result<()> {
     std::thread::sleep(Duration::from_secs(25));
     check(!playing(&l), "with one node known and no two-hop route, nothing plays");
     check(k.served_direct() == before, &format!("and the carrier was asked for nothing directly ({} requests)", k.served_direct() - before));
+    check(!k.heard_of(&bid), "a broadcasting phone with one node in reach hands that node nothing of its station");
     l.call(&json!({ "cmd": "direct_ok", "value": true }));
     let mut ok = false;
     for _ in 0..40 {
@@ -70,5 +77,14 @@ fn main() -> anyhow::Result<()> {
         }
     }
     check(ok2, "with a Lantern beside the keeper, a phone that never asks directly plays through two hops");
+    let mut out = false;
+    for _ in 0..120 {
+        std::thread::sleep(Duration::from_secs(1));
+        if r.heard_of(&bid) || k.heard_of(&bid) {
+            out = true;
+            break;
+        }
+    }
+    check(out, "with a second node in reach, the broadcasting phone's station goes out two hops away");
     Ok(())
 }

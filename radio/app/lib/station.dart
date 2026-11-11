@@ -1963,7 +1963,7 @@ class InviteSheet extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         heading('AN INVITATION'),
-        note('Anyone with this can listen and pass it on, so send it only to people you trust. It works in the app and in any browser.'),
+        note('Anyone with this can listen and pass it on, so send it only to people you trust. Everyone listening can see the others\' devices, as in a private room. It works in the app and in any browser.'),
         const SizedBox(height: 12),
         if (q is Map)
           Center(

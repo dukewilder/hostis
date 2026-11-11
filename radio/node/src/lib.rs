@@ -370,6 +370,29 @@ static HOPPING: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(16);
 // A Lantern serves a crowd and is many phones' first hop: room for more.
 static SERVING_LANTERN: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(512);
 static HOPPING_LANTERN: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(160);
+// Bytes held by requests still arriving, in KiB, shared by every peer: 48 MiB on a phone,
+// 256 MiB on a Lantern. A request that would pass it is dropped, so a crowd of slow, large
+// requests cannot hold more memory than this whatever the slot counts allow.
+static BYTES: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(48 * 1024);
+static BYTES_LANTERN: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(256 * 1024);
+
+/// A request read as it arrives, drawing on the shared byte budget a KiB at a time. The
+/// permits it holds go back when the request has been answered.
+async fn read_budgeted(recv: &mut iroh::endpoint::RecvStream, budget: &'static tokio::sync::Semaphore) -> Option<(Vec<u8>, Vec<tokio::sync::SemaphorePermit<'static>>)> {
+    let (mut buf, mut held, mut permits) = (Vec::new(), 0usize, Vec::new());
+    while let Some(b) = recv.read_chunk(64 * 1024).await.ok()? {
+        if buf.len() + b.len() > REQUEST_MAX {
+            return None;
+        }
+        buf.extend_from_slice(&b);
+        let need = buf.len().div_ceil(1024).saturating_sub(held);
+        if need > 0 {
+            permits.push(budget.try_acquire_many(need as u32).ok()?);
+            held += need;
+        }
+    }
+    Some((buf, permits))
+}
 
 #[derive(Debug, Clone)]
 struct Proto(Arc<Mutex<Option<Arc<Inner>>>>);
@@ -379,8 +402,8 @@ impl ProtocolHandler for Proto {
         let inner = self.0.lock().unwrap().clone();
         let Some(inner) = inner else { return Ok(()) };
         // Eight requests at a time from one connection, forty-eight from everyone (512 on a
-        // Lantern), four MiB each, twenty seconds to arrive: no peer can make this node hold
-        // more than it can.
+        // Lantern), four MiB each, twenty seconds to arrive, and all of them together within the
+        // byte budget: no peer can make this node hold more than it can.
         let mine = Arc::new(tokio::sync::Semaphore::new(8));
         while let Ok((mut send, mut recv)) = conn.accept_bi().await {
             let inner = inner.clone();
@@ -388,7 +411,8 @@ impl ProtocolHandler for Proto {
             tokio::spawn(async move {
                 let _slot = slot;
                 let Ok(_all) = (if inner.cfg.lantern { &SERVING_LANTERN } else { &SERVING }).try_acquire() else { return };
-                let Ok(Ok(bytes)) = tokio::time::timeout(Duration::from_secs(20), recv.read_to_end(REQUEST_MAX)).await else { return };
+                let budget = if inner.cfg.lantern { &BYTES_LANTERN } else { &BYTES };
+                let Ok(Some((bytes, _held))) = tokio::time::timeout(Duration::from_secs(20), read_budgeted(&mut recv, budget)).await else { return };
                 let Ok(req) = postcard::from_bytes::<Request>(&bytes) else { return };
                 let resp = match req {
                     Request::Hop(b) => {
@@ -1805,6 +1829,9 @@ impl Node {
             // PYRATE_RELAYS, a list of relay URLs, replaces these: for a private network.
             let custom: Vec<iroh::RelayUrl> = std::env::var("PYRATE_RELAYS").unwrap_or_default().split(',').filter_map(|r| r.trim().parse().ok()).collect();
             let private_net = !custom.is_empty();
+            if custom.iter().any(|u| !net::relay_public(u.as_str())) {
+                net::LOCAL_RELAYS_OK.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
             let relays = if custom.is_empty() { relays } else { iroh::RelayMap::from_iter(custom) };
             // Peers are found first in the network's own book, then through number0's pkarr
             // server over HTTPS. No node id is ever looked up in plain DNS, where the line's
@@ -2597,6 +2624,35 @@ impl Node {
                 let n = inner.store.lock().unwrap().clear_hold()?;
                 Ok(json!({ "cleared": n }))
             }
+            // The stations either side of the one playing on the dial: their logs come aboard
+            // now, through the usual private route, so a swipe needs only its first chunk.
+            // Logs are small; each station is warmed at most once every ten minutes.
+            "warm" => {
+                static WARMED: Mutex<Option<HashMap<StationId, u64>>> = Mutex::new(None);
+                let now = now_ms();
+                let list: Vec<StationId> = req["stations"].as_array().into_iter().flatten().filter_map(|v| v.as_str()).filter_map(|h| StationId::from_hex(h).ok()).take(4).collect();
+                let refused = inner.refused();
+                let mut warmed = 0;
+                for st in list {
+                    if refused.contains(&st) || inner.is_pocket(&st) {
+                        continue;
+                    }
+                    {
+                        let mut w = WARMED.lock().unwrap();
+                        let w = w.get_or_insert_with(HashMap::new);
+                        if w.get(&st).is_some_and(|t| now.saturating_sub(*t) < 10 * 60_000) {
+                            continue;
+                        }
+                        w.insert(st, now);
+                    }
+                    let i2 = inner.clone();
+                    self.rt.spawn(async move {
+                        let _ = i2.sync_log(st).await;
+                    });
+                    warmed += 1;
+                }
+                Ok(json!({ "warmed": warmed }))
+            }
             "tune" => {
                 let st = station()?;
                 if inner.refused().contains(&st) {
@@ -2730,7 +2786,18 @@ impl Node {
                 let phrase = req["phrase"].as_str().context("phrase")?;
                 let pass = req["passphrase"].as_str().unwrap_or("");
                 let id = pyrate_core::StationKey::from_words(phrase, pass)?.id();
-                let _ = self.rt.block_on(async { tokio::time::timeout(Duration::from_secs(25), inner.sync_log(id)).await });
+                // Exits are drawn afresh each try: keep asking for forty seconds, so one that has
+                // not heard of the station yet does not end the search.
+                let _ = self.rt.block_on(async {
+                    let until = now_ms() + 40_000;
+                    while now_ms() < until {
+                        let _ = tokio::time::timeout(Duration::from_secs(15), inner.sync_log(id)).await;
+                        if inner.store.lock().unwrap().logs.get(&id).is_some_and(|a| a.len() > 0) {
+                            break;
+                        }
+                        tokio::time::sleep(Duration::from_secs(3)).await;
+                    }
+                });
                 if inner.store.lock().unwrap().logs.get(&id).is_none_or(|a| a.len() == 0) {
                     anyhow::bail!("the station's log could not be found yet; try again in a minute, ideally on Wi-Fi");
                 }

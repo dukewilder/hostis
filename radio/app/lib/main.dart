@@ -440,6 +440,12 @@ class Tuner extends ChangeNotifier {
     _service.invokeMethod('remember', {'station': id}).catchError((_) {});
     pref('resume', id);
     Native.call({'cmd': 'tune', 'station': id});
+    // The stations either side on the dial get their logs now, so a swipe plays at once.
+    final i = stations.indexWhere((s) => s['id'] == id);
+    if (i >= 0 && stations.length > 1) {
+      final near = {stations[(i + 1) % stations.length]['id'], stations[(i - 1 + stations.length) % stations.length]['id']}..remove(id);
+      Native.callAway({'cmd': 'warm', 'stations': near.toList()});
+    }
     final name = station(id)?['name'] ?? 'Pyrate Radio';
     _service.invokeMethod('start', {'title': name}).catchError((_) {});
     face(id);
@@ -1172,7 +1178,7 @@ class _ColoursPageState extends State<ColoursPage> {
         StartShapePicker(shape: shape),
         const SizedBox(height: 8),
         fold('More options', sub: 'Invite-only, and an extra passphrase', [
-          setting('Invite-only', pocket, (v) => setState(() => pocket = v), sub: 'Hidden from the Log. Only people you send an invitation can find it or hear it.'),
+          setting('Invite-only', pocket, (v) => setState(() => pocket = v), sub: 'Hidden from the Log. Only people you send an invitation can find it or hear it, and they can see each other\'s devices.'),
           const SizedBox(height: 10),
           note('A passphrase adds a lock to your 24 words. Someone who sees the words still cannot open the station. Forget the passphrase and the station is gone for good.'),
           TextField(controller: pass, obscureText: true, style: mono(13, color: bone), decoration: field('Passphrase (optional)'),

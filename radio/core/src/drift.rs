@@ -22,16 +22,20 @@ const OFF_MS: i64 = 1_000;
 /// A gap larger than this is not trusted at all. A phone's own clock, kept by its network, is
 /// rarely out by more.
 const MAX_MS: i64 = 120_000;
+/// How far a correction moves toward a new target, per minute of our clock: a crowd of new
+/// stations saying one wrong time can only nudge the playhead while honest ones keep arriving.
+const SLEW_PER_MIN: i64 = 10_000;
 
 #[derive(Default, Debug)]
 pub struct Drift {
     gaps: VecDeque<([u8; 32], i64)>,
     current: i64,
+    at: u64,
 }
 
 impl Drift {
     pub const fn new() -> Self {
-        Self { gaps: VecDeque::new(), current: 0 }
+        Self { gaps: VecDeque::new(), current: 0, at: 0 }
     }
 
     /// One station's card: `theirs` the time it signed, `ours` our clock when it arrived.
@@ -42,7 +46,16 @@ impl Drift {
         while self.gaps.len() > KEEP {
             self.gaps.pop_front();
         }
-        self.current = self.work_out();
+        let target = self.work_out();
+        // The correction eases toward each new target, whichever way it lies, by time passed
+        // on our own clock: a flood of cards in one moment moves it no further than one card.
+        if self.at != 0 && ours > self.at {
+            let step = (ours - self.at) as i64 * SLEW_PER_MIN / 60_000;
+            self.current += (target - self.current).clamp(-step, step);
+        }
+        if ours > self.at {
+            self.at = ours;
+        }
     }
 
     fn work_out(&self) -> i64 {
@@ -93,24 +106,41 @@ mod tests {
     #[test]
     fn a_wrong_clock_is_corrected_once_stations_agree_and_eases_off_cleanly() {
         let mut d = Drift::default();
+        // Every station says the network is `gap` ahead at our time `ours`, and one says it
+        // again ten minutes later, by when the correction has had time to arrive.
+        let all = |d: &mut Drift, gap: u64, ours: u64| {
+            (1..=9).for_each(|n| d.sample(st(n), ours + gap, ours));
+            d.sample(st(1), ours + 600_000 + gap, ours + 600_000);
+        };
         for n in 1..=8 {
             d.sample(st(n), 1_060_000, 1_000_000);
         }
+        d.sample(st(1), 1_660_000, 1_600_000);
         assert_eq!(d.offset(), 0, "eight stations are not yet a quorum");
-        d.sample(st(9), 1_060_000, 1_000_000);
-        assert_eq!(d.offset(), 60_000, "our clock is a minute slow");
-        for n in 1..=9 {
-            d.sample(st(n), 1_001_500, 1_000_000);
-        }
+        all(&mut d, 60_000, 2_000_000);
+        assert_eq!(d.offset(), 60_000, "with nine, our clock is a minute slow");
+        all(&mut d, 1_500, 3_000_000);
         assert_eq!(d.offset(), 1_500, "still correcting above the lower edge");
-        for n in 1..=9 {
-            d.sample(st(n), 1_000_500, 1_000_000);
-        }
+        all(&mut d, 500, 4_000_000);
         assert_eq!(d.offset(), 0, "and off once the gap has closed");
-        for n in 1..=9 {
-            d.sample(st(n), 1_002_000, 1_000_000);
-        }
+        all(&mut d, 2_000, 5_000_000);
         assert_eq!(d.offset(), 0, "two seconds does not turn it back on");
+    }
+
+    #[test]
+    fn a_crowd_of_new_stations_can_only_nudge_the_clock() {
+        let mut d = Drift::default();
+        for n in 1..=12 {
+            d.sample(st(n), 1_000_000, 1_000_000);
+        }
+        for n in 13..=40 {
+            d.sample(st(n), 1_060_000 + 120_000, 1_060_000);
+        }
+        assert!(d.offset() <= 10_000, "a sudden crowd moves the clock ten seconds in a minute, not two minutes: {}", d.offset());
+        for i in 0..1000 {
+            d.sample(st(40), 1_060_000 + 120_000 + i, 1_060_000);
+        }
+        assert!(d.offset() <= 10_000, "and a flood of cards in one moment moves it no further");
     }
 
     #[test]

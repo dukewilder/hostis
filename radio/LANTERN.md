@@ -10,11 +10,11 @@ A Lantern is a node that never sleeps. It carries every station it hears of, rel
 
 It opens no ports and needs none. Behind a VPN it works the same, through the relays.
 
-**Its keys.** Everything a Lantern keeps is sealed under its hold key, which by default lies in `hold.key` beside the data, so a copy of the whole folder opens. Put the key on another disk, or a USB stick, with `-e PYRATE_HOLD_KEY=/keys/hold.key -v /path/on/that/disk:/keys`, and turn on the disk's own encryption. The Lantern says so at every start until you do. Never print or share `hold.key`.
+**Its keys.** Everything a Lantern keeps is sealed under its hold key, which by default lies in `hold.key` beside the data, so a copy of the whole folder opens. Put the key on another disk, or a USB stick, with `-e PYRATE_HOLD_KEY=/keys/hold.key -v /path/on/that/disk:/keys`, and turn on the disk's own encryption. The first time it starts that way, the Lantern copies the old key there and checks the copy; remove the old `hold.key` yourself once it runs. The Lantern says so at every start until you do. Never print or share `hold.key`.
 
 **Its log.** A Lantern logs, for you, which stations it carries and which peers it meets, and Docker keeps those lines. `-e PYRATE_QUIET=1` stops them.
 
-**Your own stations on your own site.** Add `--http 127.0.0.1:8080` and `--seed "Name|About|/folder|music"`, then put a web server or tunnel in front of port 8080. The page plays your Lantern's stations and nothing else, and any page can embed a station with one `<audio>` tag. The page and its streams are ordinary web: whoever runs the Lantern, and any proxy or tunnel in front of it, can see a listener's address beside the station played, and the page says so. Keep no access logs if you would rather not hold that.
+**Your own stations on your own site.** Add `--http 127.0.0.1:8080` and `--seed "Name|About|/folder|music"`, then put a web server or tunnel in front of port 8080. The page plays your Lantern's stations and nothing else, and any page can embed a station with one `<audio>` tag. The page and its streams are ordinary web: whoever runs the Lantern, and any proxy or tunnel in front of it, can see a listener's address beside the station played, and the page says so. Keep no access logs if you would rather not hold that. Podcast feeds name the address the page was reached at: set `-e PYRATE_PUBLIC_URL=https://your.address` to fix it, or `-e PYRATE_TRUST_PROXY=1` if a proxy in front sets `X-Forwarded-Host`. Without either, the Lantern trusts only the request's own Host.
 
 **Quota.** `--quota-gb` caps what it carries. Fifty gigabytes holds about 1,700 hours of music.
 

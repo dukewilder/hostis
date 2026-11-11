@@ -1003,6 +1003,12 @@ impl Ship {
                 }
             }
         }
+        // A tab that never connects directly sends its station no other way: the cargo waits
+        // for a second node rather than hand a first hop both this tab and its station.
+        if !self.direct_ok.load(std::sync::atomic::Ordering::Relaxed) {
+            say("stem: no two-hop route took the cargo; it goes again shortly");
+            return false;
+        }
         let hop = match postcard::to_stdvec(&Hop::Stem { station: id, entries, chunks, announce: Some(announce), hops: 0 }) {
             Ok(h) => h,
             Err(_) => return false,
@@ -1247,6 +1253,9 @@ impl Radio {
         let harbour = ids;
         let token_key = unhex32(&token_key).map_err(js)?;
         let custom: Vec<iroh::RelayUrl> = relays.split(',').filter_map(|r| r.trim().parse().ok()).collect();
+        if custom.iter().any(|u| !net::relay_public(u.as_str())) {
+            net::LOCAL_RELAYS_OK.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
         let relays = if custom.is_empty() {
             let m = iroh::defaults::prod::default_relay_map();
             for r in CREW_RELAYS {
@@ -1391,6 +1400,18 @@ impl Radio {
         Ok(())
     }
 
+    /// A station the visitor may tune next (the ones either side on the dial): its log comes
+    /// aboard now, through two hops, so tuning it needs only its first chunk. Tells nobody the
+    /// tab listens there: nothing is counted.
+    pub fn warm(&self, id: &str) -> Result<(), JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        if self.ship.pockets.lock().unwrap().contains_key(&st) || self.ship.archives.lock().unwrap().contains_key(&st) {
+            return Ok(());
+        }
+        self.ship.sync_soon(st);
+        Ok(())
+    }
+
     /// Whether the visitor is listening. A tab is counted aboard only while it plays: looking
     /// at a station on the dial tells nobody anything.
     pub fn listening(&self, on: bool) {
@@ -1465,7 +1486,16 @@ impl Radio {
         let s = self.ship.clone();
         Ok(wasm_bindgen_futures::future_to_promise(async move {
             let id = master.id();
-            let _ = timeout(Duration::from_secs(40), s.sync(id)).await;
+            // Exits are drawn afresh each try: keep asking for forty seconds, so one that has
+            // not yet heard of the station does not end the search.
+            let until = raw_now() + 40_000;
+            while raw_now() < until {
+                let _ = timeout(Duration::from_secs(15), s.sync(id)).await;
+                if s.archives.lock().unwrap().get(&id).is_some_and(|a| a.len() > 0) {
+                    break;
+                }
+                sleep(Duration::from_secs(3)).await;
+            }
             let deputy = pyrate_core::StationKey::generate().map_err(|e| js(anyhow!("{e}")))?;
             {
                 let mut archives = s.archives.lock().unwrap();
