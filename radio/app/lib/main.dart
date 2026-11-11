@@ -1257,6 +1257,9 @@ class _ColoursPageState extends State<ColoursPage> {
       const SizedBox(height: 8),
       Text('Go live from this phone. Listeners hear you ten to twenty seconds behind, and when you stop, the clock takes back the hour.',
           style: serif(14, color: boneFaint, italic: true)),
+      const SizedBox(height: 6),
+      Text('The mains hum that would date and place you is taken out. Sirens, bells, trains and voices around you are not: they can say where you are. Discretion, in More, can disguise your voice.',
+          style: serif(13, color: boneFaint, italic: true)),
       const SizedBox(height: 12),
       if (on)
         Row(children: [

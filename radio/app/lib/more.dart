@@ -1315,6 +1315,7 @@ class _ShipPapersState extends State<ShipPapers> {
   bool provisions = true;
   bool plain = false;
   bool plainLock = false;
+  bool disguise = false;
   bool pinSet = false;
   String? sig;
   Map? canary;
@@ -1330,6 +1331,7 @@ class _ShipPapersState extends State<ShipPapers> {
     ship.invokeMethod<bool>('plain_get').then((v) => setState(() => plain = v == true)).catchError((_) {});
     ship.invokeMethod<bool>('plain_lock_get').then((v) => setState(() => plainLock = v == true)).catchError((_) {});
     signer().then((v) { if (mounted) setState(() => sig = v); });
+    disguise = ((pref('disguise') as num?) ?? 0) != 0;
     final p = Native.call({'cmd': 'papers'});
     if (p is Map && p['canary'] is Map) canary = p['canary'] as Map;
     ship.invokeMethod<String>('wake_get').then((v) => setState(() => wake = jsonDecode(v ?? '{}'))).catchError((_) {});
@@ -1471,6 +1473,10 @@ class _ShipPapersState extends State<ShipPapers> {
         ship.invokeMethod('plain_lock_set', {'value': v});
         setState(() => plainLock = v);
       }, 'The lock screen says only "Radio", and the recents screen shows nothing'),
+      pyrateSwitch(disguise, (v) {
+        pref('disguise', v ? -4 : 0);
+        setState(() => disguise = v);
+      }, 'Disguise my voice on air and in what I record: lower, and not quite mine'),
       pyrateSwitch(pinSet, (v) {
         if (v) {
           setPin();
