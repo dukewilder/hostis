@@ -92,6 +92,8 @@ pub struct Store {
     pub keys: HashMap<StationId, StationKey>,
     /// Stations carried as ballast for the fleet: kept through quota sweeps.
     pub pinned: HashSet<StationId>,
+    /// The chunks this node holds as its ballast share: kept through quota sweeps.
+    pub ballast: HashSet<Hash>,
 }
 
 impl Store {
@@ -106,7 +108,7 @@ impl Store {
             fs::create_dir_all(dir.join(d))?;
         }
         let hold = Hold::for_dir(dir, hold)?;
-        let mut s = Self { dir: dir.to_path_buf(), hold, quota, logs: HashMap::new(), keys: HashMap::new(), pinned: HashSet::new() };
+        let mut s = Self { dir: dir.to_path_buf(), hold, quota, logs: HashMap::new(), keys: HashMap::new(), pinned: HashSet::new(), ballast: HashSet::new() };
         // keys/<name>.k2 holds a station's id and its master seed, or a deputy's, sealed. From
         // before the hold key, keys/<station hex> held the seed in the clear: sealed now.
         for f in fs::read_dir(dir.join("keys"))? {
@@ -496,9 +498,14 @@ impl Store {
     /// Evicts carried chunks until under quota. Chunks no station names go first, then the
     /// oldest-touched chunk of whichever station holds the most here, so one station flooding
     /// the disk shrinks before any other loses a chunk. Its own stations and pinned ones stay.
+    /// Bytes of the ballast share already on this disk.
+    pub fn ballast_bytes(&self) -> u64 {
+        self.ballast.iter().filter_map(|h| fs::metadata(self.chunk_path(h)).ok()).map(|m| m.len()).sum()
+    }
+
     pub fn enforce_quota(&self) -> Result<u64> {
         let own_art = self.own().iter().filter_map(|id| self.logs.get(id)).flat_map(|a| a.art_hashes()).collect::<Vec<_>>();
-        let keep: HashSet<String> = self.own().iter().chain(self.pinned.iter()).flat_map(|id| self.chunks_of(id)).chain(own_art).flat_map(|h| self.file_names(&h)).collect();
+        let keep: HashSet<String> = self.own().iter().flat_map(|id| self.chunks_of(id)).chain(own_art).chain(self.ballast.iter().copied()).flat_map(|h| self.file_names(&h)).collect();
         let mut whose: HashMap<String, StationId> = HashMap::new();
         for id in self.logs.keys() {
             for h in self.chunks_of(id) {

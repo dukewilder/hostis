@@ -290,7 +290,7 @@ class _LogPageState extends State<LogPage> {
             if (radio.carrying > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
-                child: Text('Your ballast keeps ${radio.carrying} ${radio.carrying == 1 ? 'station' : 'stations'} afloat for the fleet.', style: mono(11, color: boneFaint)),
+                child: Text('Your ballast keeps part of ${radio.carrying} ${radio.carrying == 1 ? 'station' : 'stations'} afloat for the fleet${radio.carriedBytes >= 100000000 ? ', ${(radio.carriedBytes / 1e9).toStringAsFixed(1)} GB' : ''}.', style: mono(11, color: boneFaint)),
               ),
             const SizedBox(height: 10),
             Row(children: [
