@@ -659,20 +659,22 @@ export class Radio {
     }
     /**
      * Raises a station. Returns its id, call sign, the master's 24 words and the deputy's seed.
+     * `pass`, if not empty, is a passphrase on top of the words: see `StationKey::from_words`.
      * @param {string} name
      * @param {string} about
      * @param {string} kinds
      * @param {boolean} mature
      * @param {boolean} explicit
+     * @param {string} pass
      * @returns {string}
      */
-    raise(name, about, kinds, mature, explicit) {
-        let deferred7_0;
-        let deferred7_1;
+    raise(name, about, kinds, mature, explicit, pass) {
+        let deferred8_0;
+        let deferred8_1;
         try {
-            const val4 = +mature;
-            const val5 = +explicit;
-            let ptr0, len0, ptr1, len1, ptr2, len2;
+            const val5 = +mature;
+            const val6 = +explicit;
+            let ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3;
             try {
                 ptr0 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
                 len0 = WASM_VECTOR_LEN;
@@ -680,36 +682,49 @@ export class Radio {
                 len1 = WASM_VECTOR_LEN;
                 ptr2 = passStringToWasm0(kinds, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
                 len2 = WASM_VECTOR_LEN;
+                ptr3 = passStringToWasm0(pass, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+                len3 = WASM_VECTOR_LEN;
             } catch (e) {
+                if (ptr3) { wasm.__wbindgen_free(ptr3, len3 * 1, 1); }
                 if (ptr2) { wasm.__wbindgen_free(ptr2, len2 * 1, 1); }
                 if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
                 if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
                 throw e;
             }
-            const ret = wasm.radio_raise(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, val4, val5);
-            var ptr6 = ret[0];
-            var len6 = ret[1];
+            const ret = wasm.radio_raise(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, val5, val6, ptr3, len3);
+            var ptr7 = ret[0];
+            var len7 = ret[1];
             if (ret[3]) {
-                ptr6 = 0; len6 = 0;
+                ptr7 = 0; len7 = 0;
                 throw takeFromExternrefTable0(ret[2]);
             }
-            deferred7_0 = ptr6;
-            deferred7_1 = len6;
-            return getStringFromWasm0(ptr6, len6);
+            deferred8_0 = ptr7;
+            deferred8_1 = len7;
+            return getStringFromWasm0(ptr7, len7);
         } finally {
-            wasm.__wbindgen_free(deferred7_0, deferred7_1, 1);
+            wasm.__wbindgen_free(deferred8_0, deferred8_1, 1);
         }
     }
     /**
      * Takes a station back from its 24 words on a new browser: its log comes aboard, then the
      * master appoints a fresh deputy here. Resolves to the id and the new deputy's seed.
      * @param {string} words
+     * @param {string} pass
      * @returns {Promise<any>}
      */
-    restore(words) {
-        const ptr0 = passStringToWasm0(words, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.radio_restore(this.__wbg_ptr, ptr0, len0);
+    restore(words, pass) {
+        let ptr0, len0, ptr1, len1;
+        try {
+            ptr0 = passStringToWasm0(words, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len0 = WASM_VECTOR_LEN;
+            ptr1 = passStringToWasm0(pass, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len1 = WASM_VECTOR_LEN;
+        } catch (e) {
+            if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+            if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+            throw e;
+        }
+        const ret = wasm.radio_restore(this.__wbg_ptr, ptr0, len0, ptr1, len1);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -1349,42 +1364,42 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_generic_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 2174, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 2178, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke___wasm_bindgen_b7c0b3f1bb65bebe___JsValue______true_);
             return ret;
         },
         __wbindgen_generic_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3769, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 3773, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke___wasm_bindgen_b7c0b3f1bb65bebe___JsValue__core_7d5f0a2ba6a62c33___result__Result_____wasm_bindgen_b7c0b3f1bb65bebe___JsError___true_);
             return ret;
         },
         __wbindgen_generic_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("CloseEvent")], shim_idx: 920, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("CloseEvent")], shim_idx: 924, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke___web_sys_ab6ad03aa4ba2834___features__gen_CloseEvent__CloseEvent______true_);
             return ret;
         },
         __wbindgen_generic_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 2583, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 2587, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke___web_sys_ab6ad03aa4ba2834___features__gen_MessageEvent__MessageEvent______true_);
             return ret;
         },
         __wbindgen_generic_0000000000000005: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2133, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2137, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke_______true_);
             return ret;
         },
         __wbindgen_generic_0000000000000006: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2315, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2319, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke_______true__1_);
             return ret;
         },
         __wbindgen_generic_0000000000000007: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2317, ret: Unit, inner_ret: Some(Unit) }, mutable: false }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2321, ret: Unit, inner_ret: Some(Unit) }, mutable: false }) -> Externref`.
             const ret = makeClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke_______true__2_);
             return ret;
         },
         __wbindgen_generic_0000000000000008: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 3750, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 3754, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke_______true__3_);
             return ret;
         },
@@ -1833,7 +1848,7 @@ async function __wbg_init_once(module_or_path) {
     }
 
     if (module_or_path === undefined) {
-        module_or_path = new URL('pyrate_browser_bg.4c53338738.wasm', import.meta.url);
+        module_or_path = new URL('pyrate_browser_bg.4f1d27c720.wasm', import.meta.url);
     }
     const imports = __wbg_get_imports();
 
