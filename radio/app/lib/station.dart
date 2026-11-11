@@ -1235,7 +1235,7 @@ class _PosterSheetState extends State<PosterSheet> {
 
 // ---------------------------------------------------------------------------------------
 // Chatter: talk in the station's room, cheer what is on, ask for a recording. Lines pass
-// between the people in the room and are kept by nobody.
+// between the people in the room; the radio writes none of them to disk.
 
 class ChatterPanel extends StatefulWidget {
   final String station;
@@ -1275,7 +1275,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
     if (path == null) return;
     await send('hail', track: null, path: path);
     unawaited(File(path).delete().then((_) {}, onError: (_) {}));
-    if (mounted && err == null) toast(context, 'Your hail is on its way. Only the keeper can hear it, and nobody keeps it.');
+    if (mounted && err == null) toast(context, 'Your hail is on its way, sealed so only the keeper can open it.');
   }
   final say = TextEditingController();
   late final name = TextEditingController(text: (pref('chat_name') ?? '').toString());
@@ -1373,7 +1373,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
     final r = room;
     if (r == null || r['joined'] != true) {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        note('Talk with whoever else is listening, cheer what is on, or ask the station for a recording. Lines pass between the people in the room and are gone. Joining tells the others in the room that this phone is there, which listening alone never does.'),
+        note('Talk with whoever else is listening, cheer what is on, or ask the station for a recording. Lines pass between the people in the room, and the radio keeps none of them on disk, though anyone in the room can copy what they read. Joining tells the others in the room that this phone is there, and shows them its address unless the radio runs through Tor. Listening alone does neither.'),
         const SizedBox(height: 10),
         pyrateButton(joining ? 'JOINING' : 'JOIN THE CHATTER', joining
             ? null

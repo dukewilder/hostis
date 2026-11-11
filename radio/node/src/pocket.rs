@@ -84,10 +84,11 @@ impl Inner {
                 let Ok(Event::Received(m)) = ev else { continue };
                 let Some(plain) = pocket::open(&key, &m.content) else { continue };
                 let Ok(g) = postcard::from_bytes::<Gossip>(&plain) else { continue };
+                let Some(g) = g.from_network(crate::now_ms(), m.delivered_from.as_bytes()) else { continue };
                 // Only this pocket's own station: a member cannot slip another in.
                 let ok = match &g {
                     Gossip::Station(a) => a.station == st,
-                    Gossip::Carrier { station, .. } => *station == st,
+                    Gossip::Carrier { station, .. } | Gossip::Carried { station, .. } => *station == st,
                     // The members' hourly tokens, so a pocket counts who is aboard.
                     Gossip::Aboard { station, .. } => *station == st,
                     // Where the members can be reached, each in its own hand.

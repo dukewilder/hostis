@@ -65,8 +65,14 @@ pub fn say(msg: &str) {
         }
     }
     #[cfg(not(target_os = "android"))]
-    eprintln!("{msg}");
+    if !QUIET.load(std::sync::atomic::Ordering::Relaxed) && std::env::var_os("PYRATE_QUIET").is_none_or(|v| v == "0") {
+        eprintln!("{msg}");
+    }
 }
+
+/// Set by the app on a computer: it writes nothing about stations or peers anywhere, unless
+/// PYRATE_LOG asks it to. A Lantern logs, for its keeper, unless PYRATE_QUIET is set.
+pub static QUIET: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// The hold key the next node starts under: a phone's, unwrapped from its secure hardware and
 /// handed in through the app's door before the node starts. Without one, the node keeps a key
@@ -275,7 +281,12 @@ pub struct Inner {
     endpoint: Endpoint,
     secret: [u8; 32],
     /// Steady across address changes: ballast by lot, chatter voices, listener tokens.
-    seed: [u8; 32],
+    /// The day and the counting key for it (see `start`).
+    counting: Mutex<(u64, [u8; 32])>,
+    /// This node's voice in chatter.
+    pub(crate) voice: [u8; 32],
+    /// Station-naming requests answered straight from a peer, for the privacy harness.
+    pub(crate) served_direct: std::sync::atomic::AtomicU64,
     store: Mutex<Store>,
     log: Mutex<HashMap<StationId, Listing>>,
     conns: Mutex<HashMap<EndpointId, Connection>>,
@@ -352,6 +363,14 @@ pub struct Node {
     _router: Router,
 }
 
+/// The largest request taken from a peer. A stem, the biggest, carries at most 64 chunks.
+const REQUEST_MAX: usize = 4 * 1024 * 1024;
+static SERVING: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(48);
+static HOPPING: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(16);
+// A Lantern serves a crowd and is many phones' first hop: room for more.
+static SERVING_LANTERN: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(512);
+static HOPPING_LANTERN: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(160);
+
 #[derive(Debug, Clone)]
 struct Proto(Arc<Mutex<Option<Arc<Inner>>>>);
 
@@ -359,14 +378,30 @@ impl ProtocolHandler for Proto {
     async fn accept(&self, conn: Connection) -> std::result::Result<(), AcceptError> {
         let inner = self.0.lock().unwrap().clone();
         let Some(inner) = inner else { return Ok(()) };
+        // Eight requests at a time from one connection, forty-eight from everyone (512 on a
+        // Lantern), four MiB each, twenty seconds to arrive: no peer can make this node hold
+        // more than it can.
+        let mine = Arc::new(tokio::sync::Semaphore::new(8));
         while let Ok((mut send, mut recv)) = conn.accept_bi().await {
             let inner = inner.clone();
+            let Ok(slot) = mine.clone().acquire_owned().await else { break };
             tokio::spawn(async move {
-                let Ok(bytes) = recv.read_to_end(MAX_FRAME).await else { return };
+                let _slot = slot;
+                let Ok(_all) = (if inner.cfg.lantern { &SERVING_LANTERN } else { &SERVING }).try_acquire() else { return };
+                let Ok(Ok(bytes)) = tokio::time::timeout(Duration::from_secs(20), recv.read_to_end(REQUEST_MAX)).await else { return };
                 let Ok(req) = postcard::from_bytes::<Request>(&bytes) else { return };
                 let resp = match req {
-                    Request::Hop(b) => Response::Hop(inner.on_hop(&b).await),
-                    other => inner.serve(other),
+                    Request::Hop(b) => {
+                        // A hop costs this node a connection of its own: fewer of those at once.
+                        let Ok(_hop) = (if inner.cfg.lantern { &HOPPING_LANTERN } else { &HOPPING }).try_acquire() else { return };
+                        Response::Hop(inner.on_hop(&b).await)
+                    }
+                    other => {
+                        if matches!(other, Request::Log { .. } | Request::Chunk { .. } | Request::SealedChunk { .. }) {
+                            inner.served_direct.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
+                        inner.serve(other)
+                    }
                 };
                 if let Ok(out) = postcard::to_stdvec(&resp) {
                     let _ = send.write_all(&out).await;
@@ -637,6 +672,10 @@ impl Inner {
             if let Ok(n) = self.private_log(station).await {
                 return Ok(n);
             }
+            // A log names its station as plainly as any chunk: the same rule holds.
+            if self.strict.load(std::sync::atomic::Ordering::Relaxed) {
+                return Err(anyhow!("private route failed, and this node never asks directly"));
+            }
             say("private route failed for a log; asking a carrier directly");
         }
         self.sync_log_direct(station).await
@@ -792,6 +831,8 @@ impl Inner {
                     return Some(station);
                 }
             }
+            // Opened into a plain note by `from_network` before it reaches here.
+            Gossip::Carried { .. } => return None,
             Gossip::Aboard { station, hour, tokens } => {
                 drop(log);
                 for (token, nonce) in tokens.into_iter().take(10_000) {
@@ -830,8 +871,25 @@ impl Inner {
         tuned == Some(*station) || self.store.lock().unwrap().logs.contains_key(station)
     }
 
+    /// Today's counting key, stepped forward from the last one kept, the old one overwritten.
+    fn counting_key(&self) -> [u8; 32] {
+        let today = now_ms() / 86_400_000;
+        let mut c = self.counting.lock().unwrap();
+        if c.0 < today {
+            let mut k = c.1;
+            for _ in 0..(today - c.0).min(3650) {
+                k = blake3::derive_key("pyrate/counting/step/v1", &k);
+            }
+            *c = (today, k);
+            let mut note = k.to_vec();
+            note.extend_from_slice(&today.to_le_bytes());
+            let _ = self.hold.write_note(&self.cfg.dir, "counting", &note);
+        }
+        c.1
+    }
+
     fn token(&self, station: &StationId, hour: u64) -> [u8; 32] {
-        let mut h = blake3::Hasher::new_keyed(&self.seed);
+        let mut h = blake3::Hasher::new_keyed(&self.counting_key());
         h.update(&station.0);
         h.update(&hour.to_le_bytes());
         *h.finalize().as_bytes()
@@ -967,8 +1025,8 @@ impl Inner {
             // A pocket's carriers say so only to its members.
             if self.is_pocket(&station) {
                 let g = Gossip::Carrier { station, node: me, head };
-                self.on_gossip(g.clone());
-                self.pocket_say(station, &g).await;
+                self.on_gossip(g);
+                self.pocket_say(station, &Gossip::carried(&self.secret, station, head, now_ms())).await;
                 said_carrier = true;
                 continue;
             }
@@ -990,6 +1048,9 @@ impl Inner {
             }
             let g = Gossip::Carrier { station, node: me, head };
             self.on_gossip(g.clone());
+            // Signed for nodes that check, plain for older ones, which believe it only from
+            // this node itself.
+            self.broadcast(&Gossip::carried(&self.secret, station, head, now_ms())).await;
             self.broadcast(&g).await;
             said_carrier = true;
         }
@@ -1383,7 +1444,7 @@ impl Inner {
     /// Counts a listener who has no node of their own, such as a browser tab.
     pub fn count_guest(self: &Arc<Self>, station: &StationId, guest: &[u8; 32]) {
         let hour = now_ms() / 3_600_000;
-        let mut h = blake3::Hasher::new_keyed(&self.seed);
+        let mut h = blake3::Hasher::new_keyed(&self.counting_key());
         h.update(guest);
         h.update(&hour.to_le_bytes());
         let token = *h.finalize().as_bytes();
@@ -1567,6 +1628,11 @@ impl Node {
     pub fn chunks_named(&self, id: &StationId) -> Vec<pyrate_core::Hash> {
         self.inner.store.lock().unwrap().chunks_of(id)
     }
+    /// For harnesses: logs and chunks this node has handed straight to a peer that asked.
+    pub fn served_direct(&self) -> u64 {
+        self.inner.served_direct.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     /// For harnesses: how many chunks this node holds as its ballast share.
     pub fn ballast_held(&self) -> usize {
         self.inner.store.lock().unwrap().ballast.len()
@@ -1590,23 +1656,51 @@ impl Node {
         let store = Store::open_with(&cfg.dir, cfg.quota + if cfg.ballast == BALLAST_AUTO { 0 } else { cfg.ballast }, HOLD_KEY.lock().unwrap().take())?;
         let hold = store.hold.clone();
         let key_path = cfg.dir.join("node.key");
-        // A seed of its own, kept: what this node carries by lot, its voices in chatter and its
-        // listener tokens come from here, so they hold steady while its address changes.
-        let seed_path = cfg.dir.join("seed.key");
-        let seed: [u8; 32] = match std::fs::read(&seed_path).ok().and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok()) {
-            Some(s) => s,
+        // The counting key: listener tokens come from it. It steps forward one way every day
+        // and the old one is gone, so a key taken from a seized device cannot work out the
+        // tokens it sent before today. Started from the old seed where there is one.
+        let today = now_ms() / 86_400_000;
+        let counting = match hold.read_note(&cfg.dir, "counting", None).filter(|b| b.len() == 40) {
+            Some(b) => (u64::from_le_bytes(b[32..40].try_into().unwrap()), <[u8; 32]>::try_from(&b[..32]).unwrap()),
             None => {
-                // Drawn from the old node key where there is one, so an upgrade changes nothing.
-                let base = std::fs::read(&key_path).ok().filter(|b| b.len() == 32).unwrap_or_else(|| {
+                let base = std::fs::read(cfg.dir.join("seed.key")).ok().filter(|b| b.len() == 32).unwrap_or_else(|| {
                     let mut b = vec![0u8; 32];
                     let _ = getrandom(&mut b);
                     b
                 });
-                let s = blake3::derive_key("pyrate/seed/v1", &base);
-                std::fs::write(&seed_path, s)?;
-                s
+                (today, blake3::derive_key("pyrate/counting/v1", &base))
             }
         };
+        // This node's voice in chatter: its own key, kept apart from the counting key so the
+        // name it speaks under says nothing about what it counted. An old seed keeps its voice.
+        let voice: [u8; 32] = match hold.read_note(&cfg.dir, "voice", None).and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok()) {
+            Some(v) => v,
+            None => {
+                let v = std::fs::read(cfg.dir.join("seed.key")).ok().and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok()).unwrap_or_else(|| {
+                    let mut b = [0u8; 32];
+                    let _ = getrandom(&mut b);
+                    b
+                });
+                hold.write_note(&cfg.dir, "voice", &v)?;
+                v
+            }
+        };
+        if hold.read_note(&cfg.dir, "counting", None).is_none() {
+            let mut note = counting.1.to_vec();
+            note.extend_from_slice(&counting.0.to_le_bytes());
+            hold.write_note(&cfg.dir, "counting", &note)?;
+        }
+        let _ = std::fs::remove_file(cfg.dir.join("seed.key"));
+        // The node's own key and the moment it was made, sealed in the hold. One kept in the
+        // clear by an older version is taken in and the clear file goes.
+        let mut node_key: Option<([u8; 32], u64)> = hold.read_note(&cfg.dir, "node-key", None).filter(|b| b.len() == 40).map(|b| (<[u8; 32]>::try_from(&b[..32]).unwrap(), u64::from_le_bytes(b[32..40].try_into().unwrap())));
+        if node_key.is_none() {
+            if let Some(b) = std::fs::read(&key_path).ok().and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok()) {
+                let made = std::fs::metadata(&key_path).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis() as u64).unwrap_or_else(now_ms);
+                node_key = Some((b, made));
+            }
+        }
+        let _ = std::fs::remove_file(&key_path);
         // A phone's address on the network is new every day, so no one can follow one phone
         // from day to day by its id. Lanterns keep theirs: others start from them.
         // A phone that keeps no station and no pocket has nothing anyone needs to reach it by,
@@ -1614,23 +1708,21 @@ impl Node {
         if !cfg.lantern {
             let keeps = std::fs::read_dir(cfg.dir.join("keys")).map(|d| d.flatten().any(|e| e.path().extension().is_some_and(|x| x == "k2"))).unwrap_or(false)
                 || hold.read_note(&cfg.dir, "pockets", Some(&cfg.dir.join("keys").join("pockets"))).is_some_and(|b| !b.is_empty());
-            if !keeps {
-                let _ = std::fs::remove_file(&key_path);
-            }
-            let stale = std::fs::metadata(&key_path).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age > Duration::from_secs(24 * 3600));
-            if stale {
-                let _ = std::fs::remove_file(&key_path);
+            if !keeps || node_key.is_some_and(|(_, made)| now_ms().saturating_sub(made) > 24 * 3_600_000) {
+                node_key = None;
             }
         }
-        let secret = match std::fs::read(&key_path).ok().and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok()) {
-            Some(b) => SecretKey::from_bytes(&b),
+        let (secret, made) = match node_key {
+            Some((b, made)) => (SecretKey::from_bytes(&b), made),
             None => {
                 let mut b = [0u8; 32];
                 getrandom(&mut b)?;
-                std::fs::write(&key_path, b)?;
-                SecretKey::from_bytes(&b)
+                (SecretKey::from_bytes(&b), now_ms())
             }
         };
+        let mut note = secret.to_bytes().to_vec();
+        note.extend_from_slice(&made.to_le_bytes());
+        hold.write_note(&cfg.dir, "node-key", &note)?;
         let secret_bytes = secret.to_bytes();
         // Every peer met before is a starting point next time, so no single Lantern is the door.
         // They are kept sealed, each with the relay its own signed note named, so the next start
@@ -1729,9 +1821,12 @@ impl Node {
                 .relay_mode(iroh::RelayMode::Custom(relays));
             if lantern {
                 b = b.address_lookup(iroh::address_lookup::PkarrResolver::n0_dns());
-            } else {
+            } else if !dark {
                 b = b.address_lookup(DoorsOnly(asked));
             }
+            // A phone running dark looks nobody up: that lookup would leave from its own address,
+            // outside the tunnel. It reaches peers from its own sealed book, which every signed
+            // harbour note it has heard filled in.
             if lantern && !dark {
                 b = b.address_lookup(iroh::address_lookup::PkarrPublisher::n0_dns());
             }
@@ -1786,7 +1881,9 @@ impl Node {
             cfg: cfg.clone(),
             endpoint: endpoint.clone(),
             secret: secret_bytes,
-            seed,
+            counting: Mutex::new(counting),
+            voice,
+            served_direct: std::sync::atomic::AtomicU64::new(0),
             store: Mutex::new(store),
             log: Mutex::new(HashMap::new()),
             conns: Mutex::new(HashMap::new()),
@@ -1822,7 +1919,9 @@ impl Node {
             direct: Mutex::new(std::collections::HashSet::new()),
             refused_cache: Mutex::new((0, std::collections::HashSet::new())),
             heard: Mutex::new(std::collections::VecDeque::new()),
-            strict: std::sync::atomic::AtomicBool::new(cfg.dir.join("strict").exists()),
+            // Private routes fail closed unless the owner has said otherwise: a phone that cannot
+            // find two hops waits rather than asking a carrier with its own address.
+            strict: std::sync::atomic::AtomicBool::new(!cfg.dir.join("direct-ok").exists()),
             stem_misses: Mutex::new(HashMap::new()),
             stem_seen: Mutex::new(std::collections::VecDeque::new()),
             failed: Mutex::new(HashMap::new()),
@@ -1884,6 +1983,7 @@ impl Node {
                     _ => continue,
                 };
                 let Ok(g) = postcard::from_bytes::<Gossip>(&msg.content) else { continue };
+                let Some(g) = g.from_network(now_ms(), msg.delivered_from.as_bytes()) else { continue };
                 if let Some(st) = i2.on_gossip(g) {
                     if i2.wants(&st) {
                         let i4 = i2.clone();
@@ -2123,6 +2223,8 @@ impl Node {
                     let art = a.and_then(|a| a.art());
                     json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": name.as_deref().map(shown), "tracks": tracks,
                         "direct": inner.direct.lock().unwrap().contains(&id),
+                        // Three stems with no taker and no leave to go direct: the station waits.
+                        "waiting": !inner.direct.lock().unwrap().contains(&id) && inner.stem_misses.lock().unwrap().get(&id).is_some_and(|m| *m >= 3),
                         "cover": art.and_then(|x| x.0).map(|r| hex(&r.hash)),
                         "banner": art.and_then(|x| x.1).map(|r| hex(&r.hash)),
                         "accent": art.map(|x| format!("#{:02x}{:02x}{:02x}", x.2[0], x.2[1], x.2[2])) })
@@ -2270,15 +2372,15 @@ impl Node {
             }
             "hand_request" => {
                 let key = pyrate_core::StationKey::generate()?;
-                std::fs::write(inner.cfg.dir.join("hand.key"), key.seed())?;
+                inner.hold.write_note(&inner.cfg.dir, "hand-key", &key.seed())?;
                 Ok(json!({ "code": key.id().to_hex() }))
             }
             "hand_join" => {
                 let st = station()?;
-                let seed = std::fs::read(inner.cfg.dir.join("hand.key")).context("ask for a hand's code first")?;
+                let seed = inner.hold.read_note(&inner.cfg.dir, "hand-key", Some(&inner.cfg.dir.join("hand.key"))).context("ask for a hand's code first")?;
                 let seed: [u8; 32] = seed.as_slice().try_into().context("hand key")?;
                 inner.store.lock().unwrap().add_key_for(st, pyrate_core::StationKey::from_seed(seed))?;
-                let _ = std::fs::remove_file(inner.cfg.dir.join("hand.key"));
+                inner.hold.remove_note(&inner.cfg.dir, "hand-key");
                 let i2 = inner.clone();
                 self.rt.spawn(async move {
                     let _ = i2.sync_log(st).await;
@@ -2374,13 +2476,17 @@ impl Node {
                 let set = inner.hold.read_note(&inner.cfg.dir, "tor", None).and_then(|b| String::from_utf8(b).ok()).unwrap_or_default();
                 Ok(json!({ "url": set, "active": inner.dark && !set.is_empty() }))
             }
-            "strict" => {
-                if let Some(on) = req["value"].as_bool() {
-                    let p = inner.cfg.dir.join("strict");
-                    if on { std::fs::write(&p, b"")?; } else { let _ = std::fs::remove_file(&p); }
+            // `strict` on: never a weaker route. Off (the file `direct-ok`): one hop, or a carrier
+            // asked directly, when two hops cannot be had.
+            "strict" | "direct_ok" => {
+                if let Some(v) = req["value"].as_bool() {
+                    let on = if cmd == "strict" { v } else { !v };
+                    let p = inner.cfg.dir.join("direct-ok");
+                    if on { let _ = std::fs::remove_file(&p); } else { std::fs::write(&p, b"")?; }
                     inner.strict.store(on, std::sync::atomic::Ordering::Relaxed);
                 }
-                Ok(json!({ "value": inner.strict.load(std::sync::atomic::Ordering::Relaxed) }))
+                let on = inner.strict.load(std::sync::atomic::Ordering::Relaxed);
+                Ok(json!({ "value": if cmd == "strict" { on } else { !on } }))
             }
             "provisions" => {
                 let p = inner.cfg.dir.join("provisions-off");

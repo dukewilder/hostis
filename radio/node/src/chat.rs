@@ -151,7 +151,7 @@ impl Inner {
         if let Some(k) = self.store.lock().unwrap().keys.get(st) {
             return (StationKey::from_seed(k.seed()), true);
         }
-        (chat::voice(&self.seed, st), false)
+        (chat::voice(&self.voice, st), false)
     }
 
     /// Takes a line into a room if it is good and new. True if it was.

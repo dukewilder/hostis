@@ -1411,6 +1411,12 @@ class _ColoursPageState extends State<ColoursPage> {
             Text(mine['call_sign'] ?? '', style: mono(12)),
             const SizedBox(height: 6),
             Text('${mine['tracks']} ${mine['tracks'] == 1 ? 'recording' : 'recordings'} on the clock', style: serif(14, color: boneFaint, italic: true)),
+            if (mine['waiting'] == true)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text('No ship has taken your station along the stem yet, so it waits. It goes out as soon as one does. To send it straight from this phone instead, turn on asking carriers directly, in More, under Discretion.',
+                    style: serif(13, color: boneDim, italic: true)),
+              ),
             if (mine['direct'] == true)
               Padding(
                 padding: const EdgeInsets.only(top: 8),

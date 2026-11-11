@@ -446,3 +446,16 @@ Rulings made while reading every line again. The findings themselves are in `AUD
 - **How it works is a page of its own** at hostis.black/pyrateradio/how-it-works/. It runs from the station's key to the speaker, through carrying, getting through, staying unseen and what it would take to stop it, and ends on what the radio cannot do for anyone.
 - **"Under HOSTIS colours" is retired** from the radio's pages, the player and the app. The sibling pages name their subject, and the radio's now does the same.
 
+## XXXVIII. Privacy fails closed (11 November 2026)
+
+An outside review and a pass of our own found the radio trading privacy for availability without asking: one hop when two could not be had, logs fetched directly when private routes failed, a broadcaster's station sent straight from the phone after three stems found no taker, a browser that fetched everything directly and broadcast its own count token. AUDIT-2026-11.md has every finding and its fix.
+
+- **No weaker route without the owner's word.** A phone, and now a browser tab, fetches every log and chunk through two hops, and waits when it cannot. "Ask carriers directly when private routes fail" is off until its owner turns it on, in More, under Discretion, and in the open player's own switches. A station that cannot find a stem waits too, and its page says so.
+- **The stem starts two hops out.** A broadcaster's cargo goes sealed through its guard to a second device, which starts the stem. The guard sees the phone and never the station.
+- **Carrier notes are signed** by the node they name, and an unsigned one is believed only from that node's own connection.
+- **Chunks have a ceiling.** Six seconds, 256 KiB. A log refuses anything larger, and the decoder stops at six seconds whatever a chunk claims.
+- **Secrets live in the hold.** The node key, a hand's key, the guards and the counting key are sealed under the hold key; the counting key steps forward one way each day. Linux desktops keep the hold key in their keyring. A browser seals what it keeps under a key it holds to itself, and replaces its counting key every thirty days.
+- **The clock needs nine stations and a two-thirds agreement**, and moves at most two minutes.
+- **Peers get a budget**: eight requests at once on a connection, forty-eight in all on a phone (512 on a Lantern), 4 MiB a request, twenty seconds to arrive.
+- **The pages say what two hops are.** They keep each device on a route from knowing both who and what; they do not stop someone who runs both hops or watches both ends, and Through Tor is the answer for anyone whose safety rests on it. A Lantern's web page says its keeper sees who listens there. Chatter and hails no longer claim that nobody keeps them.
+

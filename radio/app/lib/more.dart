@@ -1563,11 +1563,13 @@ class _ShipPapersState extends State<ShipPapers> {
             setState(() => duressSet = false);
           }
         }, 'A second PIN that scuttles the radio, to give up if you are made to open Colours'),
-      pyrateSwitch(strict, (v) {
-        Native.call({'cmd': 'strict', 'value': v});
-        setState(() => strict = v);
-      }, 'Never show my address, and wait when a private route fails instead of asking a carrier directly'),
-      if (strict) note('Sound may stutter on a thin network, and your own station waits for a stem rather than going on the air from this phone.'),
+      pyrateSwitch(!strict, (v) {
+        Native.call({'cmd': 'direct_ok', 'value': v});
+        setState(() => strict = !v);
+      }, 'Ask carriers directly when private routes fail'),
+      note(strict
+          ? 'Sound and logs come through two other devices, and your own station goes out along the stem. On a thin network that can mean waiting.'
+          : 'A thin network plays sooner, and the carrier asked sees this phone\'s address beside the station. Your own station can go on the air straight from this phone after three stems find no taker.'),
     ]);
   }
 }

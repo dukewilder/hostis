@@ -284,6 +284,29 @@ pub struct Archive {
     deputies: std::collections::HashSet<[u8; 32]>,
 }
 
+/// The most 20 ms frames a chunk may hold: six seconds, as every encoder here makes them.
+pub const MAX_FRAMES: u16 = 300;
+/// The most bytes a chunk may take. Six seconds of the highest bitrate the radio uses is
+/// under 50 KiB; this leaves room and no more.
+pub const MAX_CHUNK_BYTES: u32 = 256 * 1024;
+/// The most chunks one recording may have: a little over thirty-three hours.
+pub const MAX_TRACK_CHUNKS: usize = 20_000;
+
+fn chunk_ok(c: &Chunk) -> bool {
+    (1..=MAX_FRAMES).contains(&c.frames) && c.len <= MAX_CHUNK_BYTES
+}
+
+/// A log refuses sound that claims more than a chunk can hold, so no station can make a
+/// listener's decoder fill memory for a chunk that says it lasts twenty minutes.
+fn within_bounds(body: &Body) -> bool {
+    match body {
+        Body::Track { chunks, .. } => chunks.len() <= MAX_TRACK_CHUNKS && chunks.iter().all(chunk_ok),
+        Body::Live { chunk, .. } => chunk_ok(chunk),
+        Body::Deputed { body, .. } => within_bounds(body),
+        _ => true,
+    }
+}
+
 impl Archive {
     pub fn new(station: StationId) -> Self {
         Self { station, entries: Vec::new(), head: [0; 32], deputies: Default::default() }
@@ -342,6 +365,9 @@ impl Archive {
             if !self.deputies.contains(by) || body.master_only() {
                 return Err(Error::Signature);
             }
+        }
+        if !within_bounds(&e.body) {
+            return Err(Error::Chunk);
         }
         signed.verify()?;
         match &e.body {
@@ -557,5 +583,23 @@ pub mod legacy {
             at += n;
         }
         (colours, art)
+    }
+}
+
+#[cfg(test)]
+mod bounds {
+    use super::*;
+
+    #[test]
+    fn a_chunk_that_claims_too_long_is_refused() {
+        let key = StationKey::generate().unwrap();
+        let mut a = Archive::new(key.id());
+        let long = Chunk { hash: [7; 32], len: 1000, frames: 65_535 };
+        let body = Body::Track { title: "t".into(), by: "b".into(), source: "s".into(), channels: 2, bitrate: 64_000, chunks: vec![long] };
+        assert!(a.write(&key, 1, body).is_err());
+        let fat = Chunk { hash: [7; 32], len: MAX_CHUNK_BYTES + 1, frames: 300 };
+        assert!(a.write(&key, 1, Body::Live { chunk: fat, channels: 2, bitrate: 64_000 }).is_err());
+        let fine = Chunk { hash: [7; 32], len: 48_000, frames: 300 };
+        assert!(a.write(&key, 1, Body::Live { chunk: fine, channels: 2, bitrate: 64_000 }).is_ok());
     }
 }

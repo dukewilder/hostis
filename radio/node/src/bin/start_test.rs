@@ -34,6 +34,9 @@ fn main() -> anyhow::Result<()> {
         println!("sync {r:?} in {:?}", t.elapsed());
         return Ok(());
     }
+    // One keeper and nothing else: no two-hop route exists, so this harness lets the phone
+    // ask directly (privacy_test covers the other way).
+    n.call(&json!({ "cmd": "direct_ok", "value": true }));
     let t = Instant::now();
     n.call(&json!({ "cmd": "tune", "station": a[3] }));
     let (mut dial, mut title, mut sound) = (None, None, None);

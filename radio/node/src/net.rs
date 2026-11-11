@@ -226,6 +226,19 @@ pub enum Gossip {
     /// nodes find each other inside the network without asking anyone's directory. Older nodes
     /// do not know this message and pass over it.
     Harbour { node: [u8; 32], relay: String, at_ms: u64, sig: Vec<u8> },
+    /// A carrier note signed with the carrier's own node key, so nobody can say a node carries
+    /// a station when it does not. Unsigned `Carrier` notes from the network are no longer
+    /// believed.
+    Carried { station: StationId, node: [u8; 32], head: u64, at_ms: u64, sig: Vec<u8> },
+}
+
+fn carried_message(station: &StationId, node: &[u8; 32], head: u64, at_ms: u64) -> Vec<u8> {
+    let mut m = b"pyrate/carried/v1\0".to_vec();
+    m.extend_from_slice(&station.0);
+    m.extend_from_slice(node);
+    m.extend_from_slice(&head.to_le_bytes());
+    m.extend_from_slice(&at_ms.to_le_bytes());
+    m
 }
 
 fn harbour_message(node: &[u8; 32], relay: &str, at_ms: u64) -> Vec<u8> {
@@ -242,6 +255,36 @@ impl Gossip {
         let key = StationKey::from_seed(*secret);
         let node = key.id().0;
         Gossip::Harbour { node, relay: relay.into(), at_ms, sig: key.sign(&harbour_message(&node, relay, at_ms)).to_vec() }
+    }
+
+    /// This node saying it carries a station, signed with the node's own secret.
+    pub fn carried(secret: &[u8; 32], station: StationId, head: u64, at_ms: u64) -> Self {
+        let key = StationKey::from_seed(*secret);
+        let node = key.id().0;
+        Gossip::Carried { station, node, head, at_ms, sig: key.sign(&carried_message(&station, &node, head, at_ms)).to_vec() }
+    }
+
+    /// A signed carrier note as the plain kind, if the node itself signed it within fifteen
+    /// minutes of `now` (and not more than five ahead).
+    pub fn carried_checked(&self, now: u64) -> Option<Gossip> {
+        let Gossip::Carried { station, node, head, at_ms, sig } = self else { return None };
+        if now.saturating_sub(*at_ms) > 15 * 60_000 || at_ms.saturating_sub(now) > 5 * 60_000 {
+            return None;
+        }
+        let sig: [u8; 64] = sig.as_slice().try_into().ok()?;
+        StationId(*node).verify(&carried_message(station, node, *head, *at_ms), &sig).ok()?;
+        Some(Gossip::Carrier { station: *station, node: *node, head: *head })
+    }
+
+    /// What may be taken from the network: a signed carrier note opened, an unsigned one only
+    /// from the neighbour it names (its own connection vouches for it; older nodes send no
+    /// other kind), everything else as it came.
+    pub fn from_network(self, now: u64, from: &[u8; 32]) -> Option<Gossip> {
+        match self {
+            g @ Gossip::Carrier { node, .. } => (node == *from).then_some(g),
+            g @ Gossip::Carried { .. } => g.carried_checked(now),
+            g => Some(g),
+        }
     }
 
     /// For a harbour note: the node and its relay, if the node itself signed it near `now`.
@@ -386,6 +429,26 @@ mod serde_bytes64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_carrier_note_is_believed_only_from_its_own_node() {
+        let secret = [5u8; 32];
+        let st = StationId([9; 32]);
+        let g = Gossip::carried(&secret, st, 12, 1_000_000);
+        let node = StationKey::from_seed(secret).id().0;
+        let stranger = [1u8; 32];
+        assert!(matches!(g.clone().from_network(1_000_000, &stranger), Some(Gossip::Carrier { node: n, head: 12, .. }) if n == node));
+        let Gossip::Carried { station, head, at_ms, sig, .. } = g.clone() else { unreachable!() };
+        let forged = Gossip::Carried { station, node: stranger, head, at_ms, sig: sig.clone() };
+        assert!(forged.from_network(1_000_000, &stranger).is_none(), "someone else's signature on a claim about another node");
+        let raised = Gossip::Carried { station, node, head: head + 1000, at_ms, sig };
+        assert!(raised.from_network(1_000_000, &stranger).is_none(), "a head pushed up after signing");
+        assert!(g.from_network(1_000_000 + 16 * 60_000, &stranger).is_none(), "an old note");
+        // An unsigned note only from the neighbour it names.
+        let plain = Gossip::Carrier { station: st, node, head: 3 };
+        assert!(plain.clone().from_network(0, &stranger).is_none());
+        assert!(plain.from_network(0, &node).is_some());
+    }
 
     #[test]
     fn shares_split_the_log_and_shrink_with_the_fleet() {

@@ -54,6 +54,10 @@ impl Hold {
             return Ok(Self::new(&k));
         }
         let path = std::env::var_os("PYRATE_HOLD_KEY").map(PathBuf::from).unwrap_or_else(|| dir.join("hold.key"));
+        if std::env::var_os("PYRATE_HOLD_KEY").is_none() {
+            // Whoever copies the whole folder has the key with it. Said once at every start.
+            crate::say("the hold key lies beside the data it seals: PYRATE_HOLD_KEY puts it on another disk (LANTERN.md)");
+        }
         if let Ok(b) = std::fs::read(&path) {
             if let Ok(k) = <[u8; 32]>::try_from(b.as_slice()) {
                 return Ok(Self::new(&k));
@@ -62,6 +66,11 @@ impl Hold {
         let mut k = [0u8; 32];
         rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut k);
         std::fs::write(&path, k)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+        }
         Ok(Self::new(&k))
     }
 
