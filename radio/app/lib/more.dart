@@ -214,7 +214,7 @@ class _LogPageState extends State<LogPage> {
       SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Padding(padding: const EdgeInsets.fromLTRB(24, 20, 24, 4), child: Row(children: [Flexible(child: Text(s['name'] ?? '', style: pica(21, spacing: 0.02))), ...seals(s)])),
-          Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 8), child: Text('${s['call_sign']}  ·  Your chart is yours alone. Nothing here leaves this phone.', style: serif(13, color: boneFaint, italic: true))),
+          Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 8), child: Text('${s['call_sign']}  ·  Nothing here leaves this phone.', style: serif(13, color: boneFaint, italic: true))),
           ListTile(
             title: Text(s['kept'] == true ? 'STOP KEEPING' : 'KEEP', style: carved(12)),
             subtitle: Text('Kept stations sit at the top of the Log and the dial, and come aboard ahead of time on Wi-Fi.', style: serif(13, color: boneFaint, italic: true)),
@@ -736,7 +736,7 @@ class _TipSheetState extends State<TipSheet> {
                 await copySecret(widget.addr);
                 if (context.mounted) toast(context, 'No wallet on this phone answered. The address is copied.');
               } else if (lightning && memo.text.trim().isNotEmpty) {
-                toast(context, 'Your note is copied: paste it in the wallet\'s comment.');
+                toast(context, 'Your note is copied. Paste it in the wallet\'s comment.');
               }
             }),
             pyrateButton('COPY THE ADDRESS', () async {
@@ -783,7 +783,7 @@ class _PassItOnState extends State<PassItOn> {
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('PASS IT ON', style: carved(16)),
         const SizedBox(height: 8),
-        note('Hand the radio itself to someone beside you. No store, no account, no internet needed: point their camera at the code while you are on the same Wi-Fi or hotspot, or send it by Quick Share.'),
+        note('Hand the radio itself to someone beside you. Point their camera at the code while you are on the same Wi-Fi or hotspot, or send it by Quick Share. It needs no internet.'),
         const SizedBox(height: 18),
         if (qr != null && qr!['bits'] != null)
           Center(
@@ -939,7 +939,7 @@ class _RecordPanelState extends State<RecordPanel> {
     final running = started == null ? 0 : DateTime.now().difference(started!).inMilliseconds;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       heading('RECORD A SEGMENT'),
-      note('Talk into the phone and put it on the clock: a show, a reading, a word between records. No files needed.'),
+      note('Talk into the phone and put it on the clock, as a show, a reading or a word between records.'),
       const SizedBox(height: 12),
       Row(children: [
         pyrateButton(recording ? '■︎  STOP  ${fmtTime(running)}' : '●︎  RECORD', toggle, color: recording ? bloodBright : bone),
@@ -1257,7 +1257,7 @@ class _RotaEditorState extends State<RotaEditor> {
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       heading('THE CLOCK'),
-      note('Give hours of the day to chosen recordings: talk in the morning, music after dark. Outside every block the whole library plays. The bell plays one recording on a fixed beat, such as a station ident on the hour, and that recording leaves the ordinary rotation.'),
+      note('Give hours of the day to chosen recordings, talk in the morning and music after dark. Outside every block the whole library plays. The bell plays one recording on a fixed beat, such as a station ident on the hour, and that recording leaves the ordinary rotation.'),
       const SizedBox(height: 10),
       for (final (i, b) in blocks.indexed)
         Row(children: [
@@ -1452,7 +1452,7 @@ class _ShipPapersState extends State<ShipPapers> {
         final r = Native.call({'cmd': 'lan', 'value': v});
         setState(() {
           lan = (r as Map?)?['value'] == true;
-          gridMsg = v && r is Map && r['dark'] == true ? 'Not while the radio runs through Tor: there it has no address on this network to give.' : null;
+          gridMsg = v && r is Map && r['dark'] == true ? 'Off while the radio runs through Tor, which leaves it no address on this network to give.' : null;
         });
       }, 'Find radios on this Wi-Fi, with or without the internet. Anyone on the same network can tell a radio is here.'),
       pyrateSwitch(tor.isNotEmpty, (v) async {
@@ -1480,7 +1480,7 @@ class _ShipPapersState extends State<ShipPapers> {
           if (!mounted) return;
           if (r is Map && r['station'] is String) {
             await Native.callAway({'cmd': 'keep', 'station': r['station'], 'value': true});
-            if (mounted) setState(() => gridMsg = 'The station is aboard and kept: find it on the dial.');
+            if (mounted) setState(() => gridMsg = 'The station is aboard and kept, on the dial.');
           } else {
             setState(() => gridMsg = 'Not opened: ${r is Map ? r['error'] : 'not a station file'}.');
           }
@@ -1488,7 +1488,7 @@ class _ShipPapersState extends State<ShipPapers> {
       ]),
       const SizedBox(height: 26),
       heading('PASS IT ON'),
-      note('Hand the app to someone beside you, with no store and no internet.'),
+      note('Hand the app to someone beside you, with no internet needed.'),
       const SizedBox(height: 10),
       Row(children: [pyrateButton('PASS IT ON', () => pyrateSheet(context, const PassItOn()))]),
       if (sig != null) ...[
@@ -1536,7 +1536,7 @@ class _ShipPapersState extends State<ShipPapers> {
       pyrateSwitch(disguise, (v) {
         pref('disguise', v ? -4 : 0);
         setState(() => disguise = v);
-      }, 'Disguise my voice on air and in what I record: lower, and not quite mine'),
+      }, 'Shift my voice lower on air and in recordings, so it is not quite mine'),
       pyrateSwitch(pinSet, (v) {
         if (v) {
           setPin();
@@ -1549,7 +1549,7 @@ class _ShipPapersState extends State<ShipPapers> {
         pref('carry_mine_only', v);
         if (v) Native.call({'cmd': 'ballast_ok', 'value': false, 'unmetered': false});
         setState(() => mineOnly = v);
-      }, 'Keep only what I play: carry nothing for the fleet, so nothing on this phone was chosen by anyone else'),
+      }, 'Keep only what I play, with no share for the fleet'),
       if (pinSet)
         pyrateSwitch(duressSet, (v) {
           if (v) {
@@ -1558,11 +1558,11 @@ class _ShipPapersState extends State<ShipPapers> {
             Native.call({'cmd': 'pin_set', 'duress': true});
             setState(() => duressSet = false);
           }
-        }, 'A second PIN, to give up if you are made to open Colours: it scuttles the radio'),
+        }, 'A second PIN that scuttles the radio, to give up if you are made to open Colours'),
       pyrateSwitch(strict, (v) {
         Native.call({'cmd': 'strict', 'value': v});
         setState(() => strict = v);
-      }, 'Never show my address: when a private route fails, wait rather than ask a carrier directly'),
+      }, 'Never show my address, and wait when a private route fails instead of asking a carrier directly'),
       if (strict) note('Sound may stutter on a thin network, and your own station waits for a stem rather than going on the air from this phone.'),
     ]);
   }

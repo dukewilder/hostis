@@ -295,7 +295,7 @@ async function play(id, g) {
       }
       const at = playhead ?? radio.now() + 400;
       const p = JSON.parse(radio.plan(id, at));
-      if (p.kind === 'struck') { reset(); trouble = null; status('This station has struck its colours. It has ended.'); refresh(); return }
+      if (p.kind === 'struck') { reset(); trouble = null; status('This station has struck its colours.'); refresh(); return }
       // A log not found yet is looked for less and less often, up to every fifteen seconds.
       if (p.kind === 'searching') { if (!queued) status('Searching the Log'); await radio.sync(id).catch(() => { }); await sleep(wait); wait = Math.min(15000, wait * 1.6); continue }
       wait = 1200;
@@ -357,7 +357,7 @@ async function nowPlaying() {
   const p = JSON.parse(radio.plan(cur.id, radio.now()));
   lamps(p.kind === 'live');
   if (playing && trouble) { status(trouble); return }
-  if (p.kind === 'struck') { status('This station has struck its colours. It has ended.'); return }
+  if (p.kind === 'struck') { status('This station has struck its colours.'); return }
   if (p.kind === 'live') { $('np').textContent = 'Live from the station'; $('by').textContent = ''; $('slot').textContent = ''; $('prog').style.width = '100%'; $('time').textContent = '' }
   else if (p.kind === 'track') {
     $('np').textContent = p.title || ''; $('by').textContent = p.by || ''; $('slot').textContent = p.slot || '';
@@ -1033,7 +1033,7 @@ async function boot() {
     try { radio = await Radio.start(rememberHarbours(), key, RELAYS) } catch (e) {
       console.warn(e);
       $('name').textContent = 'Could not reach a relay';
-      $('signal').textContent = 'Trying again. If it never comes, this network may block the radio: try another, or the app.';
+      $('signal').textContent = 'Trying again. If it never connects, this network may block the radio. Try another network, or the app.';
       await sleep(Math.min(60000, 5000 * 2 ** tries));
     }
   }
@@ -1088,3 +1088,6 @@ document.querySelectorAll('a.openlink').forEach(a => { if (!a.id) a.href = OPEN_
 if (SHARED) { const m = location.pathname.match(/^\/ipfs\/([a-z2-7]{20,})\//); $('sharedgo').href = m ? 'https://' + m[1] + '.ipfs.dweb.link/' + location.hash : OPEN_PLAYERS[0] || '#'; $('sharednote').hidden = false }
 if (EMBED) { scale(); const p = passedId(); dormant(p && isHarbour(p) ? HARBOUR_STATIONS.find(h => h.id === p) : HARBOUR_STATIONS[0]); $('signal').textContent = '' }
 else booting = boot();
+// In the page, the radio's engine loads from this site while the page is read, so Listen
+// starts at once. Nothing goes to the network itself until Listen is pressed.
+if (EMBED) { const warm = () => init().catch(() => { }); if ('requestIdleCallback' in window) requestIdleCallback(warm, { timeout: 2500 }); else setTimeout(warm, 1200) }

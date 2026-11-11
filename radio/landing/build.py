@@ -31,7 +31,7 @@ page = page.replace("{{OPEN_PLAYERS}}", json.dumps(op["players"])).replace("{{HA
 page = page.replace("{{VERSION}}", version).replace("{{SHA}}", sha).replace("{{SIZE}}", size).replace("{{MAGNET}}", magnet.replace("&", "&amp;"))
 # The computers' builds, when tools/fetch_desktop.sh has brought them: each with its checksum
 # and a torrent that seeds from this site.
-desk = ""
+desk, desk_sums = "", ""
 D = f"{R}/landing/desktop"
 appver = re.search(r"^version:\s*([0-9.]+)", open(f"{R}/app/pubspec.yaml").read(), re.M).group(1)
 kinds = [("windows", "pyrate-radio-windows.zip", "Windows", "10 and 11 · zip"), ("macos", "pyrate-radio-macos.zip", "Mac", "Apple and Intel · zip"), ("linux", "pyrate-radio-linux-x64.tar.gz", "Linux", "x86-64 · tar.gz")]
@@ -43,21 +43,28 @@ if os.path.isdir(D) and all(os.path.exists(f"{D}/{k[1]}") for k in kinds):
         sha_d = hashlib.sha256(open(f"{out}/{name}", "rb").read()).hexdigest()
         subprocess.run([sys.executable, f"{R}/tools/torrent.py", f"{out}/{name}", f"{out}/{name}.torrent", f"https://hostis.black/pyrateradio/{name}"], capture_output=True, text=True, check=True)
         links.append(f'<a href="{name}"><b>{label}</b><small>{how}</small></a>')
-        sums.append(f"{label.lower()} {sha_d} · <a href=\"{name}.torrent\">torrent</a>")
-    desk = ('<h3 class="small">On a computer</h3>\n<div class="desk">' + "".join(links) + '</div>\n<p class="desk-sums">' + "<br>".join(sums) + "</p>\n"
-            '<p class="note">Version ' + appver + ', built from the public source by GitHub\'s machines. On a Mac, open it the first time with a right-click and Open: it is signed by nobody. Computers take new versions from this page.</p>')
-page = page.replace("{{DESKTOP}}", desk)
+        sums.append(f"{label.lower()} {sha_d} · <a href=\"{name}.torrent\">torrent</a><br>")
+    desk = ('<h3 class="small">On a computer</h3>\n<div class="desk">' + "".join(links) + '</div>\n'
+            '<p class="note">Version ' + appver + '. On a Mac, open it the first time with a right-click and Open. Computers take new versions from this page.</p>')
+    desk_sums = "".join(sums)
+page = page.replace("{{DESKTOP}}", desk).replace("{{DESKTOP_SUMS}}", desk_sums)
 open(f"{out}/index.html", "w", encoding="utf-8").write(page)
-# The keeper's handbook: the same head and footer, a body of its own.
+# The pages beside it: the same head and footer, a body of their own.
 head = page[:page.index("<body>")]
-head = head.replace('"https://hostis.black/pyrateradio/"', '"https://hostis.black/pyrateradio/handbook/"')
-head = re.sub(r"<title>.*?</title>", "<title>The Keeper's Handbook · Pyrate Radio · HOSTIS</title>", head)
-head = head.replace('content="Radio that plays all day and all night, that anyone can raise, that every listener carries, and that answers to no server, no store and no account."', 'content="What Pyrate Radio does to keep a station keeper unknown, what only the keeper can do, and how the network stands."')
 flag = page[page.index('<nav class="flagbar"'):page.index("</nav>", page.index('<nav class="flagbar"')) + 6]
 foot = page[page.index("<footer>"):page.index("</footer>") + 9]
-book = open(f"{R}/landing/handbook.body.html", encoding="utf-8").read()
-os.makedirs(f"{out}/handbook", exist_ok=True)
-open(f"{out}/handbook/index.html", "w", encoding="utf-8").write(head.replace('href="favicon.png"', 'href="../favicon.png"').replace('href="apple-touch-icon.png"', 'href="../apple-touch-icon.png"') + '<body>\n<a class="skip-link" href="#main">Skip to content</a>\n' + flag + "\n" + book.replace('href="./', 'href="../') + foot + "\n</body>\n</html>\n")
+desc = re.search(r'<meta name="description" content="([^"]*)">', head).group(1)
+for slug, body, title, about in [
+    ("handbook", "handbook.body.html", "The Keeper's Handbook", "What Pyrate Radio does to keep a station keeper unknown, what only the keeper can do, and how the network stands."),
+    ("how-it-works", "how.body.html", "How Pyrate Radio Works", "How Pyrate Radio carries every station with no server, how it keeps listeners and keepers unseen, and what it would take to stop it."),
+]:
+    h = head.replace('"https://hostis.black/pyrateradio/"', f'"https://hostis.black/pyrateradio/{slug}/"')
+    h = re.sub(r"<title>.*?</title>", f"<title>{title} · Pyrate Radio · HOSTIS</title>", h)
+    h = h.replace(f'content="{desc}"', f'content="{about}"').replace('content="Pyrate Radio"', f'content="{title}"')
+    h = h.replace('href="favicon.png"', 'href="../favicon.png"').replace('href="apple-touch-icon.png"', 'href="../apple-touch-icon.png"')
+    text = open(f"{R}/landing/{body}", encoding="utf-8").read().replace('href="./', 'href="../').replace('href="../"', 'href="../"')
+    os.makedirs(f"{out}/{slug}", exist_ok=True)
+    open(f"{out}/{slug}/index.html", "w", encoding="utf-8").write(h + '<body>\n<a class="skip-link" href="#main">Skip to content</a>\n' + flag + "\n" + text + foot + "\n</body>\n</html>\n")
 shutil.copytree(f"{R}/browser/www/dist", f"{out}/listen")
 # The HOSTIS skull, the same icon as every sibling page.
 for f in ["favicon.png", "apple-touch-icon.png"]:
