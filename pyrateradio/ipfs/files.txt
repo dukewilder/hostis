@@ -1,7 +1,7 @@
 bafybeiel2c7q4t6prkxbmhipczlcsm2yavc46hao3to3q2ja5w2s7rjmb4 pyrate-radio-0.7.1.apk
 bafybeichldvlwtsryew4tpwi6l2bzn4iqtvsuo4mcve4x7fgwzzibvwpca pyrate-radio-0.8.0.apk
 bafybeif736juxf2nquix2g7xpvp3keyqb6owbvkrl7dmnryw5mihpnpjra pyrate-radio-0.9.5.apk
-bafybeigmveadfu3lsooo4ak6d4fy5u4rowjl5me6zuuny64emx6vfqvtcm pyrate-radio-0.9.8-macos.zip
-bafybeiad3ahc3l5uagivxmeh5vsl54weveadyse5ez5xt4zp7uqpsl4dzi pyrate-radio-0.9.8-windows.zip
-bafybeic52cmj42wp6j3tsvgej3vclbcs6udqfvu2pef23ilqip24sgl6ea pyrate-radio-0.9.8-linux-x64.tar.gz
-bafybeibtfnci4o4gq5bvwvwuy4gc3whaniy5w4k4f4fmbimmqby4tehdva source/pyrate-radio-src-4fa68b2.tar.gz
+bafybeigmveadfu3lsooo4ak6d4fy5u4rowjl5me6zuuny64emx6vfqvtcm pyrate-radio-0.9.9-macos.zip
+bafybeiad3ahc3l5uagivxmeh5vsl54weveadyse5ez5xt4zp7uqpsl4dzi pyrate-radio-0.9.9-windows.zip
+bafybeic52cmj42wp6j3tsvgej3vclbcs6udqfvu2pef23ilqip24sgl6ea pyrate-radio-0.9.9-linux-x64.tar.gz
+bafybeihaut52tvozvvrudfuikff4uh7gugynkqzi3qjydxxzv64silf4m4 source/pyrate-radio-src-f273394.tar.gz

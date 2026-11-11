@@ -321,7 +321,7 @@ html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doo
 <div class="prose">
 <p>The radio cannot hide what you put on the air yourself.</p>
 </div>
-<details class="fold"><summary>Your voice, and the room around it</summary><div>The app takes out mains hum, which can date and place a recording. It cannot take out a siren, a church bell, a train or a neighbour's voice, so record somewhere quiet. Discretion, in More, can shift your voice lower and make it not quite yours. A voice you have used anywhere else in public is a voice that can be matched.</div></details>
+<details class="fold"><summary>Your voice, and the room around it</summary><div>The app takes out mains hum, which can date and place a recording. It cannot take out a siren, a church bell, a train or a neighbour's voice, so record somewhere quiet. Disguise my voice, in Settings, shifts your voice lower and make it not quite yours. A voice you have used anywhere else in public is a voice that can be matched.</div></details>
 <details class="fold"><summary>Your words</summary><div>Turns of phrase, spelling and the subjects you return to are as much yours as your face. Writing for a station in a voice you use nowhere else keeps the two apart.</div></details>
 <details class="fold"><summary>Your files</summary><div>Copies of music from shops, promotional services and AI music tools can carry marks in the sound itself, tied to the account that downloaded them. Re-encoding does not remove them, and nothing in the app can. Air only what you are content to have traced back to where you got it.</div></details>
 <details class="fold"><summary>What your station says of itself</summary><div>A home port is public, so leave it empty or name a city that is not yours. A programme that keeps clock times carries your time zone with it; one that only shuffles carries none. A Bitcoin tip address shows every payment to anyone who looks it up. Monero shows none.</div></details>
@@ -332,16 +332,16 @@ html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doo
 <div class="sechead"><h2>Your Device</h2><span class="cap">phone and computer</span></div>
 <div class="prose">
 <p>A phone with a screen lock is encrypted by the phone itself. Keep it locked and keep it updated, since the radio is only as safe as the phone it runs on. GrapheneOS, on a Pixel, is the hardest phone to break into that anyone can buy.</p>
-<p>In More, under Discretion:</p>
+<p>In Settings, under Privacy and safety:</p>
 </div>
 <ol class="steps">
 <li>A plain icon named Radio, and a lock screen and recents screen that say nothing.</li>
-<li>A PIN on Colours, and a second PIN to give up if you are made to open it. The second one scuttles the radio, which closes and opens next time as if newly installed.</li>
-<li>Keep only what I play, so your phone carries nothing for anyone else.</li>
+<li>A PIN on your station and settings, and an emergency PIN to give up if you are made to open it. The emergency PIN wipes the radio, which closes and opens next time as if newly installed.</li>
+<li>Help carry stations, which you can turn off so your phone carries nothing for anyone else.</li>
 </ol>
 <div class="prose">
 <p>On a computer, turn on the disk's own encryption: BitLocker on Windows, FileVault on a Mac, and full-disk encryption when installing Linux. Windows, Mac and Linux desktops with a keyring then keep the radio's key in the system's own keeper as well.</p>
-<p>Before a crossing where the phone may be searched, scuttle the radio in Colours. The 24 words, and the passphrase if you set one, bring every station back afterwards.</p>
+<p>Before a crossing where the phone may be searched, wipe the radio in Settings. The 24 words, and the passphrase if you set one, bring every station back afterwards.</p>
 </div>
 </section>
 
@@ -361,7 +361,7 @@ html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doo
 <div class="prose">
 <p>The relay a phone or a tab connects through sees its address, and nothing of what passes. Your internet provider sees that you use the radio, and nothing of what you play or air.</p>
 <p>For more cover, run a VPN you trust on the phone, set to always on, so the radio never touches the network without it. In a browser, open the player in Tor Browser, and the relay sees only Tor.</p>
-<p>The app can go through Tor itself. Install Orbot, start it, and in More, under Off the grid, turn on Through Tor. From the next start the radio reaches the network only by way of Tor and offers no direct path, so no peer and no relay learns where the phone is. On a computer, Tor with its HTTP tunnel on port 8118 does the same.</p>
+<p>The app can go through Tor itself. Install Orbot, start it, and in Settings, under Advanced, Connections, turn on Go through Tor. From the next start the radio reaches the network only by way of Tor and offers no direct path, so no peer and no relay learns where the phone is. On a computer, Tor with its HTTP tunnel on port 8118 does the same.</p>
 </div>
 </section>
 
@@ -369,8 +369,8 @@ html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doo
 <section id="grid">
 <div class="sechead"><h2>Off the Grid</h2><span class="cap">when the internet is cut</span></div>
 <div class="prose">
-<p>Any station can travel as one file. On its poster, press As a file, and pass the file by SD card, USB stick, Bluetooth or the share sheet. A phone that opens it, in More under Off the grid, plays the station at once with no network, and carries it to every radio it meets. Every entry and every chunk in the file is checked against the station's key, so a file can be carried by anyone and altered by no one.</p>
-<p>Radios on the same Wi-Fi, or on one phone's hotspot, can find each other with no internet at all once Find radios on this Wi-Fi is on, in More, under Off the grid. Leave it off otherwise, because anyone on the same network can tell a radio is there.</p>
+<p>Any station can travel as one file. On its poster, press As a file, and pass the file by SD card, USB stick, Bluetooth or the share sheet. A phone that opens it with Open a station file, in Settings, plays the station at once with no network, and carries it to every radio it meets. Every entry and every chunk in the file is checked against the station's key, so a file can be carried by anyone and altered by no one.</p>
+<p>Radios on the same Wi-Fi, or on one phone's hotspot, can find each other with no internet at all once Find radios on this Wi-Fi is on, in Settings, under Advanced. Leave it off otherwise, because anyone on the same network can tell a radio is there.</p>
 </div>
 </section>
 
@@ -378,7 +378,7 @@ html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doo
 <section id="check">
 <div class="sechead"><h2>Checking</h2><span class="cap">that what you run is ours</span></div>
 <div class="prose">
-<p>Compare what you download with the checksum on <a href="../#set">the main page</a>. The app shows the fingerprint of the key that signed it in More, under This copy, so a copy signed by anyone else can be told apart. The source is public, released as a tarball and a torrent with every version, so anyone can build it and compare.</p>
+<p>Compare what you download with the checksum on <a href="../#set">the main page</a>. The app shows the fingerprint of the key that signed it in Settings, under Advanced, About this copy, so a copy signed by anyone else can be told apart. The source is public, released as a tarball and a torrent with every version, so anyone can build it and compare.</p>
 <p>A new version waits three days from the moment your phone first hears of it, so a release anyone was forced to sign is in front of everyone before it lands on a phone. The app says when it arrives, and you can tap to take it sooner.</p>
 </div>
 </section>
@@ -387,7 +387,7 @@ html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doo
 <section id="canary">
 <div class="sechead"><h2>The Canary</h2><span class="cap">renewed every month</span></div>
 <div class="prose">
-<p>Once a month HOSTIS signs a line saying it has received no order to hide, change or stop anything, and no order to keep quiet about one. The app shows it in More, under The canary. If it goes more than 45 days without being renewed, the app says so, and you can read that silence for what it may mean.</p>
+<p>Once a month HOSTIS signs a line saying it has received no order to hide, change or stop anything, and no order to keep quiet about one. The app shows it in Settings, under Advanced, About this copy. If it goes more than 45 days without being renewed, the app says so, and you can read that silence for what it may mean.</p>
 </div>
 </section>
 
