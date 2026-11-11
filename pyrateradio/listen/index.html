@@ -593,15 +593,17 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 <label class="field"><span>What it broadcasts</span><input id="st-about" maxlength="140" autocomplete="off" placeholder="A line for the Log"></label>
 <label class="field"><span>Its kinds</span><input id="st-kinds" maxlength="80" autocomplete="off" placeholder="Up to three, by commas: jazz, talk, sea shanties"></label>
 <div class="switches"><label><input type="checkbox" id="st-mature"><span>It is mature</span></label><label><input type="checkbox" id="st-explicit"><span>It is explicit</span></label></div>
+<details class="fold"><summary>A passphrase on top of the words</summary><div><p>With a passphrase, the 24 words alone open a different, empty station: a photograph of them gives nothing away, and words given up under force open that one instead. Lose the passphrase and the station is lost with it.</p><label class="field"><span>Passphrase</span><input id="st-ppass" type="password" autocomplete="new-password" placeholder="Optional"></label></div></details>
 <p class="centre"><button id="st-raise" class="lead-btn"><span class="fc-lead">Raise colours</span><span class="fc-sub">a key made here &#183; nothing leaves until it sails</span></button></p>
 <p id="st-note" class="fine" role="status"></p>
-<details class="fold"><summary>Take back a station from its 24 words</summary><div><textarea id="st-words" spellcheck="false" autocomplete="off" aria-label="The station's 24 words"></textarea><p class="centre"><button id="st-restore" class="btn">Take it back</button></p></div></details>
+<details class="fold"><summary>Take back a station from its 24 words</summary><div><textarea id="st-words" spellcheck="false" autocomplete="off" aria-label="The station's 24 words"></textarea><label class="field"><span>Passphrase, if you set one</span><input id="st-rpass" type="password" autocomplete="off"></label><p class="centre"><button id="st-restore" class="btn">Take it back</button></p></div></details>
 <details class="fold"><summary>Broadcasting with the most cover</summary><div><p>What you air goes out along a stem of other nodes before anyone shows it to the network, so no listener can trace it to this tab. The relay this tab speaks through sees its address and nothing of what passes. For the most cover, open this page in Tor Browser, and the relay sees only Tor. The app on a phone goes further still.</p></div></details>
 </div>
 <div id="st-show" class="st-show" hidden>
 <p class="boxhead">Write these down</p>
 <p class="fine">These twenty-four words are the station. Whoever holds them can speak for it, strike it or take it to another device. They are shown once, never sent anywhere and never kept here. Write them on paper, in order. Nobody from Pyrate Radio or HOSTIS will ever ask for them.</p>
 <ol id="st-wordlist" class="wordlist"></ol>
+<p id="st-passnote" class="fine" hidden>And your passphrase: keep it apart from the words. Without it, these words open a different station.</p>
 <div class="switches"><label><input type="checkbox" id="st-written"><span>I have written them down, in order</span></label></div>
 <p class="centre"><button id="st-done" class="btn" disabled>On to the station</button></p>
 </div>
@@ -643,6 +645,6 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 <p class="f-copy">no rights reserved &#183; all copies welcome</p>
 <p class="f-source"><a href="https://github.com/dukewilder/hostis" target="_blank" rel="noopener noreferrer">source code</a></p>
 </footer>
-<script type="module" src="app.js?v=4c53338738"></script>
+<script type="module" src="app.js?v=4f1d27c720"></script>
 </body>
 </html>

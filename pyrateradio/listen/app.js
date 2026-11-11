@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=4c53338738';
+import init, { Radio } from './pkg/pyrate_browser.js?v=4f1d27c720';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -13,7 +13,7 @@ const EMBED = document.documentElement.classList.contains('embed');
 // flock goes straight to an open player, the same set served where no one owns it (IPFS, a
 // Lantern). 'open' is that copy: the whole Log, the chatter and the colours.
 const SCOPE = "harbour";
-const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeigylfjzel2iucwodziywmj2lfzow462pott2k2uwugn5wzxh3tpzm.ipfs.inbrowser.link/", "https://bafybeigylfjzel2iucwodziywmj2lfzow462pott2k2uwugn5wzxh3tpzm.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeigylfjzel2iucwodziywmj2lfzow462pott2k2uwugn5wzxh3tpzm/"];
+const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti.ipfs.inbrowser.link/", "https://bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeidkkhautsj2wbmmslxcsr3c2fbhogakniwsqx2kqlzzgyllyipfti/"];
 const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
 const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
 const lastId = () => { if (SHARED) return ''; try { return sessionStorage.getItem('pyrate.cur') || '' } catch (e) { return '' } };
@@ -870,9 +870,11 @@ $('st-raise').onclick = async () => {
   if (sealed() && !mineMem) { stNote('Open the sealed stations first.'); return }
   const name = $('st-name').value.trim(); if (!name) { stNote('A station needs a name.'); $('st-name').focus(); return }
   if (!radio) { stNote('Coming aboard first.'); booting ??= boot(); await booting; if (!radio) return }
-  let r; try { r = JSON.parse(radio.raise(name, $('st-about').value, $('st-kinds').value, $('st-mature').checked, $('st-explicit').checked)) } catch (e) { stNote(String(e)); return }
+  let r; try { r = JSON.parse(radio.raise(name, $('st-about').value, $('st-kinds').value, $('st-mature').checked, $('st-explicit').checked, $('st-ppass').value)) } catch (e) { stNote(String(e)); return }
   const l = kept(); l.push({ id: r.id, deputy: r.deputy, pow: null }); keep(l);
   mineCur = r.id; adopted.add(r.id); powWork(r.id);
+  const withPass = !!$('st-ppass').value; $('st-ppass').value = '';
+  $('st-passnote').hidden = !withPass;
   $('st-wordlist').innerHTML = r.words.split(/\s+/).map(w => '<li>' + esc(w) + '</li>').join('');
   $('st-written').checked = false; $('st-done').disabled = true;
   $('st-new').hidden = true; $('st-show').hidden = false; stNote('');
@@ -887,7 +889,7 @@ $('st-restore').onclick = async () => {
   if (!radio) { booting ??= boot(); await booting; if (!radio) return }
   stNote('Looking for the station’s log on the network.');
   try {
-    const r = JSON.parse(await radio.restore(words));
+    const r = JSON.parse(await radio.restore(words, $('st-rpass').value)); $('st-rpass').value = '';
     $('st-words').value = '';
     const l = kept().filter(k => k.id !== r.id); l.push({ id: r.id, deputy: r.deputy, pow: null }); keep(l);
     mineCur = r.id; adopted.add(r.id); powWork(r.id); stNote(''); studioShow();
