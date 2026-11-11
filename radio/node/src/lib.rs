@@ -1622,13 +1622,13 @@ impl Node {
                 b = b.proxy_from_env().ca_tls_config(iroh::tls::CaTlsConfig::system());
             }
             let ep = b.bind().await.map_err(|e| anyhow!("bind: {e}"))?;
-            if !standby.is_empty() && !private_net {
+            // A Lantern with its own relay in the same process never stands number0's in: while
+            // the process runs, so does its relay, even if a long first seeding keeps the node
+            // too busy to reach it in the first seconds.
+            if !standby.is_empty() && !private_net && std::env::var_os("PYRATE_RELAY_LOCAL").is_none() {
                 let ep2 = ep.clone();
                 tokio::spawn(async move {
-                    // A Lantern's own relay starts in the same process once the node is up, which
-                    // on a big data folder can take a while: it gets two minutes, a phone fifteen
-                    // seconds.
-                    let wait = if std::env::var_os("PYRATE_RELAY_LOCAL").is_some() { 120 } else { 15 };
+                    let wait = 15;
                     if tokio::time::timeout(Duration::from_secs(wait), ep2.online()).await.is_err() {
                         // What each of our relays said, for whoever reads the log.
                         use iroh::Watcher;
