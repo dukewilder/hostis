@@ -95,11 +95,25 @@ fn main() -> anyhow::Result<()> {
             println!("Wrote {path}. Sign it: release sign-paper <words> <1-3> {path}");
         }
         Some("sign-apk") => {
-            let words = std::fs::read_to_string(a.get(2).ok_or_else(|| anyhow::anyhow!("android-key.txt"))?)?;
+            // "-" reads the words from standard input, so a signing window can pass them
+            // without writing them to disk.
+            let src = a.get(2).ok_or_else(|| anyhow::anyhow!("android-key.txt, or - to read the words from input"))?;
+            let words = if src == "-" {
+                let mut w = String::new();
+                std::io::Read::read_to_string(&mut std::io::stdin(), &mut w)?;
+                w
+            } else {
+                std::fs::read_to_string(src)?
+            };
             let cert = std::fs::read(a.get(3).ok_or_else(|| anyhow::anyhow!("android-cert.der"))?)?;
             let apk = std::fs::read(a.get(4).ok_or_else(|| anyhow::anyhow!("unsigned apk"))?)?;
             let out = a.get(5).ok_or_else(|| anyhow::anyhow!("signed apk"))?;
             let key = apksign::android_key(&StationKey::from_phrase(&words)?.seed());
+            // Words that make a different key would sign an app no phone takes as an update.
+            let public = key.verifying_key().to_sec1_point(false);
+            if !cert.windows(public.as_bytes().len()).any(|w| w == public.as_bytes()) {
+                anyhow::bail!("these words do not match android-cert.der: check them against your paper");
+            }
             std::fs::write(out, apksign::sign(&apk, &key, &cert)?)?;
             println!("Signed: {out}");
         }

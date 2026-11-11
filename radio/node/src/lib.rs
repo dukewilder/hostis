@@ -2775,6 +2775,17 @@ impl Node {
                 inner.store.lock().unwrap().write(st, now_ms(), Body::Withdraw { track: h })?;
                 Ok(json!({ "ok": true }))
             }
+            // Every station this node keeps a key for, with its 24 words when the key is the
+            // station's own (a deputy's words open nothing). For `lantern --words` only.
+            "own_words" => {
+                let s = inner.store.lock().unwrap();
+                let list: Vec<Value> = s.own().into_iter().filter_map(|st| {
+                    let k = s.keys.get(&st)?;
+                    let name = s.logs.get(&st).and_then(|a| a.colours().and_then(|c| match c { Body::Colours { name, .. } => Some(name.clone()), _ => None })).unwrap_or_default();
+                    Some(json!({ "id": st.to_hex(), "name": name, "master": k.id() == st, "words": if k.id() == st { k.phrase() } else { String::new() } }))
+                }).collect();
+                Ok(json!(list))
+            }
             "phrase" => {
                 let st = station()?;
                 let s = inner.store.lock().unwrap();

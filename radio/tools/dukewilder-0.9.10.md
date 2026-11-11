@@ -72,7 +72,16 @@ docker run --rm --network <harbour network mode> \
 5. Watch `docker logs -f pyrate-lantern`. Each new station logs `set <title>` for every recording, then `cover raised`, `banner raised`, `programme set` and `notice up`. Setting 290 recordings takes a while: Netlabel is the slow one. It is done when the minute lines show `in the Log` again and no more `set` lines arrive.
 6. Then restart the harbour once more so it prints its stations at start. It logs one `station <name>: <id>` line for each seeded station.
 
-## 5. Check
+## 5. The station keys, for Dylan
+
+The harbour holds the master key of every HOSTIS station it raised, sealed in its hold. Dylan needs each station's 24 words on paper. Once step 4 is finished:
+
+1. Stop the harbour.
+2. Run the same image once with the harbour's volumes, `PYRATE_HOLD_KEY` and `/keys` mount exactly as its compose entry has them, the harbour's network mode, and one more mount: a folder in Dylan's home directory, mode 700, at `/words`. Pass only `--dir` as the harbour does and `--words /words/pyrate-station-words.txt`. It writes the words of every station it holds the master key for and stops. Its last line reads `the 24 words of N stations are in ...`.
+3. Start the harbour again and check it comes back as in step 4.
+4. Do not open, print, copy, upload or summarise that file, and never put it anywhere synced, shared or inside a Docker volume. Tell Dylan its full path and the simplest way for him to open it on this machine himself, then remind him to delete it once the words are on paper. Ask before deleting it yourself.
+
+## 6. Check
 
 - `docker ps` shows all three Lanterns up, with no published ports.
 - Each Lantern's first lines after start show `LANTERN LIT`, its node id, and later an `in the Log` count matching what it had before.
@@ -84,5 +93,6 @@ docker run --rm --network <harbour network mode> \
 - The new image id.
 - For each Lantern: its node id and its first `in the Log` count after the rebuild, and that the hold key moved, with its new path. Confirm the warning is gone. Leave the old key in place.
 - The `station <name>: <id>` lines for all five HOSTIS stations.
+- The count N from step 5, and where you told Dylan the words file is. Never its contents.
 - Each `fetch.py` run's last line.
 - Anything that did not go as written.
