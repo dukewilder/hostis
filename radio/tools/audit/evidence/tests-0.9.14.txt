@@ -1,4 +1,4 @@
-# cargo test --release -p pyrate-core; cargo test --release -p pyrate-node --lib (ed9a91e)
+# cargo test --release -p pyrate-core; cargo test --release -p pyrate-node --lib (3dda41c)
 test archive::bounds::a_chunk_that_claims_too_long_is_refused ... ok
 test art::tests::the_accent_is_the_same_every_time ... ok
 test chat::tests::a_hail_opens_only_for_the_station_s_keys ... ok
@@ -18,10 +18,8 @@ test tests::hex_is_strict_and_never_panics ... ok
 test voice::tests::a_voice_moves_where_it_is_asked ... ok
 test voice::tests::hum_goes_and_a_voice_stays ... ok
 test keys::passphrase_tests::a_passphrase_makes_the_words_another_station ... ok
-test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
 test a_signed_entry_cannot_be_moved_replayed_forked_or_backdated ... ok
 test each_kind_of_entry_takes_only_the_keys_allowed_it ... ok
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 test a_new_track_joins_the_next_round ... ok
 test blocks_and_the_bell ... ok
 test empty_library_is_dead_air ... ok
@@ -30,7 +28,6 @@ test every_track_plays_before_any_repeats ... ok
 test time_moves_forward_through_a_track ... ok
 test withdrawn_tracks_stop_playing ... ok
 test a_week_of_lookups_is_quick ... ok
-test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 test one_seed ... ok
 test a_rota_block_naming_thousands_of_recordings ... ok
 test passing_over_changes_nothing_on_any_log ... ok
@@ -42,7 +39,6 @@ test the_costliest_rotas_a_station_can_sign ... ok
 test the_costliest_schedules_a_station_can_sign ... ok
 test the_rota_and_programme_in_force_are_the_latest_written ... ok
 test remembered_answers_are_the_walked_answers ... ok
-test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 202.13s
 test archive_refuses_forgery_and_reordering ... ok
 test archive_accepts_a_true_chain ... ok
 test call_signs ... ok
@@ -54,28 +50,25 @@ test opus_round_trip ... ok
 test phrase_round_trip ... ok
 test releases_need_two_of_three ... ok
 test ingest_resamples_and_downmixes ... ok
-test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
 test text_fields_are_bounded_at_the_limit_and_one_past_it ... ok
 test no_entry_past_a_mebibyte_is_decoded_or_taken ... ok
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 test a_deputys_entry_survives_the_round_trip ... ok
 test deeply_nested_deputed_bodies_do_not_crash ... ok
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
-test a_daily_tape_starts_from_the_top_at_its_hour_every_day ... ok
 test a_called_off_show_never_airs ... ok
+test a_daily_tape_starts_from_the_top_at_its_hour_every_day ... ok
 test a_library_in_order_is_heard_in_order_across_its_hours ... ok
 test a_live_slot_plays_its_fill_and_says_its_name ... ok
-test a_premiere_takes_the_air_and_hands_it_back ... ok
 test a_premiere_of_a_recording_added_moments_ago_airs_and_one_with_nothing_is_not_billed ... ok
+test a_premiere_takes_the_air_and_hands_it_back ... ok
 test a_span_must_name_a_day ... ok
-test a_station_of_short_jingles_plays_to_the_end_of_the_week ... ok
 test a_show_dated_at_the_end_of_time_breaks_nothing ... ok
-test a_weekly_tape_signed_with_a_nonsense_minute_still_plays ... ok
+test a_station_of_short_jingles_plays_to_the_end_of_the_week ... ok
 test a_watch_plays_what_its_hand_added ... ok
+test a_weekly_tape_signed_with_a_nonsense_minute_still_plays ... ok
 test local_time_holds_across_daylight_saving ... ok
+test notices_come_down_when_taken_down_or_out_of_date ... ok
 test newest_first_for_a_podcast ... ok
 test recordings_of_a_moment_are_not_played_and_cannot_hang_the_clock ... ok
-test notices_come_down_when_taken_down_or_out_of_date ... ok
 test six_hours_a_day_and_off_the_air_the_rest ... ok
 test the_hour_lost_in_spring_does_not_stop_the_clock_east_of_utc ... ok
 test the_hour_that_comes_twice_neither_rewinds_a_tape_nor_cuts_a_slot ... ok
@@ -83,7 +76,6 @@ test the_later_of_rota_and_programme_rules ... ok
 test the_page_says_when_an_off_air_station_comes_back_and_what_is_on_the_bill ... ok
 test the_watch_bill_cuts_where_the_air_changes_hands ... ok
 test skipping_whole_rounds_changes_nothing ... ok
-test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
 test a_release_needs_two_different_keys ... ok
 test a_films_centre_channel_survives_the_fold_and_silence_is_refused ... ok
 test an_unknown_entry_is_kept_exactly_and_still_verifies ... ok
@@ -93,8 +85,6 @@ test quiet_recordings_come_up_and_dead_air_goes ... ok
 test the_watch_bill_runs_track_after_track ... ok
 test the_watch_bill_steps_over_quiet_minutes ... ok
 test a_tape_is_a_real_ogg_opus_file ... ok
-test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 test hold::secret_tests::secrets_are_never_readable_by_others ... ok
 test hold::tests::sealed_under_the_hold_key_and_nothing_else ... ok
 test lan::beacon_tests::beacons_are_signed_dated_and_rate_limited ... ok
@@ -102,19 +92,19 @@ test lan::tests::a_beacon_carries_only_local_addresses ... ok
 test lan::tests::connections_offer_the_post_quantum_exchange_first ... ok
 test chat::kept_hails::a_kept_hail_is_noise_on_disk_and_opens_for_the_keeper ... ok
 test net::card_limit_tests::a_deputys_card_is_trusted_only_against_a_current_log ... ok
-test net::card_limit_tests::long_cards_are_clipped_by_their_station_and_refused_from_anyone_else ... ok
+test net::card_limit_tests::signed_bytes_after_a_cards_fields_are_bounded ... ok
 test net::relay_tests::only_public_relays_are_taken ... ok
-test net::tests::a_card_from_a_later_version_still_verifies ... ok
+test net::card_limit_tests::long_cards_are_clipped_by_their_station_and_refused_from_anyone_else ... ok
 test net::tests::a_carrier_note_is_believed_only_from_its_own_node ... ok
 test net::tests::a_false_claim_jumps_no_queue_and_a_flood_grows_nothing ... ok
 test net::tests::a_harbour_note_is_the_node_s_own_word ... ok
-test net::tests::announce_signs_and_proves ... ok
+test net::tests::a_card_from_a_later_version_still_verifies ... ok
 test net::tests::claims_that_came_first_cannot_keep_a_real_carrier_out ... ok
-test net::tests::explicit_rides_at_the_end_and_old_cards_read_as_not ... ok
+test net::tests::announce_signs_and_proves ... ok
 test net::tests::notes_pass_on_only_signed_fresh_notes_for_the_stations_shown ... ok
 test net::tests::shares_split_the_log_and_shrink_with_the_fleet ... ok
 test net::tests::sketch_counts_roughly ... ok
-test net::card_limit_tests::signed_bytes_after_a_cards_fields_are_bounded ... ok
+test net::tests::explicit_rides_at_the_end_and_old_cards_read_as_not ... ok
 test net::tests::tracks_ride_after_explicit_and_older_cards_read_as_unknown ... ok
 test pin_tests::a_pin_is_kept_under_a_slow_hash ... ok
 test store::tests::a_hold_from_before_the_hold_key_comes_across_and_leaves_nothing_behind ... ok
@@ -124,4 +114,14 @@ test store::tests::over_quota_the_hold_lets_go_of_orphans_then_the_largest_carri
 test store::tests::without_the_hold_key_the_disk_is_noise_even_to_someone_with_the_log ... ok
 test web::tests::the_player_serves_its_own_folder_and_nothing_else ... ok
 test net::tests::strangers_bytes_never_panic_a_decoder ... ok
-test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.68s
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 190.42s
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.62s
