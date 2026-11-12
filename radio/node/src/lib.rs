@@ -210,6 +210,26 @@ pub(crate) fn remap(body: Body, moved: &HashMap<Hash, Hash>) -> Body {
 }
 
 /// A track's title and artist, by its entry hash.
+/// A station's clock and its tracks' names, worked out once per log length.
+pub(crate) struct OnNow {
+    clock: Option<pyrate_core::clock::Clock>,
+    names: HashMap<Hash, (String, String)>,
+}
+
+impl OnNow {
+    fn build(a: &Archive) -> Self {
+        let names = a
+            .entries()
+            .iter()
+            .filter_map(|e| match e.entry.body() {
+                Body::Track { title, by, .. } => Some((e.hash().ok()?, (title.clone(), by.clone()))),
+                _ => None,
+            })
+            .collect();
+        Self { clock: pyrate_core::clock::Clock::new(a).ok(), names }
+    }
+}
+
 pub(crate) fn describe_track(a: &Archive, track: &Hash) -> (String, String) {
     for e in a.entries() {
         if let Body::Track { title, by, .. } = e.entry.body() {
@@ -317,6 +337,8 @@ pub struct Inner {
     pub(crate) doors: Vec<EndpointId>,
     /// The relay each peer's signed note named.
     met: Mutex<HashMap<EndpointId, String>>,
+    /// The Log's gossip neighbours right now: nodes this one is connected to, so reachable.
+    neighbours: Mutex<std::collections::HashSet<[u8; 32]>>,
     /// Relays the first doors named: home relays before number0's.
     our_relays: Mutex<Vec<String>>,
     #[cfg(feature = "playback")]
@@ -351,6 +373,9 @@ pub struct Inner {
     /// Nodes that served this one a station's entries or sound lately: trusted to keep a place
     /// among a station's carriers. Answering is not enough: anyone can answer with nothing.
     served: Mutex<HashMap<[u8; 32], u64>>,
+    /// Each station's clock and track names, kept until its log grows: the Log page asks what
+    /// is on for up to two hundred stations at a time.
+    on_now: Mutex<HashMap<StationId, (u64, Arc<OnNow>)>>,
     /// The device's hold key, for the small files the node keeps beside its store.
     pub(crate) hold: hold::Hold,
     /// Where carriers said they can be reached, signed by each: the network's own address book.
@@ -574,7 +599,8 @@ impl Inner {
         let log = self.log.lock().unwrap();
         let Some(l) = log.get(station) else { return vec![] };
         let card = l.announce.as_ref().map(|a| a.head);
-        let trusted = |n: &[u8; 32]| served.get(n).is_some_and(|t| now.saturating_sub(*t) < 24 * 3_600_000) || self.doors.iter().any(|d| d.as_bytes() == n);
+        let neighbours = self.neighbours.lock().unwrap().clone();
+        let trusted = |n: &[u8; 32]| served.get(n).is_some_and(|t| now.saturating_sub(*t) < 24 * 3_600_000) || neighbours.contains(n) || self.doors.iter().any(|d| d.as_bytes() == n);
         net::rank_carriers(&l.carriers, &me, card, |n| failed.get(n).is_some_and(|t| now.saturating_sub(*t) < net::FAILED_MS), trusted)
             .into_iter()
             .filter_map(|n| EndpointId::from_bytes(&n).ok())
@@ -702,39 +728,54 @@ impl Inner {
         // At most twelve asked a round: a list full of claims that never answer costs a round
         // its time, not the node its afternoon. Each that fails goes to the back for a while.
         let card = self.log.lock().unwrap().get(&station).and_then(|l| l.announce.as_ref().map(|a| a.head)).unwrap_or(0);
-        let mut pages = 0;
-        let mut queue: std::collections::VecDeque<EndpointId> = self.carriers(&station).into_iter().take(12).collect();
-        while let Some(node) = queue.pop_front() {
+        let ranked: Vec<EndpointId> = self.carriers(&station).into_iter().take(12).collect();
+        // Four asked at once: claims from nodes that never answer cost a round seconds, not
+        // minutes. The first to bring real entries is the one the rest of the log comes from.
+        let mut best: Option<EndpointId> = None;
+        for batch in ranked.chunks(4) {
             let from = self.store.lock().unwrap().logs.get(&station).map(|a| a.len()).unwrap_or(0);
-            let claimed = self.log.lock().unwrap().get(&station).and_then(|l| l.carriers.get(node.as_bytes()).map(|c| c.0)).unwrap_or(0);
-            let Ok(Response::Entries(raw)) = self.ask(node, &Request::Log { station, from }).await else { continue };
-            let entries: Vec<SignedEntry> = raw.iter().filter_map(|b| SignedEntry::from_bytes(b).ok()).collect();
-            if entries.is_empty() {
-                // It said it carries more of the log than this node has, and gave none of it.
-                if claimed > from {
-                    self.failed.lock().unwrap().insert(*node.as_bytes(), now_ms());
+            let asks = batch.iter().map(|node| async move { (*node, self.ask(*node, &Request::Log { station, from }).await) });
+            let answers = n0_future::join_all(asks).await;
+            for (node, answer) in answers {
+                let claimed = self.log.lock().unwrap().get(&station).and_then(|l| l.carriers.get(node.as_bytes()).map(|c| c.0)).unwrap_or(0);
+                let Ok(Response::Entries(raw)) = answer else { continue };
+                let entries: Vec<SignedEntry> = raw.iter().filter_map(|b| SignedEntry::from_bytes(b).ok()).collect();
+                if entries.is_empty() {
+                    // It said it carries more of the log than this node has, and gave none of it.
+                    if claimed > from {
+                        self.failed.lock().unwrap().insert(*node.as_bytes(), now_ms());
+                    }
+                    continue;
                 }
-                continue;
-            }
-            match self.store.lock().unwrap().put_entries(station, entries) {
-                Ok(n) => {
-                    say(&format!("log {}: {n} new entries from {}", station.call_sign(), node.fmt_short()));
-                    if n > 0 {
+                match self.store.lock().unwrap().put_entries(station, entries) {
+                    Ok(n) if n > 0 => {
                         self.note_served(&node);
+                        added += n;
+                        best.get_or_insert(node);
                     }
-                    added += n;
-                    // Pages are limited by bytes: a long log comes in several, from the same
-                    // carrier, up to the card.
-                    pages += 1;
-                    let now_len = self.store.lock().unwrap().logs.get(&station).map(|a| a.len()).unwrap_or(0);
-                    if n > 0 && now_len < card && pages < 32 {
-                        queue.push_front(node);
-                        continue;
-                    }
+                    Ok(_) => {}
+                    Err(e) => tracing::warn!("log from {node}: {e}"),
                 }
-                Err(e) => tracing::warn!("log from {node}: {e}"),
             }
-            break;
+            if best.is_some() {
+                break;
+            }
+        }
+        // Pages are limited by bytes: a long log comes in several, from the carrier that served.
+        if let Some(node) = best {
+            for _ in 0..32 {
+                let from = self.store.lock().unwrap().logs.get(&station).map(|a| a.len()).unwrap_or(0);
+                if from >= card {
+                    break;
+                }
+                let Ok(Response::Entries(raw)) = self.ask(node, &Request::Log { station, from }).await else { break };
+                let entries: Vec<SignedEntry> = raw.iter().filter_map(|b| SignedEntry::from_bytes(b).ok()).collect();
+                match self.store.lock().unwrap().put_entries(station, entries) {
+                    Ok(n) if n > 0 => added += n,
+                    _ => break,
+                }
+            }
+            say(&format!("log {}: {added} new entries from {}", station.call_sign(), node.fmt_short()));
         }
         Ok(added)
     }
@@ -917,7 +958,10 @@ impl Inner {
                 let card = l.announce.as_ref().map(|a| a.head);
                 let served = self.served.lock().unwrap().clone();
                 let failed = self.failed.lock().unwrap().clone();
-                let trusted = |n: &[u8; 32]| served.get(n).is_some_and(|t| now.saturating_sub(*t) < 24 * 3_600_000) || self.doors.iter().any(|d| d.as_bytes() == n);
+                let neighbours = self.neighbours.lock().unwrap().clone();
+                // Trusted: a node that has served this one, a node it is connected to right now
+                // (so one that exists and answers), or a harbour.
+                let trusted = |n: &[u8; 32]| served.get(n).is_some_and(|t| now.saturating_sub(*t) < 24 * 3_600_000) || neighbours.contains(n) || self.doors.iter().any(|d| d.as_bytes() == n);
                 let failing = |n: &[u8; 32]| failed.get(n).is_some_and(|t| now.saturating_sub(*t) < net::FAILED_MS);
                 net::note_carrier(&mut l.carriers, node, head, card, now, trusted, failing, rand::random());
                 let ours = self.store.lock().unwrap().logs.get(&station).map(|x| x.len()).unwrap_or(0);
@@ -2061,6 +2105,7 @@ impl Node {
             stem_sent: Mutex::new(HashMap::new()),
             doors: doors.clone(),
             met: Mutex::new(met.iter().cloned().collect()),
+            neighbours: Mutex::new(Default::default()),
             our_relays: Mutex::new(ours.iter().map(|u| u.to_string()).collect()),
             #[cfg(feature = "playback")]
             queue: queue.clone(),
@@ -2083,6 +2128,7 @@ impl Node {
             stems_in: Default::default(),
             failed: Mutex::new(HashMap::new()),
             served: Mutex::new(HashMap::new()),
+            on_now: Mutex::new(HashMap::new()),
             hold,
             book: book.clone(),
             dark,
@@ -2145,10 +2191,15 @@ impl Node {
                     Ok(Event::Received(m)) => m,
                     Ok(Event::NeighborUp(n)) => {
                         say(&format!("neighbour up {}", n.fmt_short()));
+                        let mut nb = i2.neighbours.lock().unwrap();
+                        if nb.len() < 256 {
+                            nb.insert(*n.as_bytes());
+                        }
                         continue;
                     }
                     Ok(Event::NeighborDown(n)) => {
                         say(&format!("neighbour down {}", n.fmt_short()));
+                        i2.neighbours.lock().unwrap().remove(n.as_bytes());
                         continue;
                     }
                     _ => continue,
@@ -2517,14 +2568,27 @@ impl Node {
                 Ok(json!(bill))
             }
             "now_for" => {
-                let s = inner.store.lock().unwrap();
                 let now = now_ms();
                 let mut out = serde_json::Map::new();
                 for id in req["stations"].as_array().into_iter().flatten().filter_map(|v| v.as_str()).take(200) {
                     let Ok(st) = StationId::from_hex(id) else { continue };
-                    let Some(a) = s.logs.get(&st) else { continue };
-                    let Some(np) = pyrate_core::clock::Clock::new(a).ok().and_then(|c| c.now(now)) else { continue };
-                    let (title, by) = describe_track(a, &np.track);
+                    let Some(len) = inner.store.lock().unwrap().logs.get(&st).map(|a| a.len()) else { continue };
+                    let cached = inner.on_now.lock().unwrap().get(&st).filter(|c| c.0 == len).map(|c| c.1.clone());
+                    let on = match cached {
+                        Some(c) => c,
+                        None => {
+                            let Some(built) = inner.store.lock().unwrap().logs.get(&st).map(OnNow::build) else { continue };
+                            let built = Arc::new(built);
+                            let mut m = inner.on_now.lock().unwrap();
+                            if m.len() >= 512 {
+                                m.clear();
+                            }
+                            m.insert(st, (len, built.clone()));
+                            built
+                        }
+                    };
+                    let Some(np) = on.clock.as_ref().and_then(|c| c.now(now)) else { continue };
+                    let (title, by) = on.names.get(&np.track).cloned().unwrap_or_default();
                     out.insert(id.to_string(), json!({ "title": shown(&title), "by": shown(&by), "slot": np.slot }));
                 }
                 Ok(Value::Object(out))
@@ -3136,6 +3200,9 @@ mod playout {
         // Off the air: when the station comes back, worked out at most once a minute.
         let mut off_air: Option<(StationId, u64, Option<u64>)> = None;
         let syncing = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        // The tuned station's log and clock, kept until the log grows: the loop runs four times
+        // a second, and a long log is not copied or its clock worked out again each time.
+        let mut held: Option<(StationId, u64, Archive, pyrate_core::clock::Clock)> = None;
         loop {
             tokio::time::sleep(Duration::from_millis(250)).await;
             if RESET.swap(false, std::sync::atomic::Ordering::SeqCst) {
@@ -3162,15 +3229,19 @@ mod playout {
                     });
                 }
             }
-            let archive = inner.store.lock().unwrap().logs.get(&station).cloned();
-            let Some(archive) = archive else {
+            let len = inner.store.lock().unwrap().logs.get(&station).map(|a| a.len());
+            let Some(len) = len else {
+                held = None;
                 *inner.np.lock().unwrap() = json!({ "station": station.to_hex(), "state": "searching" });
                 continue;
             };
-            let clock = match pyrate_core::clock::Clock::new(&archive) {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
+            if !matches!(&held, Some((s, l, _, _)) if *s == station && *l == len) {
+                held = None;
+                let Some(a) = inner.store.lock().unwrap().logs.get(&station).cloned() else { continue };
+                let Ok(c) = pyrate_core::clock::Clock::new(&a) else { continue };
+                held = Some((station, len, a, c));
+            }
+            let Some((_, _, archive, clock)) = held.as_ref() else { continue };
             let q = queued_ms(&inner);
 
             // Off the beat: something stalled. Drop the queue and rejoin the clock.
@@ -3297,7 +3368,7 @@ mod playout {
                 } else if queued_ms(&inner) < 300 {
                     let stale = off_air.as_ref().is_none_or(|(s, at, _)| *s != station || now.saturating_sub(*at) > 60_000);
                     if stale {
-                        let back = clock.upcoming(now, now + 7 * 86_400_000).first().map(|b| b.0);
+                        let back = clock.next_on(now, now + 7 * 86_400_000).map(|b| b.0);
                         off_air = Some((station, now, back));
                     }
                     *inner.np.lock().unwrap() = match off_air.as_ref().and_then(|o| o.2) {

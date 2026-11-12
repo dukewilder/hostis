@@ -1177,7 +1177,7 @@ impl Ship {
         let clock = &clocks.get(station).expect("just set").1;
         let Some(np) = clock.now(at) else {
             // Off the air until its next spell, or nothing yet to play.
-            return match clock.upcoming(at, at + 7 * 86_400_000).first() {
+            return match clock.next_on(at, at + 7 * 86_400_000).as_ref() {
                 Some(b) => json!({ "kind": "off air", "back_at": b.0 }),
                 None => json!({ "kind": "dead air" }),
             };
