@@ -369,6 +369,8 @@ pub struct Inner {
     /// Each station's clock and track names, kept until its log grows: the Log page asks what
     /// is on for up to two hundred stations at a time.
     on_now: Mutex<HashMap<StationId, (u64, Arc<OnNow>)>>,
+    /// How far through each carried log the mirror has looked for sound it lacks.
+    mirror_at: Mutex<HashMap<StationId, usize>>,
     /// The device's hold key, for the small files the node keeps beside its store.
     pub(crate) hold: hold::Hold,
     /// Where carriers said they can be reached, signed by each: the network's own address book.
@@ -512,7 +514,7 @@ impl Inner {
             // In the clear, a node hands out only its own stations' sound, and art it is showing.
             // Everything it carries for others goes out sealed, by name, unopened.
             Request::Chunk { hash } => {
-                let own = store.own().iter().any(|id| store.logs.get(id).is_some_and(|a| a.art_hashes().contains(&hash))) || store.own().iter().any(|id| store.chunks_of(id).contains(&hash));
+                let own = store.is_own_named(&hash);
                 Response::Chunk(if own { store.get_chunk(&hash) } else { None }.or_else(|| self.art_mem.lock().unwrap().get(&hash)))
             }
             // On mobile data a phone serves strangers nothing: it is the owner's data plan.
@@ -1273,9 +1275,18 @@ impl Inner {
                 continue;
             }
             let _ = self.sync_log(st).await;
-            let missing: Vec<Hash> = {
-                let s = self.store.lock().unwrap();
-                s.chunks_of(&st).into_iter().filter(|h| !s.has_chunk(h)).collect()
+            // A slice of the log at a time, from where the last round stopped: a carried log
+            // may name millions of chunks, and looking each up on disk under the store's lock
+            // held every listener waiting and every chunk name in memory at once.
+            let (missing, pics) = {
+                let from = self.mirror_at.lock().unwrap().get(&st).copied().unwrap_or(0);
+                let (missing, pics, next) = self.store.lock().unwrap().missing_from(&st, from, 5_000, 200);
+                let mut at = self.mirror_at.lock().unwrap();
+                if at.len() >= 8_192 {
+                    at.clear();
+                }
+                at.insert(st, next);
+                (missing, pics)
             };
             for h in missing.into_iter().take(200) {
                 if self.chunk(&st, &h).await.is_err() {
@@ -1283,10 +1294,6 @@ impl Inner {
                 }
             }
             if self.cfg.lantern {
-                let pics: Vec<Hash> = {
-                    let s = self.store.lock().unwrap();
-                    s.logs.get(&st).map(|a| a.art_hashes()).unwrap_or_default().into_iter().filter(|h| !s.has_chunk(h)).collect()
-                };
                 for h in pics.into_iter().take(50) {
                     let _ = self.fetch(&st, &h, true).await;
                 }
@@ -2133,6 +2140,7 @@ impl Node {
             failed: Mutex::new(HashMap::new()),
             served: Mutex::new(HashMap::new()),
             on_now: Mutex::new(HashMap::new()),
+            mirror_at: Mutex::new(HashMap::new()),
             hold,
             book: book.clone(),
             dark,
