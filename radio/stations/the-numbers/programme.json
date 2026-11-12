@@ -2,418 +2,84 @@
  "utc_offset_min": 0,
  "zone_name": "UTC",
  "mode": {
-  "kind": "shuffle"
+  "kind": "in_order"
  },
  "hours": [],
+ "ident": null,
  "slots": [
   {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
+   "title": "",
+   "about": "",
    "span": {
     "days": 127,
     "start_min": 0,
-    "len_min": 5
+    "len_min": 1440
    },
    "fill": {
     "kind": "tracks",
     "tracks": [
-     "Transmission 001"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 60,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 002"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 120,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 003"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 180,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 004"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 240,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 005"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 300,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 006"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 360,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 007"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 420,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 008"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 480,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 009"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 540,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 010"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 600,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 011"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 660,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 012"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 720,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 001"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 780,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 002"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 840,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 003"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 900,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 004"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 960,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 005"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 1020,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 006"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 1080,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 007"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 1140,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 008"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 1200,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 009"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 1260,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 010"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 1320,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 011"
-    ],
-    "shuffle": false
-   },
-   "live": false
-  },
-  {
-   "title": "Transmission",
-   "about": "Five figures, each group twice. Every group is a word.",
-   "span": {
-    "days": 127,
-    "start_min": 1380,
-    "len_min": 5
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Transmission 012"
+     "001",
+     "002",
+     "003",
+     "004",
+     "005",
+     "006",
+     "007",
+     "008",
+     "009",
+     "010",
+     "011",
+     "012",
+     "013",
+     "014",
+     "015",
+     "016",
+     "017",
+     "018",
+     "019",
+     "020",
+     "021",
+     "022",
+     "023",
+     "024",
+     "025",
+     "026",
+     "027",
+     "028",
+     "029",
+     "030",
+     "031",
+     "032",
+     "033",
+     "034",
+     "035",
+     "036",
+     "037",
+     "038",
+     "039",
+     "040",
+     "041",
+     "042",
+     "043",
+     "044",
+     "045",
+     "046",
+     "047",
+     "048",
+     "049",
+     "050",
+     "051",
+     "052",
+     "053",
+     "054",
+     "055",
+     "056",
+     "057",
+     "058"
     ],
     "shuffle": false
    },
    "live": false
   }
- ],
- "ident_every_min": 15
+ ]
 }
