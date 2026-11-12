@@ -3193,7 +3193,10 @@ mod playout {
         if !matches!(last.entry.body(), Body::Live { .. }) || now.saturating_sub(last.entry.at_ms) > 25_000 {
             return None;
         }
-        Some(a.entries().iter().filter_map(|e| match e.entry.body() {
+        // Only the end of the log: a station live for weeks has hundreds of thousands of live
+        // entries, and a listener needs the last few. One behind by more than this catches up.
+        let es = a.entries();
+        Some(es[es.len().saturating_sub(256)..].iter().filter_map(|e| match e.entry.body() {
             Body::Live { chunk, channels, .. } => Some((e.entry.seq, *chunk, *channels)),
             _ => None,
         }).collect())

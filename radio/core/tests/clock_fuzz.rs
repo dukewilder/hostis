@@ -330,3 +330,24 @@ fn remembered_answers_are_the_walked_answers() {
         }
     }
 }
+
+/// The programme and rota in force are found by index; they are the latest written, as a
+/// search of the whole log from its end finds them.
+#[test]
+fn the_rota_and_programme_in_force_are_the_latest_written() {
+    for seed in 1..=500u64 {
+        let mut r = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+        let a = random_log(&mut r);
+        let scan_p = a.entries().iter().rev().find_map(|e| match e.entry.body() {
+            Body::Programme(p) => Some(Some(p.clone())),
+            Body::Rota(_) => Some(None),
+            _ => None,
+        }).flatten();
+        let scan_r = a.entries().iter().rev().find_map(|e| match e.entry.body() {
+            Body::Rota(r) => Some(r.clone()),
+            _ => None,
+        }).unwrap_or_default();
+        assert_eq!(a.programme(), scan_p, "seed {seed}");
+        assert_eq!(a.rota(), scan_r, "seed {seed}");
+    }
+}

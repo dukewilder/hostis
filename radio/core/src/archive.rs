@@ -308,6 +308,19 @@ pub struct Archive {
     track_at: std::collections::HashMap<Hash, usize>,
     /// The latest picture set for each recording.
     art_of: std::collections::HashMap<Hash, ArtRef>,
+    /// Where the latest entry of each kind the station's card is made from lies, so a list of
+    /// stations does not search every log from the end for a kind a station never wrote.
+    latest: Latest,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct Latest {
+    colours: Option<usize>,
+    rota: Option<usize>,
+    programme: Option<usize>,
+    rating: Option<usize>,
+    details: Option<usize>,
+    art: Option<usize>,
 }
 
 /// The most 20 ms frames a chunk may hold: six seconds, as every encoder here makes them.
@@ -358,7 +371,7 @@ fn within_bounds(body: &Body) -> bool {
 
 impl Archive {
     pub fn new(station: StationId) -> Self {
-        Self { station, entries: Vec::new(), head: [0; 32], deputies: Default::default(), bytes: 0, track_at: Default::default(), art_of: Default::default() }
+        Self { station, entries: Vec::new(), head: [0; 32], deputies: Default::default(), bytes: 0, track_at: Default::default(), art_of: Default::default(), latest: Latest::default() }
     }
 
     pub fn station(&self) -> StationId {
@@ -466,6 +479,16 @@ impl Archive {
             }
             _ => {}
         }
+        let at = Some(self.entries.len());
+        match e.body() {
+            Body::Colours { .. } => self.latest.colours = at,
+            Body::Rota(_) => self.latest.rota = at,
+            Body::Programme(_) => self.latest.programme = at,
+            Body::Rating { .. } => self.latest.rating = at,
+            Body::Details { .. } => self.latest.details = at,
+            Body::Art { .. } => self.latest.art = at,
+            _ => {}
+        }
         self.head = hash;
         self.bytes += size as u64;
         self.entries.push(signed);
@@ -482,24 +505,27 @@ impl Archive {
 
     /// The colours currently flown, if any.
     pub fn colours(&self) -> Option<&Body> {
-        self.entries.iter().rev().map(|e| e.entry.body()).find(|b| matches!(b, Body::Colours { .. }))
+        self.latest.colours.map(|i| self.entries[i].entry.body())
     }
 
     /// The rota in force, or the default: the whole library, shuffled, all day.
     pub fn rota(&self) -> crate::clock::Rota {
-        self.entries.iter().rev().find_map(|e| match e.entry.body() {
-            Body::Rota(r) => Some(r.clone()),
-            _ => None,
-        }).unwrap_or_default()
+        match self.latest.rota.map(|i| self.entries[i].entry.body()) {
+            Some(Body::Rota(r)) => r.clone(),
+            _ => Default::default(),
+        }
     }
 
     /// The programme in force, if the station has one later than any rota.
     pub fn programme(&self) -> Option<crate::programme::Programme> {
-        self.entries.iter().rev().find_map(|e| match e.entry.body() {
-            Body::Programme(p) => Some(Some(p.clone())),
-            Body::Rota(_) => Some(None),
+        let p = self.latest.programme?;
+        if self.latest.rota.is_some_and(|r| r > p) {
+            return None;
+        }
+        match self.entries[p].entry.body() {
+            Body::Programme(p) => Some(p.clone()),
             _ => None,
-        }).flatten()
+        }
     }
 
     /// Shows not called off, in log order, with their entry hashes.
@@ -532,26 +558,23 @@ impl Archive {
 
     /// Whether the station calls itself explicit. The latest word rules.
     pub fn explicit(&self) -> bool {
-        self.entries.iter().rev().find_map(|e| match e.entry.body() {
-            Body::Rating { explicit } => Some(*explicit),
-            _ => None,
-        }).unwrap_or(false)
+        matches!(self.latest.rating.map(|i| self.entries[i].entry.body()), Some(Body::Rating { explicit: true }))
     }
 
     /// The station's own word on what it is, if it has said.
     pub fn details(&self) -> Option<(Vec<String>, bool)> {
-        self.entries.iter().rev().find_map(|e| match e.entry.body() {
-            Body::Details { kinds, mature } => Some((kinds.clone(), *mature)),
+        match self.latest.details.map(|i| self.entries[i].entry.body()) {
+            Some(Body::Details { kinds, mature }) => Some((kinds.clone(), *mature)),
             _ => None,
-        })
+        }
     }
 
     /// The station's latest art, if it has raised any.
     pub fn art(&self) -> Option<(Option<ArtRef>, Option<ArtRef>, [u8; 3])> {
-        self.entries.iter().rev().find_map(|e| match e.entry.body() {
-            Body::Art { cover, banner, accent } => Some((*cover, *banner, *accent)),
+        match self.latest.art.map(|i| self.entries[i].entry.body()) {
+            Some(Body::Art { cover, banner, accent }) => Some((*cover, *banner, *accent)),
             _ => None,
-        })
+        }
     }
 
     /// The art for one track, by the track's entry hash.
