@@ -379,6 +379,10 @@ static HOPPING_LANTERN: tokio::sync::Semaphore = tokio::sync::Semaphore::const_n
 // requests cannot hold more memory than this whatever the slot counts allow.
 static BYTES: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(48 * 1024);
 static BYTES_LANTERN: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(256 * 1024);
+// Log pages being built and sent, in KiB: each holds up to two copies of a 2 MiB page while it
+// goes out. 16 MiB on a phone, 128 MiB on a Lantern, however many ask at once.
+static PAGES: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(16 * 1024);
+static PAGES_LANTERN: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(128 * 1024);
 
 /// A request read as it arrives, drawing on the shared byte budget a KiB at a time. The
 /// permits it holds go back when the request has been answered.
@@ -418,6 +422,19 @@ impl ProtocolHandler for Proto {
                 let budget = if inner.cfg.lantern { &BYTES_LANTERN } else { &BYTES };
                 let Ok(Some((bytes, _held))) = tokio::time::timeout(Duration::from_secs(20), read_budgeted(&mut recv, budget)).await else { return };
                 let Ok(req) = postcard::from_bytes::<Request>(&bytes) else { return };
+                // A log page is the one large answer: it is built only when there is room for it,
+                // and the room is held until it has gone, so a crowd asking for long logs waits
+                // its turn instead of filling memory.
+                let _page = if matches!(req, Request::Log { .. } | Request::PocketLog { .. }) {
+                    let pages = if inner.cfg.lantern { &PAGES_LANTERN } else { &PAGES };
+                    let k = (2 * pyrate_core::archive::PAGE_BYTES / 1024) as u32 + 2048;
+                    match tokio::time::timeout(Duration::from_secs(10), pages.acquire_many(k)).await {
+                        Ok(Ok(p)) => Some(p),
+                        _ => return,
+                    }
+                } else {
+                    None
+                };
                 let resp = match req {
                     Request::Hop(b) => {
                         // A hop costs this node a connection of its own: fewer of those at once.
@@ -470,14 +487,7 @@ impl Inner {
             Request::Log { .. } if pocket => Response::Entries(vec![]),
             Request::Log { station, from } if !self.refused_quick(&station) => {
                 store.open_log(&station);
-                let out = store
-                    .logs
-                    .get(&station)
-                    .map(|a| {
-                        a.entries().iter().skip(from as usize).take(2000).filter_map(|e| e.to_bytes().ok()).collect()
-                    })
-                    .unwrap_or_default();
-                Response::Entries(out)
+                Response::Entries(store.logs.get(&station).map(|a| a.page(from)).unwrap_or_default())
             }
             Request::Log { .. } => Response::Entries(vec![]),
             // In the clear, a node hands out only its own stations' sound, and art it is showing.
@@ -711,6 +721,11 @@ impl Inner {
     pub async fn sync_log(&self, station: StationId) -> Result<usize> {
         if self.is_own(&station) {
             return self.sync_own(station).await;
+        }
+        // A carried log that outgrew its share, or was let go to keep within budget, is not
+        // fetched again for a while.
+        if self.store.lock().unwrap().is_shut(&station) {
+            return Ok(0);
         }
         if let Some(k) = self.pocket_key(&station) {
             return self.pocket_sync(station, k).await;
@@ -1168,6 +1183,7 @@ impl Inner {
             anyhow::bail!("marooned");
         }
         *self.tuned.lock().unwrap() = Some(Tuned { station: st, since: now_ms(), playhead: None });
+        self.store.lock().unwrap().listen(&st);
         #[cfg(feature = "playback")]
         playout::reset(self);
         let i2 = self.clone();
@@ -1395,7 +1411,7 @@ impl Inner {
             s.logs.iter().filter_map(|(id, a)| Some((*id, hex(&a.art()?.1?.hash)))).collect()
         };
         let log = self.log.lock().unwrap();
-        let mut v: Vec<(u64, Value, Option<net::Announce>)> = log
+        let mut v: Vec<(u64, Value, Option<(net::Announce, bool)>)> = log
             .iter()
             .filter(|(_, l)| l.fresh(now))
             .filter_map(|(id, l)| {
@@ -1425,21 +1441,45 @@ impl Inner {
                     "port": a.port.as_deref().map(shown), "live": a.live, "aboard": aboard, "kept": is_kept, "marooned": is_marooned, "since": a.since,
                     "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),
                     "pocket": self.is_pocket(id),
-                }), a.proof.is_some().then(|| a.clone())))
+                }), a.proof.is_some().then(|| (a.clone(), show))))
             })
             .collect();
         drop(log);
-        // A deputy's card shows its tip address only once this device's log of the station is
-        // current and still names that deputy (checked with the Log let go).
+        // A card signed by a deputy is provisional until this device's log of the station is
+        // current and still names that deputy (checked with the Log let go). While it is, the
+        // station is shown as its log says, where the log says anything; nothing on the card
+        // moves money or shows a picture; and it is marked, so a page can say so.
         {
             let store = self.store.lock().unwrap();
-            for (_, j, deputy) in v.iter_mut() {
-                if let Some(a) = deputy {
-                    if !net::deputy_current(a, store.logs.get(&a.station)) {
-                        j["tip"] = Value::Null;
-                    }
+            v.retain_mut(|(_, j, deputy)| {
+                let Some((a, show)) = deputy else { return true };
+                let log = store.logs.get(&a.station);
+                if net::deputy_current(a, log) {
+                    return true;
                 }
-            }
+                j["provisional"] = json!(true);
+                j["tip"] = Value::Null;
+                j["cover"] = Value::Null;
+                let Some(log) = log else { return true };
+                if let Some(Body::Colours { name, about, port, .. }) = log.colours() {
+                    j["name"] = json!(shown(name));
+                    j["about"] = json!(pyrate_core::chat::shown(about));
+                    j["mixed"] = json!(pyrate_core::chat::mixed_script(name));
+                    j["port"] = json!(port.as_deref().map(shown));
+                }
+                if let Some((kinds, mature)) = log.details() {
+                    j["kinds"] = json!(kinds);
+                    j["mature"] = json!(mature || j["mature"] == json!(true));
+                }
+                if let Some((cover, _, accent)) = log.art() {
+                    j["cover"] = json!(cover.filter(|_| *show).map(|c| crate::hex(&c.hash)));
+                    j["accent"] = json!(format!("#{:02x}{:02x}{:02x}", accent[0], accent[1], accent[2]));
+                }
+                let explicit = log.explicit() || j["explicit"] == json!(true);
+                j["explicit"] = json!(explicit);
+                let mature = j["mature"] == json!(true);
+                own.contains(&a.station) || !((explicit && !show_explicit) || (hide_mature && (mature || explicit)))
+            });
         }
         v.sort_by(|a, b| b.0.cmp(&a.0).then(a.1["name"].as_str().cmp(&b.1["name"].as_str())));
         json!(v.into_iter().map(|x| x.1).collect::<Vec<_>>())
@@ -1717,7 +1757,14 @@ impl Node {
 
     pub fn start(cfg: Config) -> Result<Self> {
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build()?;
-        let store = Store::open_with(&cfg.dir, cfg.quota + if cfg.ballast == BALLAST_AUTO { 0 } else { cfg.ballast }, HOLD_KEY.lock().unwrap().take())?;
+        let mut store = Store::open_with(&cfg.dir, cfg.quota + if cfg.ballast == BALLAST_AUTO { 0 } else { cfg.ballast }, HOLD_KEY.lock().unwrap().take())?;
+        if cfg.lantern {
+            store.budget = store::LogBudget::LANTERN;
+        }
+        if let Some(mb) = std::env::var("PYRATE_LOG_MB").ok().and_then(|v| v.parse::<u64>().ok()).filter(|mb| *mb >= 16) {
+            store.budget.total = mb << 20;
+            store.budget.per_station = store.budget.per_station.min(store.budget.total / 2);
+        }
         let hold = store.hold.clone();
         let key_path = cfg.dir.join("node.key");
         // The counting key: listener tokens come from it. It steps forward one way every day

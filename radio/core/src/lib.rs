@@ -99,6 +99,8 @@ pub enum Error {
     ChunkHash,
     #[error("malformed chunk")]
     Chunk,
+    #[error("entry is larger than any entry may be")]
+    TooBig,
     #[error("encoding: {0}")]
     Encoding(#[from] postcard::Error),
     #[cfg(feature = "codec")]

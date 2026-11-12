@@ -362,6 +362,12 @@ impl Inner {
 
     /// The end of the stem: take the cargo into the hold and show it to the network as a carrier.
     async fn fluff(self: &Arc<Self>, station: StationId, entries: Vec<Vec<u8>>, chunks: Vec<(Hash, Vec<u8>)>, announce: Option<Announce>) {
+        // A station is something only once its card, with its work, is known: entries for a
+        // station with no card are taken by no one, so new stations are not free to make.
+        let carded = announce.is_some() || self.log.lock().unwrap().get(&station).is_some_and(|l| l.announce.is_some());
+        if !carded && self.store.lock().unwrap().is_carried(&station) {
+            return;
+        }
         let list: Vec<SignedEntry> = entries.iter().filter_map(|b| SignedEntry::from_bytes(b).ok()).collect();
         let _ = self.store.lock().unwrap().put_entries(station, list);
         {
@@ -465,8 +471,10 @@ impl Inner {
                 _ => (false, entries, chunks),
             }
         };
-        let announce = announce.filter(|_| self.stem_sent.lock().unwrap().get(&station).is_none_or(|s| s.3 != card_at));
-        if entries.is_empty() && announce.is_none() {
+        // The card rides with every stem: a node takes a stranger's entries only for a station
+        // whose card it holds, and the card's work is what makes stations cost something.
+        let card_new = announce.is_some() && self.stem_sent.lock().unwrap().get(&station).is_none_or(|s| s.3 != card_at);
+        if entries.is_empty() && !card_new {
             return true;
         }
         {

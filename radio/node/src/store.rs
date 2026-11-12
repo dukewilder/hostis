@@ -94,6 +94,42 @@ pub struct Store {
     pub pinned: HashSet<StationId>,
     /// The chunks this node holds as its ballast share: kept through quota sweeps.
     pub ballast: HashSet<Hash>,
+    /// What this node holds of logs it carries for others, in memory and on disk.
+    pub budget: LogBudget,
+    /// Carried stations whose logs outgrew `budget.per_station`, and when: no more is taken
+    /// of them for a week.
+    full: HashMap<StationId, u64>,
+    /// Carried stations let go to stay within budget, and when: not fetched again for six
+    /// hours unless someone here listens to them.
+    evicted: HashMap<StationId, u64>,
+    /// When each carried log arrived here.
+    arrived: HashMap<StationId, u64>,
+    /// When someone here last listened to each station.
+    listened: HashMap<StationId, u64>,
+}
+
+/// What a node holds of the logs it carries for other stations. A signature proves who wrote
+/// an entry, not that it is worth keeping: anyone can sign a station's worth of entries for
+/// free, so the logs a node merely carries share a fixed budget, and no one station takes
+/// more than its share. A node's own stations are never counted or let go.
+#[derive(Clone, Copy, Debug)]
+pub struct LogBudget {
+    pub total: u64,
+    pub per_station: u64,
+}
+
+impl LogBudget {
+    /// A phone: 128 MB of other stations' logs, 64 MB for any one.
+    pub const PHONE: LogBudget = LogBudget { total: 128 << 20, per_station: 64 << 20 };
+    /// A Lantern: 1 GB, 256 MB for any one. `PYRATE_LOG_MB` sets the total.
+    pub const LANTERN: LogBudget = LogBudget { total: 1 << 30, per_station: 256 << 20 };
+}
+
+const SIX_HOURS: u64 = 6 * 3_600_000;
+const DAY: u64 = 24 * 3_600_000;
+
+fn now() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
 impl Store {
@@ -108,7 +144,20 @@ impl Store {
             fs::create_dir_all(dir.join(d))?;
         }
         let hold = Hold::for_dir(dir, hold)?;
-        let mut s = Self { dir: dir.to_path_buf(), hold, quota, logs: HashMap::new(), keys: HashMap::new(), pinned: HashSet::new(), ballast: HashSet::new() };
+        let mut s = Self {
+            dir: dir.to_path_buf(),
+            hold,
+            quota,
+            logs: HashMap::new(),
+            keys: HashMap::new(),
+            pinned: HashSet::new(),
+            ballast: HashSet::new(),
+            budget: LogBudget::PHONE,
+            full: HashMap::new(),
+            evicted: HashMap::new(),
+            arrived: HashMap::new(),
+            listened: HashMap::new(),
+        };
         // keys/<name>.k2 holds a station's id and its master seed, or a deputy's, sealed. From
         // before the hold key, keys/<station hex> held the seed in the clear: sealed now.
         for f in fs::read_dir(dir.join("keys"))? {
@@ -246,8 +295,11 @@ impl Store {
         if self.logs.contains_key(id) {
             return true;
         }
-        if let Ok(bytes) = fs::read(self.log_path(id)) {
+        let path = self.log_path(id);
+        if let Ok(bytes) = fs::read(&path) {
             let a = read_sealed(id, &self.hold.log_key(&id.0), &bytes);
+            let at = fs::metadata(&path).and_then(|m| m.created().or_else(|_| m.modified())).ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis() as u64);
+            self.arrived.entry(*id).or_insert(at);
             self.logs.insert(*id, a);
             return true;
         }
@@ -261,18 +313,57 @@ impl Store {
         true
     }
 
+    /// Whether a station's log is one this node only carries for others.
+    pub fn is_carried(&self, id: &StationId) -> bool {
+        !self.keys.contains_key(id) && !self.pinned.contains(id)
+    }
+
+    /// Someone here is listening to the station: its log is kept before the others'.
+    pub fn listen(&mut self, id: &StationId) {
+        self.listened.insert(*id, now());
+    }
+
+    /// Whether this node takes no more of a carried station's log for now: it outgrew its
+    /// share, or it was let go in the last six hours and no one here has listened since.
+    pub fn is_shut(&self, id: &StationId) -> bool {
+        if !self.is_carried(id) {
+            return false;
+        }
+        let t = now();
+        let heard = self.listened.get(id).is_some_and(|l| t.saturating_sub(*l) < DAY);
+        self.full.get(id).is_some_and(|f| t.saturating_sub(*f) < 7 * DAY) || (!heard && self.evicted.get(id).is_some_and(|e| t.saturating_sub(*e) < SIX_HOURS))
+    }
+
+    /// The bytes of carried logs this node holds.
+    pub fn carried_bytes(&self) -> u64 {
+        self.logs.iter().filter(|(id, _)| self.is_carried(id)).map(|(_, a)| a.bytes()).sum()
+    }
+
     /// Appends whatever entries extend the log, in order. Returns how many were new.
     pub fn put_entries(&mut self, id: StationId, entries: Vec<SignedEntry>) -> Result<usize> {
+        let carried = self.is_carried(&id);
+        if self.is_shut(&id) {
+            return Ok(0);
+        }
         self.open_log(&id);
+        if !self.logs.contains_key(&id) {
+            self.arrived.insert(id, now());
+        }
         let path = self.log_path(&id);
+        let cap = if carried { self.budget.per_station } else { u64::MAX };
         let a = self.logs.entry(id).or_insert_with(|| Archive::new(id));
         let mut file = fs::OpenOptions::new().create(true).append(true).open(&path)?;
         let mut added = 0;
+        let mut outgrew = false;
         for e in entries {
             if e.entry.seq < a.len() {
                 continue;
             }
             let bytes = e.to_bytes()?;
+            if a.bytes() + bytes.len() as u64 > cap {
+                outgrew = true;
+                break;
+            }
             a.append(e)?;
             file.write_all(&seal_record(&self.hold.log_key(&id.0), &bytes)?)?;
             added += 1;
@@ -281,7 +372,43 @@ impl Store {
             drop(file);
             self.drop_station(&id)?;
         }
+        if outgrew {
+            let t = now();
+            self.full.retain(|_, f| t.saturating_sub(*f) < 7 * DAY);
+            self.full.insert(id, t);
+        }
+        if carried {
+            self.trim_logs();
+        }
         Ok(added)
+    }
+
+    /// Lets carried logs go until they fit the budget. First to go: the station that arrived
+    /// most recently among those no one here has listened to in a day, so a flood of new
+    /// stations displaces itself and not the stations already carried. A log let go is not
+    /// fetched again for six hours unless someone here tunes to it.
+    pub fn trim_logs(&mut self) -> Vec<StationId> {
+        let t = now();
+        let mut gone = vec![];
+        loop {
+            if self.carried_bytes() <= self.budget.total {
+                return gone;
+            }
+            let victim = self
+                .logs
+                .iter()
+                .filter(|(id, _)| self.is_carried(id))
+                .max_by_key(|(id, a)| {
+                    let heard = self.listened.get(*id).is_some_and(|l| t.saturating_sub(*l) < DAY);
+                    (!heard, self.arrived.get(*id).copied().unwrap_or(0), a.bytes())
+                })
+                .map(|(id, _)| *id);
+            let Some(v) = victim else { return gone };
+            self.forget_log(&v);
+            self.evicted.retain(|_, e| t.saturating_sub(*e) < SIX_HOURS);
+            self.evicted.insert(v, t);
+            gone.push(v);
+        }
     }
 
     /// Signs a new entry for one of this node's own stations.
@@ -437,6 +564,7 @@ impl Store {
     /// Drops a log this node no longer carries.
     pub fn forget_log(&mut self, id: &StationId) {
         self.logs.remove(id);
+        self.arrived.remove(id);
         let _ = fs::remove_file(self.log_path(id));
         let _ = fs::remove_file(self.old_log_path(id));
         let _ = fs::remove_file(self.dir.join("logs").join(format!("{}.log", id.to_hex())));
@@ -503,7 +631,33 @@ impl Store {
         self.ballast.iter().filter_map(|h| fs::metadata(self.chunk_path(h)).ok()).map(|m| m.len()).sum()
     }
 
+    /// Carried logs left on disk from before a restart are not in memory until asked for, so
+    /// the budget is checked on disk too: the oldest such files go first.
+    pub fn sweep_log_files(&self) -> u64 {
+        let held: HashSet<PathBuf> = self.logs.keys().chain(self.keys.keys()).chain(self.pinned.iter()).map(|id| self.log_path(id)).collect();
+        let Ok(rd) = fs::read_dir(self.dir.join("logs")) else { return 0 };
+        let mut idle: Vec<(SystemTime, u64, PathBuf)> = rd
+            .flatten()
+            .filter(|f| f.path().extension().is_some_and(|e| e == "sl2") && !held.contains(&f.path()))
+            .filter_map(|f| f.metadata().ok().map(|m| (m.modified().unwrap_or(SystemTime::UNIX_EPOCH), m.len(), f.path())))
+            .collect();
+        idle.sort();
+        let mut total = self.carried_bytes() + idle.iter().map(|f| f.1).sum::<u64>();
+        let mut freed = 0;
+        for (_, len, path) in idle {
+            if total <= self.budget.total {
+                break;
+            }
+            if fs::remove_file(&path).is_ok() {
+                total -= len;
+                freed += len;
+            }
+        }
+        freed
+    }
+
     pub fn enforce_quota(&self) -> Result<u64> {
+        self.sweep_log_files();
         let own_art = self.own().iter().filter_map(|id| self.logs.get(id)).flat_map(|a| a.art_hashes()).collect::<Vec<_>>();
         let keep: HashSet<String> = self.own().iter().flat_map(|id| self.chunks_of(id)).chain(own_art).chain(self.ballast.iter().copied()).flat_map(|h| self.file_names(&h)).collect();
         let mut whose: HashMap<String, StationId> = HashMap::new();

@@ -164,12 +164,32 @@ impl Serialize for Announce {
     }
 }
 
+/// The most bytes a card may take as it travels. Every field at its limit comes to about
+/// 5 KB; a card past this is refused before it is read.
+pub const CARD_WIRE: usize = 8 * 1024;
+/// The most bytes a card may carry after the fields this version knows, for later versions'
+/// fields. The signature covers them, so they travel; they are never a way to make a small
+/// card large.
+pub const CARD_EXTRA: usize = 512;
+
 impl<'de> Deserialize<'de> for Announce {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let w = AnnounceWire::deserialize(d)?;
-        // Trailing fields from later versions are ignored here and kept in `raw`.
+        if w.card.len() > CARD_WIRE {
+            return Err(serde::de::Error::custom("card too large"));
+        }
+        // Trailing fields from later versions are ignored here and kept in `raw`, up to a limit.
         let (mut card, rest): (Card, &[u8]) = postcard::take_from_bytes(&w.card).map_err(serde::de::Error::custom)?;
-        card.explicit = postcard::take_from_bytes::<bool>(rest).map(|(e, _)| e).unwrap_or(false);
+        let rest = match postcard::take_from_bytes::<bool>(rest) {
+            Ok((e, rest)) => {
+                card.explicit = e;
+                rest
+            }
+            Err(_) => rest,
+        };
+        if rest.len() > CARD_EXTRA {
+            return Err(serde::de::Error::custom("card carries too much after its fields"));
+        }
         Ok(Announce { card, raw: w.card, sig: w.sig })
     }
 }
@@ -182,7 +202,7 @@ impl Announce {
     }
 
     pub fn verify(&self) -> bool {
-        if !self.card.sane() || !pow_ok(&self.station, self.pow) {
+        if self.raw.len() > CARD_WIRE || !self.card.sane() || !pow_ok(&self.station, self.pow) {
             return false;
         }
         let signer = match &self.proof {
@@ -784,6 +804,25 @@ mod tests {
 #[cfg(test)]
 mod card_limit_tests {
     use super::*;
+
+    fn with_tail(tail: usize) -> Result<Announce, postcard::Error> {
+        let k = pyrate_core::StationKey::generate().unwrap();
+        let card = Card { station: k.id(), head: 1, name: "Tail".into(), about: String::new(), port: None, live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None, kinds: vec![], mature: false, tip: None, explicit: false };
+        let mut raw = postcard::to_stdvec(&card).unwrap();
+        raw.extend(postcard::to_stdvec(&false).unwrap());
+        raw.extend(std::iter::repeat_n(0x5a, tail));
+        let mut m = CARD_DOMAIN.to_vec();
+        m.extend_from_slice(&raw);
+        postcard::from_bytes(&postcard::to_stdvec(&AnnounceWire { card: raw, sig: k.sign(&m) }).unwrap())
+    }
+
+    #[test]
+    fn signed_bytes_after_a_cards_fields_are_bounded() {
+        let ok = with_tail(CARD_EXTRA).expect("a later version's fields, up to the limit, are read");
+        assert!(ok.verify());
+        assert!(with_tail(CARD_EXTRA + 1).is_err(), "one byte past the limit is refused unread");
+        assert!(with_tail(CARD_WIRE).is_err(), "so is a card past its whole size");
+    }
 
     #[test]
     fn long_cards_are_clipped_by_their_station_and_refused_from_anyone_else() {

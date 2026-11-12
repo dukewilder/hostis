@@ -129,7 +129,7 @@ impl Inner {
         let Some((st, key)) = found else { return vec![] };
         let mut s = self.store.lock().unwrap();
         s.open_log(&st);
-        s.logs.get(&st).map(|a| a.entries().iter().skip(from as usize).take(2000).filter_map(|e| e.to_bytes().ok()).map(|b| pocket::seal(&key, &b)).collect()).unwrap_or_default()
+        s.logs.get(&st).map(|a| a.page(from).iter().map(|b| pocket::seal(&key, b)).collect()).unwrap_or_default()
     }
 
     /// A pocket's log from the first member or host that answers, from `from` on.

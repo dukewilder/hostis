@@ -279,8 +279,17 @@ impl Ship {
             Request::Hop(_) => Response::Hop(vec![]),
             // A pocket's lines go only to whoever asks by its tag, and sealed.
             Request::Chatter { station } if self.pockets.lock().unwrap().contains_key(&station) => Response::Chatter(vec![]),
+            // The last sixty open lines, as a node gives them: hails are for their recipients.
             Request::Chatter { station } => Response::Chatter(
-                self.rooms.lock().unwrap().get(&station).map(|r| r.lines.iter().rev().take(60).rev().filter_map(|l| postcard::to_allocvec(l).ok()).collect()).unwrap_or_default(),
+                self.rooms
+                    .lock()
+                    .unwrap()
+                    .get(&station)
+                    .map(|r| {
+                        let open: Vec<_> = r.lines.iter().filter(|l| !matches!(l.line.say, pyrate_core::chat::Say::Hail { .. })).collect();
+                        open[open.len().saturating_sub(60)..].iter().filter_map(|l| postcard::to_allocvec(l).ok()).collect()
+                    })
+                    .unwrap_or_default(),
             ),
             Request::PocketChatter { tag } => {
                 let found = self.pockets.lock().unwrap().iter().find(|(_, (k, _))| pyrate_core::pocket::tag(k) == tag).map(|(st, (k, _))| (*st, *k));
@@ -483,6 +492,10 @@ impl Ship {
         let mut archives = self.archives.lock().unwrap();
         let a = archives.entry(station).or_insert_with(|| Archive::new(station));
         for b in raw {
+            // A tab holds at most 32 MB bytes of any one log.
+            if a.bytes() + b.len() as u64 > TAB_LOG_MAX {
+                break;
+            }
             let Ok(e) = SignedEntry::from_bytes(&b) else { break };
             if e.entry.seq < a.len() {
                 continue;
@@ -551,6 +564,10 @@ impl Ship {
                 let mut archives = self.archives.lock().unwrap();
                 let a = archives.entry(station).or_insert_with(|| Archive::new(station));
                 for b in raw {
+                    // A tab holds at most 32 MB bytes of any one log.
+                    if a.bytes() + b.len() as u64 > TAB_LOG_MAX {
+                        break;
+                    }
                     let Ok(e) = SignedEntry::from_bytes(&b) else { break };
                     if e.entry.seq < a.len() {
                         continue;
@@ -596,6 +613,10 @@ impl Ship {
             let mut archives = self.archives.lock().unwrap();
             let a = archives.entry(station).or_insert_with(|| Archive::new(station));
             for b in raw.iter().filter_map(|b| pyrate_core::pocket::open(&key, b)) {
+                // A tab holds at most 32 MB bytes of any one log.
+                if a.bytes() + b.len() as u64 > TAB_LOG_MAX {
+                    break;
+                }
                 let Ok(e) = SignedEntry::from_bytes(&b) else { break };
                 if e.entry.station != station || e.entry.seq < a.len() {
                     continue;
@@ -1169,7 +1190,7 @@ impl Ship {
             .collect();
         let pockets: HashSet<StationId> = self.pockets.lock().unwrap().keys().copied().collect();
         let log = self.log.lock().unwrap();
-        let mut v: Vec<(u64, Value)> = log
+        let mut v: Vec<(u64, Value, Option<Announce>)> = log
             .iter()
             .filter(|(_, l)| l.fresh(now))
             .filter_map(|(id, l)| {
@@ -1179,14 +1200,46 @@ impl Ship {
                 Some((aboard, json!({
                     "id": id.to_hex(), "call_sign": id.call_sign(), "name": shown(&a.name), "about": pyrate_core::chat::shown(&a.about), "mixed": pyrate_core::chat::mixed_script(&a.name),
                     "port": a.port.as_deref().map(shown), "live": a.live, "aboard": aboard, "since": a.since,
-                    "kinds": a.kinds, "mature": a.mature, "explicit": a.explicit,
-                    "tip": a.tip.as_ref().filter(|_| net::deputy_current(a, self.archives.lock().unwrap().get(id))),
+                    "kinds": a.kinds, "mature": a.mature, "explicit": a.explicit, "tip": a.tip,
                     "cover": a.cover.map(|h| hex(&h)), "banner": banners.get(id), "accent": accent,
                     "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),
                     "pocket": pockets.contains(id),
-                })))
+                }), a.proof.is_some().then(|| a.clone())))
             })
             .collect();
+        drop(log);
+        // A card signed by a deputy is provisional until this tab's log of the station is
+        // current and still names that deputy: shown as the log says, where it says anything,
+        // with no tip address or cover from the card, and marked.
+        {
+            let archives = self.archives.lock().unwrap();
+            for (_, j, deputy) in v.iter_mut() {
+                let Some(a) = deputy else { continue };
+                let log = archives.get(&a.station);
+                if net::deputy_current(a, log) {
+                    continue;
+                }
+                j["provisional"] = json!(true);
+                j["tip"] = Value::Null;
+                j["cover"] = Value::Null;
+                let Some(log) = log else { continue };
+                if let Some(Body::Colours { name, about, port, .. }) = log.colours() {
+                    j["name"] = json!(shown(name));
+                    j["about"] = json!(pyrate_core::chat::shown(about));
+                    j["mixed"] = json!(pyrate_core::chat::mixed_script(name));
+                    j["port"] = json!(port.as_deref().map(shown));
+                }
+                if let Some((kinds, mature)) = log.details() {
+                    j["kinds"] = json!(kinds);
+                    j["mature"] = json!(mature || j["mature"] == json!(true));
+                }
+                if let Some((cover, _, accent)) = log.art() {
+                    j["cover"] = json!(cover.map(|c| hex(&c.hash)));
+                    j["accent"] = json!(format!("#{:02x}{:02x}{:02x}", accent[0], accent[1], accent[2]));
+                }
+                j["explicit"] = json!(log.explicit() || j["explicit"] == json!(true));
+            }
+        }
         v.sort_by(|a, b| b.0.cmp(&a.0).then(a.1["name"].as_str().cmp(&b.1["name"].as_str())));
         json!(v.into_iter().map(|x| x.1).collect::<Vec<_>>())
     }
@@ -1195,17 +1248,72 @@ impl Ship {
 #[derive(Debug, Clone)]
 struct Proto(Arc<Mutex<Option<Arc<Ship>>>>);
 
+/// The most a tab holds of any one station's log. Real logs are a few megabytes; past this a
+/// station is not followed further here.
+const TAB_LOG_MAX: u64 = 32 << 20;
+
+/// Requests a tab is answering at once, from everyone.
+static SERVING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// A count held for as long as a request is being answered.
+struct Slot(&'static std::sync::atomic::AtomicUsize, Option<Arc<std::sync::atomic::AtomicUsize>>);
+
+impl Slot {
+    fn take(all: &'static std::sync::atomic::AtomicUsize, max_all: usize, mine: &Arc<std::sync::atomic::AtomicUsize>, max_mine: usize) -> Option<Slot> {
+        use std::sync::atomic::Ordering::SeqCst;
+        if mine.fetch_add(1, SeqCst) >= max_mine {
+            mine.fetch_sub(1, SeqCst);
+            return None;
+        }
+        if all.fetch_add(1, SeqCst) >= max_all {
+            all.fetch_sub(1, SeqCst);
+            mine.fetch_sub(1, SeqCst);
+            return None;
+        }
+        Some(Slot(all, Some(mine.clone())))
+    }
+}
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        if let Some(m) = &self.1 {
+            m.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+}
+
+/// The most a tab reads of a request. Everything it answers is asked in under a kilobyte.
+const REQUEST_MAX: usize = 64 * 1024;
+
 impl ProtocolHandler for Proto {
+    /// A tab answers little, and answers it within limits: four requests at a time from one
+    /// peer and sixteen from everyone, 64 KB and ten seconds to arrive, ten seconds for the
+    /// answer to go. A peer that floods a tab with streams, or asks and never reads, holds
+    /// nothing for long and cannot slow the page.
     async fn accept(&self, conn: Connection) -> std::result::Result<(), AcceptError> {
         let Some(ship) = self.0.lock().unwrap().clone() else { return Ok(()) };
+        let mine = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         while let Ok((mut send, mut recv)) = conn.accept_bi().await {
+            let Some(slot) = Slot::take(&SERVING, 16, &mine, 4) else {
+                let _ = send.reset(0u32.into());
+                let _ = recv.stop(0u32.into());
+                continue;
+            };
             let ship = ship.clone();
             spawn(async move {
-                let Ok(bytes) = recv.read_to_end(MAX_FRAME).await else { return };
+                let _slot = slot;
+                let Ok(Ok(bytes)) = timeout(Duration::from_secs(10), recv.read_to_end(REQUEST_MAX)).await else { return };
                 let Ok(req) = postcard::from_bytes::<Request>(&bytes) else { return };
                 if let Ok(out) = postcard::to_stdvec(&ship.serve(req)) {
-                    let _ = send.write_all(&out).await;
-                    let _ = send.finish();
+                    match timeout(Duration::from_secs(10), send.write_all(&out)).await {
+                        Ok(Ok(())) => {
+                            let _ = send.finish();
+                        }
+                        _ => {
+                            let _ = send.reset(0u32.into());
+                        }
+                    }
                 }
             });
         }
