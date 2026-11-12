@@ -36,6 +36,10 @@ pub enum Request {
     /// The last lines of a pocket's chatter, sealed, asked for by its tag. Answered with
     /// `Response::Chatter`. Older nodes do not know this request and answer nothing.
     PocketChatter { tag: Hash },
+    /// The cards of the stations a node knows, so a newcomer's dial fills in one round trip
+    /// instead of waiting on gossip, with what it needs to reach their carriers privately.
+    /// Answered with `Response::Cards`; older nodes answer nothing.
+    Cards,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -46,6 +50,11 @@ pub enum Response {
     Chatter(Vec<Vec<u8>>),
     Sealed(Option<Vec<u8>>),
     Flock { now_ms: u64, station: Option<StationId> },
+    /// Gossip as it would have come, each item the postcard bytes of a `Gossip`: signed station
+    /// cards first, most listened first, then the carriers' own signed notes for them (which
+    /// stations they carry, and the relay each can be reached through). Nothing in it is taken
+    /// on the answerer's word: every card and note is checked against its own signature.
+    Cards(Vec<Vec<u8>>),
 }
 
 /// The signed face of a station's card. Fields are only ever added at the end: an older
@@ -365,6 +374,95 @@ impl Gossip {
     }
 }
 
+/// How many items a `Cards` answer may hold: six hundred cards and the notes beside them.
+pub const CARDS_ITEMS: usize = 4_000;
+
+/// The latest signed notes heard from carriers, as they came, for passing on with cards: per
+/// node, the relay it named; per station and node, its carrier note. Each is kept only if its
+/// own signature holds, and only the newest of each.
+#[derive(Default)]
+pub struct Notes {
+    harbour: std::collections::HashMap<[u8; 32], (u64, Vec<u8>)>,
+    carried: std::collections::HashMap<(StationId, [u8; 32]), (u64, Vec<u8>)>,
+}
+
+impl Notes {
+    const HARBOURS: usize = 4_000;
+    const CARRIED: usize = 20_000;
+    /// Notes older than this are not handed on, so the one who takes them still believes them.
+    const FRESH_MS: u64 = 14 * 60_000;
+
+    pub fn keep(&mut self, g: &Gossip, raw: &[u8], now: u64) {
+        if raw.len() > 1024 {
+            return;
+        }
+        match g {
+            Gossip::Harbour { node, at_ms, .. } if g.harbour_checked(now).is_some() => {
+                if self.harbour.get(node).is_none_or(|(t, _)| t < at_ms) {
+                    self.harbour.insert(*node, (*at_ms, raw.to_vec()));
+                }
+                if self.harbour.len() > Self::HARBOURS {
+                    Self::trim(&mut self.harbour, now, Self::HARBOURS);
+                }
+            }
+            Gossip::Carried { station, node, at_ms, .. } if g.carried_checked(now).is_some() => {
+                let k = (*station, *node);
+                if self.carried.get(&k).is_none_or(|(t, _)| t < at_ms) {
+                    self.carried.insert(k, (*at_ms, raw.to_vec()));
+                }
+                if self.carried.len() > Self::CARRIED {
+                    Self::trim(&mut self.carried, now, Self::CARRIED);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Stale notes go first, then the oldest, down to nine tenths of the cap.
+    fn trim<K: Clone + Eq + std::hash::Hash>(m: &mut std::collections::HashMap<K, (u64, Vec<u8>)>, now: u64, cap: usize) {
+        m.retain(|_, (t, _)| now.saturating_sub(*t) < Self::FRESH_MS);
+        if m.len() > cap {
+            let mut ages: Vec<(u64, K)> = m.iter().map(|(k, (t, _))| (*t, k.clone())).collect();
+            ages.sort_by_key(|a| a.0);
+            for (_, k) in ages.into_iter().take(m.len() - cap * 9 / 10) {
+                m.remove(&k);
+            }
+        }
+    }
+
+    /// For these stations, in their order: the four freshest carrier notes of each, then the
+    /// relay note of every carrier named. Nothing for any other station.
+    pub fn for_stations(&self, stations: &[StationId], now: u64) -> Vec<Vec<u8>> {
+        let fresh = |t: &u64| now.saturating_sub(*t) < Self::FRESH_MS && t.saturating_sub(now) < 5 * 60_000;
+        let mut by: std::collections::HashMap<StationId, Vec<(u64, [u8; 32], &Vec<u8>)>> = Default::default();
+        for ((st, node), (t, raw)) in &self.carried {
+            if fresh(t) {
+                by.entry(*st).or_default().push((*t, *node, raw));
+            }
+        }
+        let mut out = Vec::new();
+        let mut named = Vec::new();
+        for st in stations {
+            let Some(mut l) = by.remove(st) else { continue };
+            l.sort_by(|a, b| b.0.cmp(&a.0));
+            for (_, node, raw) in l.into_iter().take(4) {
+                out.push(raw.clone());
+                if !named.contains(&node) {
+                    named.push(node);
+                }
+            }
+        }
+        for node in named {
+            if let Some((t, raw)) = self.harbour.get(&node).filter(|(t, _)| fresh(t)) {
+                let _ = t;
+                out.push(raw.clone());
+            }
+        }
+        out.truncate(CARDS_ITEMS);
+        out
+    }
+}
+
 /// Set on a node whose own relays are on loopback: a private test network, where the Harbour
 /// notes name loopback relays too.
 pub static LOCAL_RELAYS_OK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -591,6 +689,30 @@ mod serde_bytes64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn notes_pass_on_only_signed_fresh_notes_for_the_stations_shown() {
+        let now = 50_000_000;
+        let (a, b) = ([5u8; 32], [6u8; 32]);
+        let (shown, hidden) = (StationId([9; 32]), StationId([8; 32]));
+        let mut n = Notes::default();
+        let raw = |g: &Gossip| postcard::to_stdvec(g).unwrap();
+        for g in [Gossip::carried(&a, shown, 3, now), Gossip::carried(&b, hidden, 3, now), Gossip::harbour(&a, "https://relay.example.org/", now), Gossip::harbour(&b, "https://relay.example.net/", now)] {
+            n.keep(&g, &raw(&g), now);
+        }
+        // A forged note, someone else's signature on another node's claim, is never kept.
+        let Gossip::Carried { station, head, at_ms, sig, .. } = Gossip::carried(&a, shown, 4, now) else { unreachable!() };
+        let forged = Gossip::Carried { station, node: StationKey::from_seed(b).id().0, head, at_ms, sig };
+        n.keep(&forged, &raw(&forged), now);
+        let out: Vec<Gossip> = n.for_stations(&[shown], now + 60_000).iter().map(|b| postcard::from_bytes(b).unwrap()).collect();
+        let node_a = StationKey::from_seed(a).id().0;
+        // The shown station's carrier and that carrier's relay, and nothing about the other.
+        assert_eq!(out.len(), 2, "{out:?}");
+        assert!(matches!(&out[0], Gossip::Carried { station, node, head: 3, .. } if *station == shown && *node == node_a));
+        assert!(matches!(&out[1], Gossip::Harbour { node, .. } if *node == node_a));
+        // Past fourteen minutes nothing is handed on.
+        assert!(n.for_stations(&[shown], now + 15 * 60_000).is_empty());
+    }
 
     #[test]
     fn a_carrier_note_is_believed_only_from_its_own_node() {

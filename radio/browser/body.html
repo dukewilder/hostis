@@ -8,21 +8,23 @@
 </header>
 
 <p class="leavingnote" role="status">This station is not one of HOSTIS&#8217;s. Taking you to the open player.</p>
-<section class="set" id="set" aria-label="The radio" tabindex="-1">
+<section class="set" id="set" aria-label="Now playing" tabindex="-1">
 <div id="banner" class="banner"></div>
 <div class="plate" aria-hidden="true"><span>Receiver</span><span class="band">88 to 108</span><span>Pyrate Radio</span></div>
 <div class="face">
-<div class="art"><img id="cover" class="cover" alt="" hidden><div id="flag" class="flag"></div></div>
+<button class="art" id="artgo" aria-label="Open the station page"><img id="cover" class="cover" alt="" hidden><div id="flag" class="flag"></div></button>
 <div class="tell">
 <div class="lamps"><span id="lamp" class="lamp" title="Lit when the station is broadcasting live"></span><span id="air" class="airword">On air</span><span class="sep"></span><span id="rx" class="rx" title="Lit while sound is arriving"></span><span class="rxword">Signal</span></div>
-<h1 id="name">Searching the Log</h1>
+<h1 id="name"></h1>
 <div class="ident"><span id="freq" class="freq"></span><span id="cs" class="cs"></span></div>
 <div id="slot" class="slot"></div>
 <div id="np" class="np" aria-live="polite"></div>
 <div id="by" class="by"></div>
-<div class="prog"><div id="prog"></div></div>
+<div class="prog" id="progbar"><div id="prog"></div></div>
 <div id="time" class="time"></div>
+<p id="hint" class="hint" hidden></p>
 </div>
+<svg class="vu" viewBox="0 0 120 70" aria-hidden="true"><path class="arc" d="M14 62 A50 50 0 0 1 106 62"/><path class="hot" d="M88 27 A50 50 0 0 1 106 62"/><g class="ticks" id="ticks"></g><line id="vun" class="vun" x1="60" y1="64" x2="60" y2="18"/><circle cx="60" cy="64" r="3.5" class="hub"/><text x="60" y="58" class="vulabel">VU</text></svg>
 </div>
 
 <div class="glass" id="glass" tabindex="0" role="listbox" aria-label="The dial. Arrow keys tune.">
@@ -30,16 +32,14 @@
 </div>
 
 <div class="controls">
-<button id="go" class="power" hidden><span class="glyph">▶︎</span><span class="lbl">Listen</span></button>
+<button id="go" class="power"><span class="glyph" aria-hidden="true"></span><span class="lbl">Listen</span></button>
 <div class="buttons">
-<button id="spin" class="btn">Spin the dial</button>
-<button id="raisego" class="btn open-only">Start your own</button>
-<button id="pass" class="btn" hidden>Share</button>
-<button id="clip" class="btn" hidden>Clip it</button>
-<button id="tip" class="btn" hidden>Tip</button>
-<button id="maroon" class="btn quiet open-only" hidden>Hide this station</button>
+<button id="pagego" class="btn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>Station page</button>
+<button id="pass" class="btn" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 13v7h14v-7"/></svg>Share</button>
+<button id="spin" class="btn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h4l10 10h4M3 17h4l3-3M14 10l3-3h4M18 4l3 3-3 3M18 14l3 3-3 3"/></svg>Spin the dial</button>
+<button id="clip" class="btn" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12"/><path d="M16 10l5-3v10l-5-3"/></svg>Clip it</button>
+<button id="tip" class="btn" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v10M15 9.5h-4.2a1.8 1.8 0 0 0 0 3.6h2.4a1.8 1.8 0 0 1 0 3.6H9"/></svg>Tip</button>
 </div>
-<svg class="vu" viewBox="0 0 120 70" aria-hidden="true"><path class="arc" d="M14 62 A50 50 0 0 1 106 62"/><path class="hot" d="M88 27 A50 50 0 0 1 106 62"/><g class="ticks" id="ticks"></g><line id="vun" class="vun" x1="60" y1="64" x2="60" y2="18"/><circle cx="60" cy="64" r="3.5" class="hub"/><text x="60" y="58" class="vulabel">VU</text></svg>
 </div>
 <div id="passbox" class="passbox" hidden><div class="qr" id="qr"></div><div class="passtext"><p class="boxhead">Share</p><p>Scan it with a phone camera to start listening, in the browser or the app.</p><p class="link" id="plink"></p><div class="row-btns"><button id="pcopy" class="btn">Copy the link</button><button id="pshare" class="btn">Share</button><button id="pclose" class="btn quiet">Close</button></div></div></div>
 <div id="clipbox" class="passbox" hidden><video id="clipv" playsinline controls></video><div class="passtext"><p class="boxhead">Clip it</p><p>Twenty seconds of what is on, with the station's name, its place on the dial and a code to scan. Post it anywhere.</p><div class="row-btns"><a id="clipsave" class="btn" download>Save the clip</a><button id="clipshare" class="btn">Share</button><button id="clipclose" class="btn quiet">Close</button></div></div></div>
@@ -49,14 +49,38 @@
 
 <p id="sharednote" class="appnote" hidden>This gateway shares one address with every page it serves, so this tab keeps nothing past the visit. <a id="sharedgo" href="#">Open the player at its own address</a></p>
 <p id="appnote" class="appnote" hidden>Pyrate Radio on this phone? <a id="appopen" href="#">Open this station in the app</a></p>
-<p class="takeset open-only"><a href="../#set"><span class="ts-lead">Take the set</span><span class="ts-sub">android &#183; windows &#183; mac &#183; linux &#183; plays with the screen off</span></a></p>
-<div class="divider"><span class="divider-glyph"></span></div>
+<p class="takeset"><a href="../#set"><span class="ts-lead">Take the set</span><span class="ts-sub">android &#183; windows &#183; mac &#183; linux &#183; plays with the screen off</span></a></p>
 
-<div class="below">
-<section class="page" id="page" hidden>
+<nav class="tabs" id="tabs" aria-label="Sections">
+<button class="tab" data-v="list" aria-current="true"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Stations</span></button>
+<button class="tab" data-v="page"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span>Station page</span></button>
+<button class="tab open-only" data-v="studio"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Broadcast</span></button>
+<button class="tab" data-v="settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span>Settings</span></button>
+</nav>
+
+<main class="below" id="below">
+<section class="view log" id="v-list" aria-label="Stations">
+<div class="sechead harbour-only"><h2>HOSTIS on the Air</h2><span class="cap">tap a station to listen</span></div>
+<div class="sechead open-only"><h2>On the Air</h2><span class="cap">tap a station to listen</span></div>
+<div class="listbar"><input id="find" type="search" class="open-only" placeholder="Find a station" aria-label="Find a station" autocomplete="off"><div class="views" role="group" aria-label="How to show the stations"><button id="vlist" class="btn on" aria-pressed="true">List</button><button id="vchart" class="btn" aria-pressed="false">Map</button></div></div>
+<div id="chart" class="chart" hidden></div>
+<div id="rows"></div>
+<div class="harbour-only everyone">
+<p class="fine">Every other station plays in the open player, the same radio served from IPFS and from Lanterns and owned by nobody.</p>
+<p class="centre"><a class="lead-btn openlink" href="#"><span class="fc-lead">Every station</span><span class="fc-sub">the open player</span></a></p>
+</div>
+</section>
+
+<section class="view" id="v-page" aria-label="Station page" hidden>
+<div class="pagehead"><h2 id="pname"></h2><p id="pabout" class="pabout"></p><p id="pmeta" class="pmeta"></p></div>
+<p id="pagewait" class="fine">The station's schedule and notices appear here once its log arrives.</p>
+<div class="page" id="page" hidden>
 <div id="notices"></div>
-<div class="sechead"><h2>Chat</h2><span class="cap">with whoever is listening</span></div>
-<p class="fine harbour-only">This station&#8217;s chatter, its cheers and its hails are in the <a id="chatopen" class="openlink" href="#">open player</a>, one tap away.</p>
+<div class="sechead"><h2 id="nexth">Up Next</h2><span class="cap">from the station's own log</span></div>
+<div id="next"></div>
+</div>
+<div class="sechead gap"><h2>Chat</h2><span class="cap">with whoever is listening</span></div>
+<p class="fine harbour-only">This station&#8217;s chat, cheers and requests are in the <a id="chatopen" class="openlink" href="#">open player</a>, one tap away.</p>
 <div class="open-only">
 <div id="chatjoin"><p class="fine">Chat with whoever else is listening, cheer what is on, or ask for a song. Nothing is saved, though anyone in the chat can copy what they read. Joining lets the others in the chat see that this browser listens to this station. Just listening shows nobody anything.</p><p class="centre"><button id="chatgo" class="btn">Join the chat</button></p></div>
 <div id="chatroom" class="chat" hidden>
@@ -67,27 +91,19 @@
 <div id="askbox" hidden><select id="asktrack" aria-label="A recording"></select><input id="asknote" maxlength="140" placeholder="A word with it, if you like" aria-label="A word with it"><button id="asksend" class="btn">Ask</button></div>
 </div>
 </div>
-<div class="sechead gap"><h2 id="nexth">Up Next</h2><span class="cap">from the station's own log</span></div>
-<div id="next"></div>
+<div id="week-box" hidden>
 <div class="sechead gap"><h2>This Week</h2><span class="cap">times are yours</span></div>
-<p id="how" class="how"></p><p id="key" class="key" title="The call sign is a name; the key is the station. Two stations can wear the same call sign, never the same key."></p>
+<p id="how" class="how"></p>
 <div id="listings"></div>
 <p class="fine">Worked out in this tab from the station's own log.</p>
+</div>
+<p id="key" class="key" title="The call sign is a name; the key is the station. Two stations can wear the same call sign, never the same key."></p>
+<p class="centre open-only"><button id="maroon" class="btn quiet" hidden>Hide this station</button></p>
 </section>
 
-<section class="log">
-<div class="sechead harbour-only"><h2>HOSTIS on the Air</h2><span class="cap">the stations HOSTIS raises</span></div>
-<div class="sechead open-only"><h2>On the Air</h2><span class="cap">most listened first</span></div>
-<p class="fine open-only">Every station this browser has found so far. Tap one to tune in.</p>
-<div class="views" role="group" aria-label="How to show the Log"><button id="vlist" class="btn on" aria-pressed="true">The list</button><button id="vchart" class="btn" aria-pressed="false">The chart</button></div>
-<div id="chart" class="chart" hidden></div>
-<div id="rows"></div>
-<div class="harbour-only everyone">
-<p class="fine">Every other station on the Log plays in the open player, the same set served from IPFS and from Lanterns and owned by nobody.</p>
-<p class="centre"><a class="lead-btn openlink" href="#"><span class="fc-lead">Every station</span><span class="fc-sub">the open player &#183; the whole Log</span></a></p>
-</div>
-<div class="open-only studio" id="studio">
-<div class="sechead gap"><h2>Start a Station</h2><span class="cap">from this browser</span></div>
+<section class="view open-only studio" id="v-studio" aria-label="Start a station" hidden>
+<div id="studio">
+<div class="sechead"><h2>Start a Station</h2><span class="cap">from this browser</span></div>
 <div id="st-lock" hidden>
 <p class="fine">Your stations in this browser are locked with a passphrase.</p>
 <label class="field"><span>Passphrase</span><input id="st-pass" type="password" autocomplete="current-password"></label>
@@ -134,18 +150,17 @@
 <div class="row-btns"><button id="st-another" class="btn quiet">Start another</button></div>
 </div>
 </div>
-<div class="harbour-only">
-<div class="sechead gap"><h2>Take the Set</h2><span class="cap">android &#183; windows &#183; mac &#183; linux</span></div>
-<p class="fine">The app plays with the screen off, keeps your favourite stations and helps keep them on the air.</p>
-<p class="centre"><a class="lead-btn" href="../#set"><span class="fc-lead">Take the set</span><span class="fc-sub">the app for phones and computers</span></a></p>
-</div>
-<div class="open-only">
-<div class="sechead gap"><h2>Settings</h2><span class="cap">kept in this browser</span></div>
+</section>
+
+<section class="view" id="v-settings" aria-label="Settings" hidden>
+<div class="sechead"><h2>Settings</h2><span class="cap">kept in this browser</span></div>
 <div class="switches">
-<label><input type="checkbox" id="sw-mature"><span>Hide mature stations</span></label>
-<label><input type="checkbox" id="sw-explicit"><span>Show explicit stations</span></label>
+<label><input type="checkbox" id="sw-hiss"><span>Play a soft hiss while tuning in</span></label>
+<label class="open-only"><input type="checkbox" id="sw-mature"><span>Hide mature stations</span></label>
+<label class="open-only"><input type="checkbox" id="sw-explicit"><span>Show explicit stations</span></label>
 <label><input type="checkbox" id="sw-art"><span>Show station pictures</span></label>
 </div>
+<div class="open-only">
 <p class="fine">Each station says for itself whether it is mature or explicit. Hide any station that gets it wrong.</p>
 <p class="centre"><button id="mlist" class="btn">Hidden stations</button></p>
 <div id="mbox" hidden><p class="fine">Copy this list to share it, or paste in a list someone shared with you.</p><textarea id="mtext" spellcheck="false" aria-label="Hidden stations"></textarea><div class="row-btns"><button id="mtake" class="btn">Hide these</button><button id="mclear" class="btn quiet">Show every station again</button></div><div id="mnote" class="fine"></div></div>
@@ -154,9 +169,14 @@
 <p>Off, this browser always listens through two other radios, so the one with the station never sees you, and it waits when it cannot. On, it plays sooner on a quiet network, and the radio it asks can see this browser's relay.</p>
 </div></details>
 </div>
-<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your settings and hidden stations, your name and mutes in the chat, any invitations you opened, and the key of any station you started here (never its 24 words). The key and invitations are locked under a key the browser keeps to itself. None of it is sent anywhere.</p><p>Forgetting it all makes this browser new to the radio.</p></div></details>
+<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your settings and hidden stations, the list of stations last on the air, your name and mutes in the chat, any invitations you opened, and the key of any station you started here (never its 24 words). The key and invitations are locked under a key the browser keeps to itself. None of it is sent anywhere.</p><p>Forgetting it all makes this browser new to the radio.</p></div></details>
 <p class="centre"><button id="forget" class="btn quiet">Forget this browser</button></p>
 </section>
+</main>
+
+<div id="mini" class="miniplayer" hidden>
+<button id="mini-up" class="mp-main" aria-label="Back to the radio"><span id="mini-art" class="mp-art" aria-hidden="true"></span><span class="mp-text"><span id="mini-name" class="mp-name"></span><span id="mini-np" class="mp-np"></span></span></button>
+<button id="mini-go" class="mp-go" aria-label="Listen"><span class="glyph" aria-hidden="true"></span></button>
 </div>
 <footer>
 <p class="f-contact">Email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>

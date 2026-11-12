@@ -9,8 +9,8 @@ with sync_playwright() as p:
     b = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"])
     ctx = b.new_context(bypass_csp=True, permissions=["microphone"]); a = ctx.new_page(); errs = []
     a.on("pageerror", lambda e: errs.append(str(e))); a.on("dialog", lambda d: d.accept())
-    a.goto("http://127.0.0.1:8099/"); a.wait_for_function("document.getElementById('signal').textContent.includes('nearby')", timeout=90000)
-    a.fill("#st-name", "Open Mic"); a.click("#st-raise"); a.wait_for_selector("#st-show:not([hidden])")
+    a.goto("http://127.0.0.1:8099/"); a.wait_for_function("document.getElementById('signal').textContent.includes('Connected')", timeout=90000)
+    a.click(".tab[data-v=studio]"); a.fill("#st-name", "Open Mic"); a.click("#st-raise"); a.wait_for_selector("#st-show:not([hidden])")
     a.check("#st-written"); a.click("#st-done")
     a.wait_for_function("!document.getElementById('st-status').textContent.includes('ready') && document.getElementById('st-status').textContent.length > 0", timeout=120000)
     # PYRATE_DISGUISE=1 airs with the voice disguise on, through the same path.

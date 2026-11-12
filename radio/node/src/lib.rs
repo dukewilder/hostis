@@ -371,6 +371,13 @@ pub struct Inner {
     on_now: Mutex<HashMap<StationId, (u64, Arc<OnNow>)>>,
     /// How far through each carried log the mirror has looked for sound it lacks.
     mirror_at: Mutex<HashMap<StationId, usize>>,
+    /// The cards this node hands a newcomer, kept a few seconds so a crowd asking costs one.
+    cards_cache: Mutex<Option<(u64, Arc<Vec<Vec<u8>>>)>>,
+    /// Peers already asked for their cards in this run.
+    cards_asked: Mutex<std::collections::HashSet<[u8; 32]>>,
+    /// The latest signed notes heard from carriers, kept as they came so a newcomer asking for
+    /// cards gets them too: per node, the relay it named; per station and node, its carrier note.
+    notes: Mutex<net::Notes>,
     /// The device's hold key, for the small files the node keeps beside its store.
     pub(crate) hold: hold::Hold,
     /// Where carriers said they can be reached, signed by each: the network's own address book.
@@ -501,6 +508,9 @@ impl Inner {
         if let Request::PocketChatter { tag } = &req {
             return Response::Chatter(self.pocket_chatter(tag));
         }
+        if matches!(req, Request::Cards) {
+            return Response::Cards(self.cards_answer().to_vec());
+        }
         let pocket = matches!(&req, Request::Log { station, .. } if self.is_pocket(station));
         let mut store = self.store.lock().unwrap();
         match req {
@@ -525,6 +535,81 @@ impl Inner {
             Request::Hop(_) => Response::Hop(vec![]),
             Request::Chatter { station } => Response::Chatter(self.chatter_for(&station)),
             Request::PocketChatter { tag } => Response::Chatter(self.pocket_chatter(&tag)),
+            Request::Cards => Response::Cards(vec![]),
+        }
+    }
+
+    /// The cards of the stations this node knows and would show, most listened first: at
+    /// most 600, and at most 1 MiB in all. Never a pocket's, never one this node refuses.
+    fn cards_answer(&self) -> Arc<Vec<Vec<u8>>> {
+        let now = now_ms();
+        if let Some((at, c)) = self.cards_cache.lock().unwrap().as_ref() {
+            if now.saturating_sub(*at) < 5_000 {
+                return c.clone();
+            }
+        }
+        let refused = self.refused();
+        let mut list: Vec<(u64, StationId, Vec<u8>)> = {
+            let log = self.log.lock().unwrap();
+            log.iter()
+                .filter(|(id, l)| l.fresh(now) && !self.is_pocket(id) && !refused.contains(id))
+                .filter_map(|(id, l)| Some((l.aboard(now), *id, postcard::to_stdvec(&Gossip::Station(l.announce.clone()?)).ok()?)))
+                .collect()
+        };
+        list.sort_by(|a, b| b.0.cmp(&a.0));
+        list.truncate(600);
+        let mut out = Vec::new();
+        let mut bytes = 0usize;
+        let mut shown = Vec::new();
+        for (_, id, b) in list {
+            bytes += b.len();
+            if bytes > 1 << 20 {
+                break;
+            }
+            out.push(b);
+            shown.push(id);
+        }
+        // Then the carriers' own notes, for those stations only: never a pocket's, whose notes
+        // go only to its members, and never a station this node does not show.
+        for b in self.notes.lock().unwrap().for_stations(&shown, now) {
+            bytes += b.len();
+            if bytes > (1 << 20) + (256 << 10) {
+                break;
+            }
+            out.push(b);
+        }
+        let out = Arc::new(out);
+        *self.cards_cache.lock().unwrap() = Some((now, out.clone()));
+        out
+    }
+
+    /// Asks a peer for the cards it knows, once a run, and takes each as if it came by
+    /// gossip: checked, worked for and kept or refused by the same rules.
+    async fn cards_from(self: &Arc<Self>, node: EndpointId) {
+        if !self.cards_asked.lock().unwrap().insert(*node.as_bytes()) {
+            return;
+        }
+        let Ok(Ok(Response::Cards(list))) = tokio::time::timeout(Duration::from_secs(15), self.ask(node, &Request::Cards)).await else { return };
+        let mut n = 0;
+        let now = now_ms();
+        for b in list.into_iter().take(net::CARDS_ITEMS) {
+            if b.len() > net::CARD_WIRE {
+                continue;
+            }
+            // Taken as gossip from that node: checked against its own signature or dropped.
+            let Ok(g) = postcard::from_bytes::<Gossip>(&b) else { continue };
+            if !matches!(g, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Harbour { .. }) {
+                continue;
+            }
+            self.notes.lock().unwrap().keep(&g, &b, now);
+            let Some(g) = g.from_network(now, node.as_bytes()) else { continue };
+            let card = matches!(g, Gossip::Station(_));
+            if self.on_gossip(g).is_some() && card {
+                n += 1;
+            }
+        }
+        if n > 0 {
+            say(&format!("{n} stations from {}", node.fmt_short()));
         }
     }
 
@@ -1183,7 +1268,11 @@ impl Inner {
             self.on_gossip(g.clone());
             // Signed for nodes that check, plain for older ones, which believe it only from
             // this node itself.
-            self.broadcast(&Gossip::carried(&self.secret, station, head, now_ms())).await;
+            let signed = Gossip::carried(&self.secret, station, head, now_ms());
+            if let Ok(raw) = postcard::to_stdvec(&signed) {
+                self.notes.lock().unwrap().keep(&signed, &raw, now_ms());
+            }
+            self.broadcast(&signed).await;
             self.broadcast(&g).await;
             said_carrier = true;
         }
@@ -1199,6 +1288,9 @@ impl Inner {
             if let Some(relay) = own.or_else(|| self.endpoint.addr().relay_urls().next().map(|u| u.to_string())) {
                 self.last_harbour.store(now, std::sync::atomic::Ordering::Relaxed);
                 let note = Gossip::harbour(&self.secret, &relay, now);
+                if let Ok(raw) = postcard::to_stdvec(&note) {
+                    self.notes.lock().unwrap().keep(&note, &raw, now);
+                }
                 self.broadcast(&note).await;
                 let pockets: Vec<StationId> = self.pockets.lock().unwrap().keys().copied().collect();
                 for st in pockets {
@@ -2141,6 +2233,9 @@ impl Node {
             served: Mutex::new(HashMap::new()),
             on_now: Mutex::new(HashMap::new()),
             mirror_at: Mutex::new(HashMap::new()),
+            cards_cache: Mutex::new(None),
+            cards_asked: Mutex::new(Default::default()),
+            notes: Mutex::new(net::Notes::default()),
             hold,
             book: book.clone(),
             dark,
@@ -2183,6 +2278,12 @@ impl Node {
             *i2.gossip_tx.lock().unwrap() = Some(tx.clone());
             // Nearby radios, if the keeper turned them on.
             i2.lan_start();
+            // The doors are asked for the cards they know at once: the dial fills in one round
+            // trip instead of waiting for the next gossip.
+            for door in i2.cfg.bootstrap.iter().take(4) {
+                let (i5, door) = (i2.clone(), *door);
+                tokio::spawn(async move { i5.cards_from(door).await });
+            }
             let boot = i2.cfg.bootstrap.clone();
             let i3 = i2.clone();
             tokio::spawn(async move {
@@ -2203,6 +2304,11 @@ impl Node {
                     Ok(Event::Received(m)) => m,
                     Ok(Event::NeighborUp(n)) => {
                         say(&format!("neighbour up {}", n.fmt_short()));
+                        // A node with a near-empty Log asks its first neighbours for theirs.
+                        if i2.log.lock().unwrap().len() < 8 && i2.cards_asked.lock().unwrap().len() < 6 {
+                            let (i5, n) = (i2.clone(), n);
+                            tokio::spawn(async move { i5.cards_from(n).await });
+                        }
                         let mut nb = i2.neighbours.lock().unwrap();
                         if nb.len() < 256 {
                             nb.insert(*n.as_bytes());
@@ -2217,6 +2323,7 @@ impl Node {
                     _ => continue,
                 };
                 let Ok(g) = postcard::from_bytes::<Gossip>(&msg.content) else { continue };
+                i2.notes.lock().unwrap().keep(&g, &msg.content, now_ms());
                 let Some(g) = g.from_network(now_ms(), msg.delivered_from.as_bytes()) else { continue };
                 if let Some(st) = i2.on_gossip(g) {
                     if i2.wants(&st) {

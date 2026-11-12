@@ -24,8 +24,8 @@ with sync_playwright() as p:
     try: a.wait_for_function("document.getElementById('name').textContent.includes('Gangway')", timeout=90000)
     except Exception: pass
     check("Gangway" in (a.text_content("#name") or ""), "a reload comes back to it: " + (a.text_content("#name") or ""))
-    a.wait_for_function("window.pyrate && document.getElementById('signal').textContent.includes('nearby')", timeout=90000)
-    a.fill("#st-name", "Sealside"); a.click("#st-raise"); a.wait_for_selector("#st-show:not([hidden])")
+    a.wait_for_function("window.pyrate && document.getElementById('signal').textContent.includes('Connected')", timeout=90000)
+    a.click(".tab[data-v=studio]"); a.fill("#st-name", "Sealside"); a.click("#st-raise"); a.wait_for_selector("#st-show:not([hidden])")
     a.check("#st-written"); a.click("#st-done")
     a.wait_for_function("(localStorage.getItem('pyrate.mine') || '').length > 0", timeout=10000)
     before = a.evaluate("localStorage.getItem('pyrate.mine')")
@@ -48,7 +48,8 @@ with sync_playwright() as p:
     time.sleep(5)
     check(a.evaluate("window.__rtc") == 0, "no WebRTC")
     # The test harbour names its relay, so no one's lookup service is asked anything.
-    check(hosts <= {"127.0.0.1"}, "no host but the test network's: %s" % sorted(h for h in hosts if h))
+    # blob: and data: addresses (pictures made in the tab) have no host and go nowhere.
+    check({h for h in hosts if h} <= {"127.0.0.1"}, "no host but the test network's: %s" % sorted(h for h in hosts if h))
     check(not errs, "no page errors: %s" % errs[:3])
     b.close()
 sys.exit(0 if ok else 1)
