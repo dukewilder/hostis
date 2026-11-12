@@ -1,0 +1,10 @@
+# tools/test/browser_attack.py 8099 http://127.0.0.1:3340 target/release/pentest <attack> 60 (ed9a91e)
+PASS slow: the tab kept playing (0 seconds without sound ahead; least ahead 11605 ms)
+PASS slow: browser memory 606 -> peak 712 MB
+PASS slow: no page errors []
+PASS flood: the tab kept playing (0 seconds without sound ahead; least ahead 12267 ms)
+PASS flood: browser memory 604 -> peak 622 MB
+PASS flood: no page errors []
+PASS big: the tab kept playing (0 seconds without sound ahead; least ahead 11658 ms)
+PASS big: browser memory 606 -> peak 616 MB
+PASS big: no page errors []
