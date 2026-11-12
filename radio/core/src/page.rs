@@ -30,13 +30,10 @@ pub fn unhex(s: &str) -> Result<[u8; 32]> {
 
 /// A track's title and who it is by, from its entry hash. Empty if the log has no such track.
 pub fn describe_track(a: &Archive, track: &Hash) -> (String, String) {
-    a.entries()
-        .iter()
-        .find_map(|e| match e.entry.body() {
-            Body::Track { title, by, .. } if e.hash().ok().as_ref() == Some(track) => Some((title.clone(), by.clone())),
-            _ => None,
-        })
-        .unwrap_or_default()
+    match a.track_entry(track).map(|e| e.entry.body()) {
+        Some(Body::Track { title, by, .. }) => (title.clone(), by.clone()),
+        _ => Default::default(),
+    }
 }
 
 fn span_json(s: &Span) -> Value {

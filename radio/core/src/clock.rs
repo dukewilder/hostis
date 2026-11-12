@@ -173,6 +173,15 @@ enum Source {
 }
 
 impl Source {
+    /// The first moment after `t` at which one of this source's tracks goes on the air.
+    fn next_added(&self, tracks: &[Track], t: u64) -> Option<u64> {
+        let members = match self {
+            Source::Rounds { pool, .. } => pool,
+            Source::Cycle { order, .. } | Source::Once { order, .. } => order,
+        };
+        members.iter().map(|&i| &tracks[i]).filter(|tr| tr.added_ms > t && tr.duration_ms >= MIN_TRACK_MS && tr.withdrawn_ms.is_none_or(|w| w > tr.added_ms)).map(|tr| tr.added_ms).min()
+    }
+
     fn next(&mut self, tracks: &[Track], t: u64) -> Option<usize> {
         match self {
             Source::Once { order, at, as_of } => {
@@ -240,6 +249,14 @@ pub struct Clock {
     /// Whether whole rounds are skipped by arithmetic (always, but for the tests that check
     /// skipping changes nothing).
     skip: std::sync::atomic::AtomicBool,
+    /// Each rota block's own recordings, as places in `tracks`, in library order. Worked out
+    /// once: a block may name tens of thousands of recordings, and matching every name against
+    /// the library at every round cost a listener seconds a question.
+    block_tracks: Vec<Vec<usize>>,
+    /// The last few answers, each with the moment it holds until: the end of its recording or
+    /// the next moment the air may change hands, whichever comes first. A player asks several
+    /// times a second; within one recording the answer is worked out once.
+    recent: std::sync::Mutex<Vec<(NowPlaying, u64)>>,
 }
 
 impl Clock {
@@ -311,7 +328,16 @@ impl Clock {
             }
             p
         });
-        Ok(Self { station, rota: archive.rota(), programme, tracks, index, shows, steps: std::sync::atomic::AtomicUsize::new(0), skip: std::sync::atomic::AtomicBool::new(true) })
+        let rota = archive.rota();
+        let block_tracks = rota
+            .blocks
+            .iter()
+            .map(|b| {
+                let wanted: std::collections::HashSet<&Hash> = b.tracks.iter().collect();
+                (0..tracks.len()).filter(|&i| wanted.contains(&tracks[i].hash)).collect()
+            })
+            .collect();
+        Ok(Self { station, rota, programme, tracks, index, shows, steps: std::sync::atomic::AtomicUsize::new(0), skip: std::sync::atomic::AtomicBool::new(true), block_tracks, recent: Default::default() })
     }
 
     /// The same clock walking every track, for tests that compare.
@@ -329,6 +355,8 @@ impl Clock {
         if !self.skip.load(std::sync::atomic::Ordering::Relaxed) || members.is_empty() {
             return None;
         }
+        // Work, not just steps, is what the watch bill's budget counts.
+        self.steps.fetch_add(members.len(), std::sync::atomic::Ordering::Relaxed);
         let mut change = u64::MAX;
         let mut d = 0u64;
         for &i in members {
@@ -376,9 +404,9 @@ impl Clock {
         self.steps.store(0, std::sync::atomic::Ordering::Relaxed);
         while t < until && out.len() < n && walked < UPCOMING_STEPS && self.steps.load(std::sync::atomic::Ordering::Relaxed) < BILL_STEPS {
             walked += 1;
-            let next_cut = |after: u64| cuts.iter().copied().find(|c| *c > after);
+            let next_cut = |after: u64| cuts.get(cuts.partition_point(|c| *c <= after)).copied();
             // A quiet minute (nothing yet added, off the air, a gap between blocks): step past it.
-            let Some(np) = self.now(t) else {
+            let Some(np) = self.now_walked(t) else {
                 let minute = (t / 60_000 + 1) * 60_000;
                 t = next_cut(t).map_or(minute, |c| c.min(minute));
                 continue;
@@ -449,6 +477,56 @@ impl Clock {
     /// What is on at `t`, in Unix milliseconds. None is dead air: an empty library, or the
     /// station off the air.
     pub fn now(&self, t: u64) -> Option<NowPlaying> {
+        if !self.skip.load(std::sync::atomic::Ordering::Relaxed) {
+            return self.now_walked(t);
+        }
+        if let Some(np) = self.recall(t) {
+            return Some(np);
+        }
+        let np = self.now_walked(t)?;
+        // A continuous mode with set hours runs its tape only in those hours. In a slot outside
+        // them the tape stands still, so the answer does not move on with the clock and is not
+        // kept.
+        if let Some(p) = &self.programme {
+            let tape = !p.hours.is_empty() && matches!(p.mode, Mode::Shuffle | Mode::InOrder | Mode::NewestFirst) && np.slot.is_none();
+            if tape && !p.hours.iter().any(|h| p.zone.run_at(h, t).is_some()) {
+                return Some(np);
+            }
+        }
+        // It holds until the recording ends, the next listed change, the next minute (slots,
+        // hours and blocks all turn on the minute) or the next change of clocks in the
+        // station's zone, whichever comes first.
+        let end = np.started_at_ms.saturating_add(np.duration_ms);
+        let mut until = self.cuts(t, end).first().copied().unwrap_or(end).min((t / 60_000 + 1) * 60_000);
+        if let Some(p) = &self.programme {
+            if let Some(o) = p.zone.offsets.iter().map(|o| o.0).filter(|m| *m > t).min() {
+                until = until.min(o);
+            }
+        }
+        let mut recent = self.recent.lock().unwrap_or_else(|e| e.into_inner());
+        if recent.len() >= 4 {
+            recent.remove(0);
+        }
+        recent.push((np.clone(), until));
+        Some(np)
+    }
+
+    /// A recent answer that still holds at `t`, moved on to `t`.
+    fn recall(&self, t: u64) -> Option<NowPlaying> {
+        let recent = self.recent.lock().unwrap_or_else(|e| e.into_inner());
+        let (np, _) = recent.iter().rev().find(|(np, until)| np.started_at_ms <= t && t < *until)?;
+        let tr = &self.tracks[*self.index.get(&np.track)?];
+        let offset = t - np.started_at_ms;
+        let (mut chunk, mut left) = (0, offset);
+        while chunk < tr.chunk_ms.len() && left >= tr.chunk_ms[chunk] {
+            left -= tr.chunk_ms[chunk];
+            chunk += 1;
+        }
+        Some(NowPlaying { offset_ms: offset, chunk, chunk_offset_ms: left, ..np.clone() })
+    }
+
+    /// What is on at `t`, worked out from the start of its run.
+    fn now_walked(&self, t: u64) -> Option<NowPlaying> {
         if t < FIRST_MONDAY_MS {
             return None;
         }
@@ -512,15 +590,48 @@ impl Clock {
                     last_ident = Some(cursor);
                     Some(i)
                 }
-                _ => src.next(&self.tracks, cursor),
+                _ => {
+                    if let Source::Rounds { pool, order, at, .. } = &*src {
+                        if *at >= order.len() {
+                            // A fresh round: the pool sifted, and a hash to seed its shuffle,
+                            // which costs about what twenty steps do.
+                            self.steps.fetch_add(pool.len() + 20, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    }
+                    src.next(&self.tracks, cursor)
+                }
             };
             let Some(i) = pick else {
-                // Nothing on air yet: look again a minute on.
-                cursor = (cursor / 60_000 + 1) * 60_000;
-                if cursor > t {
+                // Nothing on air yet: look again on the minute. Until one of the source's
+                // tracks is added or the bell is next due, every minute finds the same nothing,
+                // so the walk goes straight to the first minute that can find something. (A
+                // minute at a time, a station whose tracks came late in its week cost every
+                // listener ten thousand empty looks at its library.)
+                if matches!(src, Source::Once { .. }) {
                     return None;
                 }
-                if matches!(src, Source::Once { .. }) {
+                let grid = (cursor / 60_000 + 1) * 60_000;
+                if !self.skip.load(std::sync::atomic::Ordering::Relaxed) {
+                    // The plain walk, for the tests that check the jump changes nothing.
+                    cursor = grid;
+                    if cursor > t {
+                        return None;
+                    }
+                    continue;
+                }
+                let mut wake = src.next_added(&self.tracks, cursor);
+                self.steps.fetch_add(self.tracks.len(), std::sync::atomic::Ordering::Relaxed);
+                if let Some((b, bell)) = ident {
+                    let tr = &self.tracks[b];
+                    let due = last_ident.map_or(0, |l| l.saturating_add(bell)).max(tr.added_ms);
+                    let due = due.div_ceil(60_000).saturating_mul(60_000).max(grid);
+                    if tr.on_air(due) {
+                        wake = Some(wake.map_or(due, |w| w.min(due)));
+                    }
+                }
+                let Some(wake) = wake else { return None };
+                cursor = wake.div_ceil(60_000).saturating_mul(60_000).max(grid);
+                if cursor > t {
                     return None;
                 }
                 continue;
@@ -738,13 +849,15 @@ impl Clock {
                 Some(b) => (&self.rota.blocks[b].tracks, self.rota.blocks[b].shuffle),
                 None => (&Vec::new(), true),
             };
+            let members = block.map(|b| &self.block_tracks[b]);
             let pool = |all: bool| -> Vec<usize> {
-                (0..self.tracks.len())
-                    .filter(|&i| self.tracks[i].on_air(t))
-                    .filter(|&i| all || wanted.contains(&self.tracks[i].hash))
-                    .filter(|&i| Some(self.tracks[i].hash) != self.rota.ident)
-                    .collect()
+                let on = |i: &usize| self.tracks[*i].on_air(t) && Some(self.tracks[*i].hash) != self.rota.ident;
+                match members {
+                    Some(m) if !all => m.iter().copied().filter(on).collect(),
+                    _ => (0..self.tracks.len()).filter(on).collect(),
+                }
             };
+            self.steps.fetch_add(self.tracks.len() + 20, std::sync::atomic::Ordering::Relaxed);
             let mut order = pool(wanted.is_empty());
             if order.is_empty() && !wanted.is_empty() {
                 // A block whose tracks are all gone falls back to the whole library.
@@ -799,7 +912,40 @@ impl Clock {
                 self.deal(deck, block, week, cursor)
             };
             let Some(i) = pick else {
-                cursor = (cursor / 60_000 + 1) * 60_000;
+                let grid = (cursor / 60_000 + 1) * 60_000;
+                if !self.skip.load(std::sync::atomic::Ordering::Relaxed) {
+                    cursor = grid;
+                    if cursor > t {
+                        return None;
+                    }
+                    continue;
+                }
+                // An empty stretch: nothing changes until a recording is added, a block begins
+                // or ends, or the bell is due, so the walk goes straight to the first minute
+                // that can find something.
+                let mut wake = self.tracks.iter().filter(|tr| tr.added_ms > cursor && tr.duration_ms >= MIN_TRACK_MS).map(|tr| tr.added_ms).min();
+                self.steps.fetch_add(self.tracks.len(), std::sync::atomic::Ordering::Relaxed);
+                let day = cursor / 86_400_000;
+                for b in &self.rota.blocks {
+                    for m in [b.start_min, b.end_min].into_iter().filter(|m| *m < DAY_MIN) {
+                        for d in day..=day + 1 {
+                            let at = d * 86_400_000 + m as u64 * 60_000;
+                            if at > cursor {
+                                wake = Some(wake.map_or(at, |w| w.min(at)));
+                            }
+                        }
+                    }
+                }
+                if let Some(b) = ident {
+                    let tr = &self.tracks[b];
+                    let due = last_ident.map_or(0, |l| l.saturating_add(bell)).max(tr.added_ms);
+                    let due = due.div_ceil(60_000).saturating_mul(60_000).max(grid);
+                    if tr.on_air(due) {
+                        wake = Some(wake.map_or(due, |w| w.min(due)));
+                    }
+                }
+                let Some(wake) = wake else { return None };
+                cursor = wake.div_ceil(60_000).saturating_mul(60_000).max(grid);
                 if cursor > t {
                     return None;
                 }
