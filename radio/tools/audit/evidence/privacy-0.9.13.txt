@@ -1,0 +1,7 @@
+PASS a phone asks carriers directly only when its owner says so
+PASS with one node known and no two-hop route, nothing plays
+PASS and the carrier was asked for nothing directly (0 requests)
+PASS a broadcasting phone with one node in reach hands that node nothing of its station
+PASS with the switch on, it plays
+PASS with a Lantern beside the keeper, a phone that never asks directly plays through two hops
+PASS with a second node in reach, the broadcasting phone's station goes out two hops away

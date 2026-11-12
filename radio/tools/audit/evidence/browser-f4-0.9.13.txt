@@ -1,0 +1,24 @@
+== probe
+tab 93eefc6e3ee7eab469bb205f54a90eb68ae5e329eb0bd71c86c4a64361e40e25 plays a900a3e0eadd0a1e4215bdf06b615476c3d3c9a3ff0bd03519cd9a718f3833e3 ahead 13311 ms
+PASS probe: the tab kept playing (0 seconds without sound ahead; least ahead 12041 ms)
+PASS probe: browser memory 591 -> peak 593 MB
+INFO probe: the tab's chatter answers to others (worst 42 ms, 0 missed; 0 attack streams opened, 0 cut)
+PASS probe: no page errors []
+== slow
+tab f13c82c56fd0aa8c660542e784e332f0b95c0a6c09952f3a535a630fd552d854 plays a900a3e0eadd0a1e4215bdf06b615476c3d3c9a3ff0bd03519cd9a718f3833e3 ahead 15712 ms
+PASS slow: the tab kept playing (0 seconds without sound ahead; least ahead 11536 ms)
+PASS slow: browser memory 592 -> peak 716 MB
+INFO slow: the tab's chatter answers to others (worst 235 ms, 0 missed; 346896 attack streams opened, 346576 cut)
+PASS slow: no page errors []
+== flood
+tab 03a363b6ca59a40cfbcddd3203ff990566bfd3826fa4224ad99264ad0bfa8aa3 plays a900a3e0eadd0a1e4215bdf06b615476c3d3c9a3ff0bd03519cd9a718f3833e3 ahead 14777 ms
+PASS flood: the tab kept playing (0 seconds without sound ahead; least ahead 11641 ms)
+PASS flood: browser memory 599 -> peak 615 MB
+INFO flood: the tab's chatter answers to others (worst 14 ms, 0 missed; 480 attack streams opened, 480 cut)
+PASS flood: no page errors []
+== big
+tab 983daa2b39e98e6321e5837cb9cd63b3f7e4ba9436b4b598bfe6054616d8f832 plays a900a3e0eadd0a1e4215bdf06b615476c3d3c9a3ff0bd03519cd9a718f3833e3 ahead 17609 ms
+PASS big: the tab kept playing (0 seconds without sound ahead; least ahead 12004 ms)
+PASS big: browser memory 597 -> peak 597 MB
+INFO big: the tab's chatter answers to others (worst 16 ms, 0 missed; 64 attack streams opened, 64 cut)
+PASS big: no page errors []

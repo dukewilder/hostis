@@ -1,0 +1,136 @@
+== stems 10:22
+PASS baseline: the target answers a listener (Some(38) ms, target 31 MB, 14 fds)
+PASS stem flood: 1276 stems of 3.75 MB answered, target 31 -> peak 250 MB, 88 tasks, 1276 stems counted
+PASS stem flood: a listener is still served (Some(6) ms)
+PASS junk stem: refused (Some([2, 0]))
+PASS after everything: the target still answers (Some(5) ms, target 250 MB, 14 fds)
+0 failed
+exit 0
+== slow 10:23
+PASS baseline: the target answers a listener (Some(37) ms, target 30 MB, 14 fds)
+PASS slow readers: 640 streams held, a listener is served meanwhile (Some(4) ms)
+PASS slow readers: still served 48 s in (Some(6) ms), target 40 MB
+PASS after everything: the target still answers (Some(10) ms, target 40 MB, 13 fds)
+0 failed
+exit 0
+== flood 10:24
+PASS baseline: the target answers a listener (Some(58) ms, target 31 MB, 14 fds)
+PASS 400 identities trickling 3,200 requests: a listener is served (Some(6) ms), target 31 -> 342 MB
+PASS after everything: the target still answers (Some(98) ms, target 342 MB, 14 fds)
+0 failed
+exit 0
+== cards 10:24
+PASS baseline: the target answers a listener (Some(39) ms, target 31 MB, 14 fds)
+     waiting out the stem delay (95 s)
+PASS oversized card: the Log shows a name of 0 characters
+PASS after everything: the target still answers (Some(11) ms, target 36 MB, 13 fds)
+0 failed
+exit 0
+== deputy 10:26
+PASS baseline: the target answers a listener (Some(36) ms, target 31 MB, 14 fds)
+     waiting out the stem delay (95 s)
+PASS revoked deputy, fresh listener: no tip taken from its card (null)
+PASS revoked deputy, fresh listener: none of its words shown as the station's (provisional true, name "Hijacked", about "Send money here", kinds ["news"])
+PASS revoked deputy, fresh listener: no cover from its card (null)
+PASS revoked deputy with the revocation aboard: its card is refused
+PASS after everything: the target still answers (Some(6) ms, target 32 MB, 13 fds)
+0 failed
+exit 0
+== fuzz 10:27
+PASS baseline: the target answers a listener (Some(47) ms, target 32 MB, 14 fds)
+PASS decoder fuzz: 400000 mutated frames, 0 panics
+PASS after everything: the target still answers (Some(7) ms, target 32 MB, 14 fds)
+0 failed
+exit 0
+== netfuzz 10:27
+PASS baseline: the target answers a listener (Some(37) ms, target 31 MB, 14 fds)
+PASS network fuzz: 3000 mutated requests, then a listener is served (Some(6) ms)
+PASS after everything: the target still answers (Some(5) ms, target 37 MB, 14 fds)
+0 failed
+exit 0
+== loop 10:28
+PASS baseline: the target answers a listener (Some(37) ms, target 30 MB, 14 fds)
+PASS declined stem: handled 1 times between two Lanterns
+PASS after everything: the target still answers (Some(4) ms, target 32 MB, 13 fds)
+0 failed
+exit 0
+== logflood 10:28
+PASS baseline: the target answers a listener (Some(39) ms, target 31 MB, 14 fds)
+     an honest station stemmed; waiting out the stem delay (95 s) and building twelve attacker cards
+     819 stems of about 3.6 MB sent for twelve carded stations; waiting out the stem delay (95 s)
+PASS log flood: 20 stations with no card refused (logs 1 -> 1 KB)
+PASS log flood: logs on disk 0 -> 57 MB across 2 -> 14 stations (carried budget 64 MB)
+PASS log flood: target 32 -> peak 279 MB (limit 320 MB over)
+FAIL log flood: target memory 688 MB 70 s after (started at 32 MB)
+PASS log flood: a listener is still served (Some(7305) ms)
+PASS log flood: the station carried before the flood is still carried (Some(4) -> Some(4) ms)
+PASS after everything: the target still answers (Some(915) ms, target 611 MB, 13 fds)
+1 failed
+exit 0
+== cardwire 10:34
+PASS baseline: the target answers a listener (Some(59) ms, target 31 MB, 14 fds)
+     waiting out the stem delay (95 s)
+PASS card with 512 signed bytes after its fields (stem answered: true): in the Log
+PASS card with 513 signed bytes after its fields (stem answered: true): kept out of the Log
+PASS card with 120000 signed bytes after its fields (stem answered: true): kept out of the Log
+PASS after everything: the target still answers (Some(6) ms, target 32 MB, 24 fds)
+0 failed
+exit 0
+== logreply 10:36
+PASS baseline: the target answers a listener (Some(64) ms, target 31 MB, 14 fds)
+PASS log replies: 64 answered, the largest 1982 KB (frame limit 4096 KB)
+PASS log replies: target 71 -> peak 265 MB
+PASS log replies: a listener is still served (Some(29) ms)
+PASS log replies: the whole log still comes, page by page (Some(203) entries)
+PASS after everything: the target still answers (Some(25) ms, target 265 MB, 14 fds)
+0 failed
+exit 0
+== now 10:36
+PASS baseline: the target answers a listener (Some(52) ms, target 30 MB, 14 fds)
+PASS web /now/f9ed9c783964f131ae3604ca5a13d847958a45d870f9ba14e23f1d2cec16a1d4: 216708 requests, p99 4 ms (limit 1000), target 70 -> peak 150 MB, a listener Some((200, 0, 551))
+PASS after everything: the target still answers (Some(17) ms, target 151 MB, 14 fds)
+0 failed
+exit 0
+== routes 10:36
+PASS baseline: the target answers a listener (Some(36) ms, target 32 MB, 14 fds)
+PASS web /now/bd26d1df92e3830e643f03a4a70af755a862cfe13c47a9d15c54ec2568e00e48: 209001 requests, p99 5 ms (limit 1000), target 71 -> peak 152 MB, a listener Some((200, 1, 551))
+PASS web /feed/bd26d1df92e3830e643f03a4a70af755a862cfe13c47a9d15c54ec2568e00e48.xml: 276196 requests, p99 7 ms (limit 1000), target 152 -> peak 152 MB, a listener Some((200, 0, 551))
+FAIL web /log.json: 188609 requests, p99 7 ms (limit 1000), target 152 -> peak 152 MB, a listener Some((200, 3416, 551))
+PASS web /: 127716 requests, p99 15 ms (limit 1000), target 152 -> peak 153 MB, a listener Some((200, 4, 551))
+FAIL web /art/0000000000000000000000000000000000000000000000000000000000000000.jpg: 380518 requests, p99 4 ms (limit 1000), target 111 -> peak 163 MB, a listener Some((200, 5405, 551))
+PASS web /episode/bd26d1df92e3830e643f03a4a70af755a862cfe13c47a9d15c54ec2568e00e48/0000000000000000000000000000000000000000000000000000000000000000.mp3: 370809 requests, p99 4 ms (limit 1000), target 131 -> peak 132 MB, a listener Some((200, 0, 551))
+FAIL web /nothing: 425425 requests, p99 4 ms (limit 1000), target 132 -> peak 132 MB, a listener Some((200, 5773, 551))
+PASS after everything: the target still answers (Some(29) ms, target 118 MB, 13 fds)
+3 failed
+exit 0
+== nest 10:38
+PASS baseline: the target answers a listener (Some(39) ms, target 31 MB, 14 fds)
+PASS nested entry 40,000 deep: the target is still running (Some(4) ms)
+PASS after everything: the target still answers (Some(4) ms, target 37 MB, 14 fds)
+0 failed
+exit 0
+== web 10:38
+PASS baseline: the target answers a listener (Some(38) ms, target 30 MB, 14 fds)
+PASS web: 2992 half-open requests held, a listener is served (Some((200, 0, 551)))
+PASS web: still served 40 s in (Some((200, 0, 551))), target 3007 fds
+PASS after everything: the target still answers (Some(17) ms, target 97 MB, 1267 fds)
+0 failed
+exit 0
+== eclipse 10:39
+PASS baseline: the target answers a listener (Some(36) ms, target 31 MB, 14 fds)
+     victim holds the station before the real carrier arrives: false
+PASS carrier eclipse: 64 claims first, then the real carrier; the victim has the station after Some(10) s (limit 240 s)
+PASS after everything: the target still answers (Some(4) ms, target 31 MB, 13 fds)
+0 failed
+exit 0
+== schedule 10:40
+PASS baseline: the target answers a listener (Some(48) ms, target 32 MB, 14 fds)
+     a station of 2,000 one-second recordings, a bell and a 20,000-name block stemmed; waiting out the stem delay (95 s)
+PASS costly schedule: the day's bill in Some(29) ms (907 items; killed after 90 s if no answer)
+PASS costly schedule: what is on, in Some(9) ms
+PASS costly schedule: tuned and playing for 30 s, the target used 1% of a core (state: "searching")
+PASS costly schedule: a listener is served while it plays (12 ms)
+PASS after everything: the target still answers (Some(5) ms, target 39 MB, 13 fds)
+0 failed
+exit 0
+DONE
