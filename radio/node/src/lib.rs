@@ -635,6 +635,27 @@ impl Inner {
         say(&format!("{cards} cards and {notes} carrier notes from {} ({n} logs behind)", node.fmt_short()));
     }
 
+    /// One of our stations' frequency, claimed once and kept for good: the one an earlier card
+    /// of the station claimed (signed here or by a co-host), else the one its key points at, or
+    /// the next free above it among the stations this node knows.
+    fn freq_for(&self, id: &StationId) -> u32 {
+        let note = format!("freq/{}", id.to_hex());
+        if let Some(f) = self.hold.read_note(&self.cfg.dir, &note, None).and_then(|b| String::from_utf8(b).ok()).and_then(|t| t.trim().parse::<u32>().ok()) {
+            if (net::FREQ_LOW..=net::FREQ_HIGH).contains(&f) {
+                return f;
+            }
+        }
+        let (claimed, taken) = {
+            let log = self.log.lock().unwrap();
+            let claimed = log.get(id).and_then(|l| l.announce.as_ref()).and_then(|a| a.freq);
+            let taken: std::collections::HashSet<u32> = log.iter().filter(|(k, _)| *k != id).filter_map(|(k, l)| Some(l.announce.as_ref()?.freq.unwrap_or_else(|| net::preferred_freq(k)))).collect();
+            (claimed, taken)
+        };
+        let f = claimed.unwrap_or_else(|| net::free_freq(id, &taken));
+        let _ = self.hold.write_note(&self.cfg.dir, &note, f.to_string().as_bytes());
+        f
+    }
+
     /// The chunk on now and the one after it, for a station the listener may turn to next: in
     /// the store before the turn, so the first sound needs no fetch. Asked for as any chunk is,
     /// through two hops on a phone, and nothing is counted or said about it.
@@ -1213,6 +1234,7 @@ impl Inner {
         self.pow_climb(&own);
         for id in own {
             let pow = self.pow_for(&id);
+            let freq = Some(self.freq_for(&id));
             let a = {
                 let s = self.store.lock().unwrap();
                 let Some(log) = s.logs.get(&id) else { continue };
@@ -1237,7 +1259,7 @@ impl Inner {
                 let explicit = log.explicit();
                 let tracks = Some(log.library().map(|l| l.len() as u32).unwrap_or(0));
                 let named = log.named_since();
-                let card = net::Card { station: id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof, cover, accent, kinds, mature, tip, explicit, tracks, named }.clipped();
+                let card = net::Card { station: id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof, cover, accent, kinds, mature, tip, explicit, tracks, named, freq }.clipped();
                 // A card is signed afresh only when something on it changes, or every eight to
                 // twelve minutes: a card stamped every twenty seconds would tell the network, to
                 // the second, when its keeper's device is awake.
@@ -1676,7 +1698,7 @@ impl Inner {
                     "accent": accent,
                     "id": hex, "call_sign": id.call_sign(), "name": shown(&a.name), "about": pyrate_core::chat::shown(&a.about), "mixed": pyrate_core::chat::mixed_script(&a.name),
                     "port": a.port.as_deref().map(shown), "live": a.live, "aboard": aboard, "kept": is_kept, "marooned": is_marooned, "since": a.since,
-                    "tracks": a.tracks, "signed_ms": a.at_ms, "named": a.named,
+                    "tracks": a.tracks, "signed_ms": a.at_ms, "named": a.named, "freq": a.freq,
                     "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),
                     "pocket": self.is_pocket(id),
                 }), a.proof.is_some().then(|| (a.clone(), show))))

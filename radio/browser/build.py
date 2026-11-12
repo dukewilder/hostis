@@ -91,6 +91,14 @@ def build(scope, dist, open_players):
     # Added to a home screen it opens as an app of its own, on HOSTIS black.
     for f in ["icon-192.png", "icon-512.png"]:
         shutil.copy(f"{W}/{f}", dist)
+    # HOSTIS's stations' own pictures, small, so the set and the list show them before the network answers.
+    os.makedirs(f"{dist}/art", exist_ok=True)
+    for h in json.loads(harbour_stations):
+        slug = h.get("art", "")[4:-4]
+        if not slug or not os.path.exists(f"{R}/stations/{slug}/station.jpg"): continue
+        from PIL import Image
+        Image.open(f"{R}/stations/{slug}/station.jpg").convert("RGB").resize((512, 512), Image.LANCZOS).save(f"{dist}/art/{slug}.jpg", quality=84, optimize=True, progressive=True)
+        Image.open(f"{R}/stations/{slug}/banner.jpg").convert("RGB").resize((1200, 400), Image.LANCZOS).save(f"{dist}/art/{slug}-banner.jpg", quality=80, optimize=True, progressive=True)
     json.dump({"name": "Pyrate Radio", "short_name": "Pyrate", "description": "Radio that every listener carries.",
                "start_url": "./", "scope": "./", "display": "standalone", "background_color": "#030303", "theme_color": "#030303",
                "icons": [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},

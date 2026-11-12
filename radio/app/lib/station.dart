@@ -733,7 +733,7 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
         Wrap(children: [for (final m in [15, 30, 60]) chip('Every $m minutes', (p['ident_every_min'] as num?)?.toInt() == m, () => setState(() => p['ident_every_min'] = m))]),
       const SizedBox(height: 6),
       pyrateButton(speaking ?? 'MAKE ONE FROM TEXT', speaking != null ? null : () async {
-        final text = await askText(context, 'YOUR STATION NAME', 'What the voice says', 'You\'re listening to ${widget.name.isEmpty ? 'Pyrate Radio' : widget.name}, ${frequency(widget.station).toStringAsFixed(1)} on the dial.');
+        final text = await askText(context, 'YOUR STATION NAME', 'What the voice says', 'You\'re listening to ${widget.name.isEmpty ? 'Pyrate Radio' : widget.name}, ${freqLabel(widget.station)} on the dial.');
         if (text == null || text.trim().isEmpty) return;
         if (mounted) setState(() => speaking = 'SPEAKING');
         final path = await speakToFile(text.trim());
@@ -1112,7 +1112,38 @@ class _FeedsPanelState extends State<FeedsPanel> {
 // town, and whoever scans it is listening a tap later, in the browser or the app.
 
 /// Where a station sits on every dial, from its key: 87.5 to 108.0.
-double frequency(String id) => (875 + int.parse(id.substring(0, 6), radix: 16) % 206) / 10;
+/// The frequency a station's key points at, in kHz: the tenth it always had, and two figures more.
+int preferredFreq(String id) => (875 + int.parse(id.substring(0, 6), radix: 16) % 206) * 100 + int.parse(id.substring(6, 10), radix: 16) % 100;
+
+/// Every station's frequency on this phone, worked out from the Log (see `resolveFreqs`).
+Map<String, int> resolvedFreqs = {};
+
+/// Each station keeps the frequency its card claims (or, for a card from before claims, the one
+/// its key points at). If two ever claim one, the one kept here holds it, else the one on the air
+/// longer, and the other moves to the next free place up the dial: no two share one.
+void resolveFreqs(List<Map<String, dynamic>> list) {
+  final order = [...list]..sort((a, b) {
+      final k = (b['kept'] == true ? 1 : 0) - (a['kept'] == true ? 1 : 0);
+      if (k != 0) return k;
+      final t = ((a['since'] as num?) ?? 9e15).compareTo((b['since'] as num?) ?? 9e15);
+      return t != 0 ? t : (a['id'] as String).compareTo(b['id'] as String);
+    });
+  final taken = <int>{}, m = <String, int>{};
+  for (final s in order) {
+    final c = (s['freq'] as num?)?.toInt();
+    var f = c != null && c >= 87500 && c <= 108099 ? c : preferredFreq(s['id'] as String);
+    for (var i = 0; taken.contains(f) && i < 20600; i++) {
+      f = f >= 108099 ? 87500 : f + 1;
+    }
+    taken.add(f);
+    m[s['id'] as String] = f;
+  }
+  resolvedFreqs = m;
+}
+
+/// A station's frequency in MHz, as the dial shows it: 91.137.
+double frequency(String id) => (resolvedFreqs[id] ?? preferredFreq(id)) / 1000;
+String freqLabel(String id) => frequency(id).toStringAsFixed(3);
 
 /// HOSTIS's own stations are passed on as hostis.black links; every other as an open player's.
 String stationLink(String id) => isHarbour(id) || openPlayers.isEmpty ? 'https://hostis.black/pyrateradio/listen/#$id' : '${openPlayers.first}#$id';
@@ -1210,7 +1241,7 @@ class _PosterSheetState extends State<PosterSheet> {
                   const SizedBox(height: 14),
                   Text(s['name'] ?? '', textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: pica(30, color: ink, spacing: 0.03)),
                   const SizedBox(height: 4),
-                  Text('${frequency(id).toStringAsFixed(1)} on the dial  ${(s['call_sign'] ?? '').toString()}', style: mono(12, color: soft, weight: FontWeight.w700)),
+                  Text('${freqLabel(id)} on the dial  ${(s['call_sign'] ?? '').toString()}', style: mono(12, color: soft, weight: FontWeight.w700)),
                   if ((s['about'] ?? '').toString().isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),

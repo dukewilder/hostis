@@ -1055,6 +1055,15 @@ impl Ship {
     /// The card this tab flies for one of its stations, signed by the key it keeps.
     fn card(&self, id: &StationId) -> Option<Announce> {
         let now = raw_now();
+        // The station's frequency: the one its last card claimed, wherever that was signed, else
+        // the one its key points at or the next free above it among the stations this tab knows.
+        let freq = {
+            let log = self.log.lock().unwrap();
+            log.get(id).and_then(|l| l.announce.as_ref()).and_then(|a| a.freq).unwrap_or_else(|| {
+                let taken: HashSet<u32> = log.iter().filter(|(k, _)| *k != id).filter_map(|(k, l)| Some(l.announce.as_ref()?.freq.unwrap_or_else(|| net::preferred_freq(k)))).collect();
+                net::free_freq(id, &taken)
+            })
+        };
         let mine = self.mine.lock().unwrap();
         let m = mine.get(id)?;
         let pow = m.pow?;
@@ -1080,6 +1089,7 @@ impl Ship {
                 cover: art.and_then(|a| a.0).map(|a| a.hash), accent: art.map(|a| a.2), kinds, mature, tip, explicit: log.explicit(),
                 tracks: Some(log.library().map(|l| l.len() as u32).unwrap_or(0)),
                 named: log.named_since(),
+                freq: Some(freq),
             }
             .clipped()
             .sign(&m.key),
@@ -1327,7 +1337,7 @@ impl Ship {
                 Some((aboard, json!({
                     "id": id.to_hex(), "call_sign": id.call_sign(), "name": shown(&a.name), "about": pyrate_core::chat::shown(&a.about), "mixed": pyrate_core::chat::mixed_script(&a.name),
                     "port": a.port.as_deref().map(shown), "live": a.live, "aboard": aboard, "since": a.since,
-                    "tracks": a.tracks, "signed_ms": a.at_ms, "named": a.named,
+                    "tracks": a.tracks, "signed_ms": a.at_ms, "named": a.named, "freq": a.freq,
                     "kinds": a.kinds, "mature": a.mature, "explicit": a.explicit, "tip": a.tip,
                     "cover": a.cover.map(|h| hex(&h)), "banner": banners.get(id), "accent": accent,
                     "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),

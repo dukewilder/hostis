@@ -34,17 +34,24 @@
 <div class="controls">
 <button id="go" class="power"><span class="glyph" aria-hidden="true"></span><span class="lbl">Listen</span></button>
 <div class="buttons">
-<button id="pagego" class="btn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>Station page</button>
+<button id="pagego" class="btn" aria-label="Station page"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>Page</button>
 <button id="pass" class="btn" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 13v7h14v-7"/></svg>Share</button>
-<button id="spin" class="btn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h4l10 10h4M3 17h4l3-3M14 10l3-3h4M18 4l3 3-3 3M18 14l3 3-3 3"/></svg>Spin the dial</button>
-<button id="clip" class="btn" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12"/><path d="M16 10l5-3v10l-5-3"/></svg>Clip it</button>
+<button id="spin" class="btn" aria-label="Spin the dial" title="Turn to a station at random"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h4l10 10h4M3 17h4l3-3M14 10l3-3h4M18 4l3 3-3 3M18 14l3 3-3 3"/></svg>Spin</button>
 <button id="keep" class="btn open-only" hidden aria-pressed="false"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg><span>Keep</span></button>
 <button id="tip" class="btn" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v10M15 9.5h-4.2a1.8 1.8 0 0 0 0 3.6h2.4a1.8 1.8 0 0 1 0 3.6H9"/></svg>Tip</button>
+<button id="more" class="btn" aria-expanded="false" aria-controls="morebox"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>More</span></button>
 </div>
 </div>
 <div id="passbox" class="passbox" hidden><div class="qr" id="qr"></div><div class="passtext"><p class="boxhead">Share</p><p>Scan it with a phone camera to start listening, in the browser or the app.</p><p class="link" id="plink"></p><div class="row-btns"><button id="pcopy" class="btn">Copy the link</button><button id="pshare" class="btn">Share</button><button id="pclose" class="btn quiet">Close</button></div></div></div>
 <div id="clipbox" class="passbox" hidden><video id="clipv" playsinline controls></video><div class="passtext"><p class="boxhead">Clip it</p><p>Twenty seconds of what is on, with the station's name, its place on the dial and a code to scan. Post it anywhere.</p><div class="row-btns"><a id="clipsave" class="btn" download>Save the clip</a><button id="clipshare" class="btn">Share</button><button id="clipclose" class="btn quiet">Close</button></div></div></div>
 <div id="tipbox" class="passbox" hidden><div class="passtext"><p class="boxhead">Tip the station</p><p>A tip goes from your own wallet straight to the station. Pyrate Radio moves no money and sees none of it.</p><p class="link" id="tipaddr"></p><input id="tipnote" maxlength="140" placeholder="A note for the station" aria-label="A note for the station"><p class="fine" id="tiphow"></p><div class="row-btns"><a id="tipgo" class="btn">Open my wallet</a><button id="tipcopy" class="btn">Copy the address</button><button id="tipclose" class="btn quiet">Close</button></div></div></div>
+<div id="morebox" class="passbox morebox" hidden><div class="passtext">
+<div id="cliprow" class="morerow" hidden><p class="mhead">Clip it</p><p>Twenty seconds of what is on, as a video with the station&#8217;s name and a code to scan.</p><button id="clip" class="btn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12"/><path d="M16 10l5-3v10l-5-3"/></svg>Clip it</button></div>
+<div class="morerow"><p class="mhead">Sleep timer</p><p id="sleepsay">Fades out and stops on its own.</p><div class="row-btns" id="sleepbtns"><button class="btn" data-m="15">15 min</button><button class="btn" data-m="30">30 min</button><button class="btn" data-m="45">45 min</button><button class="btn" data-m="60">60 min</button><button class="btn" data-m="90">90 min</button><button id="sleepoff" class="btn quiet" hidden>Cancel</button></div></div>
+<div class="morerow"><p class="mhead">Recently played</p><p>Forgotten when this tab closes.</p><ol id="played" class="played"></ol></div>
+<div class="morerow open-only"><button id="mhide" class="btn quiet">Hide this station</button></div>
+<div class="row-btns"><button id="moreclose" class="btn quiet">Close</button></div>
+</div></div>
 <audio id="a" playsinline></audio>
 </section>
 
@@ -64,7 +71,7 @@
 <div class="sechead harbour-only"><h2>HOSTIS on the Air</h2><span class="cap">tap a station to listen</span></div>
 <div class="sechead open-only"><h2>On the Air</h2><span class="cap">tap a station to listen</span></div>
 <div class="listbar"><input id="find" type="search" class="open-only" placeholder="Find a station" aria-label="Find a station" autocomplete="off"><div class="views" role="group" aria-label="How to show the stations"><button id="vlist" class="btn on" aria-pressed="true">List</button><button id="vchart" class="btn" aria-pressed="false">Map</button></div></div>
-<div class="listbar open-only"><div id="kinds" class="kinds" role="group" aria-label="Kinds of station"></div><label class="sortby"><span>Order</span><select id="sort" aria-label="Order of the list"><option value="aboard">Most listened</option><option value="newest">Newest</option><option value="longest">On the air longest</option></select></label></div>
+<div class="listbar open-only"><div id="kinds" class="kinds" role="group" aria-label="Kinds of station"></div><label class="sortby"><span>Order</span><select id="sort" aria-label="Order of the list"><option value="aboard">Most listened</option><option value="newest">Newest</option><option value="longest">On the air longest</option><option value="carried">Most backed up</option></select></label></div>
 <div id="chart" class="chart" hidden></div>
 <div id="rows"></div>
 <div class="harbour-only everyone">

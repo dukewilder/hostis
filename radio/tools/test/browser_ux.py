@@ -71,6 +71,28 @@ with sync_playwright() as p:
     # Listen and Stop straight away, while it is still tuning in.
     pg.click("#go"); time.sleep(0.25); pg.click("#go"); time.sleep(4); s = st()
     check(not s["playing"] and s["scheduled"] == 0, "Stop pressed while tuning in stays stopped")
+    # A station left on the set brings its sound ahead: turned to on the dial, left a few
+    # seconds, then Listen.
+    first = st()["station"]
+    pg.evaluate("(() => { const b = [...document.querySelectorAll('#names button')].find(b => b.dataset.id !== window.pyrate.state().station); b && b.click() })()")
+    time.sleep(8); sat = st()["station"]
+    t3 = time.time(); pg.click("#go"); t_sat = None
+    for i in range(900):
+        s = st()
+        if s["heard"] and s["station"] == sat: t_sat = time.time() - t3; break
+        time.sleep(0.05)
+    print(f"time  Listen to sound after the station sat on the set 8 s: {t_sat and round(t_sat, 2)} s")
+    check(t_sat is not None and t_sat < 1.0, "a station left on the set plays within a second of Listen")
+    pg.click("#go"); time.sleep(0.5)
+    # The station's actions are one toolbar on one line; More holds the sleep timer.
+    tops = pg.eval_on_selector_all(".controls .buttons .btn:not([hidden])", "bs => bs.map(b => Math.round(b.getBoundingClientRect().top))")
+    check(len(tops) >= 2 and len(set(tops)) == 1, f"the station's actions sit on one line ({len(tops)} of them)")
+    pg.click("#more"); time.sleep(0.3)
+    check(pg.is_visible("#morebox") and pg.is_visible("#sleepbtns"), "More opens with the sleep timer")
+    pg.click("#sleepbtns [data-m='15']"); time.sleep(0.2)
+    check((pg.text_content("#more span") or "") == "Sleep" and pg.is_visible("#sleepoff"), "a sleep timer is set and shown")
+    pg.click("#sleepoff"); pg.keyboard.press("Escape"); time.sleep(0.3)
+    check(not pg.is_visible("#morebox") and (pg.text_content("#more span") or "") == "More", "the timer cancels and Escape closes More")
     # The sections, and Back.
     for v, label in [("page", "Station page"), ("settings", "Settings"), ("list", "Stations")]:
         pg.click(f".tab[data-v={v}]"); time.sleep(0.5)

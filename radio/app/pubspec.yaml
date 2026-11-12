@@ -22,6 +22,7 @@ flutter:
     - assets/release_keys.txt
     - assets/chart.json
     - assets/brand/
+    - assets/stations/
   fonts:
     - family: Cinzel
       fonts:
