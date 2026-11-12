@@ -303,6 +303,11 @@ pub struct Archive {
     deputies: std::collections::HashSet<[u8; 32]>,
     /// The log's size as it travels: the sum of its entries' encodings.
     bytes: u64,
+    /// Each recording's place in `entries`, by its entry hash, so a title is found without
+    /// hashing the whole log.
+    track_at: std::collections::HashMap<Hash, usize>,
+    /// The latest picture set for each recording.
+    art_of: std::collections::HashMap<Hash, ArtRef>,
 }
 
 /// The most 20 ms frames a chunk may hold: six seconds, as every encoder here makes them.
@@ -353,7 +358,7 @@ fn within_bounds(body: &Body) -> bool {
 
 impl Archive {
     pub fn new(station: StationId) -> Self {
-        Self { station, entries: Vec::new(), head: [0; 32], deputies: Default::default(), bytes: 0 }
+        Self { station, entries: Vec::new(), head: [0; 32], deputies: Default::default(), bytes: 0, track_at: Default::default(), art_of: Default::default() }
     }
 
     pub fn station(&self) -> StationId {
@@ -435,7 +440,8 @@ impl Archive {
         if !within_bounds(&e.body) {
             return Err(Error::Chunk);
         }
-        let size = signed.to_bytes()?.len();
+        let encoded = signed.to_bytes()?;
+        let size = encoded.len();
         if size > MAX_ENTRY_BYTES {
             return Err(Error::TooBig);
         }
@@ -449,7 +455,18 @@ impl Archive {
             }
             _ => {}
         }
-        self.head = signed.hash()?;
+        // The same hash `SignedEntry::hash` gives, from the bytes already in hand.
+        let hash = *blake3::hash(&encoded).as_bytes();
+        match e.body() {
+            Body::Track { .. } => {
+                self.track_at.insert(hash, self.entries.len());
+            }
+            Body::TrackArt { track, art } => {
+                self.art_of.insert(*track, *art);
+            }
+            _ => {}
+        }
+        self.head = hash;
         self.bytes += size as u64;
         self.entries.push(signed);
         Ok(())
@@ -539,10 +556,12 @@ impl Archive {
 
     /// The art for one track, by the track's entry hash.
     pub fn track_art(&self, track: &Hash) -> Option<ArtRef> {
-        self.entries.iter().rev().find_map(|e| match e.entry.body() {
-            Body::TrackArt { track: t, art } if t == track => Some(*art),
-            _ => None,
-        })
+        self.art_of.get(track).copied()
+    }
+
+    /// The entry that added a recording, by its entry hash.
+    pub fn track_entry(&self, track: &Hash) -> Option<&SignedEntry> {
+        self.track_at.get(track).map(|&i| &self.entries[i])
     }
 
     /// Every picture this station's log names.

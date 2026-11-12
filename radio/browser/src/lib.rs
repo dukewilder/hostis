@@ -1129,12 +1129,10 @@ impl Ship {
     }
 
     fn describe(a: &Archive, track: &Hash) -> Option<(String, String, Vec<pyrate_core::Chunk>, u8)> {
-        a.entries().iter().find_map(|e| match e.entry.body() {
-            Body::Track { title, by, chunks, channels, .. } if e.hash().ok().as_ref() == Some(track) => {
-                Some((title.clone(), by.clone(), chunks.clone(), *channels))
-            }
+        match a.track_entry(track)?.entry.body() {
+            Body::Track { title, by, chunks, channels, .. } => Some((title.clone(), by.clone(), chunks.clone(), *channels)),
             _ => None,
-        })
+        }
     }
 
     /// What a station plays at `at`: the chunk, where it starts, and what it belongs to.

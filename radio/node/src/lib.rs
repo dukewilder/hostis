@@ -231,14 +231,7 @@ impl OnNow {
 }
 
 pub(crate) fn describe_track(a: &Archive, track: &Hash) -> (String, String) {
-    for e in a.entries() {
-        if let Body::Track { title, by, .. } = e.entry.body() {
-            if e.hash().ok().as_ref() == Some(track) {
-                return (title.clone(), by.clone());
-            }
-        }
-    }
-    (String::new(), String::new())
+    pyrate_core::page::describe_track(a, track)
 }
 
 /// One chunk as it played, kept briefly for Tape it.
@@ -1314,23 +1307,34 @@ impl Inner {
         let mut budget = 200usize;
         for st in kept {
             let _ = self.sync_log(st).await;
-            let want: Vec<Hash> = {
+            // The clock is built under the store's lock and walked outside it; then no more is
+            // looked at than the six hours, and no more chunks than will be fetched.
+            let clock = {
                 let s = self.store.lock().unwrap();
                 let Some(a) = s.logs.get(&st) else { continue };
                 let Ok(clock) = pyrate_core::clock::Clock::new(a) else { continue };
+                clock
+            };
+            let until = now + 6 * 3_600_000;
+            let coming = clock.upcoming(now, until);
+            let want: Vec<Hash> = {
+                let s = self.store.lock().unwrap();
+                let Some(a) = s.logs.get(&st) else { continue };
                 let mut want = Vec::new();
-                for (start, track, _) in clock.upcoming(now, now + 6 * 3_600_000) {
-                    let Some(Body::Track { chunks, .. }) = a.entries().iter().find(|e| e.hash().ok() == Some(track)).map(|e| e.entry.body()) else { continue };
+                'tracks: for (start, track, _) in coming {
+                    let Some(Body::Track { chunks, .. }) = a.track_entry(&track).map(|e| e.entry.body()) else { continue };
                     let mut t = start;
                     for c in chunks {
+                        if t >= until || want.len() >= budget {
+                            break 'tracks;
+                        }
                         let end = t + c.duration_ms();
-                        if end > now && !s.has_chunk(&c.hash) {
+                        if end > now && !want.contains(&c.hash) && !s.has_chunk(&c.hash) {
                             want.push(c.hash);
                         }
                         t = end;
                     }
                 }
-                want.dedup();
                 want
             };
             for h in want {
@@ -2562,11 +2566,18 @@ impl Node {
                     let _ = self.rt.block_on(async { tokio::time::timeout(Duration::from_secs(8), inner.sync_log(st)).await });
                 }
                 let hours = req["hours"].as_u64().unwrap_or(24).min(168);
+                // The clock is built under the store's lock and walked outside it: a station's
+                // schedule may take a while to walk, and nothing else waits on it.
+                let clock = {
+                    let s = inner.store.lock().unwrap();
+                    let a = s.logs.get(&st).context("this station's log has not arrived yet")?;
+                    pyrate_core::clock::Clock::new(a)?
+                };
+                let now = now_ms();
+                let coming = clock.upcoming(now, now + hours * 3_600_000);
                 let s = inner.store.lock().unwrap();
                 let a = s.logs.get(&st).context("this station's log has not arrived yet")?;
-                let clock = pyrate_core::clock::Clock::new(a)?;
-                let now = now_ms();
-                let bill: Vec<Value> = clock.upcoming(now, now + hours * 3_600_000).into_iter().map(|(start, track, dur)| {
+                let bill: Vec<Value> = coming.into_iter().map(|(start, track, dur)| {
                     let (title, by) = describe_track(a, &track);
                     json!({ "start_ms": start, "duration_ms": dur, "title": shown(&title), "by": shown(&by), "track": hex(&track), "art": a.track_art(&track).map(|r| hex(&r.hash)) })
                 }).collect();
@@ -3189,14 +3200,7 @@ mod playout {
     }
 
     fn describe(a: &Archive, track: &Hash) -> (String, String) {
-        for e in a.entries() {
-            if let Body::Track { title, by, .. } = e.entry.body() {
-                if e.hash().ok().as_ref() == Some(track) {
-                    return (title.clone(), by.clone());
-                }
-            }
-        }
-        (String::new(), String::new())
+        pyrate_core::page::describe_track(a, track)
     }
 
     pub async fn run(inner: Arc<Inner>) {
@@ -3308,13 +3312,13 @@ mod playout {
                 let at = st.playhead.unwrap_or(now + 400);
                 // Nothing on the clock: off the air, or nothing yet to play. Said below.
                 let Some(np) = clock.now(at) else { break };
-                let entry = archive.entries().iter().find(|e| e.hash().ok() == Some(np.track));
+                let entry = archive.track_entry(&np.track);
                 let Some(Body::Track { chunks, channels, .. }) = entry.map(|e| e.entry.body()) else { break };
                 let Some(chunk) = chunks.get(np.chunk).copied() else { break };
                 // Tuning in, the chunk after this one is asked for at the same time, so the first
                 // sound has a full chunk behind it and never stops to wait for the second.
                 let next = clock.now(at - np.chunk_offset_ms + chunk.duration_ms() + 1).and_then(|n2| {
-                    let e = archive.entries().iter().find(|e| e.hash().ok() == Some(n2.track))?;
+                    let e = archive.track_entry(&n2.track)?;
                     match e.entry.body() {
                         Body::Track { chunks, .. } => chunks.get(n2.chunk).map(|c| c.hash),
                         _ => None,
