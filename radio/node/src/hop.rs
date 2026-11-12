@@ -29,11 +29,11 @@ const FLUFF: f64 = 0.25;
 /// Cargo this node has relayed lately, so a stem that comes round again spreads here.
 const STEM_MEMORY: usize = 512;
 /// Stems waiting to be shown, and their bytes in KiB: 32 and 32 MiB on a phone, 256 and
-/// 256 MiB on a Lantern.
+/// 128 MiB on a Lantern.
 static WAITING: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(32);
 static WAITING_BYTES: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(32 * 1024);
 static WAITING_LANTERN: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(256);
-static WAITING_BYTES_LANTERN: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(256 * 1024);
+static WAITING_BYTES_LANTERN: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(128 * 1024);
 
 /// Whether a stem's cargo is what it claims: entries that parse, belong to the station and
 /// carry a valid signature, a card that is the station's and verifies, and chunks that match
@@ -189,19 +189,45 @@ impl Inner {
     }
 
     pub(crate) async fn private_log(&self, station: StationId) -> Result<usize> {
-        for _ in 0..3 {
+        let card = self.log.lock().unwrap().get(&station).and_then(|l| l.announce.as_ref().map(|a| a.head)).unwrap_or(0);
+        let mut added = 0;
+        let mut answered = false;
+        let mut tries = 0;
+        // A page at a time, until the log reaches the card or a route gives nothing more:
+        // pages are limited by bytes, so a long log comes in several.
+        for _ in 0..32 {
             let from = self.store.lock().unwrap().logs.get(&station).map(|a| a.len()).unwrap_or(0);
-            let Ok(raw) = self.ask_privately(&Ask::Log { station, from }).await else { continue };
+            let Ok(raw) = self.ask_privately(&Ask::Log { station, from }).await else {
+                tries += 1;
+                if tries >= 3 {
+                    break;
+                }
+                continue;
+            };
             let Ok(Response::Entries(list)) = postcard::from_bytes::<Response>(&raw) else { continue };
             let entries: Vec<SignedEntry> = list.iter().filter_map(|b| SignedEntry::from_bytes(b).ok()).collect();
             // An exit that found no carrier answers with nothing. For a log this phone has
             // never seen, that is no answer at all, so another exit is asked.
             if entries.is_empty() && from == 0 {
+                tries += 1;
+                if tries >= 3 {
+                    break;
+                }
                 continue;
             }
-            return self.store.lock().unwrap().put_entries(station, entries);
+            answered = true;
+            let n = self.store.lock().unwrap().put_entries(station, entries)?;
+            added += n;
+            let now_len = self.store.lock().unwrap().logs.get(&station).map(|a| a.len()).unwrap_or(0);
+            if n == 0 || now_len >= card {
+                break;
+            }
         }
-        Err(anyhow!("no private route answered"))
+        if answered {
+            Ok(added)
+        } else {
+            Err(anyhow!("no private route answered"))
+        }
     }
 
     pub(crate) async fn private_chunk(&self, station: StationId, hash: Hash, keep: bool) -> Result<Vec<u8>> {

@@ -348,8 +348,9 @@ pub struct Inner {
     pub(crate) stems_in: std::sync::atomic::AtomicU64,
     /// Nodes that failed to answer lately, and when: asked only after the others.
     pub(crate) failed: Mutex<HashMap<[u8; 32], u64>>,
-    /// Nodes that answered this one lately: trusted to keep a place among a station's carriers.
-    answered: Mutex<HashMap<[u8; 32], u64>>,
+    /// Nodes that served this one a station's entries or sound lately: trusted to keep a place
+    /// among a station's carriers. Answering is not enough: anyone can answer with nothing.
+    served: Mutex<HashMap<[u8; 32], u64>>,
     /// The device's hold key, for the small files the node keeps beside its store.
     pub(crate) hold: hold::Hold,
     /// Where carriers said they can be reached, signed by each: the network's own address book.
@@ -539,18 +540,7 @@ impl Inner {
             anyhow::Ok(postcard::from_bytes(&bytes)?)
         };
         match tokio::time::timeout(Duration::from_secs(20), fut).await {
-            Ok(Ok(r)) => {
-                let mut a = self.answered.lock().unwrap();
-                if a.len() >= 512 {
-                    let now = now_ms();
-                    a.retain(|_, t| now.saturating_sub(*t) < 24 * 3_600_000);
-                    if a.len() >= 512 {
-                        a.clear();
-                    }
-                }
-                a.insert(*node.as_bytes(), now_ms());
-                Ok(r)
-            }
+            Ok(Ok(r)) => Ok(r),
             Ok(Err(e)) => {
                 self.conns.lock().unwrap().remove(&node);
                 Err(e)
@@ -563,14 +553,29 @@ impl Inner {
         }
     }
 
+    /// A node served this one real entries or sound.
+    fn note_served(&self, node: &EndpointId) {
+        let mut a = self.served.lock().unwrap();
+        if a.len() >= 1024 {
+            let now = now_ms();
+            a.retain(|_, t| now.saturating_sub(*t) < 24 * 3_600_000);
+            if a.len() >= 1024 {
+                a.clear();
+            }
+        }
+        a.insert(*node.as_bytes(), now_ms());
+    }
+
     fn carriers(&self, station: &StationId) -> Vec<EndpointId> {
         let me = *self.endpoint.id().as_bytes();
         let now = now_ms();
         let failed = self.failed.lock().unwrap().clone();
+        let served = self.served.lock().unwrap().clone();
         let log = self.log.lock().unwrap();
         let Some(l) = log.get(station) else { return vec![] };
         let card = l.announce.as_ref().map(|a| a.head);
-        net::rank_carriers(&l.carriers, &me, card, |n| failed.get(n).is_some_and(|t| now.saturating_sub(*t) < net::FAILED_MS))
+        let trusted = |n: &[u8; 32]| served.get(n).is_some_and(|t| now.saturating_sub(*t) < 24 * 3_600_000) || self.doors.iter().any(|d| d.as_bytes() == n);
+        net::rank_carriers(&l.carriers, &me, card, |n| failed.get(n).is_some_and(|t| now.saturating_sub(*t) < net::FAILED_MS), trusted)
             .into_iter()
             .filter_map(|n| EndpointId::from_bytes(&n).ok())
             .collect()
@@ -694,17 +699,38 @@ impl Inner {
 
     pub async fn sync_log_direct(&self, station: StationId) -> Result<usize> {
         let mut added = 0;
-        for node in self.carriers(&station) {
+        // At most twelve asked a round: a list full of claims that never answer costs a round
+        // its time, not the node its afternoon. Each that fails goes to the back for a while.
+        let card = self.log.lock().unwrap().get(&station).and_then(|l| l.announce.as_ref().map(|a| a.head)).unwrap_or(0);
+        let mut pages = 0;
+        let mut queue: std::collections::VecDeque<EndpointId> = self.carriers(&station).into_iter().take(12).collect();
+        while let Some(node) = queue.pop_front() {
             let from = self.store.lock().unwrap().logs.get(&station).map(|a| a.len()).unwrap_or(0);
+            let claimed = self.log.lock().unwrap().get(&station).and_then(|l| l.carriers.get(node.as_bytes()).map(|c| c.0)).unwrap_or(0);
             let Ok(Response::Entries(raw)) = self.ask(node, &Request::Log { station, from }).await else { continue };
             let entries: Vec<SignedEntry> = raw.iter().filter_map(|b| SignedEntry::from_bytes(b).ok()).collect();
             if entries.is_empty() {
+                // It said it carries more of the log than this node has, and gave none of it.
+                if claimed > from {
+                    self.failed.lock().unwrap().insert(*node.as_bytes(), now_ms());
+                }
                 continue;
             }
             match self.store.lock().unwrap().put_entries(station, entries) {
                 Ok(n) => {
                     say(&format!("log {}: {n} new entries from {}", station.call_sign(), node.fmt_short()));
-                    added += n
+                    if n > 0 {
+                        self.note_served(&node);
+                    }
+                    added += n;
+                    // Pages are limited by bytes: a long log comes in several, from the same
+                    // carrier, up to the card.
+                    pages += 1;
+                    let now_len = self.store.lock().unwrap().logs.get(&station).map(|a| a.len()).unwrap_or(0);
+                    if n > 0 && now_len < card && pages < 32 {
+                        queue.push_front(node);
+                        continue;
+                    }
                 }
                 Err(e) => tracing::warn!("log from {node}: {e}"),
             }
@@ -777,6 +803,7 @@ impl Inner {
             // Sealed first: the carrier hands on bytes it never opened.
             if let Ok(Response::Sealed(Some(s))) = self.ask(node, &Request::SealedChunk { name }).await {
                 let Some(b) = pyrate_core::seal::unseal(hash, &s) else { continue };
+                self.note_served(&node);
                 if !keep || self.store.lock().unwrap().put_sealed(hash, &s).is_ok() {
                     return Ok(b);
                 }
@@ -786,6 +813,7 @@ impl Inner {
                 if blake3::hash(&b).as_bytes() != hash {
                     continue;
                 }
+                self.note_served(&node);
                 if !keep || self.store.lock().unwrap().put_chunk(hash, &b).is_ok() {
                     return Ok(b);
                 }
@@ -887,10 +915,11 @@ impl Inner {
                 }
                 let l = log.entry(station).or_default();
                 let card = l.announce.as_ref().map(|a| a.head);
-                let answered = self.answered.lock().unwrap();
-                let trusted = |n: &[u8; 32]| answered.contains_key(n) || self.doors.iter().any(|d| d.as_bytes() == n);
-                net::note_carrier(&mut l.carriers, node, head, card, now, trusted);
-                drop(answered);
+                let served = self.served.lock().unwrap().clone();
+                let failed = self.failed.lock().unwrap().clone();
+                let trusted = |n: &[u8; 32]| served.get(n).is_some_and(|t| now.saturating_sub(*t) < 24 * 3_600_000) || self.doors.iter().any(|d| d.as_bytes() == n);
+                let failing = |n: &[u8; 32]| failed.get(n).is_some_and(|t| now.saturating_sub(*t) < net::FAILED_MS);
+                net::note_carrier(&mut l.carriers, node, head, card, now, trusted, failing, rand::random());
                 let ours = self.store.lock().unwrap().logs.get(&station).map(|x| x.len()).unwrap_or(0);
                 if head > ours {
                     return Some(station);
@@ -2053,7 +2082,7 @@ impl Node {
             stem_seen: Mutex::new(std::collections::VecDeque::new()),
             stems_in: Default::default(),
             failed: Mutex::new(HashMap::new()),
-            answered: Mutex::new(HashMap::new()),
+            served: Mutex::new(HashMap::new()),
             hold,
             book: book.clone(),
             dark,
@@ -2065,6 +2094,19 @@ impl Node {
             let i2 = inner.clone();
             inner.load_log();
             rt.spawn(async move { i2.open_pockets().await });
+        }
+        // A Lantern runs for months: memory freed after a flood goes back to the system each
+        // minute instead of staying with the process at its peak.
+        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+        if cfg.lantern {
+            rt.spawn(async {
+                loop {
+                    tokio::time::sleep(Duration::from_secs(60)).await;
+                    unsafe {
+                        libc::malloc_trim(0);
+                    }
+                }
+            });
         }
 
         // The Log.

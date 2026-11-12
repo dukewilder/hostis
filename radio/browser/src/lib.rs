@@ -472,7 +472,7 @@ impl Ship {
             .lock()
             .unwrap()
             .get(station)
-            .map(|l| net::rank_carriers(&l.carriers, &me, l.announce.as_ref().map(|a| a.head), |n| failed.get(n).is_some_and(|t| now.saturating_sub(*t) < net::FAILED_MS)))
+            .map(|l| net::rank_carriers(&l.carriers, &me, l.announce.as_ref().map(|a| a.head), |n| failed.get(n).is_some_and(|t| now.saturating_sub(*t) < net::FAILED_MS), |n| self.harbour.iter().any(|h| h.as_bytes() == n)))
             .unwrap_or_default();
         let mut out: Vec<EndpointId> = ranked.into_iter().filter_map(|n| EndpointId::from_bytes(&n).ok()).collect();
         if pocket {
@@ -492,7 +492,7 @@ impl Ship {
         let mut archives = self.archives.lock().unwrap();
         let a = archives.entry(station).or_insert_with(|| Archive::new(station));
         for b in raw {
-            // A tab holds at most 32 MB bytes of any one log.
+            // A tab holds at most 32 MB of any one log.
             if a.bytes() + b.len() as u64 > TAB_LOG_MAX {
                 break;
             }
@@ -527,7 +527,7 @@ impl Ship {
         // Two hops first, as the app does: the carrier that answers never sees this tab.
         let mut added = 0;
         let mut private = false;
-        for _ in 0..3 {
+        for _ in 0..32 {
             let from = self.archives.lock().unwrap().get(&station).map(|a| a.len()).unwrap_or(0);
             let Ok(Response::Entries(raw)) = self.ask_privately(&Ask::Log { station, from }).await else { continue };
             let got = raw.len();
@@ -539,7 +539,8 @@ impl Ship {
             private = true;
             let (n, struck) = self.take_entries(station, raw);
             added += n;
-            if struck || got < 2000 {
+            // Pages are limited by bytes: keep asking while each brings something new.
+            if struck || got == 0 || n == 0 {
                 break;
             }
         }
@@ -549,8 +550,9 @@ impl Ship {
         if !self.direct_ok.load(std::sync::atomic::Ordering::Relaxed) {
             return Err(anyhow!("no two-hop route yet"));
         }
-        for node in self.carriers(&station) {
-            loop {
+        for node in self.carriers(&station).into_iter().take(12) {
+            for _ in 0..64 {
+                let before = added;
                 let from = self.archives.lock().unwrap().get(&station).map(|a| a.len()).unwrap_or(0);
                 let raw = match self.ask(node, &Request::Log { station, from }).await {
                     Ok(Response::Entries(raw)) => raw,
@@ -564,7 +566,7 @@ impl Ship {
                 let mut archives = self.archives.lock().unwrap();
                 let a = archives.entry(station).or_insert_with(|| Archive::new(station));
                 for b in raw {
-                    // A tab holds at most 32 MB bytes of any one log.
+                    // A tab holds at most 32 MB of any one log.
                     if a.bytes() + b.len() as u64 > TAB_LOG_MAX {
                         break;
                     }
@@ -586,7 +588,9 @@ impl Ship {
                     self.clocks.lock().unwrap().remove(&station);
                     return Ok(added);
                 }
-                if got < 2000 {
+                // A page that brings nothing new ends the asking: no carrier keeps a tab
+                // looping on entries it already has.
+                if got == 0 || added == before {
                     break;
                 }
             }
@@ -613,7 +617,7 @@ impl Ship {
             let mut archives = self.archives.lock().unwrap();
             let a = archives.entry(station).or_insert_with(|| Archive::new(station));
             for b in raw.iter().filter_map(|b| pyrate_core::pocket::open(&key, b)) {
-                // A tab holds at most 32 MB bytes of any one log.
+                // A tab holds at most 32 MB of any one log.
                 if a.bytes() + b.len() as u64 > TAB_LOG_MAX {
                     break;
                 }
@@ -802,7 +806,19 @@ impl Ship {
                 }
                 let l = log.entry(station).or_default();
                 let card = l.announce.as_ref().map(|a| a.head);
-                net::note_carrier(&mut l.carriers, node, head, card, now, |n| self.harbour.iter().any(|h| h.as_bytes() == n));
+                let failed = self.failed.lock().unwrap().clone();
+                let mut coin = [0u8; 8];
+                let _ = getrandom::fill(&mut coin);
+                net::note_carrier(
+                    &mut l.carriers,
+                    node,
+                    head,
+                    card,
+                    now,
+                    |n| self.harbour.iter().any(|h| h.as_bytes() == n),
+                    |n| failed.get(n).is_some_and(|t| now.saturating_sub(*t) < net::FAILED_MS),
+                    u64::from_le_bytes(coin),
+                );
                 drop(log);
                 let ours = self.archives.lock().unwrap().get(&station).map(|x| x.len()).unwrap_or(0);
                 (head > ours).then_some(station)
