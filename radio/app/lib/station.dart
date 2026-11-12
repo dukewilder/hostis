@@ -191,6 +191,19 @@ class _StationPageState extends State<StationPage> {
             ),
           ]),
           if ((s['about'] ?? '').toString().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 14), child: Text(s['about'], style: serif(16, color: boneDim, italic: true))),
+          // What a listener may want to know before staying, said once, plainly.
+          for (final said in [
+            if (s['twin'] == true && !isHarbour(id)) 'Another station with this name has been on the air longer. Check the call sign before you share this one.',
+            if (emptyStation(s)) 'This station has nothing to play yet.',
+            if (now - ((s['signed_ms'] as num?)?.toInt() ?? now) > 365 * 86400000) 'Its keeper has not been aboard for over a year. It plays on from the radios that carry it.'
+            else if (now - ((s['signed_ms'] as num?)?.toInt() ?? now) > 30 * 86400000) 'Its keeper has not been aboard for over a month. It plays on from the radios that carry it.',
+          ])
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(border: Border.all(color: line, width: 1)),
+              child: Text(said, style: serif(15, color: boneDim, italic: true)),
+            ),
           // The call sign is a name; the key is the station. Two stations can wear the same
           // call sign, never the same key.
           Padding(

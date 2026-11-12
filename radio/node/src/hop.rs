@@ -149,16 +149,43 @@ impl Inner {
         let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.doors.contains(n)).copied().collect();
         others.shuffle(&mut rand::thread_rng());
         // A peer met in an earlier run before a newcomer: a crowd of nodes that appeared today
-        // cannot make one of their own a guard.
-        let veterans: Vec<EndpointId> = others.iter().filter(|n| self.cfg.bootstrap.contains(n)).copied().collect();
-        let g = veterans.first().copied().or_else(|| others.first().copied()).or_else(|| known.first().copied())?;
+        // cannot make one of their own a guard. Within each, one this node is talking to now
+        // before one only heard of, so a new guard answers from its first fetch.
+        others.sort_by_key(|n| (!self.cfg.bootstrap.contains(n), !self.live(n)));
+        let g = others.first().copied().or_else(|| known.first().copied())?;
         let _ = self.hold.write_note(&self.cfg.dir, "fetch-guard", g.to_string().as_bytes());
         Some(g)
+    }
+
+    /// Whether this node is talking to `n` now: a gossip neighbour or an open connection.
+    fn live(&self, n: &EndpointId) -> bool {
+        self.neighbours.lock().unwrap().contains(n.as_bytes()) || self.conns.lock().unwrap().get(n).is_some_and(|c| c.close_reason().is_none())
     }
 
     /// Two hops. One only when the network has a single other node and the owner has let the
     /// radio take weaker routes: a lone exit would see both who asks and what for.
     pub(crate) async fn ask_privately(&self, ask: &Ask) -> Result<Vec<u8>> {
+        self.ask_route(ask, None).await
+    }
+
+    /// Exits for a request, as many as asked for and all different: nodes that have not failed
+    /// lately first, then the rest, never one of `not`.
+    fn exits(&self, nodes: &[EndpointId], not: &[EndpointId], n: usize) -> Vec<EndpointId> {
+        let now = now_ms();
+        let failed = self.failed.lock().unwrap().clone();
+        let bad = |x: &EndpointId| failed.get(x.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS);
+        let mut good: Vec<EndpointId> = nodes.iter().filter(|x| !not.contains(x) && !bad(x)).copied().collect();
+        let mut rest: Vec<EndpointId> = nodes.iter().filter(|x| !not.contains(x) && bad(x)).copied().collect();
+        good.shuffle(&mut rand::thread_rng());
+        rest.shuffle(&mut rand::thread_rng());
+        good.into_iter().chain(rest).take(n).collect()
+    }
+
+    /// Two hops by the guard and the given exit, or one drawn. An answer that does not open
+    /// marks the exit as failing, so the next draw passes over it for a while. A guard this
+    /// node is not talking to gets three seconds to answer a call before another is drawn, so
+    /// a guard that has gone to sleep costs a moment, not the ten seconds of a slow route.
+    async fn ask_route(&self, ask: &Ask, exit: Option<EndpointId>) -> Result<Vec<u8>> {
         let mut nodes = self.known_nodes();
         if nodes.is_empty() {
             return Err(anyhow!("no route"));
@@ -174,7 +201,14 @@ impl Inner {
             return c.decrypt(Nonce::from_slice(&ANSWER_NONCE), raw.as_slice()).map_err(|_| anyhow!("open"));
         }
         let guard = self.fetch_guard(&nodes).ok_or_else(|| anyhow!("no route"))?;
-        let exit = *nodes.iter().find(|n| **n != guard).ok_or_else(|| anyhow!("no route"))?;
+        if !self.live(&guard) && !matches!(tokio::time::timeout(Duration::from_secs(3), self.conn(guard)).await, Ok(Ok(_))) {
+            self.hold.remove_note(&self.cfg.dir, "fetch-guard");
+            return Err(anyhow!("the guard did not answer"));
+        }
+        let exit = match exit.filter(|e| *e != guard) {
+            Some(e) => e,
+            None => *self.exits(&nodes, &[guard], 1).first().ok_or_else(|| anyhow!("no route"))?,
+        };
         let (sealed, c) = seal(exit.as_bytes(), ask)?;
         let blob = postcard::to_stdvec(&sealed)?;
         let raw = match self.hop(guard, &Hop::Forward { next: *exit.as_bytes(), blob }).await {
@@ -185,7 +219,10 @@ impl Inner {
                 return Err(e);
             }
         };
-        c.decrypt(Nonce::from_slice(&ANSWER_NONCE), raw.as_slice()).map_err(|_| anyhow!("open"))
+        c.decrypt(Nonce::from_slice(&ANSWER_NONCE), raw.as_slice()).map_err(|_| {
+            self.failed.lock().unwrap().insert(*exit.as_bytes(), now_ms());
+            anyhow!("open")
+        })
     }
 
     pub(crate) async fn private_log(&self, station: StationId) -> Result<usize> {
@@ -233,17 +270,26 @@ impl Inner {
         }
     }
 
-    /// The first page of a log along two routes at once: the first answer with entries in it.
+    /// The first page of a log along four routes at once, through the guard to four different
+    /// exits: the first answer with entries in it. The guard sees four sealed requests where it
+    /// saw two; each exit sees what it always saw.
     async fn first_page(&self, station: StationId) -> Result<Vec<u8>> {
         use n0_future::StreamExt;
-        let one = || async {
-            let raw = self.ask_privately(&Ask::Log { station, from: 0 }).await?;
+        let one = |exit: Option<EndpointId>| async move {
+            let raw = self.ask_route(&Ask::Log { station, from: 0 }, exit).await?;
             match postcard::from_bytes::<Response>(&raw) {
                 Ok(Response::Entries(list)) if !list.is_empty() => Ok(raw),
                 _ => Err(anyhow!("an exit with nothing")),
             }
         };
-        let mut tries: n0_future::FuturesUnordered<_> = (0..2).map(|_| Box::pin(one())).collect();
+        let nodes = self.known_nodes();
+        let guard = if nodes.len() >= 2 { self.fetch_guard(&nodes) } else { None };
+        let exits = guard.map(|g| self.exits(&nodes, &[g], 4)).unwrap_or_default();
+        let mut tries: n0_future::FuturesUnordered<_> = if exits.is_empty() {
+            (0..2).map(|_| Box::pin(one(None))).collect()
+        } else {
+            exits.iter().map(|e| Box::pin(one(Some(*e)))).collect()
+        };
         let mut last = Err(anyhow!("no route"));
         while let Some(r) = tries.next().await {
             if r.is_ok() {
@@ -257,7 +303,7 @@ impl Inner {
     pub(crate) async fn private_chunk(&self, station: StationId, hash: Hash, keep: bool) -> Result<Vec<u8>> {
         use n0_future::StreamExt;
         let name = pyrate_core::seal::name(&hash);
-        let one = || async {
+        let one = || async move {
             let raw = tokio::time::timeout(Duration::from_secs(8), self.ask_privately(&Ask::Sealed { station, name })).await.map_err(|_| anyhow!("slow route"))??;
             match postcard::from_bytes::<Response>(&raw) {
                 Ok(Response::Sealed(Some(s))) => pyrate_core::seal::unseal(&hash, &s).map(|b| (b, s)).ok_or_else(|| anyhow!("unopened")),

@@ -107,6 +107,44 @@ bool falseColours(Map s) {
 
 final Set<String> harbourNames = {};
 
+/// A name as the eye reads it: no case, no accents, Greek and Cyrillic look-alikes as Latin,
+/// nothing but letters and digits. Two names with the same reading look the same on a dial.
+String nameReading(String name) {
+  const look = {'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'і': 'i', 'ј': 'j', 'ѕ': 's', 'к': 'k', 'м': 'm', 'н': 'h', 'т': 't', 'в': 'b', 'ο': 'o', 'α': 'a', 'ν': 'v', 'ρ': 'p', 'τ': 't', 'ι': 'i', 'κ': 'k', 'ε': 'e', 'υ': 'u', '0': 'o', '1': 'l'};
+  const plain = {'à': 'a', 'á': 'a', 'â': 'a', 'ä': 'a', 'ã': 'a', 'å': 'a', 'ç': 'c', 'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e', 'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i', 'ñ': 'n', 'ò': 'o', 'ó': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o', 'ø': 'o', 'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u', 'ý': 'y', 'ÿ': 'y'};
+  final b = StringBuffer();
+  for (final c in name.toLowerCase().split('')) {
+    final r = look[c] ?? plain[c] ?? c;
+    if (RegExp(r'[a-z0-9]').hasMatch(r)) b.write(r);
+  }
+  return b.toString();
+}
+
+/// Marks each station whose name reads like another's that has worn it longer (`twin`): that one
+/// is shown as it is, the newer say so. Nothing is hidden; the listener sees which came first.
+void markTwins(List<Map<String, dynamic>> list) {
+  final first = <String, Map<String, dynamic>>{};
+  for (final s in list) {
+    final k = nameReading((s['name'] ?? '').toString());
+    if (k.isEmpty) continue;
+    final f = first[k];
+    // The one that has worn the name longer comes first: a station that took the name lately
+    // is the newer to it, however long it has been on the air.
+    num age(Map m) => (m['named'] as num?) ?? (m['since'] as num?) ?? 0;
+    if (f == null || age(s) < age(f)) first[k] = s;
+  }
+  for (final s in list) {
+    final f = first[nameReading((s['name'] ?? '').toString())];
+    s['twin'] = f != null && f['id'] != s['id'];
+  }
+}
+
+/// A kind as stations write it, in one spelling: "Hip-Hop", "hip hop" and "hiphop" are one.
+String kindOf(String k) => k.toLowerCase().replaceAll(RegExp(r'[-_./]+'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+
+/// Whether a station says it has nothing to play: no recordings and not live.
+bool emptyStation(Map s) => s['tracks'] == 0 && s['live'] != true;
+
 /// The seal on a station's name: HOSTIS's own, or a warning.
 List<Widget> seals(Map s, {double size = 9}) => [
       if (isHarbour(s['id'] as String)) ...[
@@ -117,6 +155,9 @@ List<Widget> seals(Map s, {double size = 9}) => [
       if (falseColours(s)) ...[
         const SizedBox(width: 8),
         Text('FALSE COLOURS?', style: carved(size, color: bone, spacing: 0.25)),
+      ] else if (s['twin'] == true && !isHarbour(s['id'] as String)) ...[
+        const SizedBox(width: 8),
+        Text('SAME NAME', style: carved(size, color: boneFaint, spacing: 0.25)),
       ],
       if (s['explicit'] == true) ...[
         const SizedBox(width: 8),
@@ -129,6 +170,19 @@ List<Widget> seals(Map s, {double size = 9}) => [
 
 // ---------------------------------------------------------------------------------------
 // The Log
+
+/// The kinds the stations on the air give themselves, the ten most given, in one spelling.
+List<String> kindsOnAir(List<Map<String, dynamic>> stations, String? on) {
+  final n = <String, int>{};
+  for (final s in stations) {
+    for (final k in {for (final k in (s['kinds'] as List?) ?? []) kindOf(k.toString())}) {
+      if (k.isNotEmpty) n[k] = (n[k] ?? 0) + 1;
+    }
+  }
+  final top = (n.keys.where((k) => n[k]! >= 2 || stations.length < 20).toList()..sort((a, b) => n[b]! != n[a]! ? n[b]! - n[a]! : a.compareTo(b))).take(10).toList();
+  if (on != null && !top.contains(on)) top.add(on);
+  return top;
+}
 
 class LogPage extends StatefulWidget {
   final Tuner radio;
@@ -163,7 +217,7 @@ class _LogPageState extends State<LogPage> {
     final q = search.text.trim().toLowerCase();
     var st = widget.radio.stations.where((s) {
       if (hideMature && (s['mature'] == true || s['explicit'] == true)) return false;
-      if (kind != null && !((s['kinds'] as List?) ?? []).contains(kind)) return false;
+      if (kind != null && !((s['kinds'] as List?) ?? []).any((k) => kindOf(k.toString()) == kind)) return false;
       if (port != null && (s['port'] ?? '') != port) return false;
       if (onNow && s['live'] != true && ((nowOn[s['id']] as Map?)?['slot'] ?? '').toString().isEmpty) return false;
       if (q.isEmpty) return true;
@@ -277,7 +331,13 @@ class _LogPageState extends State<LogPage> {
     final radio = widget.radio;
     final st = filtered();
     refreshNow(st);
-    final ports = radio.stations.map((s) => (s['port'] ?? '').toString()).where((p) => p.isNotEmpty).toSet().toList()..sort();
+    // Home ports as filters: with hundreds of stations on the air, the twenty most named.
+    final portCount = <String, int>{};
+    for (final s in radio.stations) {
+      final p = (s['port'] ?? '').toString();
+      if (p.isNotEmpty) portCount[p] = (portCount[p] ?? 0) + 1;
+    }
+    final ports = (portCount.keys.toList()..sort((a, b) => portCount[b]! != portCount[a]! ? portCount[b]! - portCount[a]! : a.compareTo(b))).take(20).toList();
     return CustomScrollView(slivers: [
       SliverToBoxAdapter(
         child: Padding(
@@ -327,7 +387,7 @@ class _LogPageState extends State<LogPage> {
                     hideMature = !hideMature;
                     pref('hide_mature', hideMature);
                   })),
-              for (final k in stationKinds) chip(k, kind == k, () => setState(() => kind = kind == k ? null : k)),
+              for (final k in kindsOnAir(radio.stations, kind)) chip(k, kind == k, () => setState(() => kind = kind == k ? null : k)),
               for (final p in ports) chip(p, port == p, () => setState(() => port = port == p ? null : p)),
             ])),
             const SizedBox(height: 6),
@@ -1526,6 +1586,7 @@ class _SettingsPageState extends State<SettingsPage> {
           Native.call({'cmd': 'hiss', 'value': v});
           setState(() => pref('hiss', v));
         }, sub: 'So you hear the radio working before the station comes in.'),
+        setting('Show stations with nothing to play yet', pref('show_empty') == true, (v) => setState(() => pref('show_empty', v)), sub: 'Stations just raised, with no recordings on them. Hidden until they have some.'),
         setting('Hide mature stations', pref('hide_mature') == true, (v) => setState(() => pref('hide_mature', v)), sub: 'Strong language or themes, as each station says of itself.'),
         setting('Show explicit stations', pref('show_explicit') == true, (v) => setState(() => pref('show_explicit', v)), sub: 'Sexual or graphic material. Hidden until you turn this on.'),
         setting('Pictures only from stations I keep', (Native.call({'cmd': 'art_kept_only'}) as Map)['value'] == true, (v) => setState(() => Native.call({'cmd': 'art_kept_only', 'value': v})), sub: 'Other stations show by name alone.'),

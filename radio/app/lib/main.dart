@@ -143,6 +143,8 @@ Future<int> buildCode() async => await _service.invokeMethod<int>('build_code').
 /// The stations a first open lands on when no station has yet earned it: HOSTIS's own.
 List<String> harbour = [];
 
+const stationKindsForPreview = ['music', 'talk', 'news', 'readings'];
+
 /// HOSTIS's stations by name, from the build, so the dial has them before the network answers.
 Map<String, String> harbourName = {};
 
@@ -209,6 +211,30 @@ class Tuner extends ChangeNotifier {
   /// When the radio began waiting for sound, for the reason it gives past ten seconds.
   int busySince = 0;
   bool _warmedKept = false;
+
+  /// For looking at the app with a crowded Log on a computer (PYRATE_PREVIEW_STATIONS=1000):
+  /// made-up stations added to the list, never tuned to anything real. A phone has no such
+  /// setting.
+  static final List<Map<String, dynamic>> _preview = () {
+    final n = Platform.isAndroid ? 0 : int.tryParse(Platform.environment['PYRATE_PREVIEW_STATIONS'] ?? '') ?? 0;
+    final r = math.Random(7);
+    const a = ['Black', 'Salt', 'Night', 'Harbour', 'Lantern', 'Iron', 'Tide', 'Copper', 'Low', 'Grey', 'Quiet', 'Open', 'Old'];
+    const b = ['Radio', 'Watch', 'Wire', 'Hours', 'Coast', 'Air', 'Bell', 'Deck', 'Waves', 'Mile', 'Crew', 'Light', 'Room'];
+    const ports = ['Lisbon', 'Bristol', 'Austin, Texas', 'Lagos', 'Osaka', 'Manila', 'Cape Town', 'Montreal', ''];
+    return [
+      for (var i = 0; i < n; i++)
+        {
+          'id': List.generate(64, (_) => '0123456789abcdef'[r.nextInt(16)]).join(),
+          'name': '${a[r.nextInt(a.length)]} ${b[r.nextInt(b.length)]}',
+          'call_sign': 'PREVIEW·${i.toRadixString(16).toUpperCase().padLeft(4, '0')}',
+          'about': ['', 'Records from the stacks, all night.', 'Talk and the news from the harbour wall.', 'Field recordings.'][r.nextInt(4)],
+          'aboard': (400 / math.pow(i + 1, 0.7)).round(),
+          'live': r.nextInt(30) == 0,
+          'port': ports[r.nextInt(ports.length)],
+          'kinds': [stationKindsForPreview[r.nextInt(stationKindsForPreview.length)]],
+        }
+    ];
+  }();
 
   int carrying = 0;
   int carriedBytes = 0;
@@ -385,7 +411,9 @@ class Tuner extends ChangeNotifier {
       pendingLink = null;
       tune(id);
     }
-    if (_ticks % 3 == 1 || stations.isEmpty) {
+    // A crowded Log is read every four seconds rather than every two: it is the largest answer
+    // the node gives the screen.
+    if (_ticks % (stations.length > 200 ? 6 : 3) == 1 || stations.isEmpty) {
       final list = await Native.callAway({'cmd': 'stations'});
       if (list is List && (list.isNotEmpty || !stations.any((s) => s['placeholder'] == true))) {
         final at = pages.hasClients ? (pages.page ?? 0).round() : -1;
@@ -394,7 +422,13 @@ class Tuner extends ChangeNotifier {
         final fresh = list.cast<Map<String, dynamic>>();
         // A station tuned before its card came stays on the dial until the card comes.
         final keep = stations.where((s) => s['placeholder'] == true && s['id'] == tuned && !fresh.any((f) => f['id'] == s['id']));
-        stations = [...fresh, ...keep];
+        // A station with nothing to play yet stays off the dial and the list until it has
+        // something, unless it is kept, this phone's own, tuned, or the owner asks to see them.
+        final mineId = mine?['id'];
+        final showEmpty = pref('show_empty') == true;
+        final listed = [for (final s in [...fresh, ...keep, ..._preview]) if (showEmpty || !emptyStation(s) || s['kept'] == true || s['id'] == mineId || s['id'] == tuned) s];
+        markTwins(listed);
+        stations = listed;
         // The dial follows the station, not its place in the list: when the Log reorders
         // or shrinks, the face turns back to what was tuned or shown, and tunes nothing.
         if (stations.map((s) => s['id']).join() != before) quiet = true;
@@ -625,7 +659,13 @@ class _PyrateAppState extends State<PyrateApp> {
       ),
       home: ListenableBuilder(
         listenable: radio,
-        builder: (context, _) => Scaffold(
+        // Back from Stations, Broadcast or Settings comes back to the radio before it leaves.
+        builder: (context, _) => PopScope(
+          canPop: tab == 0,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop && tab != 0) setState(() => tab = 0);
+          },
+          child: Scaffold(
           // On a computer the set keeps a radio's width in the middle of the window.
           body: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 620), child: SafeArea(
             child: Column(children: [
@@ -672,6 +712,7 @@ class _PyrateAppState extends State<PyrateApp> {
               ),
             ]),
           ),
+        ),
         ),
       ),
     );

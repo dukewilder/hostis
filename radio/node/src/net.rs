@@ -86,6 +86,15 @@ pub struct Card {
     /// older app reads the card as it always has; a card from before it reads as not explicit.
     #[serde(skip)]
     pub explicit: bool,
+    /// How many recordings the station has to play, written after `explicit` the same way. A
+    /// card from before it reads as None: not known. A listener's radio uses it to keep a
+    /// station with nothing on it out of the way until it has something.
+    #[serde(skip)]
+    pub tracks: Option<u32>,
+    /// Since when the station has worn its present name (see `Archive::named_since`), after
+    /// `tracks`. Two stations with names that read alike are told apart by it.
+    #[serde(skip)]
+    pub named: Option<u64>,
 }
 
 const CARD_DOMAIN: &[u8] = b"pyrate/announce/v2\0";
@@ -128,6 +137,12 @@ impl Card {
     pub fn sign(self, key: &StationKey) -> Announce {
         let mut raw = postcard::to_stdvec(&self).unwrap_or_default();
         raw.extend(postcard::to_stdvec(&self.explicit).unwrap_or_default());
+        if let Some(t) = self.tracks {
+            raw.extend(postcard::to_stdvec(&t).unwrap_or_default());
+            if let Some(n) = self.named {
+                raw.extend(postcard::to_stdvec(&n).unwrap_or_default());
+            }
+        }
         let mut m = CARD_DOMAIN.to_vec();
         m.extend_from_slice(&raw);
         Announce { sig: key.sign(&m), card: self, raw }
@@ -192,7 +207,19 @@ impl<'de> Deserialize<'de> for Announce {
         let rest = match postcard::take_from_bytes::<bool>(rest) {
             Ok((e, rest)) => {
                 card.explicit = e;
-                rest
+                match postcard::take_from_bytes::<u32>(rest) {
+                    Ok((t, rest)) => {
+                        card.tracks = Some(t);
+                        match postcard::take_from_bytes::<u64>(rest) {
+                            Ok((n, rest)) => {
+                                card.named = Some(n);
+                                rest
+                            }
+                            Err(_) => rest,
+                        }
+                    }
+                    Err(_) => rest,
+                }
             }
             Err(_) => rest,
         };
@@ -777,7 +804,7 @@ mod tests {
         let card = Card {
             station: k.id(), head: 3, name: "HOSTIS".into(), about: "a line".into(), port: Some("Tortuga".into()),
             live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None,
-            kinds: vec!["talk".into()], mature: false, tip: None, explicit: false,
+            kinds: vec!["talk".into()], mature: false, tip: None, explicit: false, tracks: None, named: None,
         }
         .sign(&k);
         let entry = pyrate_core::SignedEntry::sign(&k, pyrate_core::Entry { station: k.id(), seq: 0, prev: [0; 32], at_ms: 1, body: pyrate_core::Body::Colours { name: "x".into(), about: "y".into(), port: None, tip: None } }).unwrap().to_bytes().unwrap();
@@ -929,7 +956,7 @@ mod tests {
         let a = Card {
             station: k.id(), head: 3, name: "HOSTIS".into(), about: "".into(), port: None,
             live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None,
-            kinds: vec!["talk".into()], mature: false, tip: None, explicit: false,
+            kinds: vec!["talk".into()], mature: false, tip: None, explicit: false, tracks: None, named: None,
         }
         .sign(&k);
         assert!(a.verify());
@@ -949,7 +976,7 @@ mod tests {
         let mut card = Card {
             station: k.id(), head: 1, name: "X".into(), about: "".into(), port: None,
             live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None,
-            kinds: vec![], mature: true, tip: None, explicit: true,
+            kinds: vec![], mature: true, tip: None, explicit: true, tracks: None, named: None,
         };
         let back: Announce = postcard::from_bytes(&postcard::to_stdvec(&card.clone().sign(&k)).unwrap()).unwrap();
         assert!(back.verify() && back.explicit && back.mature);
@@ -964,6 +991,21 @@ mod tests {
     }
 
     #[test]
+    fn tracks_ride_after_explicit_and_older_cards_read_as_unknown() {
+        let k = StationKey::generate().unwrap();
+        let card = Card {
+            station: k.id(), head: 3, name: "Y".into(), about: "".into(), port: None,
+            live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None,
+            kinds: vec![], mature: false, tip: None, explicit: true, tracks: Some(42), named: Some(9),
+        };
+        let back: Announce = postcard::from_bytes(&postcard::to_stdvec(&card.clone().sign(&k)).unwrap()).unwrap();
+        assert!(back.verify() && back.explicit && back.tracks == Some(42) && back.named == Some(9));
+        // A 0.9.13 card: explicit and nothing after it.
+        let older: Announce = postcard::from_bytes(&postcard::to_stdvec(&Card { tracks: None, named: None, ..card }.sign(&k)).unwrap()).unwrap();
+        assert!(older.verify() && older.explicit && older.tracks.is_none() && older.named.is_none());
+    }
+
+    #[test]
     fn a_card_from_a_later_version_still_verifies() {
         // A later version appends a field to the card. This one reads what it knows.
         #[derive(Serialize)]
@@ -975,7 +1017,7 @@ mod tests {
         let card = Card {
             station: k.id(), head: 1, name: "Later".into(), about: "".into(), port: None,
             live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None,
-            kinds: vec![], mature: false, tip: None, explicit: false,
+            kinds: vec![], mature: false, tip: None, explicit: false, tracks: None, named: None,
         };
         let mut raw = postcard::to_stdvec(&card).unwrap();
         raw.extend(postcard::to_stdvec(&Later { card: &card, extra: 9 }.extra).unwrap());
@@ -995,9 +1037,13 @@ mod card_limit_tests {
 
     fn with_tail(tail: usize) -> Result<Announce, postcard::Error> {
         let k = pyrate_core::StationKey::generate().unwrap();
-        let card = Card { station: k.id(), head: 1, name: "Tail".into(), about: String::new(), port: None, live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None, kinds: vec![], mature: false, tip: None, explicit: false };
+        let card = Card { station: k.id(), head: 1, name: "Tail".into(), about: String::new(), port: None, live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None, kinds: vec![], mature: false, tip: None, explicit: false, tracks: None, named: None };
         let mut raw = postcard::to_stdvec(&card).unwrap();
         raw.extend(postcard::to_stdvec(&false).unwrap());
+        // The fields this version knows end with the recordings count and the name's age; the
+        // tail comes after them.
+        raw.extend(postcard::to_stdvec(&7u32).unwrap());
+        raw.extend(postcard::to_stdvec(&5u64).unwrap());
         raw.extend(std::iter::repeat_n(0x5a, tail));
         let mut m = CARD_DOMAIN.to_vec();
         m.extend_from_slice(&raw);
@@ -1015,7 +1061,7 @@ mod card_limit_tests {
     #[test]
     fn long_cards_are_clipped_by_their_station_and_refused_from_anyone_else() {
         let k = pyrate_core::StationKey::generate().unwrap();
-        let card = |name: String| Card { station: k.id(), head: 0, name, about: "a".repeat(5_000), port: Some("p".repeat(500)), live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None, kinds: (0..30).map(|i| format!("k{i}")).collect(), mature: false, tip: Some("t".repeat(300)), explicit: false };
+        let card = |name: String| Card { station: k.id(), head: 0, name, about: "a".repeat(5_000), port: Some("p".repeat(500)), live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None, kinds: (0..30).map(|i| format!("k{i}")).collect(), mature: false, tip: Some("t".repeat(300)), explicit: false, tracks: None, named: None };
         assert!(!card("N".repeat(500)).sign(&k).verify());
         let ok = card("Ñ".repeat(500)).clipped().sign(&k);
         assert!(ok.verify());
@@ -1029,7 +1075,7 @@ mod card_limit_tests {
         let deputy = pyrate_core::StationKey::generate().unwrap();
         let mut arch = pyrate_core::Archive::new(master.id());
         let proof = arch.write(&master, 1_000, pyrate_core::Body::Deputy { key: deputy.id().0, label: "x".into() }).unwrap().to_bytes().unwrap();
-        let c = Card { station: master.id(), head: arch.len(), name: "S".into(), about: String::new(), port: None, live: false, at_ms: 1, pow: pow_find(&master.id()), since: 1, proof: Some(proof), cover: None, accent: None, kinds: vec![], mature: false, tip: Some("x".into()), explicit: false }.sign(&deputy);
+        let c = Card { station: master.id(), head: arch.len(), name: "S".into(), about: String::new(), port: None, live: false, at_ms: 1, pow: pow_find(&master.id()), since: 1, proof: Some(proof), cover: None, accent: None, kinds: vec![], mature: false, tip: Some("x".into()), explicit: false, tracks: None, named: None }.sign(&deputy);
         assert!(c.verify());
         assert!(!deputy_current(&c, None));
         assert!(deputy_current(&c, Some(&arch)));

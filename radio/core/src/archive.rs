@@ -508,6 +508,23 @@ impl Archive {
         self.latest.colours.map(|i| self.entries[i].entry.body())
     }
 
+    /// Since when the station has worn the name it wears now: the first of its colours entries,
+    /// counting back, that already gave this name. A station that took another's name lately
+    /// shows as newer to it than one that has had it all along, however old the station is.
+    pub fn named_since(&self) -> Option<u64> {
+        let Some(Body::Colours { name, .. }) = self.colours() else { return None };
+        let mut since = None;
+        for e in self.entries.iter().rev() {
+            if let Body::Colours { name: n, .. } = e.entry.body() {
+                if n != name {
+                    break;
+                }
+                since = Some(e.entry.at_ms);
+            }
+        }
+        since
+    }
+
     /// The rota in force, or the default: the whole library, shuffled, all day.
     pub fn rota(&self) -> crate::clock::Rota {
         match self.latest.rota.map(|i| self.entries[i].entry.body()) {

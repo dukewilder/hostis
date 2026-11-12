@@ -138,8 +138,33 @@ function rememberHarbours() {
 function marooned() { try { return new Set(JSON.parse(store('pyrate.maroon') || '[]')) } catch (e) { return new Set() } }
 function setMarooned(s) { store('pyrate.maroon', JSON.stringify([...s])) }
 // The listener's own switches. Explicit stays off and art stays on until they say otherwise.
-const sw = { mature: () => store('pyrate.hide_mature') === '1', explicit: () => store('pyrate.show_explicit') === '1', art: () => store('pyrate.hide_art') !== '1', hiss: () => store('pyrate.hiss') !== '0' };
-function allowed(s) { return !((s.explicit && !sw.explicit()) || (sw.mature() && (s.mature || s.explicit))) }
+const sw = { mature: () => store('pyrate.hide_mature') === '1', explicit: () => store('pyrate.show_explicit') === '1', art: () => store('pyrate.hide_art') !== '1', hiss: () => store('pyrate.hiss') !== '0', empty: () => store('pyrate.show_empty') === '1' };
+// A station that says it has no recordings and is not live has nothing to play yet: it stays
+// out of the list and the dial until it does, unless the listener keeps it or asks to see them.
+const empty = s => s.tracks === 0 && !s.live;
+function allowed(s) { return !((s.explicit && !sw.explicit()) || (sw.mature() && (s.mature || s.explicit)) || (empty(s) && !sw.empty() && !keptSet.has(s.id))) }
+
+// ---- What this browser keeps of its own choosing ------------------------------------------
+// Kept stations come first in the list. The list is sealed under the browser's own key, like
+// invitations, so a copy of the profile does not say what its owner listens to.
+let keptSet = new Set();
+function saveKept() { keepSealed('pyrate.kept', JSON.stringify([...keptSet])) }
+
+// Two stations whose names read alike, letter for letter or by look-alike letters from other
+// alphabets: the one that has worn the name longer is shown as it is, and the newer ones say
+// so beside their names. Nothing is hidden or judged; the listener sees which came first.
+const LOOK = { 'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'і': 'i', 'ј': 'j', 'ѕ': 's', 'к': 'k', 'м': 'm', 'н': 'h', 'т': 't', 'в': 'b', 'ο': 'o', 'α': 'a', 'ν': 'v', 'ρ': 'p', 'τ': 't', 'ι': 'i', 'κ': 'k', 'ε': 'e', 'υ': 'u', '0': 'o', '1': 'l' };
+const skel = name => [...norm(name)].map(c => LOOK[c] || c).join('').replace(/[^a-z0-9]/g, '');
+function twins(list) {
+  const first = new Map();
+  const age = s => s.named || s.since || 0;
+  for (const s of list) { const k = skel(s.name); if (!k) continue; const f = first.get(k); if (!f || age(s) < age(f)) first.set(k, s) }
+  for (const s of list) { const f = first.get(skel(s.name)); s.twin = !!f && f.id !== s.id }
+}
+// Kinds as stations write them, gathered into one spelling: "Hip-Hop", "hip hop" and "hiphop"
+// are one kind.
+const kindOf = k => norm(k).replace(/[-_./]+/g, ' ').replace(/\s+/g, ' ').trim();
+let kindOn = null, sortBy = store('pyrate.sort') || 'aboard', kindsKey = '';
 
 // The flag every station flies until it raises a picture: its key, drawn.
 function bits(id) { const b = []; for (const c of id) { const v = parseInt(c, 16); for (let i = 3; i >= 0; i--) b.push((v >> i) & 1) } return b }
@@ -305,19 +330,39 @@ function scale() {
   let t = ''; for (let a = -48; a <= 48; a += 12) { const r = a * Math.PI / 180; t += '<line x1="' + (60 + 46 * Math.sin(r)) + '" y1="' + (64 - 46 * Math.cos(r)) + '" x2="' + (60 + 52 * Math.sin(r)) + '" y2="' + (64 - 52 * Math.cos(r)) + '"/>' }
   $('ticks').innerHTML = t;
 }
+// With hundreds of stations on the air the glass names the eighty most listened and the one
+// on the set; the rest are a search away in the list.
+const DIAL_NAMES = 80;
 function dial(list) {
-  const ids = list.map(s => s.id + (s.live ? '*' : '')).join();
+  // The eighty most listened, the station on the set, and the stations this browser keeps.
+  const named = list.slice(0, DIAL_NAMES);
+  for (const s of list.slice(DIAL_NAMES)) if (s.id === cur?.id || keptSet.has(s.id)) named.push(s);
+  const ids = named.map(s => s.id + (s.live ? '*' : '')).join() + '#' + (cur?.id || '');
   if (ids === dialIds) return;
-  dialIds = ids; order = [...list].sort((a, b) => fq(a.id) - fq(b.id));
+  dialIds = ids; order = named.sort((a, b) => fq(a.id) - fq(b.id));
   // The track stands in from the glass's ends (player.css), so a name at 88 or 108 is never cut.
-  $('track').style.width = Math.max($('glass').clientWidth - 72, order.length * 92) + 'px';
+  $('track').style.width = Math.max($('glass').clientWidth - 72, Math.min(order.length, DIAL_NAMES) * 60) + 'px';
   $('names').innerHTML = '';
-  order.forEach((s, i) => {
+  // Each name goes in the first of three rows with room for it, so no two names overlap; a
+  // name with no room left stays off the glass (the station on the set always has one), and
+  // the needle still finds it.
+  const wide = $('track').clientWidth || 1, taken = [[], [], []];
+  const place = s => {
+    const w = Math.min(176, 14 + 7.4 * (s.name || s.call_sign || '').length), x = wide * at(fq(s.id)) / 100, l = x - w / 2 - 4, h = x + w / 2 + 4;
+    const r = taken.findIndex(row => row.every(([a, b]) => h <= a || l >= b));
+    if (r >= 0) taken[r].push([l, h]);
+    return r;
+  };
+  const onSet = order.find(s => s.id === cur?.id), rowOf = new Map();
+  if (onSet) rowOf.set(onSet.id, place(onSet));
+  for (const s of order) if (!rowOf.has(s.id)) rowOf.set(s.id, place(s));
+  for (const s of order) {
+    const r = rowOf.get(s.id); if (r < 0) continue;
     const b = document.createElement('button'); b.textContent = s.name || s.call_sign; b.dataset.id = s.id; b.title = fq(s.id).toFixed(1) + '  ' + (s.name || '');
-    b.style.left = at(fq(s.id)) + '%'; b.style.top = (i % 3) * 20 + 'px'; b.classList.toggle('live', !!s.live); b.setAttribute('role', 'option');
+    b.style.left = at(fq(s.id)) + '%'; b.style.top = r * 24 + 'px'; b.classList.toggle('live', !!s.live); b.setAttribute('role', 'option');
     b.onclick = e => { e.stopPropagation(); tuneTo(s) };
     $('names').appendChild(b);
-  });
+  }
   if (cur) needle(cur.id, false);
 }
 function needle(id, smooth = true) {
@@ -470,7 +515,7 @@ async function play(id, g) {
 // ---- What the set says ------------------------------------------------------------------
 // One reading of the state, put everywhere at once. While the set tunes in, it says how far it
 // has got, with a moving line, and never a title: the title shows once its sound is heard.
-let artWant = null, prefetched = '', showAt = 0;
+let artWant = null, prefetched = '', showAt = 0, soundy = false;
 function paint() {
   if (!cur) return;
   const p = radio ? JSON.parse(radio.plan(cur.id, radio.now())) : null, on = heard();
@@ -483,6 +528,7 @@ function paint() {
   else if (p?.kind === 'off air') line = offAir(p.back_at);
   else if (p?.kind === 'dead air') line = 'Nothing on the air right now';
   const track = !line && p?.kind === 'track', live = !line && p?.kind === 'live';
+  soundy = track || live;
   $('np').textContent = line ?? (track ? p.title || '' : live ? 'Live from the station' : '');
   $('by').textContent = track ? p.by || '' : '';
   // Before Listen, the line says what is on now, so a title is never mistaken for one playing.
@@ -542,6 +588,14 @@ function pageHead() {
   $('pabout').textContent = cur.about || '';
   $('pmeta').textContent = [cur.call_sign, fq(cur.id).toFixed(1) + ' on the dial', (cur.kinds || []).join(', '), cur.port, cur.aboard !== undefined && !cur.cached ? cur.aboard + ' listening' : ''].filter(Boolean).join('  ·  ');
   $('key').textContent = 'Key  ' + cur.id.match(/.{1,4}/g).join(' ');
+  // What a listener may want to know before staying: a newer station with an older one's name,
+  // nothing to play yet, or a keeper long gone (the station plays on from those who carry it).
+  const away = cur.signed_ms && radio ? radio.now() - cur.signed_ms : 0, notes = [];
+  if (cur.twin && !isHarbour(cur.id)) notes.push('Another station with this name has been on the air longer. Check the call sign before you share this one.');
+  if (empty(cur)) notes.push('This station has nothing to play yet.');
+  if (away > 365 * 86400e3) notes.push('Its keeper has not been aboard for over a year. It plays on from the radios that carry it.');
+  else if (away > 30 * 86400e3) notes.push('Its keeper has not been aboard for over a month. It plays on from the radios that carry it.');
+  $('pnote').hidden = !notes.length; $('pnote').textContent = notes.join(' ');
 }
 
 let pageFor = null, pageAt = 0, pageV = null;
@@ -589,6 +643,7 @@ async function show(s) {
   $('cs').textContent = (s.call_sign || '') + (s.provisional ? '  unconfirmed' : '') + (s.aboard !== undefined ? '  ' + s.aboard + ' listening' : '');
   $('cs').title = s.provisional ? 'Signed by a co-host. Shown as unconfirmed until this player has the station\'s own log.' : '';
   lamps(s.live); needle(s.id); $('tip').hidden = !s.tip;
+  $('keep').hidden = HOSTIS_ONLY || !!s.pocket; $('keep').setAttribute('aria-pressed', keptSet.has(s.id)); $('keep').querySelector('span').textContent = keptSet.has(s.id) ? 'Kept' : 'Keep';
   // A pocket station is passed on only by its keeper's invitation.
   $('pass').hidden = !!s.pocket; $('maroon').hidden = false;
   document.querySelectorAll('.row').forEach(r => { const on = r.dataset.id === s.id; r.classList.toggle('on', on); r.setAttribute('aria-current', on) });
@@ -598,6 +653,7 @@ async function show(s) {
   // browser. The tab alone remembers it, for a reload, and forgets it when it closes.
   else { if (location.hash) history.replaceState(history.state, '', location.pathname + location.search); if (!SHARED && !EMBED) try { sessionStorage.setItem('pyrate.cur', s.id) } catch (e) { } }
   pageHead(); power();
+  if (moved && stations.length) rows();
   if (radio) {
     radio.tune(s.id);
     // The stations either side on the dial come aboard ahead, so turning to one plays at once.
@@ -641,7 +697,7 @@ function power() {
   for (const b of [$('go'), $('mini-go')]) { b.classList.toggle('on', playing); b.classList.toggle('busy', busy); b.querySelector('.glyph').textContent = playing ? '■︎' : '▶︎' }
   $('go').querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen';
   $('mini-go').setAttribute('aria-label', playing ? 'Stop' : 'Listen');
-  $('clip').hidden = !(playing && heard() && clipType()) || isPocket(cur);
+  $('clip').hidden = !(playing && heard() && soundy && clipType()) || isPocket(cur);
   // The tab says what it is playing, so a listener with many tabs can find the radio.
   if (!EMBED && cur) document.title = (playing ? '▶︎ ' : '') + (cur.name || cur.call_sign || 'A station') + ' · Pyrate Radio';
 }
@@ -652,16 +708,25 @@ const lazy = 'IntersectionObserver' in window ? new IntersectionObserver(es => e
   const mini = e.target.querySelector('.mini'), s = stations.find(x => x.id === e.target.dataset.id);
   if (s?.cover) pic(s.id, s.cover).then(u => { if (u) { mini.classList.add('pic'); mini.innerHTML = '<img alt="" src="' + u + '">' } else if (e.target.isConnected) setTimeout(() => lazy.observe(e.target), 4000) });
 }), { rootMargin: '200px' }) : null;
-let rowsKey = '';
+let rowsKey = '', rowsMax = 60;
 const query = () => norm($('find')?.value || '');
 function rows() {
   const m = marooned(), q = query();
-  const shown = stations.filter(s => !m.has(s.id) && allowed(s) && inSet(s));
+  let shown = stations.filter(s => !m.has(s.id) && allowed(s) && inSet(s));
+  kinds(shown);
+  if (kindOn) shown = shown.filter(s => kindOn === 'live' ? s.live : (s.kinds || []).some(k => kindOf(k) === kindOn));
+  if (sortBy !== 'aboard') shown = [...shown].sort((a, b) => sortBy === 'newest' ? (b.since || 0) - (a.since || 0) : (a.since || 0) - (b.since || 0));
+  if (keptSet.size) shown = [...shown.filter(s => keptSet.has(s.id)), ...shown.filter(s => !keptSet.has(s.id))];
   const box = $('rows');
   dial(shown); if (!$('chart').hidden) chart();
-  const list = q ? shown.filter(s => norm([s.name, s.call_sign, s.about, (s.kinds || []).join(' '), s.port].join(' ')).includes(q)) : shown;
+  // A search reads names, call signs, what a station says of itself, its kinds, its home port and
+  // its place on the dial ("91.1" finds every station there).
+  const list = q ? shown.filter(s => norm([s.name, s.call_sign, s.about, (s.kinds || []).join(' '), s.port, fq(s.id).toFixed(1)].join(' ')).includes(q)) : shown;
   // The list is rebuilt only when something in it changed, not on every refresh.
-  const key = list.map(s => [s.id, s.name, s.live, s.aboard, s.cover, s.pocket, s.explicit, s.mature, s.about, s.cached].join('|')).join('\n') + '#' + (cur?.id || '') + playing + '#' + q + '#' + (shown.length ? '' : Math.floor(Date.now() / 30000));
+  // Sixty rows at a time: a long Log is paged, and the rest is a search or a tap away.
+  const more = list.length - rowsMax;
+  const page = list.slice(0, rowsMax);
+  const key = page.map(s => [s.id, s.name, s.live, s.aboard, s.cover, s.pocket, s.explicit, s.mature, s.about, s.cached, s.twin, keptSet.has(s.id)].join('|')).join('\n') + '#' + list.length + '#' + (cur?.id || '') + playing + '#' + q + '#' + (shown.length ? '' : Math.floor(Date.now() / 30000));
   if (key === rowsKey) return;
   rowsKey = key; box.innerHTML = '';
   if (!shown.length) {
@@ -672,7 +737,7 @@ function rows() {
     return;
   }
   if (!list.length) { box.innerHTML = '<p class="fine">No station on the air matches that.</p>'; return }
-  for (const s of list) {
+  for (const s of page) {
     const r = document.createElement('div'); r.className = 'row'; r.dataset.id = s.id;
     r.setAttribute('role', 'button'); r.tabIndex = 0;
     r.innerHTML = '<div class="mini"></div><div class="meta"><div class="name"></div><div class="about"></div><div class="cs"></div></div><div class="count"></div>';
@@ -681,7 +746,7 @@ function rows() {
     if (s.cover) { if (lazy) lazy.observe(r); else pic(s.id, s.cover).then(u => { if (u) { mini.classList.add('pic'); mini.innerHTML = '<img alt="" src="' + u + '">' } }) }
     const nm = r.querySelector('.name'); nm.textContent = s.name || s.call_sign;
     // What a station says of itself, as hairline tags: the open air in bright red, the rest in bone.
-    for (const [t, c] of [[s.live && 'On air', 'lv'], [s.mixed && !isHarbour(s.id) && 'False colours?', ''], [s.pocket && 'Private', ''], [s.explicit ? 'Explicit' : s.mature && 'Mature', '']]) if (t) { const g = document.createElement('span'); g.className = 'tag ' + c; g.textContent = t; nm.append(g) }
+    for (const [t, c] of [[s.live && 'On air', 'lv'], [keptSet.has(s.id) && 'Kept', 'kp'], [s.mixed && !isHarbour(s.id) && 'False colours?', ''], [s.twin && !isHarbour(s.id) && 'Same name as an older station', ''], [s.pocket && 'Private', ''], [s.explicit ? 'Explicit' : s.mature && 'Mature', ''], [empty(s) && 'Nothing to play yet', '']]) if (t) { const g = document.createElement('span'); g.className = 'tag ' + c; g.textContent = t; nm.append(g) }
     r.querySelector('.about').textContent = s.about || ''; r.querySelector('.cs').textContent = s.call_sign + '  ' + fq(s.id).toFixed(1);
     r.querySelector('.count').innerHTML = s.aboard !== undefined && !s.cached ? s.aboard + '<small>listening</small>' : '';
     const on = cur?.id === s.id;
@@ -692,8 +757,34 @@ function rows() {
     r.onclick = go; r.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go() } };
     box.appendChild(r);
   }
+  if (more > 0) {
+    const b = document.createElement('p'); b.className = 'centre morerows';
+    b.innerHTML = '<button class="btn">Show ' + Math.min(60, more) + ' more</button><span class="fine">' + list.length + ' stations' + (q ? ' match' : '') + '</span>';
+    b.querySelector('button').onclick = () => { rowsMax += 60; rows() };
+    box.appendChild(b);
+  }
 }
-$('find')?.addEventListener('input', () => rows());
+$('find')?.addEventListener('input', () => { rowsMax = 60; rows() });
+// The kinds the stations on the air give themselves, the ten most given, as filters; and On air.
+function kinds(list) {
+  const box = $('kinds'); if (!box || HOSTIS_ONLY) return;
+  const n = new Map();
+  for (const s of list) for (const k of new Set((s.kinds || []).map(kindOf))) if (k) n.set(k, (n.get(k) || 0) + 1);
+  const top = [...n.entries()].filter(([, c]) => c >= 2 || list.length < 20).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 10).map(([k]) => k);
+  if (kindOn && kindOn !== 'live' && !top.includes(kindOn)) top.push(kindOn);
+  const live = list.some(s => s.live);
+  const key = top.join('|') + live + kindOn;
+  if (key === kindsKey) return;
+  kindsKey = key; box.innerHTML = '';
+  for (const k of [...(live ? ['live'] : []), ...top]) {
+    const b = document.createElement('button'); b.className = 'btn' + (kindOn === k ? ' on' : ''); b.setAttribute('aria-pressed', kindOn === k);
+    b.textContent = k === 'live' ? 'On air now' : k;
+    b.onclick = () => { kindOn = kindOn === k ? null : k; rowsMax = 60; rowsKey = ''; rows() };
+    box.appendChild(b);
+  }
+}
+$('sort').value = sortBy;
+$('sort').onchange = () => { sortBy = $('sort').value; store('pyrate.sort', sortBy); rowsMax = 60; rows() };
 
 // The stations shown before the network answers: HOSTIS's own on hostis.black, and on the
 // open player the ones this browser saw on the air last time, kept for three days.
@@ -729,6 +820,7 @@ function refresh() {
   const live = JSON.parse(radio.stations()).filter(inSet);
   keepCards(live);
   stations = merged(live);
+  twins(stations);
   const n = radio.neighbours();
   $('signal').textContent = (flocking ? 'Playing in step with the host · ' : '') + (n ? 'Connected · ' + live.length + (live.length === 1 ? ' station' : ' stations') + ' on the air' : Date.now() - bootAt > 30000 ? 'Still connecting' : 'Connecting');
   $('flockleave').hidden = !flocking;
@@ -984,7 +1076,7 @@ $('mtake').onclick = () => {
 };
 $('sw-direct').checked = store('pyrate.direct') === '1';
 $('sw-direct').onchange = () => { store('pyrate.direct', $('sw-direct').checked ? '1' : '0'); radio?.set_direct_ok($('sw-direct').checked) };
-for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-explicit', 'pyrate.show_explicit', '1'], ['sw-art', 'pyrate.hide_art', '0']]) {
+for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-explicit', 'pyrate.show_explicit', '1'], ['sw-art', 'pyrate.hide_art', '0'], ['sw-empty', 'pyrate.show_empty', '1']]) {
   const el = $(id); el.checked = on === '1' ? store(key) === '1' : store(key) !== '1';
   el.onchange = () => { store(key, (el.checked ? on : (on === '1' ? '0' : '1'))); forgetPics(); rowsKey = ''; refresh(); if (cur) show(cur) };
 }
@@ -1266,6 +1358,7 @@ async function boot() {
   try { await init() } catch (e) { $('signal').textContent = 'This browser cannot run the radio. Try another browser, or the app.'; stop(); return }
   // The sealed secrets come back before anything uses them.
   try { pocketsMem = JSON.parse(await dopen(keptAnywhere('pyrate.pockets') || '[]') || '[]') } catch (e) { pocketsMem = [] }
+  try { keptSet = new Set(JSON.parse(await dopen(keptAnywhere('pyrate.kept') || '[]') || '[]').filter(id => /^[0-9a-f]{64}$/.test(id))) } catch (e) { keptSet = new Set() }
   if (!sealed() && !tabKeys()) { const m = store('pyrate.mine'); if (m) { const t = await dopen(m); try { const l = validKeys(JSON.parse(t || '[]')); if (l.length) { mineMem = l; if (t === m) keepSealed('pyrate.mine', m) } } catch (e) { } } }
   // The counting key is replaced every thirty days, so a key taken from this browser cannot
   // tie its tokens back further than that.
@@ -1335,6 +1428,11 @@ function goView(v, push = true) {
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => goView(t.dataset.v));
 addEventListener('popstate', e => goView(e.state?.v || 'list', false));
 $('pagego').onclick = $('artgo').onclick = () => goView('page');
+$('keep').onclick = () => {
+  if (!cur) return;
+  if (keptSet.has(cur.id)) keptSet.delete(cur.id); else keptSet.add(cur.id);
+  saveKept(); show(cur); rowsKey = ''; rows();
+};
 
 // ---- The mini player: the station and Listen, kept in reach once the set scrolls away ----
 function mini(line) {
