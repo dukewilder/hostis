@@ -51,6 +51,9 @@
 .toc{display:flex;flex-wrap:wrap;justify-content:center;gap:.3rem 1.4rem;font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;margin:2.2rem 0 0;line-height:2}
 .toc a{color:var(--dim);white-space:nowrap}.toc a:hover{color:var(--redup)}
 .promises{display:grid;grid-template-columns:repeat(2,1fr);gap:1.6rem 2.4rem}
+.promises.three{grid-template-columns:repeat(3,1fr);gap:1.8rem 2rem}
+@media (max-width:900px){.promises.three{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:640px){.promises.three{grid-template-columns:1fr}}
 .promises b{display:block;font:400 1.15rem var(--sc);letter-spacing:.04em;color:var(--ink);margin-bottom:.45rem}
 .promises b::before{content:'';display:inline-block;width:6px;height:6px;background:var(--red);transform:rotate(45deg);margin:0 .7rem .2rem 0;vertical-align:middle}
 .promises p{margin:0;color:var(--bonedim);font-size:1rem;line-height:1.6}
@@ -186,9 +189,11 @@ addEventListener('DOMContentLoaded',function(){document.getElementById('air').sc
 <section id="free" class="rite"><i></i><i></i><i></i><i></i>
 <p class="eyebrow">No server &#183; no account &#183; no one in charge</p>
 <h2>Nobody Can Switch It Off</h2>
-<div class="promises">
+<div class="promises three">
+<div><b>Listeners stay unseen</b><p>You never give a name, and nothing tracks you. Sound comes through two other radios. One knows who asks, the other what for.</p></div>
+<div><b>Broadcasters stay unseen</b><p>A broadcast leaves sealed and surfaces about four radios from the one that made it. No single radio on the way can tie it to the keeper.</p></div>
+<div><b>Carriers stay unseen</b><p>A phone publishes no address and keeps what it carries for others sealed. A Lantern opens no ports and can sit behind a VPN.</p></div>
 <div><b>There is no server</b><p>Phones, computers and Lanterns carry every station between them. Take hostis.black down and they all play on.</p></div>
-<div><b>Nobody sees who listens</b><p>Sound reaches you through two other radios. One knows who you are, the other what you hear. No ads, no tracking.</p></div>
 <div><b>Only the key ends a station</b><p>Every station sits on about eight devices across the fleet. Only the holder of its twenty-four words can take it off.</p></div>
 <div><b>Nothing can be forged</b><p>Every recording is checked against its station's key before it plays.</p></div>
 </div>
