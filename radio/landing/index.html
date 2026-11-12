@@ -29,26 +29,31 @@
 /*FONTS*/
 /*HOSTIS*/
 /* The radio's own page: the sibling sheet above, and what only this page needs. */
-.whyfree{display:inline-flex;align-items:center;gap:.6rem;margin-top:.4rem;font:400 .74rem var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--redup);border-bottom:1px solid rgba(237,85,85,.35);padding-bottom:.2rem}
-.whyfree:hover{color:var(--ink);border-color:var(--ink)}.whyfree .dot{width:6px;height:6px;background:var(--red);transform:rotate(45deg)}
 .tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin:0 0 1.6rem}
 .tile{display:block;padding:0 0 1rem;border:1px solid var(--line);background:var(--panel);color:var(--ink);transition:border-color .18s,background .18s;position:relative}
 .tile+.tile{margin-left:-1px}
-.tile:hover,.tile:focus-visible,.tile.on{border-color:var(--red);background:rgba(197,40,40,.055);z-index:1;outline:none}
+.tile:hover,.tile:focus-visible{border-color:var(--faint);z-index:1;outline:none}.tile.on{border-color:var(--red);z-index:2}
 .tile img{display:block;width:100%;height:auto;aspect-ratio:1;object-fit:cover;border-bottom:1px solid var(--line)}
 .tile b{display:block;font:400 1.08rem var(--sc);letter-spacing:.03em;margin:.8rem .85rem 0;line-height:1.2}
 .tile .fq{display:block;font:400 .68rem var(--mono);letter-spacing:.14em;color:var(--dim);margin:.3rem .85rem 0}
 .tile i{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;color:var(--dim);font-size:.92rem;line-height:1.45;margin:.5rem .85rem 0}
-.free-band{position:relative;isolation:isolate;margin:3.2rem 0 0;padding:44px 0 40px}
+.hbtn{display:inline-flex;align-items:center;justify-content:center;gap:.6rem;min-height:48px;padding:1rem 2.2rem;font:600 .86rem var(--carved);letter-spacing:.24em;text-transform:uppercase;color:var(--ink);background:var(--blooddeep);border:1px solid var(--red);transition:background .2s ease,transform .2s ease}
+.hbtn:hover{background:#6e1414;color:var(--ink);transform:translateY(-1px)}
+.hbtn:focus-visible{outline:2px solid var(--red);outline-offset:3px}
+.btnnote{font:400 11px var(--mono);letter-spacing:.06em;color:var(--faint);margin:.8rem 0 0;text-align:center}
+.eyebrow{font:600 .74rem var(--carved);letter-spacing:.4em;text-transform:uppercase;color:var(--red);text-align:center;margin:0 0 1rem}
+/* The box hostis.black signs its mark in: a ruled double edge and a red point at each corner. */
+.rite{position:relative;width:min(860px,calc(100vw - 2.5rem));margin:3.6rem 0 0 50%;transform:translateX(-50%);padding:clamp(2.2rem,5vw,3.2rem) clamp(1.4rem,5vw,3rem);background:#0b0a08;border:1px solid var(--ghost);outline:1px solid var(--ghost);outline-offset:8px}
+.rite>i{position:absolute;width:8px;height:8px;background:var(--red);transform:rotate(45deg)}
+.rite>i:nth-of-type(1){top:-4px;left:-4px}.rite>i:nth-of-type(2){top:-4px;right:-4px}.rite>i:nth-of-type(3){bottom:-4px;left:-4px}.rite>i:nth-of-type(4){bottom:-4px;right:-4px}
+.rite h2{font:400 clamp(1.7rem,3.4vw,2.4rem) var(--sc);letter-spacing:.04em;color:var(--ink);text-align:center;margin:0 0 2rem}
+.rite .centre{margin-top:2.2rem}
 .toc{display:flex;flex-wrap:wrap;justify-content:center;gap:.3rem 1.4rem;font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;margin:2.2rem 0 0;line-height:2}
 .toc a{color:var(--dim);white-space:nowrap}.toc a:hover{color:var(--redup)}
-.free-band::before{content:'';position:absolute;inset:0 auto 0 50%;width:min(1000px,calc(100vw - 2rem));transform:translateX(-50%);border:1px solid var(--red);background:linear-gradient(180deg,rgba(197,40,40,.09),rgba(197,40,40,.02) 70%);z-index:-1}
-.promises{display:grid;grid-template-columns:repeat(2,1fr);gap:1.6rem 2rem;width:min(860px,calc(100vw - 4rem));margin:0 0 0 50%;transform:translateX(-50%)}
+.promises{display:grid;grid-template-columns:repeat(2,1fr);gap:1.6rem 2.4rem}
 .promises b{display:block;font:400 1.15rem var(--sc);letter-spacing:.04em;color:var(--ink);margin-bottom:.45rem}
 .promises b::before{content:'';display:inline-block;width:6px;height:6px;background:var(--red);transform:rotate(45deg);margin:0 .7rem .2rem 0;vertical-align:middle}
 .promises p{margin:0;color:var(--bonedim);font-size:1rem;line-height:1.6}
-.freebtn{margin-top:1.2rem;text-align:center;min-width:min(380px,100%);background:rgba(197,40,40,.14)}
-.freebtn .fc-lead{font-size:1.3rem}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:0}
 .two .card{padding:1.5rem 1.4rem;border:1px solid var(--line);background:var(--panel)}
 .two .card+.card{margin-left:-1px}
@@ -61,29 +66,26 @@
 .compare th,.compare td{padding:.85rem 1rem;border:1px solid var(--line);text-align:left;vertical-align:top;color:var(--dim)}
 .compare thead th{font:400 .7rem var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--faint);background:var(--panel)}
 .compare tbody th{font:400 1rem var(--sc);letter-spacing:.03em;color:var(--ink);width:24%}
-.compare .us{color:var(--ink);background:rgba(197,40,40,.07);border-left-color:var(--red);border-right-color:var(--red)}
-.compare thead .us{color:var(--redup)}
-.compare tbody tr:last-child .us{border-bottom-color:var(--red)}.compare thead .us{border-top-color:var(--red)}
+.compare .us{color:var(--ink);background:#0b0a08}
+.compare thead .us{color:var(--red);font-family:var(--carved);font-weight:600;letter-spacing:.3em}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 ol.takes li b{color:var(--ink);font-weight:400;font-family:var(--sc);letter-spacing:.03em}
-.long .free-band{margin-top:0}
 @media (max-width:640px){.compare{font-size:.92rem}.compare th,.compare td{padding:.6rem .55rem}.compare tbody th{width:auto}}
 main{max-width:68ch;margin:0 auto;padding:0 18px 2rem}
 /* The hero: what it is, and the one place to go for every station. */
 .hero{padding-bottom:8px}.hero .mh-desc{margin-top:22px}
 .ctas{display:flex;flex-direction:column;align-items:center;gap:.9rem;margin:2rem auto 0}
-.ctas .lead-btn{text-align:center;min-width:min(340px,100%)}
-.ctas .fc-lead{font-size:1.25rem}
 .ctas2{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:center}
 .free{font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin:1.3rem 0 0}
-.dialband{width:min(1000px,calc(100vw - 2rem));margin:2.4rem 0 0 50%;transform:translateX(-50%);border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(197,40,40,.035),transparent 60%)}
+.dialband{width:min(1000px,calc(100vw - 2rem));margin:2.6rem 0 0 50%;transform:translateX(-50%);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .dialband svg{display:block;width:100%;height:auto}
 .dialband text{font-family:var(--mono);fill:var(--dim)}.dialband .st{fill:var(--bonedim);font-family:var(--sc)}
-@media (max-width:560px){.dialband{display:none}}
+@media (max-width:560px){.dialband{display:none}.hbtn{width:100%;padding:1rem 1.2rem}}
 .framebar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem 1rem;padding:.7rem .9rem;border:1px solid var(--line);border-bottom:0;background:var(--panel);color:var(--bonedim);font-style:italic;font-size:1rem}
 .framebar .btn{min-height:40px}
-.last{text-align:center;padding:48px 0 12px}.last .lead-btn{text-align:center;min-width:min(340px,100%)}
-.stick{position:fixed;left:.6rem;right:.6rem;bottom:calc(.6rem + env(safe-area-inset-bottom));z-index:20;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.75rem 1rem;border:1px solid var(--red);background:rgba(3,3,3,.94);backdrop-filter:blur(6px);color:var(--ink);font:400 .74rem var(--mono);letter-spacing:.13em;text-transform:uppercase;transition:transform .25s,opacity .25s}
+.last{text-align:center;padding:52px 0 12px}
+.stick{position:fixed;left:.6rem;right:.6rem;bottom:calc(.6rem + env(safe-area-inset-bottom));z-index:20;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.5rem .5rem .5rem 1rem;border:1px solid var(--ghost);background:#0b0a08;color:var(--ink);transition:transform .25s,opacity .25s}
+.stick b{font:600 .72rem var(--carved);letter-spacing:.24em;text-transform:uppercase;padding:.7rem 1.2rem;background:var(--blooddeep);border:1px solid var(--red)}
 .stick span{color:var(--dim);font:italic 400 .95rem var(--serif);letter-spacing:0;text-transform:none}
 .stick.off{transform:translateY(140%);opacity:0;pointer-events:none}
 @media (min-width:900px){.stick{left:auto;right:1.2rem;bottom:1.2rem}}
@@ -91,7 +93,7 @@ main{max-width:68ch;margin:0 auto;padding:0 18px 2rem}
 .prose p{font-size:17px;line-height:1.72;color:var(--dim);margin:0 0 1.2em;text-align:center}
 .prose a,.note a,.fold a{border-bottom:1px solid var(--faint)}.prose a:hover,.note a:hover,.fold a:hover{border-color:var(--red)}
 section{padding:40px 0 4px}
-.passed{max-width:560px;margin:0 auto 1rem;border:1px solid var(--red);background:rgba(197,40,40,.055);padding:1rem 1.25rem;font-style:italic;text-align:center;color:var(--bonedim)}
+.passed{max-width:560px;margin:0 auto 1rem;border:1px solid var(--ghost);background:#0b0a08;padding:1rem 1.25rem;font-style:italic;text-align:center;color:var(--bonedim)}
 .passed a{font:400 .7rem var(--mono);letter-spacing:.13em;text-transform:uppercase;display:inline-block;margin:.8rem .4rem 0;border-bottom:1px solid var(--faint)}
 .setframe{width:min(1000px,calc(100vw - 1rem));margin:0 0 0 50%;transform:translateX(-50%)}
 .setframe iframe{display:block;width:100%;height:640px;border:0;background:transparent;color-scheme:dark}
@@ -111,7 +113,7 @@ section{padding:40px 0 4px}
 h3.small{font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);text-align:center;margin:2.2rem 0 1rem}
 .desk{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0 auto .4rem;max-width:620px}
 .desk a{display:block;padding:.9rem .8rem;border:1px solid var(--line);background:var(--panel);text-align:center;color:var(--ink);transition:border-color .18s,background .18s}
-.desk a+a{margin-left:-1px}.desk a:hover{border-color:var(--red);background:rgba(197,40,40,.055);position:relative}
+.desk a+a{margin-left:-1px}.desk a:hover{border-color:var(--faint);position:relative}
 .desk b{display:block;font:400 1.05rem var(--sc);letter-spacing:.05em;font-weight:400}.desk small{display:block;font:400 .6rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-top:.3rem}
 .folds{max-width:620px;margin:1.8rem auto 0}
 .sums{font:400 .68rem/1.9 var(--mono);letter-spacing:.04em;color:var(--faint);word-break:break-all;margin:0}
@@ -125,10 +127,10 @@ code{font:400 .82em var(--mono);color:var(--ink)}
 .long .prose p{text-align:left}
 .long .lede{margin:2.4rem 0 0}.long .lede p{font-size:19px;line-height:1.7;color:var(--bonedim)}
 .long .toc{margin:0 0 .4rem}
-.leavingnote{display:none;max-width:560px;margin:0 auto 1.6rem;padding:1rem 1.25rem;border:1px solid var(--red);background:rgba(197,40,40,.055);font-style:italic;text-align:center;color:var(--bonedim)}
+.leavingnote{display:none;max-width:560px;margin:0 auto 1.6rem;padding:1rem 1.25rem;border:1px solid var(--ghost);background:#0b0a08;font-style:italic;text-align:center;color:var(--bonedim)}
 html.leaving .leavingnote{display:block}html.leaving .hero .ctas,html.leaving .hero .free,html.leaving .dialband,html.leaving main>section,html.leaving main>.divider,html.leaving .stick{display:none}
 @media (max-width:900px){.tiles{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:.6rem;padding:0 1rem;margin-left:50%;width:100vw;transform:translateX(-50%);scrollbar-width:none}.tiles::-webkit-scrollbar{display:none}.tile{flex:0 0 min(62vw,240px);scroll-snap-align:center}.tile+.tile{margin-left:0}}
-@media (max-width:760px){.pillars,.promises,.two{grid-template-columns:1fr}.pillars div+div{margin:-1px 0 0}.two .card+.card{margin:-1px 0 0}.setframe iframe{height:760px}.promises{width:calc(100vw - 3rem)}}
+@media (max-width:760px){.pillars,.promises,.two{grid-template-columns:1fr}.pillars div+div{margin:-1px 0 0}.two .card+.card{margin:-1px 0 0}.setframe iframe{height:760px}}
 @media (max-width:560px){.desk{grid-template-columns:1fr}.desk a+a{margin:-1px 0 0}}
 </style>
 </head>
@@ -140,9 +142,8 @@ html.leaving .leavingnote{display:block}html.leaving .hero .ctas,html.leaving .h
 <p class="mh-sub">on the air all day and all night</p>
 <p class="mh-desc">Radio that anyone can raise, that every listener carries, and that nobody can switch off.</p>
 <div class="ctas">
-<a class="lead-btn openlink" href="listen/"><span class="fc-lead">Open the full player</span><span class="fc-sub">every station &#183; any browser &#183; it opens off this site</span></a>
-<div class="ctas2"><a class="btn" href="#set">Get the app</a><a class="btn" href="#colours">Start a station</a></div>
-<a class="whyfree" href="how-it-works/"><span class="dot" aria-hidden="true"></span>Why nobody can switch it off<span aria-hidden="true"> &#8594;</span></a>
+<div><a class="hbtn openlink" href="listen/">Open the full player</a><p class="btnnote">every station, in any browser &#183; it opens off this site</p></div>
+<div class="ctas2"><a class="btn" href="#set">Get the app</a><a class="btn" href="#colours">Start a station</a><a class="btn" href="how-it-works/">Why it can&#8217;t be stopped</a></div>
 </div>
 <div class="dialband" aria-hidden="true"><svg id="dialsvg" viewBox="0 0 1000 96"></svg></div>
 </header>
@@ -183,22 +184,24 @@ document.getElementById('radio').src='listen/?embed#'+id;
 b.innerHTML='Someone passed you a HOSTIS station. It is on the dial below.'+(app?'<br>'+app:'');b.hidden=false;
 addEventListener('DOMContentLoaded',function(){document.getElementById('air').scrollIntoView()})})();
 </script>
-<section id="free" class="free-band">
-<div class="sechead"><h2>Nobody Can Switch It Off</h2><span class="cap">no server &#183; no account &#183; no one in charge</span></div>
+<section id="free" class="rite"><i></i><i></i><i></i><i></i>
+<p class="eyebrow">No server &#183; no account &#183; no one in charge</p>
+<h2>Nobody Can Switch It Off</h2>
 <div class="promises">
 <div><b>There is no server</b><p>Phones, computers, browser tabs and Lanterns carry every station between them. Take hostis.black off the internet and every station plays on.</p></div>
 <div><b>Nobody sees who listens</b><p>You never give a name. Sound reaches you through two other devices. The first knows who asks and not what, and the second knows what and not who.</p></div>
 <div><b>Only the key ends a station</b><p>Each station sits on about eight devices across the fleet and on the radios that play it. Nobody but the holder of its twenty-four words can take it off.</p></div>
 <div><b>Nothing to fake, nothing to sell</b><p>Every recording is listed in its station's signed log and checked before it plays. No ads, no tracking, no account to sell.</p></div>
 </div>
-<p class="centre"><a class="lead-btn freebtn" href="how-it-works/"><span class="fc-lead">How it stays free</span><span class="fc-sub">privacy &#183; copies &#183; getting past blocks &#183; the honest limits</span></a></p>
+<p class="centre"><a class="hbtn" href="how-it-works/">How it stays free</a></p>
+<p class="btnnote">privacy, copies, getting past blocks, and the honest limits</p>
 </section>
 
 <div class="divider"><span class="divider-glyph"></span></div>
 <section id="set">
 <div class="sechead"><h2>Take the Set</h2><span class="cap">android &#183; computers &#183; any browser</span></div>
 <div class="getset">
-<a class="lead-btn" href="pyrate-radio-{{VERSION}}.apk"><span class="fc-lead">Pyrate Radio for Android</span><span class="fc-sub">version {{VERSION}} &#183; {{SIZE}} MB &#183; arm64</span></a>
+<a class="hbtn" href="pyrate-radio-{{VERSION}}.apk">Pyrate Radio for Android</a><p class="btnnote">version {{VERSION}} &#183; {{SIZE}} MB &#183; arm64</p>
 </div>
 {{DESKTOP}}
 <div class="alt"><a class="btn openlink" href="listen/">Any browser</a><a class="btn" href="{{MAGNET}}">Magnet link</a><a class="btn" href="pyrate-radio-{{VERSION}}.apk.torrent">.torrent</a><a class="btn" href="https://github.com/dukewilder/hostis/tree/radio/radio" target="_blank" rel="noopener noreferrer">Source</a></div>
@@ -247,10 +250,10 @@ docker run -d --name lantern --restart unless-stopped -v pyrate:/data pyrate-lan
 </section>
 
 <section class="last">
-<a class="lead-btn openlink" href="listen/"><span class="fc-lead">Open the full player</span><span class="fc-sub">every station &#183; any browser &#183; nothing to install</span></a>
+<a class="hbtn openlink" href="listen/">Open the full player</a><p class="btnnote">every station, in any browser, nothing to install</p>
 </section>
 </main>
-<a id="stick" class="stick openlink off" href="listen/" aria-hidden="true" tabindex="-1"><span>Every station is in the full player</span>Open</a>
+<a id="stick" class="stick openlink off" href="listen/" aria-hidden="true" tabindex="-1"><span>Every station is in the full player</span><b>Open</b></a>
 <footer>
 <p class="f-contact">Email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>
 <p class="f-copy">no rights reserved &#183; all copies welcome</p>
@@ -269,13 +272,13 @@ document.querySelectorAll('a.openlink').forEach(function(a){a.href={{OPEN_PLAYER
 (function(){var svg=document.getElementById('dialsvg'),x=function(f){return 30+(f-87.5)/20.6*940},h='<line x1="30" y1="62" x2="970" y2="62" stroke="rgba(237,228,206,.25)"/>';
 for(var f=88;f<=108;f+=.5){var big=f%2===0;h+='<line x1="'+x(f)+'" y1="'+(big?50:56)+'" x2="'+x(f)+'" y2="62" stroke="rgba(237,228,206,'+(big?.45:.2)+')"/>';if(big)h+='<text x="'+x(f)+'" y="82" font-size="12" text-anchor="middle">'+f+'</text>'}
 var rows=[],st=[].map.call(document.querySelectorAll('.tile[data-id]'),function(a){return{f:fq(a.dataset.id),n:a.querySelector('b').textContent}}).sort(function(a,b){return a.f-b.f});
-st.forEach(function(s){var px=x(s.f),w=s.n.length*7.6+10,r=0;while(rows[r]!==undefined&&rows[r]>px-w/2)r++;rows[r]=px+w/2;var y=40-r*15;
-h+='<line x1="'+px+'" y1="'+(y+3)+'" x2="'+px+'" y2="62" stroke="#c52828" stroke-width="2"/><text class="st" x="'+px+'" y="'+y+'" font-size="13" text-anchor="middle">'+s.n.replace(/&/g,'&amp;')+'</text>'});
-svg.setAttribute('viewBox','0 '+(Math.min(0,40-(rows.length-1)*15-16))+' 1000 '+(96-Math.min(0,40-(rows.length-1)*15-16)));svg.innerHTML=h})();
+st.forEach(function(s){var px=x(s.f),w=s.n.length*8.2+14,r=0;while(rows[r]!==undefined&&rows[r]>px-w/2)r++;rows[r]=px+w/2;var y=40-r*18;
+h+='<line x1="'+px+'" y1="'+(y+3)+'" x2="'+px+'" y2="62" stroke="#c52828" stroke-width="2"/><text class="st" x="'+px+'" y="'+y+'" font-size="12" text-anchor="middle">'+s.n.replace(/&/g,'&amp;')+'</text>'});
+var top=Math.min(0,40-(rows.length-1)*18-18);svg.setAttribute('viewBox','0 '+top+' 1000 '+(96-top));svg.innerHTML=h})();
 // Once the way in has scrolled away, a bar keeps the full player one tap off.
 (function(){var bar=document.getElementById('stick'),seen=new Map();if(!('IntersectionObserver' in window))return;
 var io=new IntersectionObserver(function(es){es.forEach(function(e){seen.set(e.target,e.isIntersecting)});var any=false;seen.forEach(function(v){any=any||v});bar.classList.toggle('off',any);bar.setAttribute('aria-hidden',any);bar.tabIndex=any?-1:0},{threshold:0});
-[].forEach.call(document.querySelectorAll('.hero .ctas,#radio,.last,.free-band,footer'),function(el){io.observe(el)})})();
+[].forEach.call(document.querySelectorAll('.hero .ctas,#radio,.last,.rite,footer'),function(el){io.observe(el)})})();
 // The set in the sample tells this page how tall it has grown.
 addEventListener('message',function(e){if(e.origin===location.origin&&e.data&&e.data.pyrate==='height')document.getElementById('radio').style.height=e.data.h+'px'});
 </script>
