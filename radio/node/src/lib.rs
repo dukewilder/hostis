@@ -336,6 +336,8 @@ pub struct Inner {
     our_relays: Mutex<Vec<String>>,
     #[cfg(feature = "playback")]
     queue: player::SharedQueue,
+    /// Whether the speaker may hiss softly while tuning in (the owner's setting; on by default).
+    hiss_ok: std::sync::atomic::AtomicBool,
     #[cfg(feature = "playback")]
     np: Mutex<Value>,
     /// Art seen while browsing: held in memory only, never written to the device.
@@ -610,6 +612,31 @@ impl Inner {
         }
         if n > 0 {
             say(&format!("{n} stations from {}", node.fmt_short()));
+        }
+    }
+
+    /// The chunk on now and the one after it, for a station the listener may turn to next: in
+    /// the store before the turn, so the first sound needs no fetch. Asked for as any chunk is,
+    /// through two hops on a phone, and nothing is counted or said about it.
+    async fn warm_sound(self: &Arc<Self>, station: StationId) {
+        let now = self.play_now();
+        let want: Vec<Hash> = {
+            let s = self.store.lock().unwrap();
+            let Some(a) = s.logs.get(&station) else { return };
+            let Ok(clock) = pyrate_core::clock::Clock::new(a) else { return };
+            let mut out = Vec::new();
+            let mut at = now;
+            for _ in 0..2 {
+                let Some(np) = clock.now(at) else { break };
+                let Some(Body::Track { chunks, .. }) = a.track_entry(&np.track).map(|e| e.entry.body()) else { break };
+                let Some(c) = chunks.get(np.chunk) else { break };
+                out.push(c.hash);
+                at = at - np.chunk_offset_ms + c.duration_ms() + 1;
+            }
+            out.into_iter().filter(|h| !s.has_chunk(h)).collect()
+        };
+        for h in want {
+            let _ = self.chunk(&station, &h).await;
         }
     }
 
@@ -2212,6 +2239,7 @@ impl Node {
             our_relays: Mutex::new(ours.iter().map(|u| u.to_string()).collect()),
             #[cfg(feature = "playback")]
             queue: queue.clone(),
+            hiss_ok: std::sync::atomic::AtomicBool::new(true),
             #[cfg(feature = "playback")]
             np: Mutex::new(Value::Null),
             art_mem: Mutex::new(art::Shelf::default()),
@@ -2620,8 +2648,13 @@ impl Node {
                 let np = inner.np.lock().unwrap().clone();
                 #[cfg(not(feature = "playback"))]
                 let np = Value::Null;
+                // How much sound has gone to the speaker since the last tune or stop.
+                #[cfg(feature = "playback")]
+                let heard_ms = inner.queue.lock().unwrap().played / 48;
+                #[cfg(not(feature = "playback"))]
+                let heard_ms = 0u64;
                 let live = inner.live.lock().unwrap().map(|(s, t)| json!({ "station": s.to_hex(), "since_ms": now_ms().saturating_sub(t) }));
-                Ok(json!({ "node": self.id().to_string(), "mine": mine, "jobs": jobs, "tuned": tuned, "now": np, "live": live }))
+                Ok(json!({ "node": self.id().to_string(), "mine": mine, "jobs": jobs, "tuned": tuned, "now": np, "live": live, "heard_ms": heard_ms }))
             }
             // Where links for stations other than HOSTIS's point (the app's open player).
             "open_player" => Ok(json!({ "ok": pyrate_core::set_open_player(req["url"].as_str().unwrap_or("")) })),
@@ -3012,17 +3045,26 @@ impl Node {
                     if refused.contains(&st) || inner.is_pocket(&st) {
                         continue;
                     }
-                    {
+                    // The log is brought up to date at most every ten minutes; the sound on now,
+                    // which moves on every few seconds, at most every twenty seconds.
+                    let log_fresh = {
                         let mut w = WARMED.lock().unwrap();
                         let w = w.get_or_insert_with(HashMap::new);
-                        if w.get(&st).is_some_and(|t| now.saturating_sub(*t) < 10 * 60_000) {
+                        let last = w.get(&st).copied();
+                        if last.is_some_and(|t| now.saturating_sub(t) < 20_000) {
                             continue;
                         }
-                        w.insert(st, now);
-                    }
+                        if last.is_none_or(|t| now.saturating_sub(t) >= 10 * 60_000) {
+                            w.insert(st, now);
+                        }
+                        last.is_some_and(|t| now.saturating_sub(t) < 10 * 60_000)
+                    };
                     let i2 = inner.clone();
                     self.rt.spawn(async move {
-                        let _ = i2.sync_log(st).await;
+                        if !log_fresh {
+                            let _ = i2.sync_log(st).await;
+                        }
+                        i2.warm_sound(st).await;
                     });
                     warmed += 1;
                 }
@@ -3047,6 +3089,10 @@ impl Node {
                 *inner.tuned.lock().unwrap() = None;
                 #[cfg(feature = "playback")]
                 playout::reset(inner);
+                Ok(json!({ "ok": true }))
+            }
+            "hiss" => {
+                inner.hiss_ok.store(req["value"].as_bool().unwrap_or(true), std::sync::atomic::Ordering::Relaxed);
                 Ok(json!({ "ok": true }))
             }
             "volume" => {
@@ -3279,16 +3325,29 @@ mod playout {
 
     static RESET: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+    /// The tuning hiss on or off, as the owner's setting allows.
+    fn hiss(inner: &Inner, on: bool) {
+        let ok = inner.hiss_ok.load(std::sync::atomic::Ordering::Relaxed);
+        inner.queue.lock().unwrap().hiss = on && ok;
+    }
+
     pub fn reset(inner: &Inner) {
         let mut q = inner.queue.lock().unwrap();
         q.samples.clear();
         q.played = 0;
+        q.hiss = false;
         RESET.store(true, std::sync::atomic::Ordering::SeqCst);
         *inner.np.lock().unwrap() = Value::Null;
     }
 
     fn queued_ms(inner: &Inner) -> u64 {
         inner.queue.lock().unwrap().samples.len() as u64 / 2 * 1000 / 48_000
+    }
+
+    /// Whether `station` is still the one to play, after a wait: Stop or a new station during a
+    /// fetch means what the fetch brought is dropped, never played.
+    fn still(inner: &Inner, station: StationId) -> bool {
+        !RESET.load(std::sync::atomic::Ordering::SeqCst) && inner.tuned.lock().unwrap().as_ref().map(|t| t.station) == Some(station)
     }
 
     fn push(inner: &Inner, pcm: &[i16], channels: u8, skip_ms: u64) {
@@ -3336,7 +3395,10 @@ mod playout {
                 st = State { station: None, playhead: None, track: None, decoder: None, live_seq: None };
             }
             let tuned = inner.tuned.lock().unwrap().as_ref().map(|t| (t.station, t.since));
-            let Some((station, _since)) = tuned else { continue };
+            let Some((station, _since)) = tuned else {
+                hiss(&inner, false);
+                continue;
+            };
             if st.station != Some(station) {
                 st = State { station: Some(station), playhead: None, track: None, decoder: None, live_seq: None };
             }
@@ -3348,6 +3410,9 @@ mod playout {
                 let have = inner.store.lock().unwrap().logs.get(&station).is_some_and(|a| a.len() > 0);
                 if !have {
                     let _ = inner.sync_log(station).await;
+                    if !still(&inner, station) {
+                        continue;
+                    }
                 } else if !syncing.swap(true, std::sync::atomic::Ordering::SeqCst) {
                     let (i, f) = (inner.clone(), syncing.clone());
                     tokio::spawn(async move {
@@ -3360,6 +3425,7 @@ mod playout {
             let Some(len) = len else {
                 held = None;
                 *inner.np.lock().unwrap() = json!({ "station": station.to_hex(), "state": "searching" });
+                hiss(&inner, true);
                 continue;
             };
             if !matches!(&held, Some((s, l, _, _)) if *s == station && *l == len) {
@@ -3381,13 +3447,14 @@ mod playout {
                 }
             }
 
-            // Tuning in: the title is on the screen before the first chunk lands.
+            // Tuning in: the log is here and the first chunk is on its way. The title comes with
+            // it for the art to load, but a screen shows it only once the state is "playing".
             if st.playhead.is_none() && st.live_seq.is_none() && queued_ms(&inner) == 0 {
                 if let Some(np) = clock.now(now) {
                     let (title, by) = describe(&archive, &np.track);
                     let pic = archive.track_art(&np.track).map(|a| hex(&a.hash));
                     *inner.np.lock().unwrap() = json!({
-                        "station": station.to_hex(), "state": "searching",
+                        "station": station.to_hex(), "state": "tuning",
                         "title": shown(&title), "by": shown(&by), "art": pic, "slot": np.slot,
                         "position_ms": np.offset_ms, "duration_ms": np.duration_ms,
                     });
@@ -3407,6 +3474,9 @@ mod playout {
                     };
                     let Some((seq, chunk, ch)) = next else { break };
                     let Ok(bytes) = inner.chunk(&station, &chunk.hash).await else { break };
+                    if !still(&inner, station) {
+                        break;
+                    }
                     if st.decoder.as_ref().is_none_or(|(c, _)| *c != ch) || st.live_seq.is_none() {
                         st.decoder = ChunkDecoder::new(ch).ok().map(|d| (ch, d));
                     }
@@ -3421,6 +3491,7 @@ mod playout {
                     st.track = None;
                     st.playhead = None;
                     *inner.np.lock().unwrap() = json!({ "station": station.to_hex(), "state": "live", "title": "ON AIR" });
+                    hiss(&inner, false);
                     continue;
                 }
                 if st.live_seq.take().is_some() {
@@ -3452,9 +3523,12 @@ mod playout {
                         let _ = tokio::time::timeout(Duration::from_secs(8), a).await;
                     }
                 }
+                if !still(&inner, station) {
+                    break;
+                }
                 let Ok(bytes) = got else {
                     say("no carrier answered for the chunk on now");
-                    *inner.np.lock().unwrap() = json!({ "station": station.to_hex(), "state": "searching" });
+                    *inner.np.lock().unwrap() = json!({ "station": station.to_hex(), "state": if st.playhead.is_none() { "tuning" } else { "stalled" } });
                     break;
                 };
                 if st.track != Some(np.track) || st.decoder.is_none() {
@@ -3479,15 +3553,22 @@ mod playout {
                 st.playhead = Some(chunk_start + chunk.duration_ms());
             }
 
+            // Stopped or retuned while fetching: nothing more is said about the old station.
+            if !still(&inner, station) {
+                continue;
+            }
             // What the listener hears now.
             if st.live_seq.is_none() {
                 if let Some(np) = clock.now(now) {
                     let (title, by) = describe(&archive, &np.track);
-                    let starved = inner.queue.lock().unwrap().starved;
+                    let starved = inner.queue.lock().unwrap().starved || queued_ms(&inner) == 0;
                     let pic = archive.track_art(&np.track).map(|a| hex(&a.hash));
+                    // "tuning" until the first sound is queued, "stalled" if it later runs dry.
+                    let state = if !starved { "playing" } else if st.playhead.is_none() { "tuning" } else { "stalled" };
+                    hiss(&inner, state != "playing");
                     *inner.np.lock().unwrap() = json!({
                         "station": station.to_hex(),
-                        "state": if starved { "searching" } else { "playing" },
+                        "state": state,
                         "title": shown(&title), "by": shown(&by), "art": pic, "slot": np.slot,
                         "position_ms": np.offset_ms, "duration_ms": np.duration_ms,
                     });
@@ -3498,6 +3579,7 @@ mod playout {
                         let back = clock.next_on(now, now + 7 * 86_400_000).map(|b| b.0);
                         off_air = Some((station, now, back));
                     }
+                    hiss(&inner, false);
                     *inner.np.lock().unwrap() = match off_air.as_ref().and_then(|o| o.2) {
                         Some(back) => json!({ "station": station.to_hex(), "state": "off air", "back_at": back }),
                         None => json!({ "station": station.to_hex(), "state": "dead air" }),

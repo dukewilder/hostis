@@ -185,8 +185,8 @@ class _StationPageState extends State<StationPage> {
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [Flexible(child: Text(s['name'] ?? '', style: pica(28, spacing: 0.03))), ...seals(s, size: 9)]),
-                if ((s['port'] ?? '').toString().isNotEmpty) Text((s['port']).toString().toUpperCase(), style: carved(9, color: boneFaint, spacing: 0.25)),
-                if (((s['kinds'] as List?) ?? []).isNotEmpty) Text(((s['kinds'] as List).join(' · ')).toUpperCase(), style: carved(9, color: boneGhost, spacing: 0.25)),
+                if ((s['port'] ?? '').toString().isNotEmpty) Text((s['port']).toString().toUpperCase(), style: carved(11, color: boneFaint, spacing: 0.25)),
+                if (((s['kinds'] as List?) ?? []).isNotEmpty) Text(((s['kinds'] as List).join(' · ')).toUpperCase(), style: carved(11, color: boneFaint, spacing: 0.25)),
               ]),
             ),
           ]),
@@ -195,7 +195,7 @@ class _StationPageState extends State<StationPage> {
           // call sign, never the same key.
           Padding(
             padding: const EdgeInsets.only(top: 10),
-            child: SelectableText('KEY  ${RegExp(r'.{1,4}').allMatches(id).map((m) => m.group(0)).join(' ')}', style: mono(10, color: boneFaint)),
+            child: SelectableText('KEY  ${RegExp(r'.{1,4}').allMatches(id).map((m) => m.group(0)).join(' ')}', style: mono(11, color: boneFaint)),
           ),
           const SizedBox(height: 14),
           Wrap(spacing: 4, runSpacing: 4, children: [
@@ -204,7 +204,7 @@ class _StationPageState extends State<StationPage> {
               Navigator.pop(context);
             }),
             // A pocket station's whereabouts go only by invitation, never by a public link or poster.
-            if (s['pocket'] != true) pyrateButton('PASS IT ON', () => shareStation(s)),
+            if (s['pocket'] != true) pyrateButton('SHARE', () => shareStation(s)),
             if ((s['tip'] ?? '').toString().isNotEmpty) pyrateButton('TIP', () => tipStation(context, s['tip'], name: (s['name'] ?? 'the station').toString())),
             if (s['pocket'] != true) pyrateButton('A POSTER', () => pyrateSheet(context, PosterSheet(station: s))),
           ]),
@@ -226,7 +226,7 @@ class _StationPageState extends State<StationPage> {
             ]),
           ],
           if (error != null) Padding(padding: const EdgeInsets.only(top: 24), child: note(error!)),
-          if (p == null && error == null) Padding(padding: const EdgeInsets.only(top: 24), child: note('Reading the station\'s log')),
+          if (p == null && error == null) Padding(padding: const EdgeInsets.only(top: 24), child: note('The schedule and notices appear once the station\'s log arrives.')),
           if (p != null) ...[
             if (((p['notices'] as List?) ?? []).isNotEmpty) ...[
               section('NOTICES'),
@@ -239,7 +239,7 @@ class _StationPageState extends State<StationPage> {
                     Text(n['text'] ?? '', style: serif(16, color: bone)),
                     const SizedBox(height: 6),
                     Row(children: [
-                      Text('${dayLabel((n['at_ms'] as num).toInt())} ${clockTime((n['at_ms'] as num).toInt())}', style: mono(10, color: boneGhost)),
+                      Text('${dayLabel((n['at_ms'] as num).toInt())} ${clockTime((n['at_ms'] as num).toInt())}', style: mono(11, color: boneFaint)),
                       const Spacer(),
                       if (own)
                         TextButton(
@@ -247,7 +247,7 @@ class _StationPageState extends State<StationPage> {
                             await Native.callAway({'cmd': 'notice_remove', 'station': id, 'notice': n['id']});
                             load();
                           },
-                          child: Text('TAKE DOWN', style: carved(9, color: boneFaint)),
+                          child: Text('TAKE DOWN', style: carved(11, color: boneFaint)),
                         ),
                     ]),
                   ]),
@@ -255,9 +255,9 @@ class _StationPageState extends State<StationPage> {
             ],
             section('ON NOW'),
             if (p['now'] != null) ...[
-              if ((p['now']['slot'] ?? '').toString().isNotEmpty) Text((p['now']['slot']).toString().toUpperCase(), style: carved(10, color: boneDim, spacing: 0.3)),
+              if ((p['now']['slot'] ?? '').toString().isNotEmpty) Text((p['now']['slot']).toString().toUpperCase(), style: carved(11, color: boneDim, spacing: 0.3)),
               Text(p['now']['title'] ?? '', style: serif(18, color: boneDim, italic: true)),
-              if ((p['now']['by'] ?? '').toString().isNotEmpty) Text(p['now']['by'], style: carved(10, color: boneFaint, spacing: 0.2)),
+              if ((p['now']['by'] ?? '').toString().isNotEmpty) Text(p['now']['by'], style: carved(11, color: boneFaint, spacing: 0.2)),
             ] else
               note(p['back_at'] != null
                   ? offAirLabel((p['back_at'] as num).toInt())
@@ -275,13 +275,13 @@ class _StationPageState extends State<StationPage> {
                   ]),
                 ),
             ],
-            section('CHATTER'),
+            section('CHAT'),
             ChatterPanel(
               station: id,
               own: own,
               nextAt: ((p['next'] as List?) ?? []).map((n) => (n['start_ms'] as num).toInt()).where((t) => t > now).fold<int?>(null, (a, b) => a ?? b),
             ),
-            section('THE SCHEDULE'),
+            section('SCHEDULE'),
             note(programmeSummary(p['programme'] as Map?)),
             if (((p['listings'] as List?) ?? []).isEmpty)
               Padding(padding: const EdgeInsets.only(top: 8), child: note(own ? 'No shows yet. Add a regular show in the schedule, or plan a premiere.' : 'No shows on the bill this week.')),
@@ -289,7 +289,7 @@ class _StationPageState extends State<StationPage> {
               if (dayLabel((l['start_ms'] as num).toInt()) != lastDay)
                 Builder(builder: (_) {
                   lastDay = dayLabel((l['start_ms'] as num).toInt());
-                  return Padding(padding: const EdgeInsets.only(top: 14, bottom: 4), child: Text(lastDay!, style: carved(10, color: boneFaint, spacing: 0.3)));
+                  return Padding(padding: const EdgeInsets.only(top: 14, bottom: 4), child: Text(lastDay!, style: carved(11, color: boneFaint, spacing: 0.3)));
                 }),
               Builder(builder: (_) {
                 final start = (l['start_ms'] as num).toInt();
@@ -305,8 +305,8 @@ class _StationPageState extends State<StationPage> {
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Row(children: [
                           Flexible(child: Text(l['title'] ?? '', style: serif(16, color: onNow ? bone : boneDim))),
-                          if (l['live'] == true) Padding(padding: const EdgeInsets.only(left: 8), child: Text('LIVE', style: carved(8.5, color: bloodBright, spacing: 0.3))),
-                          if (l['kind'] == 'show') Padding(padding: const EdgeInsets.only(left: 8), child: Text('PREMIERE', style: carved(8.5, color: bone, spacing: 0.3))),
+                          if (l['live'] == true) Padding(padding: const EdgeInsets.only(left: 8), child: Text('LIVE', style: carved(11, color: bloodBright, spacing: 0.3))),
+                          if (l['kind'] == 'show') Padding(padding: const EdgeInsets.only(left: 8), child: Text('PREMIERE', style: carved(11, color: bone, spacing: 0.3))),
                         ]),
                         if ((l['about'] ?? '').toString().isNotEmpty) Text(l['about'], style: serif(13, color: boneFaint, italic: true)),
                         if (own && l['show'] != null)
@@ -316,7 +316,7 @@ class _StationPageState extends State<StationPage> {
                               await Native.callAway({'cmd': 'show_cancel', 'station': id, 'show': l['show']});
                               load();
                             },
-                            child: Text('CALL IT OFF', style: carved(8.5, color: boneFaint)),
+                            child: Text('CALL IT OFF', style: carved(11, color: boneFaint)),
                           ),
                       ]),
                     ),
@@ -324,7 +324,7 @@ class _StationPageState extends State<StationPage> {
                       IconButton(
                         visualDensity: VisualDensity.compact,
                         tooltip: ringing ? 'Silence the bell' : 'Ring a bell when it starts',
-                        icon: Icon(ringing ? Icons.notifications_active : Icons.notifications_none, size: 18, color: ringing ? bone : boneGhost),
+                        icon: Icon(ringing ? Icons.notifications_active : Icons.notifications_none, size: 20, color: ringing ? bone : boneFaint),
                         onPressed: () async {
                           if (ringing) {
                             await ship.invokeMethod('bell_cancel', {'id': id2, 'station': id, 'at': start});
@@ -477,7 +477,7 @@ class _ShowEditorState extends State<ShowEditor> {
             }),
           ]),
           const SizedBox(height: 14),
-          Text('THE RECORDINGS, IN ORDER', style: carved(10, color: boneFaint, spacing: 0.25)),
+          Text('THE RECORDINGS, IN ORDER', style: carved(11, color: boneFaint, spacing: 0.25)),
           if (library.isEmpty) note('Add recordings to the station first, or make it a live hour.'),
           TrackPicker(library: library, picked: picked, onChanged: (v) => setState(() => picked = v)),
           pyrateSwitch(live, (v) => setState(() => live = v), 'Then I go live'),
@@ -507,7 +507,7 @@ Widget chip(String label, bool on, VoidCallback onTap) => Padding(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(border: Border.all(color: on ? bone : boneGhost, width: on ? 0.9 : 0.5)),
-          child: Text(label.toUpperCase(), style: carved(9.5, color: on ? bone : boneFaint, spacing: 0.2)),
+          child: Text(label.toUpperCase(), style: carved(11, color: on ? bone : boneFaint, spacing: 0.2)),
         ),
       ),
     );
@@ -673,11 +673,11 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
               onChanged: (v) => setState(() => h['len_min'] = (v.round()) * 60),
             ),
           ),
-          if (hours.length > 1) IconButton(icon: const Icon(Icons.close, size: 16, color: boneGhost), onPressed: () => setState(() => hours.removeAt(i))),
+          if (hours.length > 1) IconButton(icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () => setState(() => hours.removeAt(i))),
         ]),
         note('${daysLabel((h['days'] as num).toInt())} from ${hhmm((h['start_min'] as num).toInt())} for ${lengthLabel((h['len_min'] as num).toInt())}, then quiet until the next.'),
       ],
-      if (hours.isNotEmpty) TextButton(onPressed: () => setState(() => hours.add({'days': 0x60, 'start_min': 10 * 60, 'len_min': 240})), child: Text('ADD MORE HOURS', style: carved(9.5, color: boneFaint))),
+      if (hours.isNotEmpty) TextButton(onPressed: () => setState(() => hours.add({'days': 0x60, 'start_min': 10 * 60, 'len_min': 240})), child: Text('ADD MORE HOURS', style: carved(11, color: boneFaint))),
       const SizedBox(height: 22),
       heading('REGULAR SHOWS'),
       note('A show at the same time each week, a co-host\'s slot, or the hour you go live. The rest of the time, everything plays as above.'),
@@ -686,10 +686,10 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
           contentPadding: EdgeInsets.zero,
           title: Row(children: [
             Flexible(child: Text(sl['title'] ?? '', style: serif(17))),
-            if (sl['live'] == true) Padding(padding: const EdgeInsets.only(left: 8), child: Text('LIVE', style: carved(8.5, color: bloodBright, spacing: 0.3))),
+            if (sl['live'] == true) Padding(padding: const EdgeInsets.only(left: 8), child: Text('LIVE', style: carved(11, color: bloodBright, spacing: 0.3))),
           ]),
-          subtitle: Text('${daysLabel((sl['span']['days'] as num).toInt())} · ${hhmm((sl['span']['start_min'] as num).toInt())} · ${lengthLabel((sl['span']['len_min'] as num).toInt())}', style: mono(10, color: boneFaint)),
-          trailing: IconButton(icon: const Icon(Icons.close, size: 16, color: boneGhost), onPressed: () => setState(() => slots.removeAt(i))),
+          subtitle: Text('${daysLabel((sl['span']['days'] as num).toInt())} · ${hhmm((sl['span']['start_min'] as num).toInt())} · ${lengthLabel((sl['span']['len_min'] as num).toInt())}', style: mono(11, color: boneFaint)),
+          trailing: IconButton(icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () => setState(() => slots.removeAt(i))),
           onTap: () async {
             final r = await pyrateSheet<Map<String, dynamic>>(context, SlotEditor(slot: Map<String, dynamic>.from(sl), library: library, hands: hands));
             if (r != null && mounted) setState(() => slots[i] = r);
@@ -700,7 +700,7 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
           final r = await pyrateSheet<Map<String, dynamic>>(context, SlotEditor(library: library, hands: hands));
           if (r != null && mounted) setState(() => slots.add(r));
         },
-        child: Text('ADD A REGULAR SHOW', style: carved(10, color: bone)),
+        child: Text('ADD A REGULAR SHOW', style: carved(11, color: bone)),
       ),
       const SizedBox(height: 22),
       heading('STATION NAME ON THE HOUR'),
@@ -1066,7 +1066,7 @@ class _FeedsPanelState extends State<FeedsPanel> {
       for (final f in mine)
         Row(children: [
           Expanded(child: Text(f['url'], maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(11, color: boneFaint))),
-          IconButton(icon: const Icon(Icons.close, size: 16, color: boneGhost), onPressed: () async {
+          IconButton(icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () async {
             await Feeds.remove(f['url']);
             if (mounted) setState(() {});
           }),
@@ -1213,7 +1213,7 @@ class _PosterSheetState extends State<PosterSheet> {
                   const Spacer(),
                   Text('Scan to listen in any browser.', style: serif(14, color: ink)),
                   const SizedBox(height: 4),
-                  Text(isHarbour(id) ? 'hostis.black/pyrateradio, or search the call sign in any Pyrate Radio' : 'Or search the call sign in any Pyrate Radio', textAlign: TextAlign.center, style: mono(8.5, color: soft)),
+                  Text(isHarbour(id) ? 'hostis.black/pyrateradio, or search the call sign in any Pyrate Radio' : 'Or search the call sign in any Pyrate Radio', textAlign: TextAlign.center, style: mono(11, color: soft)),
                 ]),
               ),
             ),
@@ -1318,13 +1318,13 @@ class _ChatterPanelState extends State<ChatterPanel> {
             for (final v in m)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: Text(v.toUpperCase(), style: carved(10, color: boneFaint, spacing: 0.25)),
+                title: Text(v.toUpperCase(), style: carved(11, color: boneFaint, spacing: 0.25)),
                 trailing: TextButton(
                   onPressed: () {
                     pref('chat_mutes', m.where((x) => x != v).toList());
                     set(() {});
                   },
-                  child: Text('HEAR AGAIN', style: carved(9, color: bone)),
+                  child: Text('HEAR AGAIN', style: carved(11, color: bone)),
                 ),
               ),
           ]),
@@ -1357,7 +1357,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(t['title'] ?? '', style: serif(16)),
-                  subtitle: (t['by'] ?? '').toString().isEmpty ? null : Text(t['by'], style: carved(9, color: boneFaint)),
+                  subtitle: (t['by'] ?? '').toString().isEmpty ? null : Text(t['by'], style: carved(11, color: boneFaint)),
                   onTap: () => Navigator.pop(context, t['hash'] as String),
                 ),
             ]),
@@ -1416,10 +1416,10 @@ class _ChatterPanelState extends State<ChatterPanel> {
                         }
                       },
                 child: Text('${(l['name'] ?? '').toString().isEmpty ? l['voice'] : l['name']}${l['keeper'] == true ? ' (the station)' : ''}'.toUpperCase(),
-                    style: carved(9, color: l['keeper'] == true ? bone : (l['mine'] == true ? boneDim : boneFaint), spacing: 0.25)),
+                    style: carved(11, color: l['keeper'] == true ? bone : (l['mine'] == true ? boneDim : boneFaint), spacing: 0.25)),
               ),
               const SizedBox(width: 8),
-              Text(clockTime((l['at_ms'] as num).toInt()), style: mono(9, color: boneGhost)),
+              Text(clockTime((l['at_ms'] as num).toInt()), style: mono(11, color: boneFaint)),
             ]),
             if (l['kind'] == 'cheer') Text('Cheers to what is on', style: serif(15, color: bone, italic: true)),
             if (l['kind'] == 'request')
@@ -1434,7 +1434,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
                       });
                       if (context.mounted) toast(context, 'It plays next.');
                     },
-                    child: Text('PLAY IT NEXT', style: carved(9, color: bone)),
+                    child: Text('PLAY IT NEXT', style: carved(11, color: bone)),
                   ),
               ]),
             if (l['kind'] == 'text') Text(l['text'] ?? '', style: serif(15, color: boneDim)),
@@ -1450,7 +1450,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
                       toast(context, (r is Map ? r['error'] : null) ?? 'That message would not open.');
                     }
                   },
-                  child: Text('PLAY IT', style: carved(9, color: bone)),
+                  child: Text('PLAY IT', style: carved(11, color: bone)),
                 ),
               ]),
           ]),
@@ -1632,7 +1632,7 @@ class _ChartPageState extends State<ChartPage> {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(s['name'] ?? '', style: serif(17)),
-                  subtitle: Text((s['port'] ?? '').toString().toUpperCase(), style: carved(9, color: boneFaint, spacing: 0.25)),
+                  subtitle: Text((s['port'] ?? '').toString().toUpperCase(), style: carved(11, color: boneFaint, spacing: 0.25)),
                   trailing: Text('${s['aboard'] ?? 0}', style: mono(13, color: boneDim, weight: FontWeight.w700)),
                   onTap: () {
                     widget.radio.tune(s['id'] as String);
@@ -1831,9 +1831,9 @@ class _NumbersKitState extends State<NumbersKit> {
           heading('A NUMBERS STATION'),
           note('Messages of five-figure groups, read twice in the phone\'s own voice after an interval signal, the way the shortwave stations did. The figures are drawn at random on this phone and mean whatever you say they mean.'),
           const SizedBox(height: 10),
-          Text('MESSAGES', style: carved(10, color: boneFaint)),
+          Text('MESSAGES', style: carved(11, color: boneFaint)),
           Wrap(children: [for (final n in [1, 3, 6, 12]) chip('$n', messages == n, () => setState(() => messages = n))]),
-          Text('GROUPS IN EACH', style: carved(10, color: boneFaint)),
+          Text('GROUPS IN EACH', style: carved(11, color: boneFaint)),
           Wrap(children: [for (final n in [5, 8, 12, 20]) chip('$n', groups == n, () => setState(() => groups = n))]),
           const SizedBox(height: 10),
           pyrateButton(busy ?? 'MAKE THEM', busy == null ? make : null),
@@ -1928,7 +1928,7 @@ class _FlockSheetState extends State<FlockSheet> {
             }),
           ],
           const SizedBox(height: 18),
-          Text('THIS PHONE\'S SPEAKER', style: carved(10, color: boneFaint)),
+          Text('THIS PHONE\'S SPEAKER', style: carved(11, color: boneFaint)),
           note('If this phone sounds ahead of the others or behind them, as a Bluetooth speaker does, move it until they match.'),
           Slider(
             value: trim.clamp(-500, 500),
@@ -1939,7 +1939,7 @@ class _FlockSheetState extends State<FlockSheet> {
               read();
             },
           ),
-          Text(trim == 0 ? 'As it is' : trim > 0 ? '${trim.round()} ms earlier' : '${(-trim).round()} ms later', style: mono(10, color: boneFaint)),
+          Text(trim == 0 ? 'As it is' : trim > 0 ? '${trim.round()} ms earlier' : '${(-trim).round()} ms later', style: mono(11, color: boneFaint)),
         ]),
       ),
     );

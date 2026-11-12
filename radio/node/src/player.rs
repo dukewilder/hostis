@@ -16,6 +16,33 @@ pub struct Queue {
     pub played: u64,
     pub starved: bool,
     pub volume: f32,
+    /// Set while the radio is tuning in with nothing yet to play: the speaker hisses softly, as
+    /// a set between stations does, until the station's sound takes over.
+    pub hiss: bool,
+    pub hiss_level: f32,
+    pub noise: f32,
+    pub seed: u32,
+}
+
+/// How loud the tuning hiss stands at its fullest, against full scale.
+const HISS: f32 = 0.045;
+
+impl Queue {
+    /// One sample of the hiss: white noise through a gentle low pass, faded in and out over a
+    /// tenth of a second or so, and only while the queue is empty.
+    fn hiss_sample(&mut self) -> f32 {
+        let target = if self.hiss && self.samples.is_empty() { HISS } else { 0.0 };
+        self.hiss_level += (target - self.hiss_level) * 0.0004;
+        if self.hiss_level < 1e-5 {
+            return 0.0;
+        }
+        self.seed ^= self.seed << 13;
+        self.seed ^= self.seed >> 17;
+        self.seed ^= self.seed << 5;
+        let x = (self.seed as f32 / u32::MAX as f32) * 2.0 - 1.0;
+        self.noise = 0.86 * self.noise + 0.14 * x;
+        self.noise * 2.2 * self.hiss_level
+    }
 }
 
 pub type SharedQueue = Arc<Mutex<Queue>>;
@@ -85,12 +112,16 @@ fn out_stream<T: cpal::SizedSample + cpal::FromSample<f32>>(device: &cpal::Devic
                 while phase >= 1.0 {
                     phase -= 1.0;
                     prev = cur;
+                    if q.seed == 0 {
+                        q.seed = 0x9E37_79B9;
+                    }
+                    let h = q.hiss_sample();
                     if q.samples.len() >= 2 {
-                        cur = [q.samples.pop_front().unwrap_or(0.0), q.samples.pop_front().unwrap_or(0.0)];
+                        cur = [q.samples.pop_front().unwrap_or(0.0) + h, q.samples.pop_front().unwrap_or(0.0) + h];
                         q.played += 1;
                         q.starved = false;
                     } else {
-                        cur = [0.0, 0.0];
+                        cur = [h, h];
                         q.starved = true;
                     }
                 }

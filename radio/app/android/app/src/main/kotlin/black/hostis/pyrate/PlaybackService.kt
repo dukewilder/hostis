@@ -180,14 +180,24 @@ class PlaybackService : MediaBrowserServiceCompat() {
             val s = stations.getJSONObject(i)
             if (s.optString("id") == tuned) { name = s.optString("name"); cover = s.optString("cover").ifEmpty { null } }
         }
-        val title = now?.optString("title")?.ifEmpty { null } ?: name
-        val by = now?.optString("by")?.ifEmpty { null } ?: name
+        // The lock screen names a song only once it is heard; until then it says how far
+        // tuning in has got, as the app does.
+        val said = if (now?.optString("station") == tuned) now.optString("state") else ""
+        val sounding = said == "playing" || said == "live"
+        val waiting = said == "" || said == "searching" || said == "tuning" || said == "stalled"
+        val title = (if (sounding) now?.optString("title")?.ifEmpty { null } else null) ?: name
+        val by = if (sounding) now?.optString("by")?.ifEmpty { null } ?: name else when (said) {
+            "off air" -> "Off the air"
+            "dead air" -> "Nothing on the air right now"
+            "stalled" -> "Signal lost. Tuning in again"
+            "tuning" -> "Tuning in"
+            else -> "Finding the station"
+        }
         val pic = now?.optString("art")?.ifEmpty { null } ?: cover
         val plain = prefs().getBoolean("plain_lock", false)
         val key = "$tuned|$title|$by|$pic|$plain"
-        val sounding = now?.optString("state") == "playing"
         main.post {
-            session.setPlaybackState(state(PlaybackStateCompat.STATE_PLAYING))
+            session.setPlaybackState(state(if (waiting) PlaybackStateCompat.STATE_BUFFERING else PlaybackStateCompat.STATE_PLAYING))
             if (waking && sounding) {
                 waking = false
                 alarmTone?.stop()
@@ -208,7 +218,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         val built = md.build()
         main.post {
             session.setMetadata(built)
-            if (foreground) goForeground(if (plain) "Radio" else title, if (plain) "" else name)
+            if (foreground) goForeground(if (plain) "Radio" else title, if (plain) "" else if (sounding) name else by)
         }
     }
 
