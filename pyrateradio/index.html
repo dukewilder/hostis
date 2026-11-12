@@ -24,6 +24,7 @@
 <meta name="twitter:image" content="https://hostis.black/og-image.png">
 <link rel="icon" type="image/png" sizes="48x48" href="favicon.png">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link" crossorigin>
 <style>
 @font-face {
   font-family: 'Cinzel';
@@ -231,43 +232,89 @@ footer .f-contact a:hover,footer .f-source a:hover{color:#c52828;border-color:#c
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
 
 /* The radio's own page: the sibling sheet above, and what only this page needs. */
+.tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin:0 0 1.6rem}
+.tile{display:block;padding:0 0 1rem;border:1px solid var(--line);background:var(--panel);color:var(--ink);transition:border-color .18s,background .18s;position:relative}
+.tile+.tile{margin-left:-1px}
+.tile:hover,.tile:focus-visible{border-color:var(--faint);z-index:1;outline:none}.tile.on{border-color:var(--red);z-index:2}
+.tile img{display:block;width:100%;height:auto;aspect-ratio:1;object-fit:cover;border-bottom:1px solid var(--line)}
+.tile b{display:block;font:400 1.08rem var(--sc);letter-spacing:.03em;margin:.8rem .85rem 0;line-height:1.2}
+.tile .fq{display:block;font:400 .68rem var(--mono);letter-spacing:.14em;color:var(--dim);margin:.3rem .85rem 0}
+.tile i{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;color:var(--dim);font-size:.92rem;line-height:1.45;margin:.5rem .85rem 0}
+.hbtn{display:inline-flex;align-items:center;justify-content:center;gap:.6rem;min-height:48px;padding:1rem 2.2rem;font:600 .86rem var(--carved);letter-spacing:.24em;text-transform:uppercase;color:var(--ink);background:var(--blooddeep);border:1px solid var(--red);transition:background .2s ease,transform .2s ease}
+.hbtn:hover{background:#6e1414;color:var(--ink);transform:translateY(-1px)}
+.hbtn:focus-visible{outline:2px solid var(--red);outline-offset:3px}
+.btnnote{font:400 11px var(--mono);letter-spacing:.06em;color:var(--faint);margin:.8rem 0 0;text-align:center}
+.eyebrow{font:600 .74rem var(--carved);letter-spacing:.4em;text-transform:uppercase;color:var(--red);text-align:center;margin:0 0 1rem}
+/* The box hostis.black signs its mark in: a ruled double edge and a red point at each corner. */
+.rite{position:relative;width:min(860px,calc(100vw - 2.5rem));margin:3.6rem 0 0 50%;transform:translateX(-50%);padding:clamp(2.2rem,5vw,3.2rem) clamp(1.4rem,5vw,3rem);background:#0b0a08;border:1px solid var(--ghost);outline:1px solid var(--ghost);outline-offset:8px}
+.rite>i{position:absolute;width:8px;height:8px;background:var(--red);transform:rotate(45deg)}
+.rite>i:nth-of-type(1){top:-4px;left:-4px}.rite>i:nth-of-type(2){top:-4px;right:-4px}.rite>i:nth-of-type(3){bottom:-4px;left:-4px}.rite>i:nth-of-type(4){bottom:-4px;right:-4px}
+.rite h2{font:400 clamp(1.7rem,3.4vw,2.4rem) var(--sc);letter-spacing:.04em;color:var(--ink);text-align:center;margin:0 0 2rem}
+.rite .centre{margin-top:2.2rem}
+.toc{display:flex;flex-wrap:wrap;justify-content:center;gap:.3rem 1.4rem;font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;margin:2.2rem 0 0;line-height:2}
+.toc a{color:var(--dim);white-space:nowrap}.toc a:hover{color:var(--redup)}
+.promises{display:grid;grid-template-columns:repeat(2,1fr);gap:1.6rem 2.4rem}
+.promises.three{grid-template-columns:repeat(3,1fr);gap:1.8rem 2rem}
+@media (max-width:900px){.promises.three{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:640px){.promises.three{grid-template-columns:1fr}}
+.promises>div:last-child:nth-child(odd){grid-column:1/-1}
+@media (min-width:901px){.promises.three>div:last-child{grid-column:auto}}
+@media (max-width:640px){.promises>div:last-child{grid-column:auto}}
+.promises b{display:block;font:400 1.15rem var(--sc);letter-spacing:.04em;color:var(--ink);margin-bottom:.45rem}
+.promises b::before{content:'';display:inline-block;width:6px;height:6px;background:var(--red);transform:rotate(45deg);margin:0 .7rem .2rem 0;vertical-align:middle}
+.promises p{margin:0;color:var(--bonedim);font-size:1rem;line-height:1.6}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.two .card{padding:1.5rem 1.4rem;border:1px solid var(--line);background:var(--panel)}
+.two .card+.card{margin-left:-1px}
+.two .card>b{display:block;font:400 1.25rem var(--sc);letter-spacing:.04em;color:var(--ink);margin-bottom:.6rem}
+.two .card>p{color:var(--dim);font-size:1rem;line-height:1.6;margin:0 0 1rem}
+.two .fold{margin-top:.4rem}
+.row-btns{display:flex;flex-wrap:wrap;gap:.5rem}
+.compare-wrap{overflow-x:auto}
+.compare{width:100%;border-collapse:collapse;font-size:1rem;line-height:1.45}
+.compare th,.compare td{padding:.85rem 1rem;border:1px solid var(--line);text-align:left;vertical-align:top;color:var(--dim)}
+.compare thead th{font:400 .7rem var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--faint);background:var(--panel)}
+.compare tbody th{font:400 1rem var(--sc);letter-spacing:.03em;color:var(--ink);width:24%}
+.compare .us{color:var(--ink);background:#0b0a08}
+.compare thead .us{color:var(--red);font-family:var(--carved);font-weight:600;letter-spacing:.3em}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+ol.takes li b{color:var(--ink);font-weight:400;font-family:var(--sc);letter-spacing:.03em}
+@media (max-width:640px){.compare{font-size:.92rem}.compare th,.compare td{padding:.6rem .55rem}.compare tbody th{width:auto}}
 main{max-width:68ch;margin:0 auto;padding:0 18px 2rem}
+/* The hero: what it is, and the one place to go for every station. */
+.hero{padding-bottom:8px}.hero .mh-desc{margin-top:22px}
+.ctas{display:flex;flex-direction:column;align-items:center;gap:.9rem;margin:2rem auto 0}
+.ctas2{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:center}
+.free{font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin:1.3rem 0 0}
+.dialband{width:min(1000px,calc(100vw - 2rem));margin:2.6rem 0 0 50%;transform:translateX(-50%);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.dialband svg{display:block;width:100%;height:auto}
+.dialband text{font-family:var(--mono);fill:var(--dim)}.dialband .st{fill:var(--bonedim);font-family:var(--sc)}
+@media (max-width:560px){.dialband{display:none}.hbtn{width:100%;padding:1rem 1.2rem}}
+.framebar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem 1rem;padding:.7rem .9rem;border:1px solid var(--line);border-bottom:0;background:var(--panel);color:var(--bonedim);font-style:italic;font-size:1rem}
+.framebar .btn{min-height:40px}
+.last{text-align:center;padding:52px 0 12px}
+.stick{position:fixed;left:.6rem;right:.6rem;bottom:calc(.6rem + env(safe-area-inset-bottom));z-index:20;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.5rem .5rem .5rem 1rem;border:1px solid var(--ghost);background:#0b0a08;color:var(--ink);transition:transform .25s,opacity .25s}
+.stick b{font:600 .72rem var(--carved);letter-spacing:.24em;text-transform:uppercase;padding:.7rem 1.2rem;background:var(--blooddeep);border:1px solid var(--red)}
+.stick span{color:var(--dim);font:italic 400 .95rem var(--serif);letter-spacing:0;text-transform:none}
+.stick.off{transform:translateY(140%);opacity:0;pointer-events:none}
+@media (min-width:900px){.stick{left:auto;right:1.2rem;bottom:1.2rem}}
+@media (prefers-reduced-motion:reduce){.stick{transition:none}}
 .prose p{font-size:17px;line-height:1.72;color:var(--dim);margin:0 0 1.2em;text-align:center}
 .prose a,.note a,.fold a{border-bottom:1px solid var(--faint)}.prose a:hover,.note a:hover,.fold a:hover{border-color:var(--red)}
 section{padding:40px 0 4px}
-.passed{max-width:560px;margin:0 auto 1rem;border:1px solid var(--red);background:rgba(197,40,40,.055);padding:1rem 1.25rem;font-style:italic;text-align:center;color:var(--bonedim)}
+.passed{max-width:560px;margin:0 auto 1rem;border:1px solid var(--ghost);background:#0b0a08;padding:1rem 1.25rem;font-style:italic;text-align:center;color:var(--bonedim)}
 .passed a{font:400 .7rem var(--mono);letter-spacing:.13em;text-transform:uppercase;display:inline-block;margin:.8rem .4rem 0;border-bottom:1px solid var(--faint)}
 .setframe{width:min(1000px,calc(100vw - 1rem));margin:0 0 0 50%;transform:translateX(-50%)}
 .setframe iframe{display:block;width:100%;height:640px;border:0;background:transparent;color-scheme:dark}
 .under{text-align:center;color:var(--dim);font-style:italic;font-size:1rem;margin:1rem auto 0;max-width:36em}
 .under a{border-bottom:1px solid var(--faint)}
 .wide{width:min(1000px,calc(100vw - 2rem));margin-left:50%;transform:translateX(-50%)}
-.doors{display:grid;grid-template-columns:repeat(3,1fr);margin-top:2.6rem;text-align:left}
-.doors a{display:block;padding:1.35rem 1.3rem 1.45rem;color:var(--ink);border:1px solid var(--line);background:var(--panel);transition:border-color .18s,background .18s}
-.doors a+a{margin-left:-1px}
-.doors a:hover,.doors a:focus-visible{border-color:var(--red);background:rgba(197,40,40,.055);position:relative;outline:none}
-.doors .what{display:block;font-family:var(--sc);font-size:1.2rem;letter-spacing:.05em;color:var(--ink)}
-.doors .what::before{content:'';display:inline-block;width:6px;height:6px;background:var(--red);transform:rotate(45deg);margin:0 .7rem .2rem 0;vertical-align:middle}
-.doors .how{display:block;color:var(--dim);font-style:italic;font-size:1rem;line-height:1.5;margin-top:.45rem}
-.toc{display:flex;flex-wrap:wrap;justify-content:center;gap:.3rem 1.4rem;font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;margin:2.2rem 0 0;line-height:2}
-.toc a{color:var(--dim);white-space:nowrap}.toc a:hover{color:var(--redup)}
 .pillars{display:grid;grid-template-columns:repeat(3,1fr);gap:0}
 .pillars div{padding:1.4rem 1.3rem 1.5rem;border:1px solid var(--line-soft);text-align:center}
 .pillars div+div{margin-left:-1px}
 .pillars b{display:block;font:400 1.15rem var(--sc);letter-spacing:.05em;color:var(--ink);margin-bottom:.55rem}
 .pillars p{margin:0;color:var(--dim);font-size:1rem;line-height:1.55;font-style:italic}
 .centre{text-align:center;margin:1.6rem 0 0}
-.cards{display:grid;grid-template-columns:1fr 1fr;gap:0}
-.station{display:block;position:relative;padding:1.3rem 1.2rem;border:1px solid var(--line);background:var(--panel);color:var(--ink);transition:border-color .18s}
-.station+.station{margin-left:-1px}
-.station:hover,.station:focus-visible{border-color:var(--red);position:relative;outline:none;color:var(--ink)}
-.station .flag{display:inline-grid;grid-template-columns:repeat(9,1fr);gap:0 .3em;font-family:var(--mono);font-size:.5rem;line-height:1.1;padding:.45rem .55rem;border:1px solid var(--line);margin-bottom:.9rem}
-.station .flag span{color:rgba(237,228,206,.12)}.station .flag b{color:var(--ink);font-weight:400}
-.station .fq{position:absolute;top:1.3rem;right:1.2rem;font:400 .95rem var(--mono);letter-spacing:.06em;color:var(--ink)}
-.station .fq::after{content:'on the dial';display:block;font-size:.55rem;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);text-align:right;margin-top:.2rem}
-.station>b{font-family:var(--sc);font-weight:400;font-size:1.35rem;letter-spacing:.03em;display:block}
-.station .cs{font:400 .68rem var(--mono);letter-spacing:.14em;color:var(--faint);display:block;margin-top:.15rem}
-.station i{color:var(--dim);display:block;font-size:.98rem;line-height:1.5;margin-top:.55rem}
 .note{text-align:center;color:var(--dim);font-style:italic;font-size:1rem;margin:1.2rem auto 0;max-width:38em}
 .getset{text-align:center;margin:0 auto 1rem;max-width:560px}
 .getset .lead-btn{text-align:center}
@@ -275,7 +322,7 @@ section{padding:40px 0 4px}
 h3.small{font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);text-align:center;margin:2.2rem 0 1rem}
 .desk{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0 auto .4rem;max-width:620px}
 .desk a{display:block;padding:.9rem .8rem;border:1px solid var(--line);background:var(--panel);text-align:center;color:var(--ink);transition:border-color .18s,background .18s}
-.desk a+a{margin-left:-1px}.desk a:hover{border-color:var(--red);background:rgba(197,40,40,.055);position:relative}
+.desk a+a{margin-left:-1px}.desk a:hover{border-color:var(--faint);position:relative}
 .desk b{display:block;font:400 1.05rem var(--sc);letter-spacing:.05em;font-weight:400}.desk small{display:block;font:400 .6rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-top:.3rem}
 .folds{max-width:620px;margin:1.8rem auto 0}
 .sums{font:400 .68rem/1.9 var(--mono);letter-spacing:.04em;color:var(--faint);word-break:break-all;margin:0}
@@ -289,30 +336,49 @@ code{font:400 .82em var(--mono);color:var(--ink)}
 .long .prose p{text-align:left}
 .long .lede{margin:2.4rem 0 0}.long .lede p{font-size:19px;line-height:1.7;color:var(--bonedim)}
 .long .toc{margin:0 0 .4rem}
-.leavingnote{display:none;max-width:560px;margin:0 auto 1.6rem;padding:1rem 1.25rem;border:1px solid var(--red);background:rgba(197,40,40,.055);font-style:italic;text-align:center;color:var(--bonedim)}
-html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doors,html.leaving .toc,html.leaving main>section,html.leaving main>.divider{display:none}
-@media (max-width:760px){.doors,.pillars{grid-template-columns:1fr}.doors a+a,.pillars div+div{margin:-1px 0 0}.setframe iframe{height:760px}}
-@media (max-width:560px){.cards,.desk{grid-template-columns:1fr}.station+.station,.desk a+a{margin:-1px 0 0}}
+.leavingnote{display:none;max-width:560px;margin:0 auto 1.6rem;padding:1rem 1.25rem;border:1px solid var(--ghost);background:#0b0a08;font-style:italic;text-align:center;color:var(--bonedim)}
+html.leaving .leavingnote{display:block}html.leaving .hero .ctas,html.leaving .hero .free,html.leaving .dialband,html.leaving main>section,html.leaving main>.divider,html.leaving .stick{display:none}
+@media (max-width:900px){.tiles{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:.6rem;padding:0 1rem;margin-left:50%;width:100vw;transform:translateX(-50%);scrollbar-width:none}.tiles::-webkit-scrollbar{display:none}.tile{flex:0 0 min(62vw,240px);scroll-snap-align:center}.tile+.tile{margin-left:0}}
+@media (max-width:760px){.pillars,.promises,.two{grid-template-columns:1fr}.pillars div+div{margin:-1px 0 0}.two .card+.card{margin:-1px 0 0}.setframe iframe{height:760px}}
+@media (max-width:560px){.desk{grid-template-columns:1fr}.desk a+a{margin:-1px 0 0}}
 </style>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
 <nav class="flagbar" aria-label="HOSTIS"><a class="fb-mark" href="/"><span class="sk" aria-hidden="true"><svg viewBox="0 -719.5 919 1000" style="width:.919em;height:1em;vertical-align:-.2805em;overflow:visible" fill="currentColor"><path transform="scale(1,-1)" d="M233 -61Q217 -61 201.0 -48.0Q185 -35 173 -13Q141 -10 121.0 9.5Q101 29 101 63Q101 80 121.0 92.5Q141 105 162 105Q173 105 182.5 97.0Q192 89 196 79Q207 93 219 105L245 132Q258 145 269.5 158.5Q281 172 291 186L293 212Q293 243 260 267Q227 291 227 314Q227 323 230.5 334.5Q234 346 243 350Q236 363 231.5 390.0Q227 417 227 445Q227 458 228.0 471.5Q229 485 231 498Q222 511 211.5 523.5Q201 536 189 549Q178 562 167.0 574.5Q156 587 146 599Q130 573 100 573Q76 573 63.5 582.0Q51 591 51 615Q51 649 70.5 667.5Q90 686 123 687Q134 708 150.5 721.0Q167 734 183 734Q197 734 207.5 726.0Q218 718 218 704Q218 699 217.5 694.5Q217 690 215 685Q211 677 211 667Q211 665 217.5 654.0Q224 643 233.0 630.0Q242 617 250.0 606.0Q258 595 261 593Q292 653 345.5 682.5Q399 712 466 712Q529 712 579.5 687.0Q630 662 662 606Q667 610 677.0 623.5Q687 637 695.5 651.0Q704 665 704 669Q704 674 703.5 679.0Q703 684 701 688Q697 695 697 706Q697 720 708.0 728.0Q719 736 732 736Q766 736 789 687Q826 687 847.0 668.5Q868 650 868 618Q868 597 849.0 583.0Q830 569 810 569Q798 569 787.5 579.0Q777 589 773 601Q764 590 755.0 579.0Q746 568 735 557Q725 547 715.0 535.5Q705 524 697 512Q700 496 702.0 479.0Q704 462 704 445Q704 420 701.0 396.5Q698 373 690 350Q697 344 701.0 333.0Q705 322 705 313Q705 294 687 280Q669 267 654.0 251.0Q639 235 639 212L640 184Q658 159 681 134Q692 122 703.0 109.5Q714 97 724 85Q729 95 738.0 103.0Q747 111 758 111Q782 111 802.0 92.0Q822 73 822 50Q822 -8 765 -8L752 -7Q741 -28 725.0 -41.5Q709 -55 692 -55Q679 -55 668.0 -46.5Q657 -38 657 -24Q657 -19 658.5 -14.0Q660 -9 661 -5Q664 3 664 13Q664 18 655.5 32.0Q647 46 636.0 60.5Q625 75 619 80L615 77Q606 47 575 33H576Q542 14 520.0 8.0Q498 2 466 2Q435 2 414.0 7.5Q393 13 356 33H357Q328 46 316 78L313 80Q308 77 295.5 61.0Q283 45 272.0 28.0Q261 11 261 6Q261 2 262.5 -2.0Q264 -6 265 -11Q267 -15 268.0 -20.0Q269 -25 269 -30Q269 -44 258.0 -52.5Q247 -61 233 -61ZM691 535Q698 546 706.0 557.5Q714 569 725 576Q733 590 745.0 604.0Q757 618 771 626Q776 617 785.5 608.5Q795 600 807 600Q823 600 833.0 607.0Q843 614 843 630Q843 647 826.0 655.0Q809 663 783 663H775Q771 681 761.0 693.0Q751 705 738 705Q731 705 723.5 700.0Q716 695 716 687Q716 680 718 677L725 661Q726 658 726 652Q726 651 718.5 642.5Q711 634 700.5 622.5Q690 611 681.0 602.0Q672 593 670 592Q678 579 682.5 564.5Q687 550 691 535ZM236 522Q244 552 254 578Q251 579 247 585L219 615Q215 620 211.5 624.0Q208 628 205 632L193 645Q189 649 189 650Q189 656 191 659L198 675Q199 678 199 685Q199 693 191.5 698.0Q184 703 176 703Q163 703 152.5 692.0Q142 681 137 663H132Q108 663 92.0 654.0Q76 645 76 629Q76 614 87.5 608.5Q99 603 114 603Q125 603 134.0 609.5Q143 616 148 624Q162 614 173.0 603.0Q184 592 191 581Q206 558 214 553Q218 550 223.5 542.5Q229 535 236 522ZM475 457Q482 457 495 462L522 473Q537 479 554.5 483.5Q572 488 590 488Q602 488 615 478L626 469Q629 467 632.0 465.5Q635 464 637 462L644 471Q639 490 636.0 507.0Q633 524 633 543Q633 557 634.5 571.5Q636 586 640 599Q620 642 574.0 668.0Q528 694 466 694Q406 694 360.0 670.0Q314 646 293 603Q293 584 296 564Q299 545 299 524Q299 511 296.0 498.0Q293 485 289 472L296 463Q308 474 325.5 483.0Q343 492 359 492Q394 492 425 475Q458 457 475 457ZM253 451Q264 452 272.0 467.5Q280 483 284.0 505.5Q288 528 288 550Q288 554 288.0 557.5Q288 561 287 565L283 581Q270 558 260.0 533.0Q250 508 250 479Q250 465 253 451ZM679 453V482Q679 509 673.0 533.0Q667 557 653 579L647 550Q644 537 644 521Q644 513 648.0 504.5Q652 496 658 487L670 470Q676 462 679 453ZM473 481Q467 481 451.0 485.0Q435 489 417.5 494.5Q400 500 387.0 505.5Q374 511 374 514Q374 517 377 517L378 516L401 509L429 501Q443 497 456.5 494.5Q470 492 479 492Q480 492 482.5 492.5Q485 493 489 494Q493 495 498.0 496.5Q503 498 510 499L562 511L582 516Q586 517 588.5 518.0Q591 519 592 519L599 518Q601 518 605 516Q603 514 599 514Q586 514 570.5 510.5Q555 507 535 498Q516 489 500.0 485.0Q484 481 473 481ZM466 20Q508 20 543.5 38.5Q579 57 601.0 88.5Q623 120 623 160Q623 184 617 206Q610 211 604.0 217.0Q598 223 593 230Q602 235 617 237Q625 245 634.0 253.5Q643 262 652 271Q660 279 667.5 289.0Q675 299 680 310L672 324L668 332Q666 334 666 337Q666 346 673 357Q680 368 680 378Q680 384 680.0 389.0Q680 394 679 398Q678 403 678.0 406.5Q678 410 678 414V423L662 443Q656 445 650.5 447.5Q645 450 640 452L620 463Q611 468 599.5 472.5Q588 477 573 477Q561 477 547.5 474.0Q534 471 519 463Q489 448 473 448Q451 448 416 463Q382 478 358 478Q343 478 313 460Q297 451 287.0 445.5Q277 440 272 438Q271 435 268.0 433.0Q265 431 261 429L248 422L247 410Q247 400 250.0 393.5Q253 387 256 382L263 372Q266 366 266 361Q266 358 265.5 356.0Q265 354 265 352L262 344Q259 337 259 329V325L252 311Q276 273 304 259Q334 244 346 232L338 231Q330 230 323.0 226.5Q316 223 316 217Q316 213 316.0 210.0Q316 207 317 203L318 189Q314 182 313.0 173.0Q312 164 312 155Q312 128 319 106L344 79Q353 51 388.0 35.5Q423 20 466 20ZM355 345Q315 345 298.5 361.0Q282 377 282 408Q282 424 295.5 436.5Q309 449 329.0 456.0Q349 463 368 463Q394 463 414.5 451.0Q435 439 435 419Q435 407 426.0 397.5Q417 388 407 383Q399 367 386.5 356.0Q374 345 355 345ZM577 345Q559 345 540.5 358.0Q522 371 509.5 388.5Q497 406 497 419Q497 439 518.0 451.0Q539 463 564 463Q584 463 603.5 456.0Q623 449 636.5 436.5Q650 424 650 408Q650 377 633.5 361.0Q617 345 577 345ZM340 312 309 322 299 332Q293 336 289 340V346Q291 345 298.0 342.5Q305 340 315 337Q337 329 348 329Q363 329 373.0 332.0Q383 335 390 339Q398 344 406.5 352.0Q415 360 425 370L423 360L376 316ZM588 312 548 326 512 356 511 361 528 346Q539 336 549.5 332.5Q560 329 580 329Q591 329 613 337L639 346V340Q633 334 615 325L600 317ZM442 236Q433 236 425.5 248.0Q418 260 418 269Q418 276 423.5 290.0Q429 304 436.5 319.5Q444 335 452.0 346.0Q460 357 466 357Q476 357 485.5 341.0Q495 325 498 308Q504 301 509.0 290.0Q514 279 514 269Q514 260 506.0 248.0Q498 236 490 236Q476 236 466 246Q456 236 442 236ZM561 89Q548 89 535.0 93.5Q522 98 510 103L488 99Q482 98 476.0 97.5Q470 97 465 97Q454 97 441 102Q429 105 417 105Q412 105 403.0 104.0Q394 103 385 101L367 98Q363 97 359.0 96.0Q355 95 353 94Q351 96 351 100V103Q351 107 351.5 111.5Q352 116 353 120L354 127L351 141Q350 145 350.0 148.5Q350 152 350 156Q350 162 361.5 171.5Q373 181 385 186Q392 188 399.0 192.0Q406 196 416 201Q434 210 465 210Q491 210 510.5 205.0Q530 200 555 183L577 154V130L575 114Q581 108 581 101Q581 94 573.5 91.5Q566 89 561 89ZM565 122V141Q565 144 564.5 147.0Q564 150 563 153L561 165L546 176L539 175L531 179Q528 187 520 187H519Q508 187 503 183Q499 189 484.5 192.0Q470 195 454 195Q453 195 451.0 194.5Q449 194 447 194L439 192Q439 190 436 190H431L419 184Q417 186 415.0 187.0Q413 188 410 188Q404 188 401.5 182.5Q399 177 399 172L389 173L378 169L371 160L359 157L362 131L376 136L382 148L383 164L388 168L389 142L403 153Q412 155 417 161V181L423 183L429 157L446 160L443 183L449 186L455 160L464 159V188H471V160L485 161L487 186L496 184L493 159L506 152H512L514 181L519 180L518 153L525 154Q536 154 542 147L541 172L547 171L545 144L550 134ZM550 104 561 109 555 122 540 116Q543 124 543 129Q543 135 535.0 140.5Q527 146 519 149L517 123L511 126V148Q509 149 505.5 149.5Q502 150 500 151Q497 152 494.0 152.5Q491 153 488 154V127L480 125L478 152L461 155L460 129H456L453 155L428 152L430 128H426L420 149L408 138L405 123H402Q401 126 398.5 130.5Q396 135 392 135H390L385 116Q381 118 378.0 122.0Q375 126 374 130Q371 129 367.5 127.0Q364 125 362 123L365 110L376 115L385 106L396 120L409 113L420 127L434 119L443 109L455 125Q457 120 461.5 115.5Q466 111 472 111Q482 111 488 119L496 126Q513 111 523.0 107.5Q533 104 550 104ZM223 -29Q231 -29 240.0 -24.5Q249 -20 249 -10Q249 0 244 7Q239 15 239 22Q239 24 247.0 34.0Q255 44 266.5 57.0Q278 70 287.5 80.5Q297 91 300 93L293 105L291 121Q290 125 290.5 129.0Q291 133 291 137V154Q284 143 274.5 133.5Q265 124 254 116Q232 81 198 54Q193 62 184.0 69.0Q175 76 164 76Q145 76 135.0 68.5Q125 61 125 50Q125 31 144.0 21.0Q163 11 187 11Q190 -2 200.5 -15.5Q211 -29 223 -29ZM701 -22Q713 -22 723.5 -9.0Q734 4 738 17Q752 13 765 13Q797 13 797 38Q797 56 786.0 69.0Q775 82 756 82Q746 82 736.5 75.0Q727 68 722 60Q707 70 695.0 84.5Q683 99 673 114Q663 121 655.0 132.0Q647 143 641 153Q641 149 641.5 144.0Q642 139 642 136V133Q642 112 630 92Q634 88 647.5 73.0Q661 58 673.5 44.0Q686 30 686 28Q686 21 681 13Q676 3 676 -4Q676 -14 684.5 -18.0Q693 -22 701 -22ZM464 76Q459 76 454.5 78.0Q450 80 446 81Q442 83 438.0 84.0Q434 85 429 86H425Q421 86 416.5 85.5Q412 85 406 84L405 86Q415 93 426 94Q434 90 444.5 87.0Q455 84 464 84Q472 84 479 87Q485 90 493 90H512Q513 90 517 88L525 85Q527 84 532.0 82.0Q537 80 537 79Q537 77 534 77Q518 86 500 86Q492 86 482 81Q474 76 464 76Z"/></svg></span>HOSTIS</a></nav>
-<header class="masthead">
+<header class="masthead hero" id="top">
 <h1>Pyrate Radio</h1>
 <p class="mh-sub">on the air all day and all night</p>
 <p class="mh-desc">Radio that anyone can raise, that every listener carries, and that nobody can switch off.</p>
+<div class="ctas">
+<div><a class="hbtn openlink" href="listen/">Open the full player</a><p class="btnnote">every station, in any browser &#183; it opens off this site</p></div>
+<div class="ctas2"><a class="btn" href="#set">Get the app</a><a class="btn" href="#colours">Start a station</a><a class="btn" href="how-it-works/">Why it can&#8217;t be stopped</a></div>
+</div>
+<div class="dialband" aria-hidden="true"><svg id="dialsvg" viewBox="0 0 1000 96"></svg></div>
 </header>
 <main id="main">
 <div id="passed" class="passed" hidden></div>
-<p class="leavingnote">This station is not one of HOSTIS's. Taking you to the open player.</p>
-<div class="setframe"><iframe id="radio" src="listen/?embed" title="Pyrate Radio, playing in this page" allow="autoplay; clipboard-write; web-share"></iframe>
-<p class="under">The dial here holds HOSTIS's own stations. Every other station is in the <a class="openlink" href="listen/">open player</a>.</p></div>
+<p class="leavingnote">This station is not one of HOSTIS's. Taking you to the full player.</p>
+
+<section id="air">
+<div class="sechead"><h2>On the Air</h2><span class="cap">HOSTIS's own stations</span></div>
+<div class="tiles wide" role="list">
+<a class="tile" role="listitem" href="listen/#f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f" data-id="f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f"><img src="listen/art/the-public-domain.jpg" alt="" width="512" height="512" loading="lazy"><b>The Public Domain</b><span class="fq"></span><i>Recordings published in 1925 or earlier, free in the United States since 1 January 2026.</i></a>
+<a class="tile" role="listitem" href="listen/#110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a" data-id="110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"><img src="listen/art/readings.jpg" alt="" width="512" height="512" loading="lazy"><b>Readings</b><span class="fq"></span><i>LibriVox recordings read aloud round the clock, Johnson's General History of the Pyrates first.</i></a>
+<a class="tile" role="listitem" href="listen/#1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069" data-id="1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069"><img src="listen/art/the-numbers.jpg" alt="" width="512" height="512" loading="lazy"><b>The Numbers</b><span class="fq"></span></a>
+<a class="tile" role="listitem" href="listen/#8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd" data-id="8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd"><img src="listen/art/netlabel.jpg" alt="" width="512" height="512" loading="lazy"><b>Netlabel</b><span class="fq"></span><i>Creative Commons electronic, ambient and experimental music from the netlabels that gave it away.</i></a>
+<a class="tile" role="listitem" href="listen/#23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a" data-id="23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a"><img src="listen/art/poets-corner.jpg" alt="" width="512" height="512" loading="lazy"><b>Poets&rsquo; Corner</b><span class="fq"></span><i>Short public domain poems read by LibriVox volunteers, one on the hour.</i></a>
+</div>
+<div class="setframe">
+<div class="framebar"><span>This page plays only HOSTIS's own stations.</span><a class="btn openlink" href="listen/">Every station</a></div>
+<iframe id="radio" src="listen/?embed" title="Pyrate Radio, HOSTIS's stations, playing in this page" allow="autoplay; clipboard-write; web-share"></iframe>
+</div>
+</section>
 <script>
 // A station link: hostis.black/pyrateradio/#<station id>. One of HOSTIS's own plays here, in
 // the browser or the app. Anything else (another station, an invitation, a flock) goes straight
 // on to the open player before this page reads it: the part after the # never reaches a server.
-(function(){var H=["f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a", "1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069", "8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd", "23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a"],P=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeifyjyj7j4iz46nwbzov4hno434crufnu2gjt5qerwbph2uu3qb5uu.ipfs.inbrowser.link/", "https://bafybeifyjyj7j4iz46nwbzov4hno434crufnu2gjt5qerwbph2uu3qb5uu.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeifyjyj7j4iz46nwbzov4hno434crufnu2gjt5qerwbph2uu3qb5uu/"],h=(location.hash||'').toLowerCase(),id=h.slice(1);
+(function(){var H=["f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a", "1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069", "8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd", "23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a"],P=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeibliqutdu2tzczbkgiijocvj4ydgwi4mmn23otmvtrbo5njiy6jdu.ipfs.inbrowser.link/", "https://bafybeibliqutdu2tzczbkgiijocvj4ydgwi4mmn23otmvtrbo5njiy6jdu.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeibliqutdu2tzczbkgiijocvj4ydgwi4mmn23otmvtrbo5njiy6jdu/"],h=(location.hash||'').toLowerCase(),id=h.slice(1);
 if(/pocket=|flock=/.test(h)||(/^[0-9a-f]{64}$/.test(id)&&H.indexOf(id)<0)){history.replaceState(null,'',location.pathname);
 document.documentElement.className+=' leaving';var go=function(u){location.replace(u+h)},done=0;
 var ping=function(u){return fetch(u+'favicon.png',{mode:'no-cors',cache:'no-store'}).then(function(){return u})};
@@ -323,52 +389,36 @@ setTimeout(function(){if(!done++)go(P[0])},8000);return}
 if(!/^[0-9a-f]{64}$/.test(id))return;var b=document.getElementById('passed');
 var app=/Android/.test(navigator.userAgent)?' <a href="intent://station/'+id+'#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url='+encodeURIComponent(new URL('listen/#'+id,location.href).href)+';end">Open in the app</a>':'';
 document.getElementById('radio').src='listen/?embed#'+id;
-b.innerHTML='Someone passed you a HOSTIS station. It is on the dial below.'+(app?'<br>'+app:'');b.hidden=false})();
-document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeifyjyj7j4iz46nwbzov4hno434crufnu2gjt5qerwbph2uu3qb5uu.ipfs.inbrowser.link/", "https://bafybeifyjyj7j4iz46nwbzov4hno434crufnu2gjt5qerwbph2uu3qb5uu.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeifyjyj7j4iz46nwbzov4hno434crufnu2gjt5qerwbph2uu3qb5uu/"][0]});
+b.innerHTML='Someone passed you a HOSTIS station. It is on the dial below.'+(app?'<br>'+app:'');b.hidden=false;
+addEventListener('DOMContentLoaded',function(){document.getElementById('air').scrollIntoView()})})();
 </script>
-
-<nav class="doors wide">
-<a class="openlink" href="listen/"><span class="what">Every station</span><span class="how">The whole Log in any browser, phone or computer, with nothing to install.</span></a>
-<a href="#set"><span class="what">Take the set</span><span class="how">The app for Android, Windows, Mac and Linux. It plays with the screen off.</span></a>
-<a href="#colours"><span class="what">Raise colours</span><span class="how">A station of your own, on the air in a minute.</span></a>
-</nav>
-<nav class="toc" aria-label="On this page"><a href="#how">How it works</a><a href="#air">On the air</a><a href="#set">Take the set</a><a href="#colours">Raise colours</a><a href="#lantern">Light a Lantern</a><a href="#faq">Questions</a><a href="handbook/">Keeper's handbook</a></nav>
-
-<div class="divider"><span class="divider-glyph"></span></div>
-<section id="how">
-<div class="sechead"><h2>How It Works</h2><span class="cap">from the key to the speaker</span></div>
-<div class="pillars wide">
-<div><b>Every device is the network</b><p>Phones, computers, browser tabs and Lanterns pass the stations between them, and each checks what it gets against the station's own key.</p></div>
-<div><b>Every device carries</b><p>Each holds a share of every station, about eight copies across the fleet, so a station plays on with nobody listening and its keeper offline.</p></div>
-<div><b>Nobody sees who listens</b><p>You never give a name. Sound comes through two hops, and the count of who is aboard is made from tokens that change every hour.</p></div>
+<section id="free" class="rite"><i></i><i></i><i></i><i></i>
+<p class="eyebrow">The Promises</p>
+<h2>Nobody Can Switch It Off</h2>
+<div class="promises three">
+<div><b>There is no server</b><p>Phones, computers and Lanterns carry every station between them. Take hostis.black down and they all play on.</p></div>
+<div><b>Only the key ends a station</b><p>A station with a hundred listeners lives in a hundred places, and the rest of the network keeps spares. Only the holder of its twenty-four words can end it.</p></div>
+<div><b>It gets past blocks</b><p>Block the way in and the radios already aboard keep each other. Run it through Tor, over Wi-Fi with no internet, or pass a whole station as one file.</p></div>
+<div><b>Listeners stay unseen</b><p>You listen without an account or a name, and nothing tracks you. Sound comes through two other radios. One knows who asks, the other what for.</p></div>
+<div><b>Broadcasters stay unseen</b><p>A broadcast leaves sealed and travels about four radios before it surfaces. None of them can tie it to the keeper.</p></div>
+<div><b>Carriers stay unseen</b><p>A phone keeps what it carries sealed and its address to itself. A Lantern runs with every port closed, behind a VPN if you like.</p></div>
+<div><b>Nothing can be forged</b><p>Every recording is checked against its station's key before it plays. A carrier can pass a station on and cannot change a note of it.</p></div>
+<div><b>Not even HOSTIS can stop it</b><p>HOSTIS can't remove a station, change what one plays or see who listens. An update needs two of three keys kept in separate places, and waits three days on every phone.</p></div>
+<div><b>No gatekeeper</b><p>Anyone can start a station in a minute, free, and nobody approves it. The keeper decides what plays, and you decide what reaches you.</p></div>
 </div>
-<p class="centre"><a class="btn" href="how-it-works/">The whole account</a></p>
-</section>
-
-<div class="divider"><span class="divider-glyph"></span></div>
-<section id="air">
-<div class="sechead"><h2>On the Air</h2><span class="cap">the stations HOSTIS raises</span></div>
-<div class="cards">
-<a class="station" href="listen/#f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f" data-id="f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f"><span class="flag"></span><span class="fq"></span><b>The Public Domain</b><span class="cs">GAHAGU·3695</span><i>Recordings published in 1925 or earlier, free in the United States since 1 January 2026. Every January the fence moves back another year.</i></a>
-<a class="station" href="listen/#110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a" data-id="110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"><span class="flag"></span><span class="fq"></span><b>Readings</b><span class="cs">DEVAKA·F42C</span><i>LibriVox recordings, every one in the public domain, read aloud around the clock. Johnson's General History of the Pyrates first.</i></a>
-<a class="station" href="listen/#1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069" data-id="1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069"><span class="flag"></span><span class="fq"></span><b>The Numbers</b><span class="cs">LOGEHO·95A5</span><i>Five figures on the hour, every hour. Every group is a word, and the key is a book this radio reads.</i></a>
-<a class="station" href="listen/#8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd" data-id="8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd"><span class="flag"></span><span class="fq"></span><b>Netlabel</b><span class="cs">KAMANO·62C1</span><i>Creative Commons electronic, ambient and experimental music, from the netlabels that gave it away.</i></a>
-<a class="station" href="listen/#23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a" data-id="23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a"><span class="flag"></span><span class="fq"></span><b>Poets&rsquo; Corner</b><span class="cs">VOVUFE·F376</span><i>Short public domain poems, read aloud by LibriVox volunteers. A poem everyone should hear once, on the hour.</i></a>
-</div>
-<p class="note">Every other station belongs to whoever holds its key. The Log sorts by how many are aboard.</p>
+<p class="centre"><a class="hbtn" href="how-it-works/">How it stays free</a></p>
 </section>
 
 <div class="divider"><span class="divider-glyph"></span></div>
 <section id="set">
 <div class="sechead"><h2>Take the Set</h2><span class="cap">android &#183; computers &#183; any browser</span></div>
 <div class="getset">
-<a class="lead-btn" href="pyrate-radio-0.9.11.apk"><span class="fc-lead">Pyrate Radio for Android</span><span class="fc-sub">version 0.9.11 &#183; 45 MB &#183; arm64</span></a>
+<a class="hbtn" href="pyrate-radio-0.9.14.apk">Pyrate Radio for Android</a><p class="btnnote">version 0.9.14 &#183; 45 MB &#183; arm64</p>
 </div>
 <h3 class="small">On a computer</h3>
-<div class="desk"><a href="pyrate-radio-0.9.11-windows.zip"><b>Windows</b><small>10 and 11 · zip</small></a><a href="pyrate-radio-0.9.11-macos.zip"><b>Mac</b><small>Apple and Intel · zip</small></a><a href="pyrate-radio-0.9.11-linux-x64.tar.gz"><b>Linux</b><small>x86-64 · tar.gz</small></a></div>
-<p class="note">Version 0.9.11. On a Mac, open it the first time with a right-click and Open. Computers take new versions from this page.</p>
-<div class="alt"><a class="btn openlink" href="listen/">Any browser</a><a class="btn" href="magnet:?xt=urn:btih:179b2e01838e6c96d8142dc119fa472c2db5b93a&amp;dn=pyrate-radio-0.9.11.apk&amp;tr=udp:%2F%2Ftracker.opentrackr.org:1337%2Fannounce&amp;tr=udp:%2F%2Fopen.demonii.com:1337%2Fannounce&amp;tr=udp:%2F%2Ftracker.torrent.eu.org:451%2Fannounce&amp;ws=https:%2F%2Fhostis.black%2Fpyrateradio%2Fpyrate-radio-0.9.11.apk">Magnet link</a><a class="btn" href="pyrate-radio-0.9.11.apk.torrent">.torrent</a><a class="btn" href="https://github.com/dukewilder/hostis/tree/radio/radio" target="_blank" rel="noopener noreferrer">Source</a></div>
-<p class="note">Once you have it, the app passes itself on from phone to phone, in Settings.</p>
+<div class="desk"><a href="pyrate-radio-0.9.14-windows.zip"><b>Windows</b><small>10 and 11 · zip</small></a><a href="pyrate-radio-0.9.14-macos.zip"><b>Mac</b><small>Apple and Intel · zip</small></a><a href="pyrate-radio-0.9.14-linux-x64.tar.gz"><b>Linux</b><small>x86-64 · tar.gz</small></a></div>
+<p class="note">Version 0.9.14. On a Mac, open it the first time with a right-click and Open. Computers take new versions from this page.</p>
+<div class="alt"><a class="btn openlink" href="listen/">Any browser</a><a class="btn" href="magnet:?xt=urn:btih:8ee671f42bde54d9a1da92e36f5775afaf53fb73&amp;dn=pyrate-radio-0.9.14.apk&amp;tr=udp:%2F%2Ftracker.opentrackr.org:1337%2Fannounce&amp;tr=udp:%2F%2Fopen.demonii.com:1337%2Fannounce&amp;tr=udp:%2F%2Ftracker.torrent.eu.org:451%2Fannounce&amp;ws=https:%2F%2Fhostis.black%2Fpyrateradio%2Fpyrate-radio-0.9.14.apk">Magnet link</a><a class="btn" href="pyrate-radio-0.9.14.apk.torrent">.torrent</a><a class="btn" href="https://github.com/dukewilder/hostis/tree/radio/radio" target="_blank" rel="noopener noreferrer">Source</a></div>
 <div class="folds">
 <details class="fold"><summary>Installing on stock Android</summary><div>
 <p>Pyrate Radio does not register with Google. From 2026 in some countries, and everywhere in 2027, Google's phones ask once before installing an app from a developer who keeps their name to themselves.</p>
@@ -380,7 +430,7 @@ document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51
 <p>GrapheneOS, LineageOS and other de-Googled phones skip all of this, and so does an install over ADB.</p>
 </div></details>
 <details class="fold"><summary>Checksums and the signing certificate</summary><div>
-<p class="sums">android 537abe87af7410df0b777ff76ebaceb73fb06ab60973856ec7f0615c835e51e2<br>windows fbe6cb2d0040b512d92c9bc130e290833715bfdb2164b2d9ce862d235f98e5e5 · <a href="pyrate-radio-0.9.11-windows.zip.torrent">torrent</a><br>mac a3cb380c0fb1ad239f84e92df96f613ec1afca5aea98aadb8ee288bea01b5b04 · <a href="pyrate-radio-0.9.11-macos.zip.torrent">torrent</a><br>linux dd1b64772c2c20690a8cb0fee9d47606b9f9508bb3859767a3bb8bf4ea2e801a · <a href="pyrate-radio-0.9.11-linux-x64.tar.gz.torrent">torrent</a><br>signing certificate AF:4C:08:F6:0C:06:87:5C:84:9F:74:59:6B:BB:99:62:DC:A8:EB:33:E2:22:8E:72:BC:A9:BD:06:4E:6D:8A:14</p>
+<p class="sums">android b064889e554f89849d3bbf017487e8e8ad9348af7738c3cf98182cbe51285a7c<br>windows f5d6dba6484ba19577e45561e3a488f563cf07b0e00429cea3fcf2f1a8a90f02 · <a href="pyrate-radio-0.9.14-windows.zip.torrent">torrent</a><br>mac 034e5ce1a7b149220d18c4923a5be06192adcb150f0e8bc584705140b882c300 · <a href="pyrate-radio-0.9.14-macos.zip.torrent">torrent</a><br>linux 04baf76d98592101a507dd19c33fe4c1ce9e847fdbcdb4cead297ff543d61e11 · <a href="pyrate-radio-0.9.14-linux-x64.tar.gz.torrent">torrent</a><br>signing certificate AF:4C:08:F6:0C:06:87:5C:84:9F:74:59:6B:BB:99:62:DC:A8:EB:33:E2:22:8E:72:BC:A9:BD:06:4E:6D:8A:14</p>
 <p>The app shows the same certificate in Settings, under Advanced, and takes an update only when two of the three HOSTIS release keys have signed it. The source is CC0, so you can build it yourself and compare.</p>
 </div></details>
 </div>
@@ -388,63 +438,61 @@ document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51
 
 <div class="divider"><span class="divider-glyph"></span></div>
 <section id="colours">
-<div class="sechead"><h2>Raise Colours</h2><span class="cap">a station of your own</span></div>
-<div class="prose">
-<p>Name a station and drop recordings in. The clock plays them round the hour, the day and the week, at one loudness, as a loop, a schedule or a podcast's feed. Press the red button and you are live from the microphone, ten to twenty seconds behind.</p>
-<p>The station is a key made on your own device and shown to you once as twenty-four words. Whoever holds the words is the station, and nobody can take it from them.</p>
-</div>
-<p class="centre"><a class="btn openlink" href="listen/">Raise one in the browser</a></p>
-<p class="note"><a href="handbook/">The keeper's handbook</a> covers keeping a station, and yourself, unknown.</p>
-</section>
-
-<div class="divider"><span class="divider-glyph"></span></div>
-<section id="lantern">
-<div class="sechead"><h2>Light a Lantern</h2><span class="cap">a node that never sleeps</span></div>
-<div class="prose">
-<p>A Lantern is the radio on a machine that stays on. It carries every station, relays for devices that cannot reach each other, and can put stations of its own on the air from folders of recordings. It opens no ports and works the same behind a VPN.</p>
-</div>
-<ol class="steps">
-<li>Install Docker on any Linux machine, Raspberry Pi or server.</li>
-<li>Run these three lines.<pre class="cmd">git clone --depth 1 --branch radio https://github.com/dukewilder/hostis
+<div class="sechead"><h2>Join the Fleet</h2></div>
+<div class="two wide">
+<div class="card"><b>Raise colours</b><p>Name it, drop recordings in, and it plays round the clock. Go live from the microphone whenever you like.</p><p class="row-btns"><a class="btn openlink" href="listen/">Start a station</a><a class="btn quiet" href="handbook/">Keeper's handbook</a></p></div>
+<div class="card" id="lantern"><b>Light a Lantern</b><p>The radio on a machine that stays on, like a Raspberry Pi or an old laptop. It carries every station and opens no ports.</p><p class="row-btns"><a class="btn" href="https://github.com/dukewilder/hostis/blob/radio/radio/LANTERN.md" target="_blank" rel="noopener noreferrer">The Lantern guide</a></p>
+<details class="fold"><summary>The three lines</summary><div><pre class="cmd">git clone --depth 1 --branch radio https://github.com/dukewilder/hostis
 docker build -t pyrate-lantern -f hostis/radio/Dockerfile hostis/radio
-docker run -d --name lantern --restart unless-stopped -v pyrate:/data pyrate-lantern</pre></li>
-<li>It joins the network within a minute and carries from then on. <code>docker logs lantern</code> shows it working.</li>
-</ol>
-<p class="note"><a href="https://github.com/dukewilder/hostis/blob/radio/radio/LANTERN.md">The Lantern guide</a> covers stations from folders, a web page of your own, quotas and the open player.</p>
+docker run -d --name lantern --restart unless-stopped -v pyrate:/data pyrate-lantern</pre><p><code>docker logs lantern</code> shows it working.</p></div></details></div>
+</div>
 </section>
 
 <div class="divider"><span class="divider-glyph"></span></div>
 <section id="faq">
-<div class="sechead"><h2>Questions</h2><span class="cap">asked and answered</span></div>
+<div class="sechead"><h2>Questions</h2></div>
 <div class="faq">
 <details class="fold"><summary>Is it free?</summary><div>Yes, and it stays free. Nothing is sold in it, to you or about you. A station can show a tip address, and a tip goes straight from your wallet to the station.</div></details>
 <details class="fold"><summary>Do I need an account?</summary><div>No. Open it and listen. A station is its key, and the key lives on the device that made it.</div></details>
-<details class="fold"><summary>Does it work on iPhone?</summary><div>Yes, in Safari, listening and broadcasting both. Open the <a class="openlink" href="listen/">open player</a> and add it to your home screen to open it like an app. Listening with the screen off needs the app, on Android or a computer.</div></details>
-<details class="fold"><summary>Who can see what I listen to?</summary><div>No single device learns both who you are and what you hear. Your phone fetches sound through two other devices, the first knowing who asks and not what, the second what and not who. Counts are made from anonymous tokens that change every hour. What your phone carries for others sits on it sealed, and it cannot tell what it holds.</div></details>
-<details class="fold"><summary>Can a station be taken down?</summary><div>Not from any one place. Its log and its sound are copied across every device that carries it, and any one of them can hand it on. Only the holder of its key can end it.</div></details>
+<details class="fold"><summary>Does it work on iPhone?</summary><div>Yes, in Safari, listening and broadcasting both. Open the <a class="openlink" href="listen/">full player</a> and add it to your home screen to open it like an app. Listening with the screen off needs the app, on Android or a computer.</div></details>
 <details class="fold"><summary>Who decides what is on the air?</summary><div>Whoever holds a station's key decides what it plays. You decide what reaches you. Hide a station and it leaves your dial. Explicit stations stay off it until you switch them on, and mature ones can be hidden too.</div></details>
 <details class="fold"><summary>How much data, room and battery does it use?</summary><div>Music streams at about 29 MB an hour and talk at about 11. The share your phone carries for others takes up to 4 GB, less on a fuller phone, and fills only on Wi-Fi while it charges, so away from the charger it costs you nothing.</div></details>
-<details class="fold"><summary>Does my station need my phone to stay on?</summary><div>No. Its programme lives in its signed log and every listener works out what is playing from the log and the clock. Put a song on a loop, uninstall the app, and the song plays on.</div></details>
-<details class="fold"><summary>What happens if I lose my phone?</summary><div>Put your station's twenty-four words into the app on another device and the station is yours again. The old phone can no longer speak for it. Without the words nobody can recover it, HOSTIS included.</div></details>
-<details class="fold"><summary>How do people find my station?</summary><div>It is on the Log and on the dial, at a frequency drawn from its key. Pass on its link, or print its poster, which carries a code that opens the station in any phone's browser.</div></details>
-<details class="fold"><summary>Can I make a private station?</summary><div>Yes, an invite-only station. It never shows on the Log. Its key is its invitation, and only whoever you hand it to can find it. Its listeners can see each other's devices, as in a private room.</div></details>
-<details class="fold"><summary>Can listeners talk?</summary><div>Each station has a chat for talk, cheers and requests the station can play next, and the radio saves none of it. A listener can also send the station a voice message only the station can open.</div></details>
-<details class="fold"><summary>How do I know the app is genuine?</summary><div>Check the file against the checksum under Take the set, and the signing certificate against the one the app shows. Updates arrive inside the app, signed by two of three HOSTIS release keys, and wait three days before they install unless you take them sooner.</div></details>
-<details class="fold"><summary>Why &#8220;Pyrate&#8221;?</summary><div>It is the spelling in Captain Charles Johnson's General History of the Pyrates of 1724, read on this radio around the clock. The old law called the pirate <i>hostis humani generis</i>, the enemy of all mankind. HOSTIS takes the name. The rest is at <a href="https://hostis.black">hostis.black</a>.</div></details>
+<details class="fold"><summary>How do I know the app is genuine?</summary><div>Check the file against the checksum under Take the Set, and the signing certificate against the one the app shows. Updates arrive inside the app, signed by two of three HOSTIS release keys, and wait three days before they install unless you take them sooner.</div></details>
 </div>
+<p class="centre"><a class="btn quiet" href="how-it-works/#questions">More questions</a></p>
+</section>
+
+<section class="last">
+<a class="hbtn openlink" href="listen/">Open the full player</a>
 </section>
 </main>
+<a id="stick" class="stick openlink off" href="listen/" aria-hidden="true" tabindex="-1"><span>Every station is in the full player</span><b>Open</b></a>
 <footer>
 <p class="f-contact">Email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>
 <p class="f-copy">no rights reserved &#183; all copies welcome</p>
 <p class="f-source"><a href="https://github.com/dukewilder/hostis" target="_blank" rel="noopener noreferrer">source code</a></p>
 </footer>
 <script>
-// Each station's flag is its key, drawn; its frequency is the same on every dial.
-document.querySelectorAll('.station[data-id]').forEach(function(a){var id=a.dataset.id,b=[];for(var k=0;k<id.length;k++){var v=parseInt(id[k],16);for(var i=3;i>=0;i--)b.push((v>>i)&1)}
-var h='';for(var r=0;r<6;r++)for(var c=0;c<9;c++){var half=c<5?c:8-c;h+=b[(r*5+half)%b.length]?'<b>1</b>':'<span>0</span>'}a.querySelector('.flag').innerHTML=h;
-a.querySelector('.fq').textContent=((875+parseInt(id.slice(0,6),16)%206)/10).toFixed(1)});
-// The set in the hero tells this page how tall it has grown.
+// Each station's flag is its key, drawn, and its place on the dial comes from the key as well.
+function fq(id){return ((875+parseInt(id.slice(0,6),16)%206)*100+parseInt(id.slice(6,10),16)%100)/1000}
+document.querySelectorAll('.tile[data-id]').forEach(function(a){a.querySelector('.fq').textContent=fq(a.dataset.id).toFixed(3)+' FM';
+// A tile turns the set in this page to its station, where the set can take it.
+a.addEventListener('click',function(e){var f=document.getElementById('radio');if(!f.contentWindow||document.documentElement.classList.contains('leaving'))return;e.preventDefault();
+f.contentWindow.postMessage({pyrate:'tune',id:a.dataset.id},location.origin);document.querySelectorAll('.tile.on').forEach(function(t){t.classList.remove('on')});a.classList.add('on');f.scrollIntoView({behavior:'smooth',block:'center'})})});
+// Every way to the full player leads off this site, to the copy nobody owns.
+document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeibliqutdu2tzczbkgiijocvj4ydgwi4mmn23otmvtrbo5njiy6jdu.ipfs.inbrowser.link/", "https://bafybeibliqutdu2tzczbkgiijocvj4ydgwi4mmn23otmvtrbo5njiy6jdu.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeibliqutdu2tzczbkgiijocvj4ydgwi4mmn23otmvtrbo5njiy6jdu/"][0]});
+// The dial across the hero, with HOSTIS's stations at their places on it.
+(function(){var svg=document.getElementById('dialsvg'),x=function(f){return 30+(f-87.5)/20.6*940},h='<line x1="30" y1="62" x2="970" y2="62" stroke="rgba(237,228,206,.25)"/>';
+for(var f=88;f<=108;f+=.5){var big=f%2===0;h+='<line x1="'+x(f)+'" y1="'+(big?50:56)+'" x2="'+x(f)+'" y2="62" stroke="rgba(237,228,206,'+(big?.45:.2)+')"/>';if(big)h+='<text x="'+x(f)+'" y="82" font-size="12" text-anchor="middle">'+f+'</text>'}
+var rows=[],st=[].map.call(document.querySelectorAll('.tile[data-id]'),function(a){return{f:fq(a.dataset.id),n:a.querySelector('b').textContent}}).sort(function(a,b){return a.f-b.f});
+st.forEach(function(s){var px=x(s.f),w=s.n.length*8.2+14,r=0;while(rows[r]!==undefined&&rows[r]>px-w/2)r++;rows[r]=px+w/2;var y=40-r*18;
+h+='<line x1="'+px+'" y1="'+(y+3)+'" x2="'+px+'" y2="62" stroke="#c52828" stroke-width="2"/><text class="st" x="'+px+'" y="'+y+'" font-size="12" text-anchor="middle">'+s.n.replace(/&/g,'&amp;')+'</text>'});
+var top=Math.min(0,40-(rows.length-1)*18-18);svg.setAttribute('viewBox','0 '+top+' 1000 '+(96-top));svg.innerHTML=h})();
+// Once the way in has scrolled away, a bar keeps the full player one tap off.
+(function(){var bar=document.getElementById('stick'),seen=new Map();if(!('IntersectionObserver' in window))return;
+var io=new IntersectionObserver(function(es){es.forEach(function(e){seen.set(e.target,e.isIntersecting)});var any=false;seen.forEach(function(v){any=any||v});bar.classList.toggle('off',any);bar.setAttribute('aria-hidden',any);bar.tabIndex=any?-1:0},{threshold:0});
+[].forEach.call(document.querySelectorAll('.hero .ctas,#radio,.last,.rite,footer'),function(el){io.observe(el)})})();
+// The set in the sample tells this page how tall it has grown.
 addEventListener('message',function(e){if(e.origin===location.origin&&e.data&&e.data.pyrate==='height')document.getElementById('radio').style.height=e.data.h+'px'});
 </script>
 </body>

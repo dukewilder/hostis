@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>How Pyrate Radio Works · Pyrate Radio · HOSTIS</title>
-<meta name="description" content="How Pyrate Radio carries every station with no server, how it keeps listeners and keepers unseen, and what it would take to stop it.">
+<title>Nobody Can Switch It Off · How Pyrate Radio Works · Pyrate Radio · HOSTIS</title>
+<meta name="description" content="No server, no account and nobody in charge: how Pyrate Radio carries every station, keeps listeners and keepers unseen, and what it would take to stop it.">
 <meta name="author" content="HOSTIS">
 <link rel="canonical" href="https://hostis.black/pyrateradio/how-it-works/">
 <meta name="theme-color" content="#030303">
 <meta name="color-scheme" content="dark">
-<meta property="og:title" content="How Pyrate Radio Works">
+<meta property="og:title" content="Nobody Can Switch It Off · How Pyrate Radio Works">
 <meta property="og:description" content="Radio that anyone can raise, that every listener carries, and that nobody can switch off.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://hostis.black/pyrateradio/how-it-works/">
@@ -19,11 +19,12 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@hostis_black">
 <meta name="twitter:creator" content="@hostis_black">
-<meta name="twitter:title" content="How Pyrate Radio Works">
+<meta name="twitter:title" content="Nobody Can Switch It Off · How Pyrate Radio Works">
 <meta name="twitter:description" content="Radio that anyone can raise, that every listener carries, and that nobody can switch off.">
 <meta name="twitter:image" content="https://hostis.black/og-image.png">
 <link rel="icon" type="image/png" sizes="48x48" href="../favicon.png">
 <link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png">
+<link rel="preconnect" href="https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link" crossorigin>
 <style>
 @font-face {
   font-family: 'Cinzel';
@@ -231,43 +232,89 @@ footer .f-contact a:hover,footer .f-source a:hover{color:#c52828;border-color:#c
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
 
 /* The radio's own page: the sibling sheet above, and what only this page needs. */
+.tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin:0 0 1.6rem}
+.tile{display:block;padding:0 0 1rem;border:1px solid var(--line);background:var(--panel);color:var(--ink);transition:border-color .18s,background .18s;position:relative}
+.tile+.tile{margin-left:-1px}
+.tile:hover,.tile:focus-visible{border-color:var(--faint);z-index:1;outline:none}.tile.on{border-color:var(--red);z-index:2}
+.tile img{display:block;width:100%;height:auto;aspect-ratio:1;object-fit:cover;border-bottom:1px solid var(--line)}
+.tile b{display:block;font:400 1.08rem var(--sc);letter-spacing:.03em;margin:.8rem .85rem 0;line-height:1.2}
+.tile .fq{display:block;font:400 .68rem var(--mono);letter-spacing:.14em;color:var(--dim);margin:.3rem .85rem 0}
+.tile i{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;color:var(--dim);font-size:.92rem;line-height:1.45;margin:.5rem .85rem 0}
+.hbtn{display:inline-flex;align-items:center;justify-content:center;gap:.6rem;min-height:48px;padding:1rem 2.2rem;font:600 .86rem var(--carved);letter-spacing:.24em;text-transform:uppercase;color:var(--ink);background:var(--blooddeep);border:1px solid var(--red);transition:background .2s ease,transform .2s ease}
+.hbtn:hover{background:#6e1414;color:var(--ink);transform:translateY(-1px)}
+.hbtn:focus-visible{outline:2px solid var(--red);outline-offset:3px}
+.btnnote{font:400 11px var(--mono);letter-spacing:.06em;color:var(--faint);margin:.8rem 0 0;text-align:center}
+.eyebrow{font:600 .74rem var(--carved);letter-spacing:.4em;text-transform:uppercase;color:var(--red);text-align:center;margin:0 0 1rem}
+/* The box hostis.black signs its mark in: a ruled double edge and a red point at each corner. */
+.rite{position:relative;width:min(860px,calc(100vw - 2.5rem));margin:3.6rem 0 0 50%;transform:translateX(-50%);padding:clamp(2.2rem,5vw,3.2rem) clamp(1.4rem,5vw,3rem);background:#0b0a08;border:1px solid var(--ghost);outline:1px solid var(--ghost);outline-offset:8px}
+.rite>i{position:absolute;width:8px;height:8px;background:var(--red);transform:rotate(45deg)}
+.rite>i:nth-of-type(1){top:-4px;left:-4px}.rite>i:nth-of-type(2){top:-4px;right:-4px}.rite>i:nth-of-type(3){bottom:-4px;left:-4px}.rite>i:nth-of-type(4){bottom:-4px;right:-4px}
+.rite h2{font:400 clamp(1.7rem,3.4vw,2.4rem) var(--sc);letter-spacing:.04em;color:var(--ink);text-align:center;margin:0 0 2rem}
+.rite .centre{margin-top:2.2rem}
+.toc{display:flex;flex-wrap:wrap;justify-content:center;gap:.3rem 1.4rem;font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;margin:2.2rem 0 0;line-height:2}
+.toc a{color:var(--dim);white-space:nowrap}.toc a:hover{color:var(--redup)}
+.promises{display:grid;grid-template-columns:repeat(2,1fr);gap:1.6rem 2.4rem}
+.promises.three{grid-template-columns:repeat(3,1fr);gap:1.8rem 2rem}
+@media (max-width:900px){.promises.three{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:640px){.promises.three{grid-template-columns:1fr}}
+.promises>div:last-child:nth-child(odd){grid-column:1/-1}
+@media (min-width:901px){.promises.three>div:last-child{grid-column:auto}}
+@media (max-width:640px){.promises>div:last-child{grid-column:auto}}
+.promises b{display:block;font:400 1.15rem var(--sc);letter-spacing:.04em;color:var(--ink);margin-bottom:.45rem}
+.promises b::before{content:'';display:inline-block;width:6px;height:6px;background:var(--red);transform:rotate(45deg);margin:0 .7rem .2rem 0;vertical-align:middle}
+.promises p{margin:0;color:var(--bonedim);font-size:1rem;line-height:1.6}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.two .card{padding:1.5rem 1.4rem;border:1px solid var(--line);background:var(--panel)}
+.two .card+.card{margin-left:-1px}
+.two .card>b{display:block;font:400 1.25rem var(--sc);letter-spacing:.04em;color:var(--ink);margin-bottom:.6rem}
+.two .card>p{color:var(--dim);font-size:1rem;line-height:1.6;margin:0 0 1rem}
+.two .fold{margin-top:.4rem}
+.row-btns{display:flex;flex-wrap:wrap;gap:.5rem}
+.compare-wrap{overflow-x:auto}
+.compare{width:100%;border-collapse:collapse;font-size:1rem;line-height:1.45}
+.compare th,.compare td{padding:.85rem 1rem;border:1px solid var(--line);text-align:left;vertical-align:top;color:var(--dim)}
+.compare thead th{font:400 .7rem var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--faint);background:var(--panel)}
+.compare tbody th{font:400 1rem var(--sc);letter-spacing:.03em;color:var(--ink);width:24%}
+.compare .us{color:var(--ink);background:#0b0a08}
+.compare thead .us{color:var(--red);font-family:var(--carved);font-weight:600;letter-spacing:.3em}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+ol.takes li b{color:var(--ink);font-weight:400;font-family:var(--sc);letter-spacing:.03em}
+@media (max-width:640px){.compare{font-size:.92rem}.compare th,.compare td{padding:.6rem .55rem}.compare tbody th{width:auto}}
 main{max-width:68ch;margin:0 auto;padding:0 18px 2rem}
+/* The hero: what it is, and the one place to go for every station. */
+.hero{padding-bottom:8px}.hero .mh-desc{margin-top:22px}
+.ctas{display:flex;flex-direction:column;align-items:center;gap:.9rem;margin:2rem auto 0}
+.ctas2{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:center}
+.free{font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin:1.3rem 0 0}
+.dialband{width:min(1000px,calc(100vw - 2rem));margin:2.6rem 0 0 50%;transform:translateX(-50%);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.dialband svg{display:block;width:100%;height:auto}
+.dialband text{font-family:var(--mono);fill:var(--dim)}.dialband .st{fill:var(--bonedim);font-family:var(--sc)}
+@media (max-width:560px){.dialband{display:none}.hbtn{width:100%;padding:1rem 1.2rem}}
+.framebar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem 1rem;padding:.7rem .9rem;border:1px solid var(--line);border-bottom:0;background:var(--panel);color:var(--bonedim);font-style:italic;font-size:1rem}
+.framebar .btn{min-height:40px}
+.last{text-align:center;padding:52px 0 12px}
+.stick{position:fixed;left:.6rem;right:.6rem;bottom:calc(.6rem + env(safe-area-inset-bottom));z-index:20;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.5rem .5rem .5rem 1rem;border:1px solid var(--ghost);background:#0b0a08;color:var(--ink);transition:transform .25s,opacity .25s}
+.stick b{font:600 .72rem var(--carved);letter-spacing:.24em;text-transform:uppercase;padding:.7rem 1.2rem;background:var(--blooddeep);border:1px solid var(--red)}
+.stick span{color:var(--dim);font:italic 400 .95rem var(--serif);letter-spacing:0;text-transform:none}
+.stick.off{transform:translateY(140%);opacity:0;pointer-events:none}
+@media (min-width:900px){.stick{left:auto;right:1.2rem;bottom:1.2rem}}
+@media (prefers-reduced-motion:reduce){.stick{transition:none}}
 .prose p{font-size:17px;line-height:1.72;color:var(--dim);margin:0 0 1.2em;text-align:center}
 .prose a,.note a,.fold a{border-bottom:1px solid var(--faint)}.prose a:hover,.note a:hover,.fold a:hover{border-color:var(--red)}
 section{padding:40px 0 4px}
-.passed{max-width:560px;margin:0 auto 1rem;border:1px solid var(--red);background:rgba(197,40,40,.055);padding:1rem 1.25rem;font-style:italic;text-align:center;color:var(--bonedim)}
+.passed{max-width:560px;margin:0 auto 1rem;border:1px solid var(--ghost);background:#0b0a08;padding:1rem 1.25rem;font-style:italic;text-align:center;color:var(--bonedim)}
 .passed a{font:400 .7rem var(--mono);letter-spacing:.13em;text-transform:uppercase;display:inline-block;margin:.8rem .4rem 0;border-bottom:1px solid var(--faint)}
 .setframe{width:min(1000px,calc(100vw - 1rem));margin:0 0 0 50%;transform:translateX(-50%)}
 .setframe iframe{display:block;width:100%;height:640px;border:0;background:transparent;color-scheme:dark}
 .under{text-align:center;color:var(--dim);font-style:italic;font-size:1rem;margin:1rem auto 0;max-width:36em}
 .under a{border-bottom:1px solid var(--faint)}
 .wide{width:min(1000px,calc(100vw - 2rem));margin-left:50%;transform:translateX(-50%)}
-.doors{display:grid;grid-template-columns:repeat(3,1fr);margin-top:2.6rem;text-align:left}
-.doors a{display:block;padding:1.35rem 1.3rem 1.45rem;color:var(--ink);border:1px solid var(--line);background:var(--panel);transition:border-color .18s,background .18s}
-.doors a+a{margin-left:-1px}
-.doors a:hover,.doors a:focus-visible{border-color:var(--red);background:rgba(197,40,40,.055);position:relative;outline:none}
-.doors .what{display:block;font-family:var(--sc);font-size:1.2rem;letter-spacing:.05em;color:var(--ink)}
-.doors .what::before{content:'';display:inline-block;width:6px;height:6px;background:var(--red);transform:rotate(45deg);margin:0 .7rem .2rem 0;vertical-align:middle}
-.doors .how{display:block;color:var(--dim);font-style:italic;font-size:1rem;line-height:1.5;margin-top:.45rem}
-.toc{display:flex;flex-wrap:wrap;justify-content:center;gap:.3rem 1.4rem;font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;margin:2.2rem 0 0;line-height:2}
-.toc a{color:var(--dim);white-space:nowrap}.toc a:hover{color:var(--redup)}
 .pillars{display:grid;grid-template-columns:repeat(3,1fr);gap:0}
 .pillars div{padding:1.4rem 1.3rem 1.5rem;border:1px solid var(--line-soft);text-align:center}
 .pillars div+div{margin-left:-1px}
 .pillars b{display:block;font:400 1.15rem var(--sc);letter-spacing:.05em;color:var(--ink);margin-bottom:.55rem}
 .pillars p{margin:0;color:var(--dim);font-size:1rem;line-height:1.55;font-style:italic}
 .centre{text-align:center;margin:1.6rem 0 0}
-.cards{display:grid;grid-template-columns:1fr 1fr;gap:0}
-.station{display:block;position:relative;padding:1.3rem 1.2rem;border:1px solid var(--line);background:var(--panel);color:var(--ink);transition:border-color .18s}
-.station+.station{margin-left:-1px}
-.station:hover,.station:focus-visible{border-color:var(--red);position:relative;outline:none;color:var(--ink)}
-.station .flag{display:inline-grid;grid-template-columns:repeat(9,1fr);gap:0 .3em;font-family:var(--mono);font-size:.5rem;line-height:1.1;padding:.45rem .55rem;border:1px solid var(--line);margin-bottom:.9rem}
-.station .flag span{color:rgba(237,228,206,.12)}.station .flag b{color:var(--ink);font-weight:400}
-.station .fq{position:absolute;top:1.3rem;right:1.2rem;font:400 .95rem var(--mono);letter-spacing:.06em;color:var(--ink)}
-.station .fq::after{content:'on the dial';display:block;font-size:.55rem;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);text-align:right;margin-top:.2rem}
-.station>b{font-family:var(--sc);font-weight:400;font-size:1.35rem;letter-spacing:.03em;display:block}
-.station .cs{font:400 .68rem var(--mono);letter-spacing:.14em;color:var(--faint);display:block;margin-top:.15rem}
-.station i{color:var(--dim);display:block;font-size:.98rem;line-height:1.5;margin-top:.55rem}
 .note{text-align:center;color:var(--dim);font-style:italic;font-size:1rem;margin:1.2rem auto 0;max-width:38em}
 .getset{text-align:center;margin:0 auto 1rem;max-width:560px}
 .getset .lead-btn{text-align:center}
@@ -275,7 +322,7 @@ section{padding:40px 0 4px}
 h3.small{font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);text-align:center;margin:2.2rem 0 1rem}
 .desk{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0 auto .4rem;max-width:620px}
 .desk a{display:block;padding:.9rem .8rem;border:1px solid var(--line);background:var(--panel);text-align:center;color:var(--ink);transition:border-color .18s,background .18s}
-.desk a+a{margin-left:-1px}.desk a:hover{border-color:var(--red);background:rgba(197,40,40,.055);position:relative}
+.desk a+a{margin-left:-1px}.desk a:hover{border-color:var(--faint);position:relative}
 .desk b{display:block;font:400 1.05rem var(--sc);letter-spacing:.05em;font-weight:400}.desk small{display:block;font:400 .6rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-top:.3rem}
 .folds{max-width:620px;margin:1.8rem auto 0}
 .sums{font:400 .68rem/1.9 var(--mono);letter-spacing:.04em;color:var(--faint);word-break:break-all;margin:0}
@@ -289,32 +336,85 @@ code{font:400 .82em var(--mono);color:var(--ink)}
 .long .prose p{text-align:left}
 .long .lede{margin:2.4rem 0 0}.long .lede p{font-size:19px;line-height:1.7;color:var(--bonedim)}
 .long .toc{margin:0 0 .4rem}
-.leavingnote{display:none;max-width:560px;margin:0 auto 1.6rem;padding:1rem 1.25rem;border:1px solid var(--red);background:rgba(197,40,40,.055);font-style:italic;text-align:center;color:var(--bonedim)}
-html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doors,html.leaving .toc,html.leaving main>section,html.leaving main>.divider{display:none}
-@media (max-width:760px){.doors,.pillars{grid-template-columns:1fr}.doors a+a,.pillars div+div{margin:-1px 0 0}.setframe iframe{height:760px}}
-@media (max-width:560px){.cards,.desk{grid-template-columns:1fr}.station+.station,.desk a+a{margin:-1px 0 0}}
+.leavingnote{display:none;max-width:560px;margin:0 auto 1.6rem;padding:1rem 1.25rem;border:1px solid var(--ghost);background:#0b0a08;font-style:italic;text-align:center;color:var(--bonedim)}
+html.leaving .leavingnote{display:block}html.leaving .hero .ctas,html.leaving .hero .free,html.leaving .dialband,html.leaving main>section,html.leaving main>.divider,html.leaving .stick{display:none}
+@media (max-width:900px){.tiles{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:.6rem;padding:0 1rem;margin-left:50%;width:100vw;transform:translateX(-50%);scrollbar-width:none}.tiles::-webkit-scrollbar{display:none}.tile{flex:0 0 min(62vw,240px);scroll-snap-align:center}.tile+.tile{margin-left:0}}
+@media (max-width:760px){.pillars,.promises,.two{grid-template-columns:1fr}.pillars div+div{margin:-1px 0 0}.two .card+.card{margin:-1px 0 0}.setframe iframe{height:760px}}
+@media (max-width:560px){.desk{grid-template-columns:1fr}.desk a+a{margin:-1px 0 0}}
 </style>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
 <nav class="flagbar" aria-label="HOSTIS"><a class="fb-mark" href="/"><span class="sk" aria-hidden="true"><svg viewBox="0 -719.5 919 1000" style="width:.919em;height:1em;vertical-align:-.2805em;overflow:visible" fill="currentColor"><path transform="scale(1,-1)" d="M233 -61Q217 -61 201.0 -48.0Q185 -35 173 -13Q141 -10 121.0 9.5Q101 29 101 63Q101 80 121.0 92.5Q141 105 162 105Q173 105 182.5 97.0Q192 89 196 79Q207 93 219 105L245 132Q258 145 269.5 158.5Q281 172 291 186L293 212Q293 243 260 267Q227 291 227 314Q227 323 230.5 334.5Q234 346 243 350Q236 363 231.5 390.0Q227 417 227 445Q227 458 228.0 471.5Q229 485 231 498Q222 511 211.5 523.5Q201 536 189 549Q178 562 167.0 574.5Q156 587 146 599Q130 573 100 573Q76 573 63.5 582.0Q51 591 51 615Q51 649 70.5 667.5Q90 686 123 687Q134 708 150.5 721.0Q167 734 183 734Q197 734 207.5 726.0Q218 718 218 704Q218 699 217.5 694.5Q217 690 215 685Q211 677 211 667Q211 665 217.5 654.0Q224 643 233.0 630.0Q242 617 250.0 606.0Q258 595 261 593Q292 653 345.5 682.5Q399 712 466 712Q529 712 579.5 687.0Q630 662 662 606Q667 610 677.0 623.5Q687 637 695.5 651.0Q704 665 704 669Q704 674 703.5 679.0Q703 684 701 688Q697 695 697 706Q697 720 708.0 728.0Q719 736 732 736Q766 736 789 687Q826 687 847.0 668.5Q868 650 868 618Q868 597 849.0 583.0Q830 569 810 569Q798 569 787.5 579.0Q777 589 773 601Q764 590 755.0 579.0Q746 568 735 557Q725 547 715.0 535.5Q705 524 697 512Q700 496 702.0 479.0Q704 462 704 445Q704 420 701.0 396.5Q698 373 690 350Q697 344 701.0 333.0Q705 322 705 313Q705 294 687 280Q669 267 654.0 251.0Q639 235 639 212L640 184Q658 159 681 134Q692 122 703.0 109.5Q714 97 724 85Q729 95 738.0 103.0Q747 111 758 111Q782 111 802.0 92.0Q822 73 822 50Q822 -8 765 -8L752 -7Q741 -28 725.0 -41.5Q709 -55 692 -55Q679 -55 668.0 -46.5Q657 -38 657 -24Q657 -19 658.5 -14.0Q660 -9 661 -5Q664 3 664 13Q664 18 655.5 32.0Q647 46 636.0 60.5Q625 75 619 80L615 77Q606 47 575 33H576Q542 14 520.0 8.0Q498 2 466 2Q435 2 414.0 7.5Q393 13 356 33H357Q328 46 316 78L313 80Q308 77 295.5 61.0Q283 45 272.0 28.0Q261 11 261 6Q261 2 262.5 -2.0Q264 -6 265 -11Q267 -15 268.0 -20.0Q269 -25 269 -30Q269 -44 258.0 -52.5Q247 -61 233 -61ZM691 535Q698 546 706.0 557.5Q714 569 725 576Q733 590 745.0 604.0Q757 618 771 626Q776 617 785.5 608.5Q795 600 807 600Q823 600 833.0 607.0Q843 614 843 630Q843 647 826.0 655.0Q809 663 783 663H775Q771 681 761.0 693.0Q751 705 738 705Q731 705 723.5 700.0Q716 695 716 687Q716 680 718 677L725 661Q726 658 726 652Q726 651 718.5 642.5Q711 634 700.5 622.5Q690 611 681.0 602.0Q672 593 670 592Q678 579 682.5 564.5Q687 550 691 535ZM236 522Q244 552 254 578Q251 579 247 585L219 615Q215 620 211.5 624.0Q208 628 205 632L193 645Q189 649 189 650Q189 656 191 659L198 675Q199 678 199 685Q199 693 191.5 698.0Q184 703 176 703Q163 703 152.5 692.0Q142 681 137 663H132Q108 663 92.0 654.0Q76 645 76 629Q76 614 87.5 608.5Q99 603 114 603Q125 603 134.0 609.5Q143 616 148 624Q162 614 173.0 603.0Q184 592 191 581Q206 558 214 553Q218 550 223.5 542.5Q229 535 236 522ZM475 457Q482 457 495 462L522 473Q537 479 554.5 483.5Q572 488 590 488Q602 488 615 478L626 469Q629 467 632.0 465.5Q635 464 637 462L644 471Q639 490 636.0 507.0Q633 524 633 543Q633 557 634.5 571.5Q636 586 640 599Q620 642 574.0 668.0Q528 694 466 694Q406 694 360.0 670.0Q314 646 293 603Q293 584 296 564Q299 545 299 524Q299 511 296.0 498.0Q293 485 289 472L296 463Q308 474 325.5 483.0Q343 492 359 492Q394 492 425 475Q458 457 475 457ZM253 451Q264 452 272.0 467.5Q280 483 284.0 505.5Q288 528 288 550Q288 554 288.0 557.5Q288 561 287 565L283 581Q270 558 260.0 533.0Q250 508 250 479Q250 465 253 451ZM679 453V482Q679 509 673.0 533.0Q667 557 653 579L647 550Q644 537 644 521Q644 513 648.0 504.5Q652 496 658 487L670 470Q676 462 679 453ZM473 481Q467 481 451.0 485.0Q435 489 417.5 494.5Q400 500 387.0 505.5Q374 511 374 514Q374 517 377 517L378 516L401 509L429 501Q443 497 456.5 494.5Q470 492 479 492Q480 492 482.5 492.5Q485 493 489 494Q493 495 498.0 496.5Q503 498 510 499L562 511L582 516Q586 517 588.5 518.0Q591 519 592 519L599 518Q601 518 605 516Q603 514 599 514Q586 514 570.5 510.5Q555 507 535 498Q516 489 500.0 485.0Q484 481 473 481ZM466 20Q508 20 543.5 38.5Q579 57 601.0 88.5Q623 120 623 160Q623 184 617 206Q610 211 604.0 217.0Q598 223 593 230Q602 235 617 237Q625 245 634.0 253.5Q643 262 652 271Q660 279 667.5 289.0Q675 299 680 310L672 324L668 332Q666 334 666 337Q666 346 673 357Q680 368 680 378Q680 384 680.0 389.0Q680 394 679 398Q678 403 678.0 406.5Q678 410 678 414V423L662 443Q656 445 650.5 447.5Q645 450 640 452L620 463Q611 468 599.5 472.5Q588 477 573 477Q561 477 547.5 474.0Q534 471 519 463Q489 448 473 448Q451 448 416 463Q382 478 358 478Q343 478 313 460Q297 451 287.0 445.5Q277 440 272 438Q271 435 268.0 433.0Q265 431 261 429L248 422L247 410Q247 400 250.0 393.5Q253 387 256 382L263 372Q266 366 266 361Q266 358 265.5 356.0Q265 354 265 352L262 344Q259 337 259 329V325L252 311Q276 273 304 259Q334 244 346 232L338 231Q330 230 323.0 226.5Q316 223 316 217Q316 213 316.0 210.0Q316 207 317 203L318 189Q314 182 313.0 173.0Q312 164 312 155Q312 128 319 106L344 79Q353 51 388.0 35.5Q423 20 466 20ZM355 345Q315 345 298.5 361.0Q282 377 282 408Q282 424 295.5 436.5Q309 449 329.0 456.0Q349 463 368 463Q394 463 414.5 451.0Q435 439 435 419Q435 407 426.0 397.5Q417 388 407 383Q399 367 386.5 356.0Q374 345 355 345ZM577 345Q559 345 540.5 358.0Q522 371 509.5 388.5Q497 406 497 419Q497 439 518.0 451.0Q539 463 564 463Q584 463 603.5 456.0Q623 449 636.5 436.5Q650 424 650 408Q650 377 633.5 361.0Q617 345 577 345ZM340 312 309 322 299 332Q293 336 289 340V346Q291 345 298.0 342.5Q305 340 315 337Q337 329 348 329Q363 329 373.0 332.0Q383 335 390 339Q398 344 406.5 352.0Q415 360 425 370L423 360L376 316ZM588 312 548 326 512 356 511 361 528 346Q539 336 549.5 332.5Q560 329 580 329Q591 329 613 337L639 346V340Q633 334 615 325L600 317ZM442 236Q433 236 425.5 248.0Q418 260 418 269Q418 276 423.5 290.0Q429 304 436.5 319.5Q444 335 452.0 346.0Q460 357 466 357Q476 357 485.5 341.0Q495 325 498 308Q504 301 509.0 290.0Q514 279 514 269Q514 260 506.0 248.0Q498 236 490 236Q476 236 466 246Q456 236 442 236ZM561 89Q548 89 535.0 93.5Q522 98 510 103L488 99Q482 98 476.0 97.5Q470 97 465 97Q454 97 441 102Q429 105 417 105Q412 105 403.0 104.0Q394 103 385 101L367 98Q363 97 359.0 96.0Q355 95 353 94Q351 96 351 100V103Q351 107 351.5 111.5Q352 116 353 120L354 127L351 141Q350 145 350.0 148.5Q350 152 350 156Q350 162 361.5 171.5Q373 181 385 186Q392 188 399.0 192.0Q406 196 416 201Q434 210 465 210Q491 210 510.5 205.0Q530 200 555 183L577 154V130L575 114Q581 108 581 101Q581 94 573.5 91.5Q566 89 561 89ZM565 122V141Q565 144 564.5 147.0Q564 150 563 153L561 165L546 176L539 175L531 179Q528 187 520 187H519Q508 187 503 183Q499 189 484.5 192.0Q470 195 454 195Q453 195 451.0 194.5Q449 194 447 194L439 192Q439 190 436 190H431L419 184Q417 186 415.0 187.0Q413 188 410 188Q404 188 401.5 182.5Q399 177 399 172L389 173L378 169L371 160L359 157L362 131L376 136L382 148L383 164L388 168L389 142L403 153Q412 155 417 161V181L423 183L429 157L446 160L443 183L449 186L455 160L464 159V188H471V160L485 161L487 186L496 184L493 159L506 152H512L514 181L519 180L518 153L525 154Q536 154 542 147L541 172L547 171L545 144L550 134ZM550 104 561 109 555 122 540 116Q543 124 543 129Q543 135 535.0 140.5Q527 146 519 149L517 123L511 126V148Q509 149 505.5 149.5Q502 150 500 151Q497 152 494.0 152.5Q491 153 488 154V127L480 125L478 152L461 155L460 129H456L453 155L428 152L430 128H426L420 149L408 138L405 123H402Q401 126 398.5 130.5Q396 135 392 135H390L385 116Q381 118 378.0 122.0Q375 126 374 130Q371 129 367.5 127.0Q364 125 362 123L365 110L376 115L385 106L396 120L409 113L420 127L434 119L443 109L455 125Q457 120 461.5 115.5Q466 111 472 111Q482 111 488 119L496 126Q513 111 523.0 107.5Q533 104 550 104ZM223 -29Q231 -29 240.0 -24.5Q249 -20 249 -10Q249 0 244 7Q239 15 239 22Q239 24 247.0 34.0Q255 44 266.5 57.0Q278 70 287.5 80.5Q297 91 300 93L293 105L291 121Q290 125 290.5 129.0Q291 133 291 137V154Q284 143 274.5 133.5Q265 124 254 116Q232 81 198 54Q193 62 184.0 69.0Q175 76 164 76Q145 76 135.0 68.5Q125 61 125 50Q125 31 144.0 21.0Q163 11 187 11Q190 -2 200.5 -15.5Q211 -29 223 -29ZM701 -22Q713 -22 723.5 -9.0Q734 4 738 17Q752 13 765 13Q797 13 797 38Q797 56 786.0 69.0Q775 82 756 82Q746 82 736.5 75.0Q727 68 722 60Q707 70 695.0 84.5Q683 99 673 114Q663 121 655.0 132.0Q647 143 641 153Q641 149 641.5 144.0Q642 139 642 136V133Q642 112 630 92Q634 88 647.5 73.0Q661 58 673.5 44.0Q686 30 686 28Q686 21 681 13Q676 3 676 -4Q676 -14 684.5 -18.0Q693 -22 701 -22ZM464 76Q459 76 454.5 78.0Q450 80 446 81Q442 83 438.0 84.0Q434 85 429 86H425Q421 86 416.5 85.5Q412 85 406 84L405 86Q415 93 426 94Q434 90 444.5 87.0Q455 84 464 84Q472 84 479 87Q485 90 493 90H512Q513 90 517 88L525 85Q527 84 532.0 82.0Q537 80 537 79Q537 77 534 77Q518 86 500 86Q492 86 482 81Q474 76 464 76Z"/></svg></span>HOSTIS</a></nav>
 <header class="masthead">
-<h1>How Pyrate Radio Works</h1>
-<p class="mh-sub">Pyrate Radio &#183; from the key to the speaker</p>
-<p class="mh-desc">What happens between a keeper&#8217;s microphone and your speaker, and why nobody can switch it off.</p>
+<h1>Nobody Can Switch It Off</h1>
+<p class="mh-sub">how Pyrate Radio works</p>
+<p class="mh-desc">No server, no account and nobody in charge. Every station lives on the devices that carry it, and no device on the way learns both who you are and what you hear.</p>
+<div class="ctas"><div><a class="hbtn" href="https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/">Open the full player</a><p class="btnnote">every station, in any browser, nothing to install</p></div></div>
 </header>
 <main id="main" class="long">
-<nav class="toc" aria-label="On this page"><a href="#station">The station</a><a href="#clock">The clock</a><a href="#sound">The sound</a><a href="#log">The Log</a><a href="#carrying">Carrying</a><a href="#through">Getting through</a><a href="#unseen">Unseen</a><a href="#stopping">Stopping it</a><a href="#trust">Trusting the build</a><a href="#limits">The limits</a></nav>
+
+
+<nav class="toc" aria-label="On this page"><a href="#promises">The promises</a><a href="#compared">Compared</a><a href="#take">What it would take</a><a href="#station">The station</a><a href="#clock">The clock</a><a href="#sound">The sound</a><a href="#log">The Log</a><a href="#carrying">Carrying</a><a href="#through">Getting through</a><a href="#unseen">Unseen</a><a href="#stopping">Stopping it</a><a href="#trust">Trusting the build</a><a href="#limits">The limits</a><a href="#questions">Questions</a></nav>
 
 <div class="prose lede">
 <p>Open the app and a station is already playing. The dial is full before the network has said a word, because your phone kept the Log from the last time it listened, and the sound comes from whichever phones, computers and Lanterns hold it, checked against the station's own key before a note of it plays. HOSTIS runs none of this. Take hostis.black off the internet tomorrow and every station on the dial plays on.</p>
 </div>
+<div class="divider"><span class="divider-glyph"></span></div>
+<section id="promises" class="rite"><i></i><i></i><i></i><i></i>
+<p class="eyebrow">The Design</p>
+<h2>The Promises</h2>
+<div class="promises">
+<div><b>There is no server</b><p>HOSTIS runs no server the radio needs. Phones, computers, browser tabs and Lanterns pass the stations between them. Take hostis.black off the internet and every station on the dial plays on.</p></div>
+<div><b>Only the key ends a station</b><p>A station is a key made on its keeper's own device and shown once as twenty-four words. Nobody else can change what it plays or take it off the air, HOSTIS included. Every radio that plays a station keeps it and hands it on, so a station with a hundred listeners lives in a hundred places, and every radio also holds a share of the whole network, so each piece of even an unheard station sits on about eight devices. Silencing a station means reaching every one of them at once, in every country, and keeping them all offline for good.</p></div>
+<div><b>It gets past blocks</b><p>Block the doors and the devices already aboard keep each other. Run it through Tor. Pass stations over Wi-Fi with no internet at all, or as one file on a USB stick.</p></div>
+<div><b>Listeners stay unseen</b><p>You listen without an account or a name, and nothing tracks you. A listening phone publishes no address and takes a fresh network identity every time the app starts. Sound reaches you through two other devices. The first knows who asks and not what for, the second what is asked for and not who by, and the count beside a station is built from tokens that change every hour.</p></div>
+<div><b>Broadcasters stay unseen</b><p>A broadcast leaves the keeper's device sealed, through a guard and along a stem of other radios, and surfaces about four devices from where it began. Every radio relays stems, so the first to show it cannot tell whether it made it or passed it on.</p></div>
+<div><b>Carriers stay unseen</b><p>A phone keeps what it carries for others sealed, each chunk locked under a key worked out from the station's own log and filed under a second name. A Lantern opens no ports, can sit behind a VPN, and relays sealed bytes it cannot read.</p></div>
+<div><b>Nothing can be forged</b><p>Every entry in a station's log is signed by its key, and every chunk of sound is checked against its fingerprint before it plays. A carrier can pass a station on and cannot change a note of it.</p></div>
+<div><b>Not even HOSTIS can stop it</b><p>HOSTIS writes the software, raises its own stations and runs one Lantern among any number. It cannot remove a station, change what one plays or see who listens. An update lands only when two of three release keys, kept in separate places, have signed it, and waits three days on every phone, so anything HOSTIS were forced to sign is in front of everyone first. A canary signed every month says whether any order has come, and the source is CC0 for anyone to build and compare.</p></div>
+<div><b>No gatekeeper</b><p>Anyone can start a station in a minute, free, from a phone or a browser, and nobody approves it. HOSTIS ranks nothing and keeps no list of what may be played. The keeper decides what plays, and each listener decides what reaches them by hiding stations, keeping them, or taking on a list of hidden stations from someone they trust.</p></div>
+</div>
+</section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
+<section id="compared">
+<div class="sechead"><h2>Compared</h2><span class="cap">who holds the off switch</span></div>
+<div class="compare-wrap wide"><table class="compare">
+<thead><tr><th scope="col"><span class="vh">Question</span></th><th scope="col">A streaming service</th><th scope="col">Licensed FM</th><th scope="col" class="us">Pyrate Radio</th></tr></thead>
+<tbody>
+<tr><th scope="row">Who can take a station off</th><td>The company, or anyone who leans on it</td><td>The regulator, or whoever finds the transmitter</td><td class="us">Only the holder of its key</td></tr>
+<tr><th scope="row">Who knows what you hear</th><td>The company, tied to your account</td><td>Nobody</td><td class="us">No single device</td></tr>
+<tr><th scope="row">Starting a station</th><td>Their terms and their cut</td><td>A licence, a transmitter and a mast</td><td class="us">Free, in a minute, from a phone or a browser</td></tr>
+<tr><th scope="row">When one machine is seized</th><td>Everything on it stops</td><td>That station goes silent</td><td class="us">The rest carry on</td></tr>
+<tr><th scope="row">Reach</th><td>The whole internet</td><td>As far as the signal carries</td><td class="us">The whole internet, and rooms with none</td></tr>
+<tr><th scope="row">What it costs you</th><td>A subscription, or adverts</td><td>Nothing</td><td class="us">Nothing</td></tr>
+</tbody></table></div>
+</section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
+<section id="take">
+<div class="sechead"><h2>What It Would Take</h2><span class="cap">to stop it, one step at a time</span></div>
+<ol class="steps takes">
+<li><b>Take down hostis.black.</b> The full player lives on IPFS under a name of its own, pinned by anyone who runs a one-line script, and the app passes itself from phone to phone. Every station plays on.</li>
+<li><b>Block the doors into the network.</b> A device already aboard remembers every node it has met, and signed bearings carried on the network add new doors as they open.</li>
+<li><b>Block the relays.</b> Any Lantern can relay and anyone can light one. Where relays are blocked, Tor carries the traffic.</li>
+<li><b>Seize a Lantern, or a thousand.</b> Each chunk sits on about eight devices across the fleet and on the listeners' own radios. The rest hand it on.</li>
+<li><b>Seize a listener's phone.</b> Everything the radio keeps is sealed under a key the phone's own hardware holds. An emergency PIN, given up under force, wipes it.</li>
+<li><b>Lean on HOSTIS.</b> HOSTIS cannot remove a station, change what one plays or see who listens. An update needs two of three release keys kept in separate places and waits three days on every phone. A canary, signed monthly, says whether any order has come.</li>
+<li><b>Cut the internet.</b> Radios on the same Wi-Fi find each other with no internet, and a whole station travels as one file.</li>
+</ol>
+</section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
+<div class="sechead"><h2>The Whole Account</h2><span class="cap">from the key to the speaker</span></div>
+
 
 <div class="divider"><span class="divider-glyph"></span></div>
 <section id="station">
 <div class="sechead"><h2>The Station</h2><span class="cap">a key made on your own device</span></div>
 <div class="prose">
-<p>Raising a station makes an Ed25519 key pair on the phone, computer or browser tab in front of you. The public half is the station's id. Its frequency on the dial, between 87.5 and 108.0, and the black flag that stands for it where it has no art are both drawn from that id, so two stations can share a name and never a frequency, a flag or a key.</p>
+<p>Raising a station makes an Ed25519 key pair on the phone, computer or browser tab in front of you. The public half is the station's id. The black flag that stands for it where it has no art is drawn from that id, and so is the place its frequency starts from. Frequencies run to the kilohertz, 87.500 to 108.099, and the keeper claims one on the station's card, the place its key points at or the next free one above. If two stations ever claim one, the one a listener keeps holds it, else the one on the air longer, and the other moves up, so no two stations share a frequency on any radio. Two stations can share a name and never a key.</p>
 <p>The private half is shown to you once as twenty-four words. Whoever holds the words is the station. They stay on the device unless you write them down. Nobody keeps a copy, so nobody can recover them for you. Add a passphrase when you raise the station and the words alone open a different station, empty, so a photograph of the paper gives nothing away. The passphrase is stretched with Argon2id over 64 MiB of memory, which makes every guess at it slow and expensive.</p>
 <p>The device that broadcasts holds a deputy key, which can put things on the air and nothing more. Only the twenty-four words can end the station, appoint a deputy or revoke one. If a phone is lost or taken, type the words into another device and appoint it, and the old phone can no longer speak for the station.</p>
 <p>A station's name and line, each recording, its programme, its art, every notice and live broadcast, and in the end its strike are all entries in its log. Each entry is signed by the station's key and carries the fingerprint of the one before it. Any node can check the whole log against the id alone. A carrier can hand it on, and cannot add an entry, drop one, reorder them or change a word.</p>
@@ -349,7 +449,7 @@ html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doo
 <p>The Log is the list of stations on the air, and every node keeps its own copy. Stations announce themselves with a card (name, line, home port, kinds, cover, whether they are mature or explicit, and how far their log runs), signed by the station and passed from node to node by gossip. Each node checks each card before it keeps it or passes it on, and keeps the last Log it heard sealed on its own disk, so the dial is full the moment the app opens.</p>
 <p>Every card carries proof of work, a puzzle that takes a phone a few seconds and has to be solved again for each station. Raising ten thousand junk stations costs ten thousand times the work of raising one. A Log holds at most 5,000 cards, and once it is full a newcomer gets in only by showing more work than the weakest card already there. The stations you raised and the ones you keep are never at stake.</p>
 <p>The count beside each station costs work too. Every listener adds a token that changes every hour, paid for in work and checked by every node, into a HyperLogLog sketch of 256 bytes. The sketch gives a number to within about six and a half percent and holds no name, so HOSTIS, the station and anyone watching can see that forty are aboard and never who the forty are.</p>
-<p>The Log sorts by how many are aboard, and HOSTIS ranks nothing. Each listener decides what reaches them. A hidden station leaves your Log and your dial, explicit stations stay off it until you ask for them, and lists of hidden stations pass from hand to hand for anyone who wants to use one.</p>
+<p>Each listener chooses the order (most listened, newest, on the air longest, or most backed up), and HOSTIS ranks nothing. Each listener decides what reaches them. A hidden station leaves your Log and your dial, explicit stations stay off it until you ask for them, and lists of hidden stations pass from hand to hand for anyone who wants to use one.</p>
 </div>
 </section>
 
@@ -379,7 +479,7 @@ html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doo
 <section id="unseen">
 <div class="sechead"><h2>Unseen</h2><span class="cap">listeners, keepers and the device in your hand</span></div>
 <div class="prose">
-<p>A listening phone tells the network nothing about what it plays. It publishes no address and takes a fresh network identity each time the app starts, or each day on a phone that keeps a station. It fetches sound through two other devices. The first, a guard it keeps for weeks, sees who is asking and not what for. The second sees what is asked for and not who by. The clock tells the phone what it will need before it needs it, so the extra hops cost nothing you can hear. If a route is slow, a second one starts beside it through another device, and the first answer wins. If the phone cannot find two devices to route through, it waits. It asks a carrier directly only if you have turned on Connect directly when needed, in Settings, under Advanced, and the station page tells you when your own station is waiting.</p>
+<p>A listening phone tells the network nothing about what it plays. It publishes no address and takes a fresh network identity each time the app starts, or each day on a phone that keeps a station. It fetches sound through two other devices. The first, a guard it keeps for weeks, sees who is asking and not what for. The second sees what is asked for and not who by. The clock tells the phone what it will need before it needs it, so the extra hops cost nothing you can hear. The first page of a station's log goes through the one guard to four exits at once, and the first answer wins. If a route is slow later, a second one starts beside it through another device. If the phone cannot find two devices to route through, it waits. It asks a carrier directly only if you have turned on Connect directly when needed, in Settings, under Advanced, and the station page tells you when your own station is waiting.</p>
 <p>A broadcasting device never shows its station to the network itself. New entries and chunks leave sealed, through a guard that forwards a blob it cannot read to a second device, and that second device starts them along a stem of others, after the Dandelion++ design used in Bitcoin. At each step the cargo spreads with a chance of one in four, otherwise it moves on, so it surfaces about four devices from where it started. Every device relays stems, so the first device to show a station's new recording to the network cannot tell whether it made it or passed it on. Broadcasters keep the same first step for weeks, as Tor keeps its guards, so the stem never starts with a stranger drawn at random. If no second device will take the cargo, it waits: nothing is handed to the first step that would let it tie the station to the device, unless the owner has turned on Connect directly when needed.</p>
 <p>On the device, everything the radio keeps is sealed under a key held in the phone's secure hardware, or by Windows' data protection, the macOS keychain or a Linux desktop's keyring on a computer. Station names and titles are cleaned of hidden characters, a recorder's date never becomes a title, copied words leave the clipboard after ninety seconds, and the keyboard is told to learn nothing. Chatter lives in memory and is gone when the app closes. A plain icon named Radio, a PIN on your station and settings, and an emergency PIN to give up under force, which wipes the radio, are in Settings, under Privacy and safety. Wiping destroys the key that seals the hold, and with it everything on the device.</p>
 <p>A browser tab draws a new key on every visit, reaches the network through a relay, and fetches and broadcasts through two hops as the app does. The deputy key of a station raised in a browser, and any invitation, are sealed under a key the browser keeps to itself. A browser that cannot make that key keeps them only until the tab closes, and never in its lasting storage. Invitations and flocks go only to copies of the open player that the visitor's own browser checks against their IPFS names.</p>
@@ -421,7 +521,24 @@ html.leaving .leavingnote{display:block}html.leaving .setframe,html.leaving .doo
 </section>
 
 <div class="divider"><span class="divider-glyph"></span></div>
+<section id="questions">
+<div class="sechead"><h2>Questions</h2><span class="cap">asked and answered</span></div>
+<div class="faq">
+<details class="fold"><summary>Who can see what I listen to?</summary><div>No single device learns both who you are and what you hear. Your phone fetches sound through two other devices, the first knowing who asks and not what, the second what and not who. Counts are made from anonymous tokens that change every hour. What your phone carries for others sits on it sealed, and it cannot tell what it holds.</div></details>
+<details class="fold"><summary>Can a station be taken down?</summary><div>Not from any one place. Its log and its sound are copied across every device that carries it, and any one of them can hand it on. Only the holder of its key can end it.</div></details>
+<details class="fold"><summary>Does my station need my phone to stay on?</summary><div>No. Its programme lives in its signed log and every listener works out what is playing from the log and the clock. Put a song on a loop, uninstall the app, and the song plays on.</div></details>
+<details class="fold"><summary>What happens if I lose my phone?</summary><div>Put your station's twenty-four words into the app on another device and the station is yours again. The old phone can no longer speak for it. Without the words nobody can recover it, HOSTIS included.</div></details>
+<details class="fold"><summary>How do people find my station?</summary><div>It is on the Log and on the dial, at a frequency of its own. Pass on its link, or print its poster, which carries a code that opens the station in any phone's browser.</div></details>
+<details class="fold"><summary>Can I make a private station?</summary><div>Yes, an invite-only station. It never shows on the Log. Its key is its invitation, and only whoever you hand it to can find it. Its listeners can see each other's devices, as in a private room.</div></details>
+<details class="fold"><summary>Can listeners talk?</summary><div>Each station has a chat for talk, cheers and requests the station can play next, and the radio saves none of it. A listener can also send the station a voice message only the station can open.</div></details>
+<details class="fold"><summary>Why &#8220;Pyrate&#8221;?</summary><div>It is the spelling in Captain Charles Johnson's General History of the Pyrates of 1724, read on this radio around the clock. The old law called the pirate <i>hostis humani generis</i>, the enemy of all mankind. HOSTIS takes the name. The rest is at <a href="https://hostis.black">hostis.black</a>.</div></details>
+</div>
+</section>
+
+<section class="last">
+<a class="hbtn" href="https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/">Open the full player</a>
 <p class="coda"><a href="../">Back to Pyrate Radio</a></p>
+</section>
 </main>
 <footer>
 <p class="f-contact">Email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>
