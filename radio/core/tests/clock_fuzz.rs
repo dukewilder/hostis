@@ -120,7 +120,7 @@ fn one_seed() {
     for e in a.entries() {
         let b = e.entry.body();
         let kind = format!("{b:?}");
-        eprintln!("{} {}", e.entry.at_ms, &kind[..kind.len().min(300)]);
+        eprintln!("{} {}", e.entry.at_ms, &kind[..kind.len().min(220)]);
     }
     let t0 = std::time::Instant::now();
     let c = Clock::new(&a).unwrap();
@@ -134,6 +134,9 @@ fn one_seed() {
         let t0 = std::time::Instant::now();
         let _ = c.upcoming(t, t + 86_400_000);
         eprintln!("upcoming {} ms", t0.elapsed().as_millis());
+        let t0 = std::time::Instant::now();
+        let _ = c.next_on(t, t + 7 * 86_400_000);
+        eprintln!("next_on {} ms", t0.elapsed().as_millis());
         let t0 = std::time::Instant::now();
         let _ = c.listings(t, t + 7 * 86_400_000);
         eprintln!("listings {} ms", t0.elapsed().as_millis());

@@ -22,9 +22,9 @@ const DAY_MIN: u16 = 24 * 60;
 const MAX_STEPS: usize = 1_300_000;
 /// Steps the watch bill may spend in all, so a long window of short tracks stays quick.
 const BILL_STEPS: usize = 4_000_000;
-/// The most steps a bill of what is coming walks: a few hours of one-second tracks, a week of
-/// anything real.
-pub const UPCOMING_STEPS: usize = 20_000;
+/// The most steps a bill of what is coming walks: an hour of one-second tracks, a week of
+/// three-minute ones.
+pub const UPCOMING_STEPS: usize = 4_000;
 /// A recording shorter than this is not played: a second is the shortest thing worth airing,
 /// and it keeps a week's walk within its steps whatever a station signs.
 pub const MIN_TRACK_MS: u64 = 1_000;

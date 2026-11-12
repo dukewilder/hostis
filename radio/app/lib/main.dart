@@ -879,6 +879,12 @@ class _StationFace extends StatelessWidget {
           const SizedBox(width: 10),
           Text(s['call_sign'] ?? '', style: caps(11, color: boneFaint, spacing: 0.14)),
         ]),
+        // A card signed by a co-host is shown as unconfirmed until this phone holds the
+        // station's log and the log still names that co-host.
+        if (s['provisional'] == true) ...[
+          const SizedBox(height: 4),
+          Text('UNCONFIRMED', style: caps(9, color: boneFaint, spacing: 0.3)),
+        ],
         const SizedBox(height: 8),
         Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, spacing: 2, children: [
           for (final (label, act) in <(String, VoidCallback)>[

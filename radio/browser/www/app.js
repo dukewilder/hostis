@@ -494,7 +494,7 @@ async function show(s) {
   if (SCOPE === 'harbour') $('chatopen').href = OPEN_PLAYERS[0] + '#' + s.id;
   flag($('flag'), s.id, s.live); art(await pic(s.id, s.cover));
   const b = await pic(s.id, s.banner); $('banner').style.backgroundImage = b ? 'url(' + b + ')' : '';
-  $('name').textContent = s.name || s.call_sign; $('cs').textContent = s.call_sign + (s.aboard !== undefined ? '  ' + s.aboard + ' listening' : '');
+  $('name').textContent = s.name || s.call_sign; $('cs').textContent = s.call_sign + (s.provisional ? '  unconfirmed' : '') + (s.aboard !== undefined ? '  ' + s.aboard + ' listening' : ''); $('cs').title = s.provisional ? 'Signed by a co-host. Shown as unconfirmed until this player has the station\'s own log.' : '';
   lamps(s.live); needle(s.id); power(); $('tip').hidden = !s.tip; $('tipbox').hidden = true;
   // A pocket station is passed on only by its keeper's invitation.
   $('pass').hidden = !!s.pocket; $('maroon').hidden = false; if (s.pocket) $('clip').hidden = true;
