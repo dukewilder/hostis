@@ -50,6 +50,7 @@ type Towers = Arc<Mutex<HashMap<StationId, broadcast::Sender<Bytes>>>>;
 struct Web {
     inner: Arc<Inner>,
     towers: Towers,
+    views: Arc<Views>,
     /// The gangway carries only its own Lantern's stations unless told otherwise. A public
     /// page that streams any station makes its keeper the distributor of whatever is on air.
     every_station: bool,
@@ -57,6 +58,133 @@ struct Web {
     makers: Arc<tokio::sync::Semaphore>,
     /// Episodes being made, so two requests for one recording make it once.
     making: Arc<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
+}
+
+/// One recording, as the web pages need it.
+struct TrackView {
+    /// Where its entry is in the log.
+    at: usize,
+    title: String,
+    by: String,
+    channels: u8,
+    duration_ms: u64,
+    added_ms: u64,
+    art: Option<[u8; 32]>,
+    bell: bool,
+    in_library: bool,
+}
+
+/// What the web pages need of one station's log, worked out once each time the log grows and
+/// shared by every request after: no request copies a log or hashes its entries.
+struct View {
+    len: u64,
+    clock: Option<Mutex<Clock>>,
+    /// The last entry's time, when it is live sound.
+    live_at: Option<u64>,
+    /// The newest live chunks, oldest first.
+    live: Vec<(u64, pyrate_core::Chunk, u8)>,
+    tracks: HashMap<[u8; 32], TrackView>,
+    /// The library in the order it was built, oldest first.
+    library: Vec<[u8; 32]>,
+    name: String,
+    about: String,
+    cover: Option<[u8; 32]>,
+    /// The feed as last made, and the address it was made for.
+    feed: Mutex<Option<(String, String)>>,
+}
+
+impl View {
+    fn build(a: &Archive) -> Self {
+        let mut tracks = HashMap::new();
+        let mut live = Vec::new();
+        for (i, e) in a.entries().iter().enumerate() {
+            match e.entry.body() {
+                Entry::Track { title, by, channels, chunks, source, .. } => {
+                    let Ok(h) = e.hash() else { continue };
+                    let duration_ms = chunks.iter().map(|c| c.duration_ms()).sum();
+                    tracks.insert(h, TrackView { at: i, title: title.clone(), by: by.clone(), channels: *channels, duration_ms, added_ms: e.entry.at_ms, art: None, bell: source.starts_with("bell "), in_library: false });
+                }
+                Entry::TrackArt { track, art } => {
+                    if let Some(t) = tracks.get_mut(track) {
+                        t.art = Some(art.hash);
+                    }
+                }
+                Entry::Live { chunk, channels, .. } => {
+                    live.push((e.entry.seq, *chunk, *channels));
+                    if live.len() > 64 {
+                        live.drain(..32);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let library: Vec<[u8; 32]> = a.library().unwrap_or_default().into_iter().map(|(h, _)| h).collect();
+        for h in &library {
+            if let Some(t) = tracks.get_mut(h) {
+                t.in_library = true;
+            }
+        }
+        let live_at = a.entries().last().filter(|l| matches!(l.entry.body(), Entry::Live { .. })).map(|l| l.entry.at_ms);
+        let (name, about) = match a.colours() {
+            Some(Entry::Colours { name, about, .. }) => (name.clone(), about.clone()),
+            _ => (a.station().call_sign(), String::new()),
+        };
+        let cover = a.art().and_then(|(c, _, _)| c).map(|c| c.hash);
+        Self { len: a.len(), clock: Clock::new(a).ok().map(Mutex::new), live_at, live, tracks, library, name, about, cover, feed: Mutex::new(None) }
+    }
+
+    fn live_tail(&self, now: u64) -> Option<&[(u64, pyrate_core::Chunk, u8)]> {
+        self.live_at.filter(|l| now.saturating_sub(*l) <= 25_000).map(|_| self.live.as_slice())
+    }
+}
+
+/// Each station's view, kept until its log grows.
+#[derive(Default)]
+struct Views {
+    map: Mutex<HashMap<StationId, Arc<View>>>,
+    /// One view is worked out at a time: a crowd asking at once waits for the one in hand.
+    building: tokio::sync::Mutex<()>,
+}
+
+impl Views {
+    async fn get(&self, inner: &Arc<Inner>, st: &StationId) -> Option<Arc<View>> {
+        let len = inner.store.lock().unwrap().logs.get(st).map(|a| a.len())?;
+        let cached = |m: &HashMap<StationId, Arc<View>>| m.get(st).filter(|v| v.len == len).cloned();
+        if let Some(v) = cached(&self.map.lock().unwrap()) {
+            return Some(v);
+        }
+        let _b = self.building.lock().await;
+        let len = inner.store.lock().unwrap().logs.get(st).map(|a| a.len())?;
+        if let Some(v) = self.map.lock().unwrap().get(st).filter(|v| v.len == len).cloned() {
+            return Some(v);
+        }
+        let a = inner.archive(st)?;
+        let v = Arc::new(tokio::task::spawn_blocking(move || View::build(&a)).await.ok()?);
+        let mut m = self.map.lock().unwrap();
+        if m.len() >= 128 {
+            m.clear();
+        }
+        m.insert(*st, v.clone());
+        Some(v)
+    }
+}
+
+/// A recording's chunks, read from the log in place.
+fn chunks_at(inner: &Inner, st: &StationId, at: usize) -> Option<(Vec<pyrate_core::Chunk>, u8)> {
+    let s = inner.store.lock().unwrap();
+    match s.logs.get(st)?.entries().get(at)?.entry.body() {
+        Entry::Track { chunks, channels, .. } => Some((chunks.clone(), *channels)),
+        _ => None,
+    }
+}
+
+/// One chunk of a recording, read from the log in place.
+fn chunk_at(inner: &Inner, st: &StationId, at: usize, n: usize) -> Option<(pyrate_core::Chunk, u8)> {
+    let s = inner.store.lock().unwrap();
+    match s.logs.get(st)?.entries().get(at)?.entry.body() {
+        Entry::Track { chunks, channels, .. } => Some((*chunks.get(n)?, *channels)),
+        _ => None,
+    }
 }
 
 impl Web {
@@ -70,6 +198,7 @@ pub async fn serve(inner: Arc<Inner>, addr: SocketAddr, every_station: bool) -> 
     let web = Web {
         inner,
         towers: Arc::new(Mutex::new(HashMap::new())),
+        views: Arc::new(Views::default()),
         every_station,
         listeners: Arc::new(tokio::sync::Semaphore::new(MAX_LISTENERS)),
         makers: Arc::new(tokio::sync::Semaphore::new(EPISODE_MAKERS)),
@@ -103,44 +232,21 @@ async fn log(State(w): State<Web>) -> impl IntoResponse {
     ([(header::CACHE_CONTROL, "no-store"), (header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")], axum::Json(list))
 }
 
-fn describe(a: &Archive, track: &[u8; 32]) -> (String, String) {
-    for e in a.entries() {
-        if let Entry::Track { title, by, .. } = e.entry.body() {
-            if e.hash().ok().as_ref() == Some(track) {
-                return (title.clone(), by.clone());
-            }
-        }
-    }
-    (String::new(), String::new())
-}
-
-fn live_tail(a: &Archive, now: u64) -> Option<Vec<(u64, pyrate_core::Chunk, u8)>> {
-    let last = a.entries().last()?;
-    if !matches!(last.entry.body(), Entry::Live { .. }) || now.saturating_sub(last.entry.at_ms) > 25_000 {
-        return None;
-    }
-    Some(a.entries().iter().filter_map(|e| match e.entry.body() {
-        Entry::Live { chunk, channels, .. } => Some((e.entry.seq, *chunk, *channels)),
-        _ => None,
-    }).collect())
-}
-
 async fn now(State(w): State<Web>, Path(id): Path<String>) -> Response {
     let Ok(st) = StationId::from_hex(&id) else { return StatusCode::NOT_FOUND.into_response() };
     if !w.allowed(&st) {
         return StatusCode::NOT_FOUND.into_response();
     }
-    let Some(a) = w.inner.archive(&st) else { return StatusCode::NOT_FOUND.into_response() };
+    let Some(v) = w.views.get(&w.inner, &st).await else { return StatusCode::NOT_FOUND.into_response() };
     let t = now_ms();
-    if live_tail(&a, t).is_some() {
+    if v.live_tail(t).is_some() {
         return axum::Json(json!({ "live": true, "title": "ON AIR" })).into_response();
     }
-    let np = Clock::new(&a).ok().and_then(|c| c.now(t));
-    let body = match np {
-        Some(np) => {
-            let (title, by) = describe(&a, &np.track);
-            let pic = a.track_art(&np.track).map(|r| crate::hex(&r.hash));
-            json!({ "live": false, "title": crate::shown(&title), "by": crate::shown(&by), "art": pic, "position_ms": np.offset_ms, "duration_ms": np.duration_ms })
+    let np = v.clock.as_ref().and_then(|c| c.lock().unwrap().now(t));
+    let body = match np.and_then(|np| v.tracks.get(&np.track).map(|tr| (np, tr))) {
+        Some((np, tr)) => {
+            let pic = tr.art.map(|h| crate::hex(&h));
+            json!({ "live": false, "title": crate::shown(&tr.title), "by": crate::shown(&tr.by), "art": pic, "position_ms": np.offset_ms, "duration_ms": np.duration_ms })
         }
         None => json!({ "live": false, "title": "", "by": "" }),
     };
@@ -208,35 +314,40 @@ async fn feed(State(w): State<Web>, Path(id): Path<String>, h: HeaderMap) -> Res
     if !w.allowed(&st) {
         return StatusCode::NOT_FOUND.into_response();
     }
-    let Some(a) = w.inner.archive(&st) else { return StatusCode::NOT_FOUND.into_response() };
-    let (name, about) = match a.colours() {
-        Some(Entry::Colours { name, about, .. }) => (name.clone(), about.clone()),
-        _ => (st.call_sign(), String::new()),
-    };
+    let Some(v) = w.views.get(&w.inner, &st).await else { return StatusCode::NOT_FOUND.into_response() };
     let base = xml(&base(&h));
+    if let Some((b, body)) = v.feed.lock().unwrap().as_ref() {
+        if *b == base {
+            return ([(header::CONTENT_TYPE, "application/rss+xml; charset=utf-8"), (header::CACHE_CONTROL, "max-age=300")], body.clone()).into_response();
+        }
+    }
     let link = format!("{}#{}", pyrate_core::open_player(), st.to_hex());
-    let cover = a.art().and_then(|(c, _, _)| c).map(|c| format!("{base}/art/{}.jpg", crate::hex(&c.hash)));
-    let lib = a.library().unwrap_or_default();
+    let cover = v.cover.map(|c| format!("{base}/art/{}.jpg", crate::hex(&c)));
     let mut items = String::new();
-    for (h, e) in lib.iter().rev().take(100) {
-        let Entry::Track { title, by, chunks, channels, .. } = e.entry.body() else { continue };
-        let ms: u64 = chunks.iter().map(|c| c.duration_ms()).sum();
+    for h in v.library.iter().rev() {
+        let Some(tr) = v.tracks.get(h) else { continue };
         // The bell is the station's ident, not an episode.
-        if matches!(e.entry.body(), Entry::Track { source, .. } if source.starts_with("bell ")) {
+        if tr.bell {
             continue;
         }
-        let kbps = if *channels == 1 { 64 } else { 128 };
-        let art = a.track_art(h).map(|r| format!("<itunes:image href=\"{base}/art/{}.jpg\"/>", crate::hex(&r.hash))).unwrap_or_default();
+        if items.len() > 1 << 20 || items.matches("<item>").count() >= 100 {
+            break;
+        }
+        let ms = tr.duration_ms;
+        let kbps = if tr.channels == 1 { 64 } else { 128 };
+        let art = tr.art.map(|r| format!("<itunes:image href=\"{base}/art/{}.jpg\"/>", crate::hex(&r))).unwrap_or_default();
         items.push_str(&format!(
             "<item><title>{}</title><itunes:author>{}</itunes:author><guid isPermaLink=\"false\">{}</guid><pubDate>{}</pubDate><enclosure url=\"{base}/episode/{}/{}.mp3\" length=\"{}\" type=\"audio/mpeg\"/><itunes:duration>{}</itunes:duration>{art}</item>\n",
-            xml(title), xml(by), crate::hex(h), rfc822(e.entry.at_ms), st.to_hex(), crate::hex(h), ms * kbps / 8, ms / 1000,
+            xml(&tr.title), xml(&tr.by), crate::hex(h), rfc822(tr.added_ms), st.to_hex(), crate::hex(h), ms * kbps / 8, ms / 1000,
         ));
     }
-    let image = cover.map(|c| format!("<itunes:image href=\"{c}\"/><image><url>{c}</url><title>{}</title><link>{}</link></image>", xml(&name), xml(&link))).unwrap_or_default();
+    let (name, about) = (&v.name, &v.about);
+    let image = cover.map(|c| format!("<itunes:image href=\"{c}\"/><image><url>{c}</url><title>{}</title><link>{}</link></image>", xml(name), xml(&link))).unwrap_or_default();
     let body = format!(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rss version=\"2.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\"><channel><title>{}</title><link>{}</link><description>{}</description><itunes:author>{}</itunes:author>{image}<generator>Pyrate Radio</generator>\n{items}</channel></rss>\n",
-        xml(&name), xml(&link), xml(if about.is_empty() { "A station on Pyrate Radio" } else { &about }), xml(&name),
+        xml(name), xml(&link), xml(if about.is_empty() { "A station on Pyrate Radio" } else { about }), xml(name),
     );
+    *v.feed.lock().unwrap() = Some((base, body.clone()));
     ([(header::CONTENT_TYPE, "application/rss+xml; charset=utf-8"), (header::CACHE_CONTROL, "max-age=300")], body).into_response()
 }
 
@@ -251,10 +362,10 @@ async fn episode(State(w): State<Web>, Path((id, track)): Path<(String, String)>
     }
     // The recording must be in this station's library now: a withdrawn one, or another
     // station's, is not served from the cache either.
-    let Some(a) = w.inner.archive(&st) else { return StatusCode::NOT_FOUND.into_response() };
-    let found = a.library().unwrap_or_default().into_iter().find(|(x, _)| *x == th).map(|(_, e)| e.entry.body().clone());
-    let Some(Entry::Track { chunks, channels, .. }) = found else { return StatusCode::NOT_FOUND.into_response() };
-    if chunks.iter().map(|c| c.duration_ms()).sum::<u64>() > MAX_EPISODE_MS || !(1..=2).contains(&channels) {
+    let Ok(th) = <[u8; 32]>::try_from(th.as_slice()) else { return StatusCode::NOT_FOUND.into_response() };
+    let Some(v) = w.views.get(&w.inner, &st).await else { return StatusCode::NOT_FOUND.into_response() };
+    let Some(tr) = v.tracks.get(&th).filter(|t| t.in_library) else { return StatusCode::NOT_FOUND.into_response() };
+    if tr.duration_ms > MAX_EPISODE_MS || !(1..=2).contains(&tr.channels) {
         return StatusCode::PAYLOAD_TOO_LARGE.into_response();
     }
     let dir = w.inner.cfg.dir.join("episodes");
@@ -267,6 +378,7 @@ async fn episode(State(w): State<Web>, Path((id, track)): Path<(String, String)>
             let Ok(_permit) = w.makers.clone().acquire_owned().await else { return StatusCode::SERVICE_UNAVAILABLE.into_response() };
             let _ = std::fs::create_dir_all(&dir);
             let tmp = dir.join(format!("{key}.{}.part", now_ms()));
+            let Some((chunks, channels)) = chunks_at(&w.inner, &st, tr.at) else { return StatusCode::NOT_FOUND.into_response() };
             let (inner, handle, tmp2) = (w.inner.clone(), tokio::runtime::Handle::current(), tmp.clone());
             let made = tokio::task::spawn_blocking(move || make_episode(&inner, &handle, st, &chunks, channels, &tmp2)).await.ok().flatten();
             if made.is_none() || std::fs::rename(&tmp, &path).is_err() {
@@ -481,7 +593,7 @@ async fn art(State(w): State<Web>, Path(hash): Path<String>) -> Response {
 async fn listen(State(w): State<Web>, Path(id): Path<String>) -> Response {
     let id = id.trim_end_matches(".mp3");
     let Ok(st) = StationId::from_hex(id) else { return StatusCode::NOT_FOUND.into_response() };
-    if !w.allowed(&st) || w.inner.archive(&st).is_none() {
+    if !w.allowed(&st) || !w.inner.store.lock().unwrap().logs.contains_key(&st) {
         return StatusCode::NOT_FOUND.into_response();
     }
     let Ok(permit) = w.listeners.clone().try_acquire_owned() else { return StatusCode::SERVICE_UNAVAILABLE.into_response() };
@@ -495,7 +607,7 @@ async fn listen(State(w): State<Web>, Path(id): Path<String>) -> Response {
             None => {
                 let (tx, rx) = broadcast::channel(256);
                 towers.insert(st, tx.clone());
-                tokio::spawn(tower(w.inner.clone(), w.towers.clone(), st, tx));
+                tokio::spawn(tower(w.inner.clone(), w.towers.clone(), w.views.clone(), st, tx));
                 rx
             }
         }
@@ -535,7 +647,7 @@ fn getrandom_fill(b: &mut [u8; 32]) -> anyhow::Result<()> {
 
 /// One per station with listeners: follows the clock (or the live broadcast),
 /// decodes, encodes to MP3 at the pace of the hour, and hands the bytes to every tab.
-async fn tower(inner: Arc<Inner>, towers: Towers, st: StationId, tx: broadcast::Sender<Bytes>) {
+async fn tower(inner: Arc<Inner>, towers: Towers, views: Arc<Views>, st: StationId, tx: broadcast::Sender<Bytes>) {
     say(&format!("web: tower up for {}", st.call_sign()));
     let mut lame = match mp3lame_encoder::Builder::new().and_then(|mut b| {
         b.set_num_channels(2).ok()?;
@@ -576,7 +688,7 @@ async fn tower(inner: Arc<Inner>, towers: Towers, st: StationId, tx: broadcast::
             last_sync = t;
             let _ = inner.sync_log(st).await;
         }
-        let Some(a) = inner.archive(&st) else {
+        let Some(v) = views.get(&inner, &st).await else {
             tokio::time::sleep(Duration::from_secs(1)).await;
             continue;
         };
@@ -591,7 +703,7 @@ async fn tower(inner: Arc<Inner>, towers: Towers, st: StationId, tx: broadcast::
                 playhead = None; // fell behind the hour: rejoin it
             }
         }
-        let (pcm, ch) = if let Some(tail) = live_tail(&a, t) {
+        let (pcm, ch) = if let Some(tail) = v.live_tail(t) {
             let next = match live_seq {
                 Some(s) => tail.iter().find(|(q, _, _)| *q > s).cloned(),
                 None => tail.iter().rev().nth(1).or(tail.last()).cloned(),
@@ -614,17 +726,18 @@ async fn tower(inner: Arc<Inner>, towers: Towers, st: StationId, tx: broadcast::
                 playhead = None;
                 decoder = None;
             }
-            let Ok(clock) = Clock::new(&a) else { break };
+            let Some(clock) = v.clock.as_ref() else { break };
             let at = playhead.unwrap_or(t);
-            let Some(np) = clock.now(at) else {
+            let np = clock.lock().unwrap().now(at);
+            let Some(np) = np else {
                 // Off the air: the tower waits for the station to come back.
                 dry = 0;
                 tokio::time::sleep(Duration::from_secs(2)).await;
                 continue;
             };
-            let entry = a.entries().iter().find(|e| e.hash().ok() == Some(np.track));
-            let Some(Entry::Track { chunks, channels, .. }) = entry.map(|e| e.entry.body()) else { break };
-            let Some(chunk) = chunks.get(np.chunk).copied() else { continue };
+            let Some(tr) = v.tracks.get(&np.track) else { break };
+            let Some((chunk, channels)) = chunk_at(&inner, &st, tr.at, np.chunk) else { continue };
+            let channels = &channels;
             let Ok(bytes) = inner.chunk(&st, &chunk.hash).await else {
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;

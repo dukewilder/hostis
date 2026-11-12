@@ -282,6 +282,9 @@ impl SignedEntry {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        if bytes.len() > MAX_ENTRY_BYTES {
+            return Err(Error::TooBig);
+        }
         Ok(postcard::from_bytes(bytes)?)
     }
 
@@ -298,6 +301,8 @@ pub struct Archive {
     entries: Vec<SignedEntry>,
     head: Hash,
     deputies: std::collections::HashSet<[u8; 32]>,
+    /// The log's size as it travels: the sum of its entries' encodings.
+    bytes: u64,
 }
 
 /// The most 20 ms frames a chunk may hold: six seconds, as every encoder here makes them.
@@ -307,6 +312,17 @@ pub const MAX_FRAMES: u16 = 300;
 pub const MAX_CHUNK_BYTES: u32 = 256 * 1024;
 /// The most chunks one recording may have: a little over thirty-three hours.
 pub const MAX_TRACK_CHUNKS: usize = 20_000;
+/// The most bytes one signed entry may take. A recording of 20,000 chunks is about 840 KB;
+/// nothing else a station writes comes near it. Checked before an entry is decoded.
+pub const MAX_ENTRY_BYTES: usize = 1 << 20;
+/// The most entries one answer to a log request holds.
+pub const PAGE_ENTRIES: usize = 2000;
+/// The most bytes one answer to a log request holds, past its first entry.
+pub const PAGE_BYTES: usize = 2 << 20;
+/// The longest a name, title, label or address in an entry may be, in bytes.
+pub const MAX_SHORT: usize = 1024;
+/// The longest a description, source, notice or release note may be, in bytes.
+pub const MAX_LONG: usize = 16 * 1024;
 
 fn chunk_ok(c: &Chunk) -> bool {
     (1..=MAX_FRAMES).contains(&c.frames) && c.len <= MAX_CHUNK_BYTES
@@ -314,18 +330,30 @@ fn chunk_ok(c: &Chunk) -> bool {
 
 /// A log refuses sound that claims more than a chunk can hold, so no station can make a
 /// listener's decoder fill memory for a chunk that says it lasts twenty minutes.
+///
+/// Every text field has a limit too, so a signature never makes a station's words cheap to
+/// keep, show or pass on: a station that writes a ten-megabyte title has written an entry no
+/// node takes.
 fn within_bounds(body: &Body) -> bool {
+    let short = |s: &str| s.len() <= MAX_SHORT;
+    let long = |s: &str| s.len() <= MAX_LONG;
     match body {
-        Body::Track { chunks, .. } => chunks.len() <= MAX_TRACK_CHUNKS && chunks.iter().all(chunk_ok),
+        Body::Colours { name, about, port, tip } => short(name) && long(about) && port.as_deref().is_none_or(short) && tip.as_deref().is_none_or(short),
+        Body::Track { title, by, source, chunks, .. } => short(title) && short(by) && long(source) && chunks.len() <= MAX_TRACK_CHUNKS && chunks.iter().all(chunk_ok),
         Body::Live { chunk, .. } => chunk_ok(chunk),
+        Body::Deputy { label, .. } => short(label),
         Body::Deputed { body, .. } => within_bounds(body),
+        Body::Release { version, chunks, notes, sigs, .. } => short(version) && long(notes) && chunks.len() <= MAX_TRACK_CHUNKS && sigs.len() <= 8 && sigs.iter().all(|(_, s)| s.len() <= 128),
+        Body::Details { kinds, .. } => kinds.len() <= 64 && kinds.iter().all(|k| short(k)),
+        Body::Show { title, about, tracks, .. } => short(title) && long(about) && tracks.len() <= 10_000,
+        Body::Notice { text, .. } => long(text),
         _ => true,
     }
 }
 
 impl Archive {
     pub fn new(station: StationId) -> Self {
-        Self { station, entries: Vec::new(), head: [0; 32], deputies: Default::default() }
+        Self { station, entries: Vec::new(), head: [0; 32], deputies: Default::default(), bytes: 0 }
     }
 
     pub fn station(&self) -> StationId {
@@ -338,6 +366,28 @@ impl Archive {
 
     pub fn len(&self) -> u64 {
         self.entries.len() as u64
+    }
+
+    /// The log's size as it travels, in bytes.
+    pub fn bytes(&self) -> u64 {
+        self.bytes
+    }
+
+    /// Entries from `from` on, encoded, as many as fit one answer: at most `PAGE_ENTRIES`
+    /// and `PAGE_BYTES`, and always at least one if there is one. A long log goes out a page
+    /// at a time, so no request makes a node build a reply of hundreds of megabytes.
+    pub fn page(&self, from: u64) -> Vec<Vec<u8>> {
+        let mut out = vec![];
+        let mut size = 0;
+        for e in self.entries.iter().skip(from.min(usize::MAX as u64) as usize).take(PAGE_ENTRIES) {
+            let Ok(b) = e.to_bytes() else { break };
+            if !out.is_empty() && size + b.len() > PAGE_BYTES {
+                break;
+            }
+            size += b.len();
+            out.push(b);
+        }
+        out
     }
 
     pub fn is_empty(&self) -> bool {
@@ -385,6 +435,10 @@ impl Archive {
         if !within_bounds(&e.body) {
             return Err(Error::Chunk);
         }
+        let size = signed.to_bytes()?.len();
+        if size > MAX_ENTRY_BYTES {
+            return Err(Error::TooBig);
+        }
         signed.verify()?;
         match &e.body {
             Body::Deputy { key, .. } => {
@@ -396,6 +450,7 @@ impl Archive {
             _ => {}
         }
         self.head = signed.hash()?;
+        self.bytes += size as u64;
         self.entries.push(signed);
         Ok(())
     }
