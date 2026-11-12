@@ -26,7 +26,7 @@ Widget pyrateButton(String label, VoidCallback? onTap, {Color color = bone}) => 
         shape: const RoundedRectangleBorder(),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
       ),
-      child: Text(label, style: carved(10.5, color: onTap == null ? boneGhost : color, spacing: 0.22)),
+      child: Text(label, style: carved(11, color: onTap == null ? boneGhost : color, spacing: 0.22)),
     );
 
 InputDecoration pyrateField(String label) => InputDecoration(
@@ -40,7 +40,7 @@ InputDecoration pyrateField(String label) => InputDecoration(
 Widget tag(String text, Color color) => Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(border: Border.all(color: color, width: 1)),
-      child: Text(text, style: caps(8, color: color, spacing: 0.18)),
+      child: Text(text, style: caps(11, color: color, spacing: 0.18)),
     );
 
 Widget note(String text) => Text(text, style: serif(14, color: boneFaint, italic: true));
@@ -197,12 +197,12 @@ class _LogPageState extends State<LogPage> {
         child: InkWell(
           onTap: onTap,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             // The site's filter: a square hairline that turns to bone when it is on.
             color: on ? bone : Colors.transparent,
             decoration: null,
             foregroundDecoration: BoxDecoration(border: Border.all(color: on ? bone : line, width: 1)),
-            child: Text(label.toUpperCase(), style: caps(9.5, color: on ? black : boneDim, spacing: 0.16)),
+            child: Text(label.toUpperCase(), style: caps(11, color: on ? black : boneDim, spacing: 0.12)),
           ),
         ),
       );
@@ -283,9 +283,9 @@ class _LogPageState extends State<LogPage> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 26, 24, 6),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            masthead('The Log'),
+            masthead('Stations'),
             const SizedBox(height: 8),
-            note('Every station on the air, the ones you keep first. Press and hold a station for more.'),
+            note('Every station on the air, the ones you keep first. Tap one to listen.'),
             if (radio.carrying > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
@@ -293,11 +293,11 @@ class _LogPageState extends State<LogPage> {
               ),
             const SizedBox(height: 10),
             Row(children: [
-              Expanded(child: TextField(enableIMEPersonalizedLearning: false, controller: search, style: serif(17), decoration: pyrateField('Search the Log'))),
+              Expanded(child: TextField(enableIMEPersonalizedLearning: false, controller: search, style: serif(17), decoration: pyrateField('Find a station'))),
               const SizedBox(width: 12),
               IconButton(
-                tooltip: 'The chart of the seas',
-                icon: const Icon(Icons.public, size: 20, color: boneFaint),
+                tooltip: 'Stations on a map',
+                icon: const Icon(Icons.public, size: 22, color: boneDim),
                 onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChartPage(radio: radio, onTune: widget.onTune))),
               ),
               pyrateButton('SPIN THE DIAL', () {
@@ -309,28 +309,27 @@ class _LogPageState extends State<LogPage> {
               }),
             ]),
             const SizedBox(height: 12),
-            Wrap(children: [
+            // The order, then the filters, each a row that slides sideways so the list itself
+            // stays near the top of the screen.
+            SizedBox(height: 46, child: ListView(scrollDirection: Axis.horizontal, children: [
               for (final (k, label) in [('aboard', 'Most listened'), ('longest', 'Longest on air'), ('newest', 'Newest'), ('carried', 'Most backed up')])
                 chip(label, sort == k, () => setState(() {
                       sort = k;
                       pref('sort', k);
                     })),
-            ]),
-            Wrap(children: [
+            ])),
+            SizedBox(height: 46, child: ListView(scrollDirection: Axis.horizontal, children: [
               chip('on now', onNow, () => setState(() {
                     onNow = !onNow;
                     _nowTick = 0;
                   })),
-              for (final k in stationKinds) chip(k, kind == k, () => setState(() => kind = kind == k ? null : k)),
               chip('hide mature', hideMature, () => setState(() {
                     hideMature = !hideMature;
                     pref('hide_mature', hideMature);
                   })),
-            ]),
-            if (ports.isNotEmpty)
-              Wrap(children: [
-                for (final p in ports) chip(p, port == p, () => setState(() => port = port == p ? null : p)),
-              ]),
+              for (final k in stationKinds) chip(k, kind == k, () => setState(() => kind = kind == k ? null : k)),
+              for (final p in ports) chip(p, port == p, () => setState(() => port = port == p ? null : p)),
+            ])),
             const SizedBox(height: 6),
             const Divider(color: lineSoft, height: 1, thickness: 1),
           ]),
@@ -340,7 +339,7 @@ class _LogPageState extends State<LogPage> {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text(radio.stations.isEmpty ? 'Searching the Log' : onNow ? 'No shows and no one live at this minute. Spin the dial.' : 'No station answers to that.', style: serif(16, color: boneFaint, italic: true)),
+            child: Text(radio.stations.isEmpty ? 'Finding stations on the air' : onNow ? 'No shows and no one live at this minute. Spin the dial.' : 'No station answers to that.', style: serif(16, color: boneFaint, italic: true)),
           ),
         ),
       SliverList.separated(
@@ -364,7 +363,7 @@ class _LogPageState extends State<LogPage> {
                 color: tuned ? const Color(0x0AC52828) : null,
                 border: tuned ? const Border(left: BorderSide(color: red, width: 2)) : null,
               ),
-              padding: EdgeInsets.fromLTRB(tuned ? 22 : 24, 14, 24, 14),
+              padding: EdgeInsets.fromLTRB(tuned ? 22 : 24, 12, 8, 12),
               child: Row(children: [
                 StationArt(station: id, hash: s['cover'], width: 52, height: 52, fallback: Flag(id: id, width: 48, live: live)),
                 const SizedBox(width: 16),
@@ -378,21 +377,28 @@ class _LogPageState extends State<LogPage> {
                       ...seals(s),
                     ]),
                     const SizedBox(height: 2),
-                    Text(s['call_sign'] ?? '', style: caps(9.5, color: boneGhost, spacing: 0.14)),
+                    if ((s['call_sign'] ?? '').toString().isNotEmpty) Text(s['call_sign'] ?? '', style: caps(11, color: boneFaint, spacing: 0.12)),
                     if (on != null && (on['slot'] ?? '').toString().isNotEmpty)
-                      Text((on['slot'] as String).toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: caps(9, color: boneDim, spacing: 0.22)),
+                      Text((on['slot'] as String).toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: caps(11, color: boneDim, spacing: 0.18)),
                     if (on != null && (on['title'] ?? '').toString().isNotEmpty)
-                      Text('Now: ${on['title']}${(on['by'] ?? '').toString().isNotEmpty ? ' · ${on['by']}' : ''}',
-                          maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(13, color: boneDim, italic: true))
+                      Text('On now: ${on['title']}${(on['by'] ?? '').toString().isNotEmpty ? ' · ${on['by']}' : ''}',
+                          maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(14, color: boneDim, italic: true))
                     else if ((s['about'] ?? '').toString().isNotEmpty)
-                      Text(s['about'], maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(13, color: boneFaint, italic: true)),
+                      Text(s['about'], maxLines: 2, overflow: TextOverflow.ellipsis, style: serif(14, color: boneFaint, italic: true)),
                   ]),
                 ),
-                const SizedBox(width: 12),
-                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('${s['aboard'] ?? 0}', style: mono(16, color: tuned ? bone : boneDim)),
-                  Text('ABOARD', style: caps(8, color: boneGhost)),
-                ]),
+                const SizedBox(width: 8),
+                if (s['placeholder'] != true)
+                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Text('${s['aboard'] ?? 0}', style: mono(16, color: tuned ? bone : boneDim)),
+                    Text('LISTENING', style: caps(11, color: boneFaint, spacing: 0.1)),
+                  ]),
+                // The rest of what can be done with a station, without a long press to find it.
+                IconButton(
+                  tooltip: 'More for ${s['name'] ?? 'this station'}',
+                  icon: const Icon(Icons.more_vert, size: 20, color: boneFaint),
+                  onPressed: () => longPress(context, s),
+                ),
               ]),
             ),
           );
@@ -499,7 +505,7 @@ class _WatchBillState extends State<WatchBill> {
             if (dayLabel((item['start_ms'] as num).toInt()) != lastDay)
               Builder(builder: (_) {
                 lastDay = dayLabel((item['start_ms'] as num).toInt());
-                return Padding(padding: const EdgeInsets.only(top: 14, bottom: 4), child: Text(lastDay!, style: carved(10, color: boneFaint, spacing: 0.3)));
+                return Padding(padding: const EdgeInsets.only(top: 14, bottom: 4), child: Text(lastDay!, style: carved(11, color: boneFaint, spacing: 0.3)));
               }),
             Builder(builder: (_) {
               final start = (item['start_ms'] as num).toInt();
@@ -511,13 +517,13 @@ class _WatchBillState extends State<WatchBill> {
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(item['title'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(15, color: past ? bone : boneDim)),
-                    if ((item['by'] ?? '').toString().isNotEmpty) Text(item['by'], style: carved(8.5, color: boneFaint, spacing: 0.2)),
+                    if ((item['by'] ?? '').toString().isNotEmpty) Text(item['by'], style: carved(11, color: boneFaint, spacing: 0.2)),
                   ]),
                 ),
                 if (!past)
                   IconButton(
                     tooltip: ringing ? 'Cancel the reminder' : 'Remind me when it starts',
-                    icon: Icon(ringing ? Icons.notifications_active : Icons.notifications_none, size: 18, color: ringing ? bone : boneGhost),
+                    icon: Icon(ringing ? Icons.notifications_active : Icons.notifications_none, size: 20, color: ringing ? bone : boneFaint),
                     onPressed: () async {
                       if (ringing) {
                         await ship.invokeMethod('bell_cancel', {'id': id, 'station': s['id'], 'at': start});
@@ -864,7 +870,7 @@ Future<void> historySheet(BuildContext context, Tuner radio) => pyrateSheet(
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(h['title'] ?? '', style: serif(15, color: boneDim)),
-                      Text('${h['by'] ?? ''}${(h['by'] ?? '').toString().isNotEmpty ? ' · ' : ''}${h['station'] ?? ''}', style: carved(8.5, color: boneFaint, spacing: 0.2)),
+                      Text('${h['by'] ?? ''}${(h['by'] ?? '').toString().isNotEmpty ? ' · ' : ''}${h['station'] ?? ''}', style: carved(11, color: boneFaint, spacing: 0.2)),
                     ]),
                   ),
                 ]),
@@ -1011,7 +1017,7 @@ class _DetailsPanelState extends State<DetailsPanel> {
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       heading('ABOUT THE STATION'),
-      note('Helps listeners find you in the Log.'),
+      note('Helps listeners find you in Stations.'),
       const SizedBox(height: 10),
       Wrap(spacing: 8, runSpacing: 8, children: [
         for (final k in stationKinds)
@@ -1020,7 +1026,7 @@ class _DetailsPanelState extends State<DetailsPanel> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(border: Border.all(color: kinds.contains(k) ? bone : boneGhost, width: kinds.contains(k) ? 0.9 : 0.5)),
-              child: Text(k.toUpperCase(), style: carved(9.5, color: kinds.contains(k) ? bone : boneFaint, spacing: 0.22)),
+              child: Text(k.toUpperCase(), style: carved(11, color: kinds.contains(k) ? bone : boneFaint, spacing: 0.22)),
             ),
           ),
       ]),
@@ -1059,7 +1065,7 @@ class AboardChart extends StatelessWidget {
         heading('LISTENERS, HOUR BY HOUR'),
         SizedBox(height: 70, width: double.infinity, child: CustomPaint(painter: _Spark(pts.map((p) => p.$2.toDouble()).toList()))),
         const SizedBox(height: 4),
-        Text('most ${pts.map((p) => p.$2).reduce((a, b) => a > b ? a : b)} · now ${pts.last.$2}', style: mono(10)),
+        Text('most ${pts.map((p) => p.$2).reduce((a, b) => a > b ? a : b)} · now ${pts.last.$2}', style: mono(11)),
       ]),
     );
   }
@@ -1170,7 +1176,7 @@ class _HandsPanelState extends State<HandsPanel> {
         if (myCode != null) pyrateButton('I HAVE BEEN ADDED', board),
       ]),
       if (widget.station != null)
-        Padding(padding: const EdgeInsets.only(top: 10), child: SelectableText('This station\'s id: ${widget.station}', style: mono(10))),
+        Padding(padding: const EdgeInsets.only(top: 10), child: SelectableText('This station\'s id: ${widget.station}', style: mono(11))),
       if (myCode != null) ...[
         const SizedBox(height: 10),
         note('Send this code to the station\'s owner:'),
@@ -1272,7 +1278,7 @@ class _RotaEditorState extends State<RotaEditor> {
               style: serif(14, color: boneDim, italic: true),
             ),
           ),
-          IconButton(icon: const Icon(Icons.close, size: 16, color: boneGhost), onPressed: () => setState(() => blocks.removeAt(i))),
+          IconButton(icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () => setState(() => blocks.removeAt(i))),
         ]),
       Row(children: [pyrateButton('ADD A BLOCK', addBlock)]),
       const SizedBox(height: 14),
@@ -1291,7 +1297,7 @@ class _RotaEditorState extends State<RotaEditor> {
         Row(children: [
           Text('every', style: mono(11)),
           for (final m in [15, 30, 60, 120])
-            TextButton(onPressed: () => setState(() => every = m), child: Text('$m MIN', style: carved(10, color: every == m ? bone : boneFaint))),
+            TextButton(onPressed: () => setState(() => every = m), child: Text('$m MIN', style: carved(11, color: every == m ? bone : boneFaint))),
         ]),
       const SizedBox(height: 8),
       Row(children: [
@@ -1338,7 +1344,7 @@ Widget action(String title, VoidCallback onTap, {String? sub, Color color = bone
               if (sub != null) Padding(padding: const EdgeInsets.only(top: 3), child: Text(sub, style: serif(14, color: boneFaint, italic: true))),
             ]),
           ),
-          const Icon(Icons.chevron_right, size: 20, color: boneGhost),
+          const Icon(Icons.chevron_right, size: 20, color: boneFaint),
         ]),
       ),
     );
@@ -1469,7 +1475,7 @@ class _SettingsPageState extends State<SettingsPage> {
         title: Text('Add a hidden-stations list', style: serif(22)),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            note('Paste a list someone shared. Every station on it is hidden from your dial and the Log.'),
+            note('Paste a list someone shared. Every station on it is hidden from your radio and from Stations.'),
             TextField(enableIMEPersonalizedLearning: false, controller: text, maxLines: 6, style: mono(11, color: bone), decoration: pyrateField('The list')),
           ]),
         ),
@@ -1516,6 +1522,10 @@ class _SettingsPageState extends State<SettingsPage> {
     return ListView(padding: const EdgeInsets.fromLTRB(24, 26, 24, 40), children: [
       masthead('Settings'),
       section('LISTENING', [
+        setting('A soft hiss while tuning in', pref('hiss') != false, (v) {
+          Native.call({'cmd': 'hiss', 'value': v});
+          setState(() => pref('hiss', v));
+        }, sub: 'So you hear the radio working before the station comes in.'),
         setting('Hide mature stations', pref('hide_mature') == true, (v) => setState(() => pref('hide_mature', v)), sub: 'Strong language or themes, as each station says of itself.'),
         setting('Show explicit stations', pref('show_explicit') == true, (v) => setState(() => pref('show_explicit', v)), sub: 'Sexual or graphic material. Hidden until you turn this on.'),
         setting('Pictures only from stations I keep', (Native.call({'cmd': 'art_kept_only'}) as Map)['value'] == true, (v) => setState(() => Native.call({'cmd': 'art_kept_only', 'value': v})), sub: 'Other stations show by name alone.'),
@@ -1531,7 +1541,7 @@ class _SettingsPageState extends State<SettingsPage> {
             await ship.invokeMethod('wake_set', {'on': false, 'hour': 7, 'minute': 0});
             if (mounted) setState(() => wake = {'on': false});
           }, color: boneDim),
-        fold('Hidden stations', sub: hidden.isEmpty ? 'None. Press and hold a station in the Log to hide it.' : '${hidden.length} hidden', [
+        fold('Hidden stations', sub: hidden.isEmpty ? 'None. To hide a station, tap the three dots beside it in Stations.' : '${hidden.length} hidden', [
           for (final m in hidden)
             Row(children: [
               Expanded(child: Text(m['name'] ?? '', style: serif(16, color: boneDim))),
@@ -1540,7 +1550,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   await Native.callAway({'cmd': 'maroon', 'station': m['id'], 'value': false});
                   if (mounted) setState(() {});
                 },
-                child: Text('SHOW AGAIN', style: carved(10, color: boneFaint)),
+                child: Text('SHOW AGAIN', style: carved(11, color: boneFaint)),
               ),
             ]),
           const SizedBox(height: 6),
@@ -1651,7 +1661,7 @@ class _SettingsPageState extends State<SettingsPage> {
           if (sig != null) ...[
             note('Signed by HOSTIS with the key below. hostis.black/pyrateradio shows the same fingerprint, and a copy signed with any other is not ours.'),
             const SizedBox(height: 6),
-            SelectableText(sig!, style: mono(10, color: boneDim)),
+            SelectableText(sig!, style: mono(11, color: boneDim)),
           ],
           if (canary != null) ...[
             const SizedBox(height: 14),

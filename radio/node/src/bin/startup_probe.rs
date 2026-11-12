@@ -98,6 +98,16 @@ fn main() -> anyhow::Result<()> {
         p.call(&json!({ "cmd": "tune", "station": other }));
         let switch = watch(&p, "switched", 120, |n| playing(n) && n.call(&json!({ "cmd": "status" }))["now"]["station"] == other.as_str());
         println!("station to station: {switch:?} s");
+        // Stop pressed while the next station is still tuning in: nothing it was fetching may
+        // reach the speaker afterwards.
+        p.call(&json!({ "cmd": "tune", "station": id }));
+        std::thread::sleep(Duration::from_millis(60));
+        p.call(&json!({ "cmd": "stop" }));
+        std::thread::sleep(Duration::from_secs(6));
+        let heard = p.call(&json!({ "cmd": "status" }))["heard_ms"].as_u64().unwrap_or(0);
+        println!("{} stop while tuning in: {heard} ms of sound after it", if heard == 0 { "ok  " } else { "FAIL" });
+        p.call(&json!({ "cmd": "tune", "station": other }));
+        watch(&p, "back on", 60, playing);
         // Stop, and whether it stays stopped.
         p.call(&json!({ "cmd": "stop" }));
         std::thread::sleep(Duration::from_secs(5));

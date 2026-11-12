@@ -199,8 +199,8 @@ button.small:hover{color:var(--black);background:var(--ink);border-color:var(--i
 .chart p{margin-top:.6rem}
 
 /* your colours */
-.switches{display:flex;flex-direction:column;gap:.7rem;width:fit-content;margin:0 auto 1.1rem;font-size:1rem;color:var(--bonedim)}
-.switches label{display:flex;align-items:center;gap:.75rem;cursor:pointer}
+.switches{display:flex;flex-direction:column;gap:.1rem;width:fit-content;margin:0 auto 1.1rem;font-size:1.05rem;color:var(--bonedim)}
+.switches label{display:flex;align-items:center;gap:.75rem;cursor:pointer;min-height:44px}
 .switches label:hover{color:var(--ink)}
 textarea{display:block;width:100%;min-height:9rem;padding:.7rem;margin:1rem 0 .6rem;font:400 .72rem var(--mono);color:var(--bonedim)}
 .keeps{margin-top:1.6rem}.keeps summary{font-size:1rem}.keeps p{margin:0 0 .8rem}
