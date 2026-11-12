@@ -64,24 +64,38 @@ fn seal_record(key: &[u8; 32], plain: &[u8]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-fn read_sealed(id: &StationId, key: &[u8; 32], bytes: &[u8]) -> Archive {
+/// The log a sealed file holds, and where it was torn, if it was: a record cut short by a
+/// crash or a full disk, or bytes that do not open. Nothing after a tear is read. A whole
+/// record whose entry the log refuses is not a tear, and the file is left as it is.
+fn read_sealed_len(id: &StationId, key: &[u8; 32], bytes: &[u8]) -> (Archive, Option<usize>) {
     use chacha20poly1305::aead::Aead;
     let c = log_cipher(key);
     let mut a = Archive::new(*id);
     let mut at = 0;
-    while at + 4 <= bytes.len() {
+    while at < bytes.len() {
+        if at + 4 > bytes.len() {
+            return (a, Some(at));
+        }
         let n = u32::from_be_bytes(bytes[at..at + 4].try_into().unwrap()) as usize;
-        at += 4;
-        if n < 12 || at + n > bytes.len() {
-            break;
+        if n < 12 || at + 4 + n > bytes.len() {
+            return (a, Some(at));
         }
-        let Ok(plain) = c.decrypt(chacha20poly1305::Nonce::from_slice(&bytes[at..at + 12]), &bytes[at + 12..at + n]) else { break };
+        let body = at + 4;
+        let Ok(plain) = c.decrypt(chacha20poly1305::Nonce::from_slice(&bytes[body..body + 12]), &bytes[body + 12..body + n]) else {
+            // Bytes that do not open after records that did are a tear. If the first record
+            // does not open, the key is wrong, and the file is left for the right one.
+            return (a, (at > 0).then_some(at));
+        };
         if SignedEntry::from_bytes(&plain).and_then(|e| a.append(e)).is_err() {
-            break;
+            return (a, None);
         }
-        at += n;
+        at = body + n;
     }
-    a
+    (a, None)
+}
+
+fn read_sealed(id: &StationId, key: &[u8; 32], bytes: &[u8]) -> Archive {
+    read_sealed_len(id, key, bytes).0
 }
 
 pub struct Store {
@@ -297,7 +311,14 @@ impl Store {
         }
         let path = self.log_path(id);
         if let Ok(bytes) = fs::read(&path) {
-            let a = read_sealed(id, &self.hold.log_key(&id.0), &bytes);
+            let (a, torn) = read_sealed_len(id, &self.hold.log_key(&id.0), &bytes);
+            // A tail torn by a crash is cut off, so the next entry lands where it can be read
+            // again: left in place, every later entry would be lost at the next start.
+            if let Some(good) = torn {
+                if let Ok(f) = fs::OpenOptions::new().write(true).open(&path) {
+                    let _ = f.set_len(good as u64);
+                }
+            }
             let at = fs::metadata(&path).and_then(|m| m.created().or_else(|_| m.modified())).ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis() as u64);
             self.arrived.entry(*id).or_insert(at);
             self.logs.insert(*id, a);
@@ -353,8 +374,10 @@ impl Store {
         let cap = if carried { self.budget.per_station } else { u64::MAX };
         let a = self.logs.entry(id).or_insert_with(|| Archive::new(id));
         let mut file = fs::OpenOptions::new().create(true).append(true).open(&path)?;
+        let mut good = file.metadata()?.len();
         let mut added = 0;
         let mut outgrew = false;
+        let mut failed = None;
         for e in entries {
             if e.entry.seq < a.len() {
                 continue;
@@ -364,9 +387,27 @@ impl Store {
                 outgrew = true;
                 break;
             }
+            let rec = seal_record(&self.hold.log_key(&id.0), &bytes)?;
             a.append(e)?;
-            file.write_all(&seal_record(&self.hold.log_key(&id.0), &bytes)?)?;
+            // A write that fails part way (a full disk) is cut back to the last whole record.
+            if let Err(err) = file.write_all(&rec) {
+                failed = Some(err);
+                break;
+            }
+            good += rec.len() as u64;
             added += 1;
+        }
+        if let Some(err) = failed {
+            let _ = file.set_len(good);
+            drop(file);
+            self.logs.remove(&id);
+            self.open_log(&id);
+            return Err(err.into());
+        }
+        // A station's own entries are on disk before anyone hears of them: a phone that lost
+        // them in a power cut would sign the same places in its log again.
+        if !carried && added > 0 {
+            let _ = file.sync_data();
         }
         if a.is_struck() {
             drop(file);
@@ -808,6 +849,44 @@ mod tests {
         assert!(s.open_log(&id));
         assert!(!dir.join("keys").join(id.to_hex()).exists() && !dir.join("logs").join(format!("{}.sl", filed_as(&id))).exists());
         assert!(!dir.join("chunks").join(&name[..2]).join(&name).exists(), "and the old files are gone");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_log_torn_by_a_crash_is_cut_back_and_keeps_what_comes_after() {
+        let dir = std::env::temp_dir().join(format!("pyrate-torn-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let k = StationKey::generate().unwrap();
+        let id = k.id();
+        let colours = |n: &str| Body::Colours { name: n.into(), about: "".into(), port: None, tip: None };
+        {
+            let mut s = Store::open_with(&dir, 1 << 20, Some([7; 32])).unwrap();
+            s.add_key(StationKey::from_seed(k.seed())).unwrap();
+            for i in 0..3 {
+                s.write(id, 1_000 + i, colours(&format!("n{i}"))).unwrap();
+            }
+        }
+        let path = Store::open_with(&dir, 1 << 20, Some([7; 32])).unwrap().log_path(&id);
+        let whole = fs::metadata(&path).unwrap().len();
+        // Half a record, as a crash in the middle of a write leaves it.
+        let mut f = fs::OpenOptions::new().append(true).open(&path).unwrap();
+        f.write_all(&[0, 0, 0, 200, 1, 2, 3, 4, 5]).unwrap();
+        drop(f);
+        {
+            let mut s = Store::open_with(&dir, 1 << 20, Some([7; 32])).unwrap();
+            assert!(s.open_log(&id));
+            assert_eq!(s.logs[&id].len(), 3);
+            assert_eq!(fs::metadata(&path).unwrap().len(), whole, "the torn tail is cut off");
+            s.write(id, 2_000, colours("after")).unwrap();
+        }
+        let mut s = Store::open_with(&dir, 1 << 20, Some([7; 32])).unwrap();
+        assert!(s.open_log(&id));
+        assert_eq!(s.logs[&id].len(), 4, "the entry written after the crash is still there");
+        // Opened under the wrong hold key, nothing reads and nothing is cut.
+        let size = fs::metadata(&path).unwrap().len();
+        let (a, torn) = read_sealed_len(&id, &[1; 32], &fs::read(&path).unwrap());
+        assert!(a.is_empty() && torn.is_none());
+        assert_eq!(fs::metadata(&path).unwrap().len(), size);
         let _ = fs::remove_dir_all(&dir);
     }
 }
