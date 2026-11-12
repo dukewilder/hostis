@@ -22,6 +22,9 @@ const DAY_MIN: u16 = 24 * 60;
 const MAX_STEPS: usize = 1_300_000;
 /// Steps the watch bill may spend in all, so a long window of short tracks stays quick.
 const BILL_STEPS: usize = 4_000_000;
+/// The most steps a bill of what is coming walks: a few hours of one-second tracks, a week of
+/// anything real.
+pub const UPCOMING_STEPS: usize = 20_000;
 /// A recording shorter than this is not played: a second is the shortest thing worth airing,
 /// and it keeps a week's walk within its steps whatever a station signs.
 pub const MIN_TRACK_MS: u64 = 1_000;
@@ -233,10 +236,10 @@ pub struct Clock {
     index: std::collections::HashMap<Hash, usize>,
     shows: Vec<Show>,
     /// Steps walked since the counter was last set, for the watch bill's budget.
-    steps: std::cell::Cell<usize>,
+    steps: std::sync::atomic::AtomicUsize,
     /// Whether whole rounds are skipped by arithmetic (always, but for the tests that check
     /// skipping changes nothing).
-    skip: std::cell::Cell<bool>,
+    skip: std::sync::atomic::AtomicBool,
 }
 
 impl Clock {
@@ -308,13 +311,13 @@ impl Clock {
             }
             p
         });
-        Ok(Self { station, rota: archive.rota(), programme, tracks, index, shows, steps: std::cell::Cell::new(0), skip: std::cell::Cell::new(true) })
+        Ok(Self { station, rota: archive.rota(), programme, tracks, index, shows, steps: std::sync::atomic::AtomicUsize::new(0), skip: std::sync::atomic::AtomicBool::new(true) })
     }
 
     /// The same clock walking every track, for tests that compare.
     #[doc(hidden)]
     pub fn stepping(self) -> Self {
-        self.skip.set(false);
+        self.skip.store(false, std::sync::atomic::Ordering::Relaxed);
         self
     }
 
@@ -323,7 +326,7 @@ impl Clock {
     /// whatever its order, so a week of short tracks is crossed in a few steps, not hundreds
     /// of thousands.
     fn whole_rounds(&self, members: &[usize], cursor: u64, t: u64) -> Option<(u64, u64)> {
-        if !self.skip.get() || members.is_empty() {
+        if !self.skip.load(std::sync::atomic::Ordering::Relaxed) || members.is_empty() {
             return None;
         }
         let mut change = u64::MAX;
@@ -353,12 +356,26 @@ impl Clock {
     /// tape starts over, the week turns), and one that resumes after a cut is listed from
     /// where it resumes.
     pub fn upcoming(&self, from: u64, until: u64) -> Vec<(u64, Hash, u64)> {
+        self.upcoming_n(from, until, 2000)
+    }
+
+    /// The next thing on the air from `from`, if anything is before `until`.
+    pub fn next_on(&self, from: u64, until: u64) -> Option<(u64, Hash, u64)> {
+        self.upcoming_n(from, until, 1).into_iter().next()
+    }
+
+    /// As [`upcoming`](Self::upcoming), stopping at `n` entries. However short a station's
+    /// recordings, the walk takes at most `UPCOMING_STEPS` steps: a library of one-second
+    /// tracks cannot make a week's bill cost seconds.
+    pub fn upcoming_n(&self, from: u64, until: u64, n: usize) -> Vec<(u64, Hash, u64)> {
         let cuts = self.cuts(from, until);
         let mut out: Vec<(u64, Hash, u64)> = Vec::new();
         let mut last_started = 0u64;
         let mut t = from;
-        self.steps.set(0);
-        while t < until && out.len() < 2000 && self.steps.get() < BILL_STEPS {
+        let mut walked = 0usize;
+        self.steps.store(0, std::sync::atomic::Ordering::Relaxed);
+        while t < until && out.len() < n && walked < UPCOMING_STEPS && self.steps.load(std::sync::atomic::Ordering::Relaxed) < BILL_STEPS {
+            walked += 1;
             let next_cut = |after: u64| cuts.iter().copied().find(|c| *c > after);
             // A quiet minute (nothing yet added, off the air, a gap between blocks): step past it.
             let Some(np) = self.now(t) else {
@@ -471,7 +488,7 @@ impl Clock {
         let mut cursor = start;
         let mut last_ident: Option<u64> = None;
         for _ in 0..MAX_STEPS {
-            self.steps.set(self.steps.get() + 1);
+            self.steps.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             // At the start of a round, with no bell to keep, whole rounds are passed over at once.
             if ident.is_none() {
                 match src {
@@ -758,7 +775,7 @@ impl Clock {
 
         let everything: Vec<usize> = (0..self.tracks.len()).collect();
         for _ in 0..MAX_STEPS {
-            self.steps.set(self.steps.get() + 1);
+            self.steps.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             // The whole library shuffled, no blocks and no bell: whole rounds at once.
             if ident.is_none() && self.rota.blocks.is_empty() {
                 let deck = decks[0].get_or_insert_with(|| Deck { round: 0, order: Vec::new(), at: 0 });

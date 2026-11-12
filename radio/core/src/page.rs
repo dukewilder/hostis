@@ -180,7 +180,7 @@ pub fn page_of(a: &Archive, now: u64, days: u64) -> Result<Value> {
     };
     let tracks = a.library().map(|l| l.len()).unwrap_or(0);
     // When an off-air station comes back.
-    let back = if on.is_none() { clock.upcoming(now, now + 7 * 86_400_000).first().map(|b| b.0) } else { None };
+    let back = if on.is_none() { clock.next_on(now, now + 7 * 86_400_000).map(|b| b.0) } else { None };
     Ok(json!({
         "id": a.station().to_hex(), "name": name, "about": about, "port": port, "tip": tip,
         "since": a.entries().first().map(|e| e.entry.at_ms),
