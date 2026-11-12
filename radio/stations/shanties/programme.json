@@ -1,0 +1,9 @@
+{
+ "utc_offset_min": 0,
+ "zone_name": "UTC",
+ "mode": {
+  "kind": "shuffle"
+ },
+ "hours": [],
+ "slots": []
+}

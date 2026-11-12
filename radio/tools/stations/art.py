@@ -2,7 +2,7 @@
 # Cover and banner for every HOSTIS station, drawn in the site's own faces and colours and
 # rendered by a headless Chrome: station.jpg (1280 square) and banner.jpg (1500 by 500) in
 # each station's folder, where a Lantern seed takes them.
-#   art.py <stations folder>
+#   art.py <stations folder> [station ...]      (every station, or only those named)
 # No rights reserved.
 import os, random, sys
 from playwright.sync_api import sync_playwright
@@ -65,9 +65,20 @@ def rings(size):
     return f'<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}">{out}{arcs}<circle cx="{c}" cy="{c}" r="{c * 0.05}" fill="#c52828"/></svg>'
 
 
+def anchor(size, rope=True):
+    """A fouled anchor, the sailors' own mark: the cable round the shank in red."""
+    r = ('<path d="M100,24 C150,44 58,74 118,96 S66,140 104,160 S136,186 120,204" fill="none" stroke="#c52828" stroke-width="5" stroke-linecap="round"/>' if rope else "")
+    return (f'<svg width="{size}" height="{int(size * 1.07)}" viewBox="0 0 200 214" style="display:block;margin:0 auto">'
+            '<g fill="none" stroke="#ede4ce" stroke-linecap="round" stroke-linejoin="round">'
+            '<circle cx="100" cy="20" r="13" stroke-width="7"/><line x1="100" y1="34" x2="100" y2="200" stroke-width="11"/>'
+            '<line x1="54" y1="58" x2="146" y2="58" stroke-width="9"/><path d="M30,140 Q38,206 100,206 Q162,206 170,140" stroke-width="10"/></g>'
+            '<g fill="#ede4ce"><circle cx="50" cy="58" r="7"/><circle cx="150" cy="58" r="7"/><polygon points="16,152 30,116 47,148"/><polygon points="184,152 170,116 153,148"/></g>'
+            f'{r}</svg>')
+
+
 STATIONS = {
     "the-numbers": {
-        "title": "The Numbers", "cap": "five figures on the hour",
+        "title": "The Numbers", "cap": "",
         "cover": lambda: f'<div style="position:absolute;top:150px;left:0;right:0;text-align:center"><div class="skull" style="font-size:64px">☠︎</div></div>'
                          f'<div style="position:absolute;top:270px;left:0;right:0">{dial(860)}</div>'
                          f'<div style="position:absolute;top:350px;left:0;right:0">{numbers_motif(44)}</div>'
@@ -75,7 +86,16 @@ STATIONS = {
                          f'<div class="cap" style="font-size:22px;margin-top:26px">Pyrate Radio &middot; a HOSTIS station</div></div>',
         "banner": lambda: f'<div style="position:absolute;left:96px;top:118px;width:520px">{numbers_motif(30, 6, 3)}</div>'
                           f'<div style="position:absolute;right:110px;top:160px;text-align:right"><div class="title" style="font-size:84px">The Numbers</div>'
-                          f'<div class="cap" style="font-size:18px;margin-top:22px">Five figures on the hour</div></div>',
+                          f'<div class="cap" style="font-size:18px;margin-top:22px">Pyrate Radio</div></div>',
+    },
+    "shanties": {
+        "title": "Shanties", "cap": "sea songs and pirate songs",
+        "cover": lambda: f'<div style="position:absolute;top:110px;left:0;right:0">{anchor(560)}</div>'
+                         f'<div style="position:absolute;bottom:150px;left:0;right:0;text-align:center"><div class="title" style="font-size:132px">Shanties</div>'
+                         f'<div class="cap" style="font-size:22px;margin-top:26px">Pyrate Radio &middot; a HOSTIS station</div></div>',
+        "banner": lambda: f'<div style="position:absolute;left:150px;top:60px">{anchor(330)}</div>'
+                          f'<div style="position:absolute;right:110px;top:150px;text-align:right"><div class="title" style="font-size:104px">Shanties</div>'
+                          f'<div class="cap" style="font-size:18px;margin-top:22px">Sea songs and pirate songs</div></div>',
     },
     "netlabel": {
         "title": "Netlabel", "cap": "free music, freely carried",
@@ -133,7 +153,10 @@ def page(w, h, m, body):
 def main():
     with sync_playwright() as p:
         b = p.chromium.launch(executable_path="/usr/bin/google-chrome", args=["--no-sandbox"])
+        only = sys.argv[2:]
         for slug, s in STATIONS.items():
+            if only and slug not in only:
+                continue
             out = f"{ROOT}/{slug}"
             os.makedirs(out, exist_ok=True)
             for kind, (w, h, m) in {"cover": (1280, 1280, 56), "banner": (1500, 500, 34)}.items():
