@@ -465,23 +465,45 @@ pub const MAX_CARRIERS: usize = 64;
 pub const FAILED_MS: u64 = 10 * 60_000;
 
 /// Takes in a carrier's claim. Anyone can say they carry anything, so a claim never reaches
-/// past the station's own card, and a listing keeps only the freshest few.
-/// Notes a carrier's claim. A full list takes a newcomer only in place of a carrier silent for
-/// ten minutes, unless the newcomer is one this node trusts (one that has answered it, or a
-/// harbour), which takes the place of the stalest stranger. So a flood of fresh identities,
-/// each signing a claim, cannot push out the carriers that keep saying they are there.
-pub fn note_carrier(carriers: &mut std::collections::HashMap<[u8; 32], (u64, u64)>, node: [u8; 32], head: u64, card_head: Option<u64>, now: u64, trusted: impl Fn(&[u8; 32]) -> bool) {
+/// past the station's own card, and a full list decides who stays like this:
+///
+/// - A carrier this node trusts (one that has served it a station's entries or sound, or a
+///   harbour) is never pushed out by one it does not.
+/// - Otherwise a carrier that failed lately, or has gone quiet for ten minutes, gives way first.
+/// - Failing that, a trusted newcomer takes the place of the stalest stranger, and an untrusted
+///   one takes the place of a stranger chosen at random one time in four (`coin`).
+///
+/// So claims that arrive first and keep saying they are there cannot keep a real carrier out:
+/// it gets in within a few of its claims, is asked, serves, and from then on is trusted. And a
+/// flood that arrives later cannot push out the carriers that have served this node.
+#[allow(clippy::too_many_arguments)]
+pub fn note_carrier(
+    carriers: &mut std::collections::HashMap<[u8; 32], (u64, u64)>,
+    node: [u8; 32],
+    head: u64,
+    card_head: Option<u64>,
+    now: u64,
+    trusted: impl Fn(&[u8; 32]) -> bool,
+    failed: impl Fn(&[u8; 32]) -> bool,
+    coin: u64,
+) {
     let head = card_head.map_or(head, |c| head.min(c));
     if carriers.contains_key(&node) || carriers.len() < MAX_CARRIERS {
         carriers.insert(node, (head, now));
         return;
     }
-    let me_trusted = trusted(&node);
-    let victim = carriers
-        .iter()
-        .filter(|(n, (_, seen))| (me_trusted && !trusted(n)) || now.saturating_sub(*seen) > CARRIER_STALE_MS)
-        .min_by_key(|(_, (_, seen))| *seen)
-        .map(|(n, _)| *n);
+    let strangers: Vec<([u8; 32], u64)> = carriers.iter().filter(|(n, _)| !trusted(n)).map(|(n, (_, seen))| (*n, *seen)).collect();
+    let spent = strangers.iter().filter(|(n, seen)| failed(n) || now.saturating_sub(*seen) > CARRIER_STALE_MS).min_by_key(|(_, seen)| *seen);
+    let victim = match spent {
+        Some((n, _)) => Some(*n),
+        None if trusted(&node) => strangers.iter().min_by_key(|(_, seen)| *seen).map(|(n, _)| *n),
+        None if !strangers.is_empty() && coin % 4 == 0 => {
+            let mut s = strangers.clone();
+            s.sort_unstable();
+            Some(s[(coin / 4 % s.len() as u64) as usize].0)
+        }
+        None => carriers.iter().filter(|(_, (_, seen))| now.saturating_sub(*seen) > CARRIER_STALE_MS).min_by_key(|(_, (_, seen))| *seen).map(|(n, _)| *n),
+    };
     if let Some(v) = victim {
         carriers.remove(&v);
         carriers.insert(node, (head, now));
@@ -491,16 +513,17 @@ pub fn note_carrier(carriers: &mut std::collections::HashMap<[u8; 32], (u64, u64
 /// How long a carrier may go unheard before a newcomer may take its place on a full list.
 pub const CARRIER_STALE_MS: u64 = 10 * 60_000;
 
-/// Carriers in the order to ask them: the furthest copy of the log first (no claim counting
-/// past the card), the freshest word next, and any that failed lately last.
-pub fn rank_carriers(carriers: &std::collections::HashMap<[u8; 32], (u64, u64)>, me: &[u8; 32], card_head: Option<u64>, failed: impl Fn(&[u8; 32]) -> bool) -> Vec<[u8; 32]> {
-    let mut v: Vec<(bool, u64, u64, [u8; 32])> = carriers
+/// Carriers in the order to ask them: any that failed lately last, those that have served this
+/// node before the rest, then the furthest copy of the log (no claim counting past the card),
+/// then the freshest word.
+pub fn rank_carriers(carriers: &std::collections::HashMap<[u8; 32], (u64, u64)>, me: &[u8; 32], card_head: Option<u64>, failed: impl Fn(&[u8; 32]) -> bool, trusted: impl Fn(&[u8; 32]) -> bool) -> Vec<[u8; 32]> {
+    let mut v: Vec<(bool, bool, u64, u64, [u8; 32])> = carriers
         .iter()
         .filter(|(n, _)| *n != me)
-        .map(|(n, (h, s))| (failed(n), card_head.map_or(*h, |c| (*h).min(c)), *s, *n))
+        .map(|(n, (h, s))| (failed(n), !trusted(n), card_head.map_or(*h, |c| (*h).min(c)), *s, *n))
         .collect();
-    v.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)).then(b.2.cmp(&a.2)));
-    v.into_iter().map(|x| x.3).collect()
+    v.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)).then(b.2.cmp(&a.2)).then(b.3.cmp(&a.3)));
+    v.into_iter().map(|x| x.4).collect()
 }
 
 /// HyperLogLog with 256 registers. 256 bytes on the wire, about 6.5 percent error.
@@ -699,25 +722,68 @@ mod tests {
 
     #[test]
     fn a_false_claim_jumps_no_queue_and_a_flood_grows_nothing() {
+        let none = |_: &[u8; 32]| false;
         let mut c = std::collections::HashMap::new();
-        note_carrier(&mut c, [1; 32], 10, Some(10), 1_000, |_| false);
-        note_carrier(&mut c, [2; 32], u64::MAX, Some(10), 2_000, |_| false);
-        let order = rank_carriers(&c, &[0; 32], Some(10), |_| false);
+        note_carrier(&mut c, [1; 32], 10, Some(10), 1_000, none, none, 1);
+        note_carrier(&mut c, [2; 32], u64::MAX, Some(10), 2_000, none, none, 1);
+        let order = rank_carriers(&c, &[0; 32], Some(10), none, none);
         assert_eq!(order, vec![[2; 32], [1; 32]], "a claim past the card counts as the card, and the fresher word goes first");
-        let order = rank_carriers(&c, &[0; 32], Some(10), |n| *n == [2; 32]);
+        let order = rank_carriers(&c, &[0; 32], Some(10), |n| *n == [2; 32], none);
         assert_eq!(order[0], [1; 32], "a carrier that failed lately goes last");
+        let order = rank_carriers(&c, &[0; 32], Some(10), none, |n| *n == [1; 32]);
+        assert_eq!(order[0], [1; 32], "one that has served this node goes first");
+        // A late flood of a thousand fresh identities: the carriers that served stay.
+        let served = |n: &[u8; 32]| *n == [1; 32] || *n == [2; 32];
         for i in 0..1_000u32 {
             let mut n = [9u8; 32];
             n[..4].copy_from_slice(&i.to_le_bytes());
-            note_carrier(&mut c, n, 10, Some(10), 3_000 + i as u64, |_| false);
+            note_carrier(&mut c, n, 10, Some(10), 3_000 + i as u64, served, none, i as u64);
         }
         assert_eq!(c.len(), MAX_CARRIERS);
-        assert!(c.contains_key(&[1; 32]) && c.contains_key(&[2; 32]), "a flood of fresh identities pushes out no carrier still speaking");
+        assert!(c.contains_key(&[1; 32]) && c.contains_key(&[2; 32]), "a flood of fresh identities pushes out no carrier that has served");
         // A carrier silent past ten minutes gives way; a trusted one always finds a place.
-        note_carrier(&mut c, [5; 32], 10, Some(10), 3_000 + CARRIER_STALE_MS + 1, |_| false);
-        assert!(c.contains_key(&[5; 32]) && !c.contains_key(&[1; 32]));
-        note_carrier(&mut c, [6; 32], 10, Some(10), 3_000 + CARRIER_STALE_MS + 2, |n| *n == [6; 32]);
+        let t = 3_000 + CARRIER_STALE_MS + 2_000;
+        note_carrier(&mut c, [6; 32], 10, Some(10), t, |n| *n == [6; 32] || served(n), none, 1);
         assert!(c.contains_key(&[6; 32]) && c.len() == MAX_CARRIERS);
+    }
+
+    #[test]
+    fn claims_that_came_first_cannot_keep_a_real_carrier_out() {
+        // NET-001: 64 attacker claims fill the list and are refreshed every time; the real
+        // carrier keeps claiming. It gets in within a few claims, whatever the coins.
+        let none = |_: &[u8; 32]| false;
+        let mut worst = 0;
+        for seed in 0..200u64 {
+            let mut c = std::collections::HashMap::new();
+            let attackers: Vec<[u8; 32]> = (0..64u8).map(|i| [i + 100; 32]).collect();
+            for a in &attackers {
+                note_carrier(&mut c, *a, 10, Some(10), 0, none, none, 1);
+            }
+            let mut rng = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let mut claims = 0;
+            for t in 1..1_000u64 {
+                for a in &attackers {
+                    rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                    note_carrier(&mut c, *a, 10, Some(10), t * 1_000, none, none, rng >> 33);
+                }
+                rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                note_carrier(&mut c, [1; 32], 10, Some(10), t * 1_000, none, none, rng >> 33);
+                claims += 1;
+                if c.contains_key(&[1; 32]) {
+                    break;
+                }
+            }
+            assert!(c.contains_key(&[1; 32]), "seed {seed}: never got in");
+            worst = worst.max(claims);
+        }
+        assert!(worst <= 40, "the real carrier got in within {worst} claims at worst");
+        // And one that fails is the first to go.
+        let mut c = std::collections::HashMap::new();
+        for i in 0..64u8 {
+            note_carrier(&mut c, [i + 100; 32], 10, Some(10), 0, none, none, 1);
+        }
+        note_carrier(&mut c, [1; 32], 10, Some(10), 5, none, |n| *n == [100; 32], 1);
+        assert!(c.contains_key(&[1; 32]) && !c.contains_key(&[100; 32]));
     }
 
     #[test]

@@ -91,6 +91,8 @@ struct View {
     cover: Option<[u8; 32]>,
     /// The feed as last made, and the address it was made for.
     feed: Mutex<Option<(String, String)>>,
+    /// What is playing, as last worked out, and when: good for a second.
+    playing: Mutex<Option<(u64, serde_json::Value)>>,
 }
 
 impl View {
@@ -130,7 +132,7 @@ impl View {
             _ => (a.station().call_sign(), String::new()),
         };
         let cover = a.art().and_then(|(c, _, _)| c).map(|c| c.hash);
-        Self { len: a.len(), clock: Clock::new(a).ok().map(Mutex::new), live_at, live, tracks, library, name, about, cover, feed: Mutex::new(None) }
+        Self { len: a.len(), clock: Clock::new(a).ok().map(Mutex::new), live_at, live, tracks, library, name, about, cover, feed: Mutex::new(None), playing: Mutex::new(None) }
     }
 
     fn live_tail(&self, now: u64) -> Option<&[(u64, pyrate_core::Chunk, u8)]> {
@@ -242,6 +244,12 @@ async fn now(State(w): State<Web>, Path(id): Path<String>) -> Response {
     if v.live_tail(t).is_some() {
         return axum::Json(json!({ "live": true, "title": "ON AIR" })).into_response();
     }
+    // Worked out at most once a second per station, however many ask.
+    if let Some((at, body)) = v.playing.lock().unwrap().as_ref() {
+        if t.saturating_sub(*at) < 1_000 {
+            return ([(header::CACHE_CONTROL, "no-store")], axum::Json(body.clone())).into_response();
+        }
+    }
     let np = v.clock.as_ref().and_then(|c| c.lock().unwrap().now(t));
     let body = match np.and_then(|np| v.tracks.get(&np.track).map(|tr| (np, tr))) {
         Some((np, tr)) => {
@@ -250,6 +258,7 @@ async fn now(State(w): State<Web>, Path(id): Path<String>) -> Response {
         }
         None => json!({ "live": false, "title": "", "by": "" }),
     };
+    *v.playing.lock().unwrap() = Some((t, body.clone()));
     ([(header::CACHE_CONTROL, "no-store")], axum::Json(body)).into_response()
 }
 
