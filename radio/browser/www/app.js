@@ -582,7 +582,7 @@ function paint() {
   if (!busy) busySince = 0; else if (!busySince) busySince = Date.now();
   const waited = busySince ? Date.now() - busySince : 0;
   $('hint').hidden = waited < 10000;
-  $('hint').textContent = waited > 45000 && stage === 'finding' ? 'No radio carrying this station has answered yet. Keep waiting, or try another station.' : stage === 'connecting' ? 'Still connecting. Some networks block the radio; another network, or the app, may get through.' : 'Still tuning in. The first station takes longest, while the radio sets up its private route.';
+  $('hint').textContent = waited > 45000 && stage === 'finding' ? 'No radio carrying this station has answered yet. Keep waiting, or try another station.' : stage === 'connecting' ? 'Still connecting. Some networks block the radio; another network, or the app, may get through.' : 'Still tuning in. The first station takes longest.';
   // The picture: the recording's own if it has one, the station's otherwise.
   const want = (track && p.art) || cur.cover || null, c = cur.id;
   if (want !== artWant) { artWant = want; if (!want) art(null); else pic(c, want).then(u => { if (cur?.id === c && artWant === want) { if (u) art(u); else artWant = undefined } }) }
@@ -634,8 +634,8 @@ function pageHead() {
   const away = cur.signed_ms && radio ? radio.now() - cur.signed_ms : 0, notes = [];
   if (cur.twin && !isHarbour(cur.id)) notes.push('Another station with this name has been on the air longer. Check the call sign before you share this one.');
   if (empty(cur)) notes.push('This station has nothing to play yet.');
-  if (away > 365 * 86400e3) notes.push('Its keeper has not been aboard for over a year. It plays on from the radios that carry it.');
-  else if (away > 30 * 86400e3) notes.push('Its keeper has not been aboard for over a month. It plays on from the radios that carry it.');
+  if (away > 365 * 86400e3) notes.push('Its keeper has not been aboard for over a year.');
+  else if (away > 30 * 86400e3) notes.push('Its keeper has not been aboard for over a month.');
   $('pnote').hidden = !notes.length; $('pnote').textContent = notes.join(' ');
 }
 
@@ -739,7 +739,7 @@ function power() {
   for (const b of [$('go'), $('mini-go')]) { b.classList.toggle('on', playing); b.classList.toggle('busy', busy); b.querySelector('.glyph').textContent = playing ? '■︎' : '▶︎' }
   $('go').querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen';
   $('mini-go').setAttribute('aria-label', playing ? 'Stop' : 'Listen');
-  $('cliprow').hidden = !(playing && heard() && soundy && clipType()) || isPocket(cur);
+  $('clip').hidden = !(playing && heard() && soundy && clipType()) || isPocket(cur);
   // The tab says what it is playing, so a listener with many tabs can find the radio.
   if (!EMBED && cur) document.title = (playing ? '▶︎ ' : '') + (cur.name || cur.call_sign || 'A station') + ' · Pyrate Radio';
 }
@@ -1537,22 +1537,26 @@ function playedList() {
   const hm = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   $('played').innerHTML = played.length ? [...played].reverse().map(h => '<li><time>' + hm(h.at) + '</time><span>' + esc(h.title) + '<small>' + esc([h.by, h.station].filter(Boolean).join(' · ')) + '</small></span></li>').join('') : '<li class="none">Nothing yet.</li>';
 }
-function moreOpen(o) { $('morebox').hidden = !o; $('more').setAttribute('aria-expanded', o); if (o) { playedList(); sleepSay(); $('morebox').scrollIntoView({ behavior: 'smooth', block: 'nearest' }) } }
+function moreOpen(o) { $('morebox').hidden = !o; $('more').setAttribute('aria-expanded', o); if (o) sleepSay(); else { $('played').hidden = true; $('playedgo').setAttribute('aria-expanded', false) } }
 $('more').onclick = () => moreOpen($('morebox').hidden);
-$('moreclose').onclick = () => moreOpen(false);
 addEventListener('keydown', e => { if (e.key === 'Escape' && !$('morebox').hidden) { moreOpen(false); $('more').focus() } });
+addEventListener('pointerdown', e => { if (!$('morebox').hidden && !e.target.closest('#morebox,#more')) moreOpen(false) });
 $('clip').addEventListener('click', () => moreOpen(false));
+$('mhide').addEventListener('click', () => moreOpen(false));
+$('playedgo').onclick = () => { const o = $('played').hidden; $('played').hidden = !o; $('playedgo').setAttribute('aria-expanded', o); if (o) playedList() };
+let sleepMin = 0;
 function sleepSay() {
-  $('sleepsay').textContent = sleepAt ? 'Fades out at ' + new Date(sleepAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '.' : 'Fades out and stops on its own.';
+  $('sleepsay').textContent = sleepAt ? 'until ' + new Date(sleepAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
   $('sleepoff').hidden = !sleepAt; $('more').querySelector('span').textContent = sleepAt ? 'Sleep' : 'More';
+  for (const b of $('sleepbtns').querySelectorAll('[data-m]')) b.setAttribute('aria-pressed', !!sleepAt && +b.dataset.m === sleepMin);
 }
 function sleepIn(min) {
-  clearTimeout(sleepT); sleepT = null; sleepAt = min ? Date.now() + min * 60000 : null;
+  clearTimeout(sleepT); sleepT = null; sleepAt = min ? Date.now() + min * 60000 : null; sleepMin = min || 0;
   if (min) sleepT = setTimeout(() => {
     // Thirty seconds down to silence, then Stop, then the level back for next time.
     const t = ctx?.currentTime ?? 0;
     if (ctx && playing) { bus.gain.cancelScheduledValues(t); bus.gain.setValueAtTime(bus.gain.value, t); bus.gain.linearRampToValueAtTime(0, t + 30) }
-    setTimeout(() => { if (playing) stop(); if (ctx) { bus.gain.cancelScheduledValues(ctx.currentTime); bus.gain.setValueAtTime(1, ctx.currentTime + 0.4) } sleepAt = null; sleepSay() }, ctx && playing ? 30000 : 0);
+    setTimeout(() => { if (playing) stop(); if (ctx) { bus.gain.cancelScheduledValues(ctx.currentTime); bus.gain.setValueAtTime(1, ctx.currentTime + 0.4) } sleepAt = null; sleepMin = 0; sleepSay() }, ctx && playing ? 30000 : 0);
   }, min * 60000);
   sleepSay();
 }

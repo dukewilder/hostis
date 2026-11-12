@@ -175,3 +175,111 @@ PASS no page errors: []
 station: Gangway
 np: Low Tide | state: {'playing': True, 'heard': True, 'stage': 'tuning', 'trouble': None, 'station': '8e689c262f5db5a3c9b99fb7d1f380b4a0f35623cbf59455a01bf766fd5c3107', 'scheduled': 2, 'ahead_ms': 12172, 'ctx': 'running', 'neighbours': 1, 'stations': 2, 'view': 'list', 'webcodecs': True}
 errors: []
+
+# browser_ux.py, pass 2 after the More menu and copy pass
+# browser_ux.py 8097 390 (pass 2)
+time  name on the set 0.28 s, first row 0.29 s
+ok   a station is on the set within 1.5 s
+time  Listen to sound 0.78 s, stages ['finding', 'tuning']
+ok   Listen reaches sound
+ok   no title before its sound
+ok   the button says Stop while playing
+ok   Stop stops at once
+ok   and stays stopped
+ok   Stop pressed while tuning in stays stopped
+time  Listen to sound after the station sat on the set 8 s: 0.41 s
+ok   a station left on the set plays within a second of Listen
+ok   the station's actions sit on one line (4 of them)
+ok   More opens with the sleep timer
+ok   a sleep timer is set and shown
+ok   the timer cancels and Escape closes More
+ok   the Station page tab opens its section
+ok   the Settings tab opens its section
+ok   the Stations tab opens its section
+ok   Back returns to the stations
+ok   the mini player shows once the set is out of view
+ok   the mini player's button plays
+ok   and stops
+ok   no errors in the console
+all passed
+# browser_ux.py 8099 390 (pass 2)
+time  name on the set 1.02 s, first row 1.04 s
+ok   a station is on the set within 1.5 s
+time  Listen to sound 0.84 s, stages ['tuning']
+ok   Listen reaches sound
+ok   no title before its sound
+ok   the button says Stop while playing
+ok   the name changes at once on a switch (Second Watch)
+time  switch to sound 0.57 s
+ok   a switch reaches sound
+ok   Stop stops at once
+ok   and stays stopped
+ok   Stop pressed while tuning in stays stopped
+time  Listen to sound after the station sat on the set 8 s: 0.46 s
+ok   a station left on the set plays within a second of Listen
+ok   the station's actions sit on one line (5 of them)
+ok   More opens with the sleep timer
+ok   a sleep timer is set and shown
+ok   the timer cancels and Escape closes More
+ok   the Station page tab opens its section
+ok   the Settings tab opens its section
+ok   the Stations tab opens its section
+ok   Back returns to the stations
+ok   the mini player shows once the set is out of view
+ok   the mini player's button plays
+ok   and stops
+ok   no errors in the console
+all passed
+# browser_ux.py 8097 1440 (pass 2)
+time  name on the set 0.27 s, first row 0.28 s
+ok   a station is on the set within 1.5 s
+time  Listen to sound 0.83 s, stages ['finding', 'tuning']
+ok   Listen reaches sound
+ok   no title before its sound
+ok   the button says Stop while playing
+ok   Stop stops at once
+ok   and stays stopped
+ok   Stop pressed while tuning in stays stopped
+time  Listen to sound after the station sat on the set 8 s: 0.43 s
+ok   a station left on the set plays within a second of Listen
+ok   the station's actions sit on one line (4 of them)
+ok   More opens with the sleep timer
+ok   a sleep timer is set and shown
+ok   the timer cancels and Escape closes More
+ok   the Station page tab opens its section
+ok   the Settings tab opens its section
+ok   the Stations tab opens its section
+ok   Back returns to the stations
+ok   the mini player shows once the set is out of view
+ok   the mini player's button plays
+ok   and stops
+ok   no errors in the console
+all passed
+# browser_ux.py 8099 1440 (pass 2)
+time  name on the set 1.02 s, first row 1.02 s
+ok   a station is on the set within 1.5 s
+time  Listen to sound 0.9 s, stages ['tuning']
+ok   Listen reaches sound
+ok   no title before its sound
+ok   the button says Stop while playing
+ok   the name changes at once on a switch (Second Watch)
+time  switch to sound 0.68 s
+ok   a switch reaches sound
+ok   Stop stops at once
+ok   and stays stopped
+ok   Stop pressed while tuning in stays stopped
+time  Listen to sound after the station sat on the set 8 s: 0.43 s
+ok   a station left on the set plays within a second of Listen
+ok   the station's actions sit on one line (5 of them)
+ok   More opens with the sleep timer
+ok   a sleep timer is set and shown
+ok   the timer cancels and Escape closes More
+ok   the Station page tab opens its section
+ok   the Settings tab opens its section
+ok   the Stations tab opens its section
+ok   Back returns to the stations
+ok   the mini player shows once the set is out of view
+ok   the mini player's button plays
+ok   and stops
+ok   no errors in the console
+all passed

@@ -974,7 +974,7 @@ class _StationMore extends StatelessWidget {
   const _StationMore({required this.radio, required this.s, required this.tuned});
   @override
   Widget build(BuildContext context) {
-    Widget row(String label, String about, VoidCallback act) => InkWell(
+    Widget row(String label, String? about, VoidCallback act) => InkWell(
           onTap: () {
             Navigator.pop(context);
             act();
@@ -985,8 +985,7 @@ class _StationMore extends StatelessWidget {
             decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: lineSoft))),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(label, style: carved(13)),
-              const SizedBox(height: 3),
-              Text(about, style: serif(14, color: boneFaint, italic: true)),
+              if (about != null) ...[const SizedBox(height: 3), Text(about, style: serif(14, color: boneFaint, italic: true))],
             ]),
           ),
         );
@@ -995,11 +994,11 @@ class _StationMore extends StatelessWidget {
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text((s['name'] ?? '').toString(), style: pica(24)),
         const SizedBox(height: 10),
-        row('SCHEDULE', 'What plays today and this week, with a reminder for any of it.', () => pyrateSheet(context, WatchBill(station: s))),
-        if (tuned) row('RECORD THIS', 'Save what is playing to this device.', () => tapeIt(context)),
-        row('PLAY ON SEVERAL PHONES', 'Phones in one room playing in step, like one speaker.', () => pyrateSheet(context, const FlockSheet())),
-        row('SLEEP TIMER', radio.sleepAt == null ? 'Fade out and stop after a while.' : 'Fades out at ${clockTime(radio.sleepAt!.millisecondsSinceEpoch)}.', () => sleepSheet(context, radio)),
-        row('RECENTLY PLAYED', 'What has played since the app opened.', () => historySheet(context, radio)),
+        row('SCHEDULE', null, () => pyrateSheet(context, WatchBill(station: s))),
+        if (tuned) row('RECORD THIS', null, () => tapeIt(context)),
+        row('PLAY ON SEVERAL PHONES', null, () => pyrateSheet(context, const FlockSheet())),
+        row('SLEEP TIMER', radio.sleepAt == null ? null : 'Until ${clockTime(radio.sleepAt!.millisecondsSinceEpoch)}', () => sleepSheet(context, radio)),
+        row('RECENTLY PLAYED', null, () => historySheet(context, radio)),
       ]),
     );
   }
@@ -1031,7 +1030,7 @@ class _StationFace extends StatelessWidget {
           const SizedBox(width: 160, child: LinearProgressIndicator(minHeight: 1, color: red, backgroundColor: boneGhost)),
           if (waited > 10000) ...[
             const SizedBox(height: 12),
-            Text(waited > 45000 && state != 'tuning' ? 'No radio carrying this station has answered yet. Keep waiting, or swipe to another station.' : 'Still tuning in. The first station takes longest, while the radio sets up its private route.',
+            Text(waited > 45000 && state != 'tuning' ? 'No radio carrying this station has answered yet. Keep waiting, or swipe to another station.' : 'Still tuning in. The first station takes longest.',
                 textAlign: TextAlign.center, maxLines: 3, style: serif(14, color: boneFaint, italic: true)),
           ],
         ],

@@ -195,8 +195,8 @@ class _StationPageState extends State<StationPage> {
           for (final said in [
             if (s['twin'] == true && !isHarbour(id)) 'Another station with this name has been on the air longer. Check the call sign before you share this one.',
             if (emptyStation(s)) 'This station has nothing to play yet.',
-            if (now - ((s['signed_ms'] as num?)?.toInt() ?? now) > 365 * 86400000) 'Its keeper has not been aboard for over a year. It plays on from the radios that carry it.'
-            else if (now - ((s['signed_ms'] as num?)?.toInt() ?? now) > 30 * 86400000) 'Its keeper has not been aboard for over a month. It plays on from the radios that carry it.',
+            if (now - ((s['signed_ms'] as num?)?.toInt() ?? now) > 365 * 86400000) 'Its keeper has not been aboard for over a year.'
+            else if (now - ((s['signed_ms'] as num?)?.toInt() ?? now) > 30 * 86400000) 'Its keeper has not been aboard for over a month.',
           ])
             Container(
               margin: const EdgeInsets.only(top: 12),

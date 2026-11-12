@@ -40,22 +40,22 @@
 <button id="keep" class="btn open-only" hidden aria-pressed="false"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg><span>Keep</span></button>
 <button id="tip" class="btn" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v10M15 9.5h-4.2a1.8 1.8 0 0 0 0 3.6h2.4a1.8 1.8 0 0 1 0 3.6H9"/></svg>Tip</button>
 <button id="more" class="btn" aria-expanded="false" aria-controls="morebox"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>More</span></button>
+<div id="morebox" class="moremenu" role="menu" aria-labelledby="more" hidden>
+<button id="clip" class="mi" role="menuitem" hidden>Clip it</button>
+<div class="mi sleeprow" role="group" aria-label="Sleep timer"><span class="sl">Sleep<small id="sleepsay"></small></span><span id="sleepbtns"><button data-m="15">15</button><button data-m="30">30</button><button data-m="60">60</button><button data-m="90">90</button><button id="sleepoff" hidden>Off</button></span></div>
+<button id="playedgo" class="mi" role="menuitem" aria-expanded="false">Recently played</button>
+<ol id="played" class="played" hidden></ol>
+<button id="mhide" class="mi open-only" role="menuitem">Hide this station</button>
 </div>
 </div>
-<div id="passbox" class="passbox" hidden><div class="qr" id="qr"></div><div class="passtext"><p class="boxhead">Share</p><p>Scan it with a phone camera to start listening, in the browser or the app.</p><p class="link" id="plink"></p><div class="row-btns"><button id="pcopy" class="btn">Copy the link</button><button id="pshare" class="btn">Share</button><button id="pclose" class="btn quiet">Close</button></div></div></div>
-<div id="clipbox" class="passbox" hidden><video id="clipv" playsinline controls></video><div class="passtext"><p class="boxhead">Clip it</p><p>Twenty seconds of what is on, with the station's name, its place on the dial and a code to scan. Post it anywhere.</p><div class="row-btns"><a id="clipsave" class="btn" download>Save the clip</a><button id="clipshare" class="btn">Share</button><button id="clipclose" class="btn quiet">Close</button></div></div></div>
-<div id="tipbox" class="passbox" hidden><div class="passtext"><p class="boxhead">Tip the station</p><p>A tip goes from your own wallet straight to the station. Pyrate Radio moves no money and sees none of it.</p><p class="link" id="tipaddr"></p><input id="tipnote" maxlength="140" placeholder="A note for the station" aria-label="A note for the station"><p class="fine" id="tiphow"></p><div class="row-btns"><a id="tipgo" class="btn">Open my wallet</a><button id="tipcopy" class="btn">Copy the address</button><button id="tipclose" class="btn quiet">Close</button></div></div></div>
-<div id="morebox" class="passbox morebox" hidden><div class="passtext">
-<div id="cliprow" class="morerow" hidden><p class="mhead">Clip it</p><p>Twenty seconds of what is on, as a video with the station&#8217;s name and a code to scan.</p><button id="clip" class="btn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12"/><path d="M16 10l5-3v10l-5-3"/></svg>Clip it</button></div>
-<div class="morerow"><p class="mhead">Sleep timer</p><p id="sleepsay">Fades out and stops on its own.</p><div class="row-btns" id="sleepbtns"><button class="btn" data-m="15">15 min</button><button class="btn" data-m="30">30 min</button><button class="btn" data-m="45">45 min</button><button class="btn" data-m="60">60 min</button><button class="btn" data-m="90">90 min</button><button id="sleepoff" class="btn quiet" hidden>Cancel</button></div></div>
-<div class="morerow"><p class="mhead">Recently played</p><p>Forgotten when this tab closes.</p><ol id="played" class="played"></ol></div>
-<div class="morerow open-only"><button id="mhide" class="btn quiet">Hide this station</button></div>
-<div class="row-btns"><button id="moreclose" class="btn quiet">Close</button></div>
-</div></div>
+</div>
+<div id="passbox" class="passbox" hidden><div class="qr" id="qr"></div><div class="passtext"><p class="boxhead">Share</p><p class="link" id="plink"></p><div class="row-btns"><button id="pcopy" class="btn">Copy the link</button><button id="pshare" class="btn">Share</button><button id="pclose" class="btn quiet">Close</button></div></div></div>
+<div id="clipbox" class="passbox" hidden><video id="clipv" playsinline controls></video><div class="passtext"><p class="boxhead">Clip it</p><div class="row-btns"><a id="clipsave" class="btn" download>Save the clip</a><button id="clipshare" class="btn">Share</button><button id="clipclose" class="btn quiet">Close</button></div></div></div>
+<div id="tipbox" class="passbox" hidden><div class="passtext"><p class="boxhead">Tip the station</p><p>Straight from your wallet to the station.</p><p class="link" id="tipaddr"></p><input id="tipnote" maxlength="140" placeholder="A note for the station" aria-label="A note for the station"><p class="fine" id="tiphow"></p><div class="row-btns"><a id="tipgo" class="btn">Open my wallet</a><button id="tipcopy" class="btn">Copy the address</button><button id="tipclose" class="btn quiet">Close</button></div></div></div>
 <audio id="a" playsinline></audio>
 </section>
 
-<p id="sharednote" class="appnote" hidden>This gateway shares one address with every page it serves, so this tab keeps nothing past the visit. <a id="sharedgo" href="#">Open the player at its own address</a></p>
+<p id="sharednote" class="appnote" hidden>This copy keeps nothing after you leave. <a id="sharedgo" href="#">Open the player at its own address</a></p>
 <p id="appnote" class="appnote" hidden>Pyrate Radio on this phone? <a id="appopen" href="#">Open this station in the app</a></p>
 <p class="takeset"><a href="../#set"><span class="ts-lead">Take the set</span><span class="ts-sub">android &#183; windows &#183; mac &#183; linux &#183; plays with the screen off</span></a></p>
 
@@ -68,14 +68,14 @@
 
 <main class="below" id="below">
 <section class="view log" id="v-list" aria-label="Stations">
-<div class="sechead harbour-only"><h2>HOSTIS on the Air</h2><span class="cap">tap a station to listen</span></div>
-<div class="sechead open-only"><h2>On the Air</h2><span class="cap">tap a station to listen</span></div>
+<div class="sechead harbour-only"><h2>HOSTIS on the Air</h2></div>
+<div class="sechead open-only"><h2>On the Air</h2></div>
 <div class="listbar"><input id="find" type="search" class="open-only" placeholder="Find a station" aria-label="Find a station" autocomplete="off"><div class="views" role="group" aria-label="How to show the stations"><button id="vlist" class="btn on" aria-pressed="true">List</button><button id="vchart" class="btn" aria-pressed="false">Map</button></div></div>
 <div class="listbar open-only"><div id="kinds" class="kinds" role="group" aria-label="Kinds of station"></div><label class="sortby"><span>Order</span><select id="sort" aria-label="Order of the list"><option value="aboard">Most listened</option><option value="newest">Newest</option><option value="longest">On the air longest</option><option value="carried">Most backed up</option></select></label></div>
 <div id="chart" class="chart" hidden></div>
 <div id="rows"></div>
 <div class="harbour-only everyone">
-<p class="fine">Every other station plays in the open player, the same radio served from IPFS and from Lanterns and owned by nobody.</p>
+<p class="fine">Every other station is in the open player.</p>
 <p class="centre"><a class="lead-btn openlink" href="#"><span class="fc-lead">Every station</span><span class="fc-sub">the open player</span></a></p>
 </div>
 </section>
@@ -91,7 +91,7 @@
 <div class="sechead gap"><h2>Chat</h2><span class="cap">with whoever is listening</span></div>
 <p class="fine harbour-only">This station&#8217;s chat, cheers and requests are in the <a id="chatopen" class="openlink" href="#">open player</a>, one tap away.</p>
 <div class="open-only">
-<div id="chatjoin"><p class="fine">Chat with whoever else is listening, cheer what is on, or ask for a song. Nothing is saved, though anyone in the chat can copy what they read. Joining lets the others in the chat see that this browser listens to this station. Just listening shows nobody anything.</p><p class="centre"><button id="chatgo" class="btn">Join the chat</button></p></div>
+<div id="chatjoin"><p class="fine">Joining shows the others here that this browser is listening. Nothing is saved.</p><p class="centre"><button id="chatgo" class="btn">Join the chat</button></p></div>
 <div id="chatroom" class="chat" hidden>
 <p id="chatwho" class="fine"></p>
 <div id="lines" class="lines" aria-live="polite"></div>
@@ -104,7 +104,6 @@
 <div class="sechead gap"><h2>This Week</h2><span class="cap">times are yours</span></div>
 <p id="how" class="how"></p>
 <div id="listings"></div>
-<p class="fine">Worked out in this tab from the station's own log.</p>
 </div>
 <p id="key" class="key" title="The call sign is a name; the key is the station. Two stations can wear the same call sign, never the same key."></p>
 <p class="centre open-only"><button id="maroon" class="btn quiet" hidden>Hide this station</button></p>
@@ -120,14 +119,14 @@
 <p id="st-locknote2" class="fine" role="status"></p>
 </div>
 <div id="st-new">
-<p id="st-unchecked" class="fine" hidden>This copy of the player comes from a gateway that serves its files unchecked. To start a station, use <a id="st-checked" href="#">a copy your browser checks</a> or the app.</p>
+<p id="st-unchecked" class="fine" hidden>To start a station, open <a id="st-checked" href="#">a copy your browser checks</a> or the app.</p>
 <p class="fine">Give it a name, add some recordings, and it plays day and night. Nobody can take it down.</p>
 <label class="field"><span>Station name</span><input id="st-name" maxlength="40" autocomplete="off" placeholder="The name on the dial"></label>
 <label class="field"><span>What it plays</span><input id="st-about" maxlength="140" autocomplete="off" placeholder="One line about it"></label>
 <details class="fold"><summary>More options</summary><div>
 <label class="field"><span>Kinds</span><input id="st-kinds" maxlength="80" autocomplete="off" placeholder="Up to three, with commas: jazz, talk, shanties"></label>
 <div class="switches"><label><input type="checkbox" id="st-mature"><span>Mature: strong language or themes</span></label><label><input type="checkbox" id="st-explicit"><span>Explicit: sexual or graphic material</span></label></div>
-<p>A passphrase adds a lock to your 24 words. Someone who sees the words still cannot open the station. Forget the passphrase and the station is gone for good.</p>
+<p>A second lock on your 24 words. Forget it and the station is gone for good.</p>
 <label class="field"><span>Passphrase</span><input id="st-ppass" type="password" autocomplete="new-password" placeholder="Optional"></label>
 </div></details>
 <p class="centre"><button id="st-raise" class="lead-btn"><span class="fc-lead">Raise colours</span><span class="fc-sub">you can change all of this later</span></button></p>
@@ -137,7 +136,7 @@
 </div>
 <div id="st-show" class="st-show" hidden>
 <p class="boxhead">Write these down</p>
-<p class="fine">These 24 words are your station. With them you can bring it back on any device, or end it. They are shown once and saved nowhere, so write them on paper, in order. Nobody from Pyrate Radio or HOSTIS will ever ask for them.</p>
+<p class="fine">These 24 words are your station. They are shown once and saved nowhere. Write them on paper, in order. Nobody from HOSTIS will ever ask for them.</p>
 <ol id="st-wordlist" class="wordlist"></ol>
 <p id="st-passnote" class="fine" hidden>Keep your passphrase somewhere other than the words. Without it, the words open a different, empty station.</p>
 <div class="switches"><label><input type="checkbox" id="st-written"><span>I have written them down, in order</span></label></div>
@@ -146,16 +145,16 @@
 <div id="st-mine" hidden>
 <div class="st-card"><div id="st-flag" class="mini"></div><div class="meta"><div id="st-mname" class="name"></div><div id="st-mcs" class="cs"></div></div><button id="st-tune" class="btn">Listen</button></div>
 <p id="st-status" class="st-status" role="status"></p>
-<label class="drop" id="st-drop"><input type="file" id="st-files" multiple accept="audio/*,video/mp4,video/webm,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.webm"><span class="drop-lead">Drop recordings here</span><span class="drop-sub">or click to choose them &#183; they play day and night</span></label>
-<div class="st-opts"><label><input type="checkbox" id="st-talk"><span>Spoken word (smaller files, fine for talk)</span></label><label><input type="checkbox" id="st-disguise"><span>Disguise my voice</span></label></div>
+<label class="drop" id="st-drop"><input type="file" id="st-files" multiple accept="audio/*,video/mp4,video/webm,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.webm"><span class="drop-lead">Drop recordings here</span><span class="drop-sub">or click to choose them</span></label>
+<div class="st-opts"><label><input type="checkbox" id="st-talk"><span>Spoken word</span></label><label><input type="checkbox" id="st-disguise"><span>Disguise my voice</span></label></div>
 <div id="st-queue" class="st-queue"></div>
-<p class="fine">Keep this tab open until your recordings finish sending. After that they play whether or not this tab is open.</p>
+<p class="fine">Keep this tab open until they finish sending.</p>
 <div class="st-live"><button id="st-live" class="power"><span class="glyph">&#9679;&#xFE0E;</span><span class="lbl">Go live</span></button><span id="st-livetime" class="st-livetime"></span></div>
-<p id="st-livenote" class="fine" hidden>Talk to your listeners through this browser's microphone. They hear you about fifteen seconds behind, and your recordings carry on when you stop. Sirens, bells or voices in the background can give away where you are.</p>
+<p id="st-livenote" class="fine" hidden>Listeners hear you about fifteen seconds behind. Sounds in the background can give away where you are.</p>
 <details class="fold"><summary>More</summary><div>
 <label class="field"><span>Where your recordings came from</span><input id="st-source" maxlength="280" autocomplete="off" placeholder="And why you are free to play them"></label>
 </div></details>
-<details class="fold" id="st-safer"><summary>Lock this station in this browser</summary><div><p>This browser keeps your station's key locked so a copy of its files gives nothing away. Add a passphrase for another lock, or have the tab forget the key when it closes. Your 24 words bring it back either way.</p><label class="field"><span>Passphrase</span><input id="st-newpass" type="password" autocomplete="new-password"></label><p class="centre"><button id="st-lockit" class="btn">Lock it</button></p><div class="switches"><label><input type="checkbox" id="st-tabonly"><span>Forget the key when this tab closes</span></label></div><p id="st-locknote" class="fine" role="status"></p></div></details>
+<details class="fold" id="st-safer"><summary>Lock this station in this browser</summary><div><p>Your 24 words bring it back either way.</p><label class="field"><span>Passphrase</span><input id="st-newpass" type="password" autocomplete="new-password"></label><p class="centre"><button id="st-lockit" class="btn">Lock it</button></p><div class="switches"><label><input type="checkbox" id="st-tabonly"><span>Forget the key when this tab closes</span></label></div><p id="st-locknote" class="fine" role="status"></p></div></details>
 <div class="row-btns"><button id="st-another" class="btn quiet">Start another</button></div>
 </div>
 </div>
@@ -176,10 +175,10 @@
 <div id="mbox" hidden><p class="fine">Copy this list to share it, or paste in a list someone shared with you.</p><textarea id="mtext" spellcheck="false" aria-label="Hidden stations"></textarea><div class="row-btns"><button id="mtake" class="btn">Hide these</button><button id="mclear" class="btn quiet">Show every station again</button></div><div id="mnote" class="fine"></div></div>
 <details class="fold"><summary>Advanced</summary><div>
 <div class="switches"><label><input type="checkbox" id="sw-direct"><span>Connect directly when needed</span></label></div>
-<p>Off, this browser always listens through two other radios, so the one with the station never sees you, and it waits when it cannot. On, it plays sooner on a quiet network, and the radio it asks can see this browser's relay.</p>
+<p>Plays sooner on a quiet network, but the radio it asks can see this browser's relay.</p>
 </div></details>
 </div>
-<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your settings, kept and hidden stations, the list of stations last on the air, your name and mutes in the chat, any invitations you opened, and the key of any station you started here (never its 24 words). The key and invitations are locked under a key the browser keeps to itself. None of it is sent anywhere.</p><p>Forgetting it all makes this browser new to the radio.</p></div></details>
+<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your settings, kept and hidden stations, the list of stations last on the air, your name and mutes in the chat, any invitations you opened, and the key of any station you started here (never its 24 words). The key and invitations are locked under a key the browser keeps to itself. None of it is sent anywhere.</p></div></details>
 <p class="centre"><button id="forget" class="btn quiet">Forget this browser</button></p>
 </section>
 </main>
