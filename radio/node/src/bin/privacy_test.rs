@@ -55,6 +55,9 @@ fn main() -> anyhow::Result<()> {
             break;
         }
     }
+    if !ok {
+        eprintln!("status: {}", l.call(&json!({ "cmd": "status" })));
+    }
     check(ok, "with the switch on, it plays");
     // A Lantern makes two hops possible: a new phone, switch off, plays through them.
     let r = Node::start(Config { carry_all: true, lantern: true, ..cfg("relay", false) })?;
