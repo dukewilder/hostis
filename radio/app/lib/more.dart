@@ -345,7 +345,6 @@ class _LogPageState extends State<LogPage> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             masthead('Stations'),
             const SizedBox(height: 8),
-            note('Every station on the air, the ones you keep first. Tap one to listen.'),
             if (radio.carrying > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
@@ -896,7 +895,7 @@ Future<void> sleepSheet(BuildContext context, Tuner radio) => pyrateSheet(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('SLEEP TIMER', style: carved(16)),
           const SizedBox(height: 8),
-          note(radio.sleepAt == null ? 'The radio fades and stops on its own.' : 'Fades out at ${clockTime(radio.sleepAt!.millisecondsSinceEpoch)}.'),
+          if (radio.sleepAt != null) note('Until ${clockTime(radio.sleepAt!.millisecondsSinceEpoch)}'),
           const SizedBox(height: 14),
           Wrap(spacing: 10, runSpacing: 10, children: [
             for (final m in [15, 30, 45, 60, 90])
@@ -918,7 +917,7 @@ Future<void> historySheet(BuildContext context, Tuner radio) => pyrateSheet(
       context,
       Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(padding: const EdgeInsets.fromLTRB(24, 22, 24, 4), child: Text('RECENTLY PLAYED', style: carved(16))),
-        Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 10), child: note('Forgotten when the app closes. Use Record this to keep something.')),
+        const SizedBox(height: 10),
         Flexible(
           child: ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(24, 0, 24, 24), children: [
             if (radio.heard.isEmpty) note('Nothing yet.'),
@@ -1585,15 +1584,15 @@ class _SettingsPageState extends State<SettingsPage> {
         setting('A soft hiss while tuning in', pref('hiss') != false, (v) {
           Native.call({'cmd': 'hiss', 'value': v});
           setState(() => pref('hiss', v));
-        }, sub: 'So you hear the radio working before the station comes in.'),
-        setting('Show stations with nothing to play yet', pref('show_empty') == true, (v) => setState(() => pref('show_empty', v)), sub: 'Stations just raised, with no recordings on them. Hidden until they have some.'),
-        setting('Hide mature stations', pref('hide_mature') == true, (v) => setState(() => pref('hide_mature', v)), sub: 'Strong language or themes, as each station says of itself.'),
-        setting('Show explicit stations', pref('show_explicit') == true, (v) => setState(() => pref('show_explicit', v)), sub: 'Sexual or graphic material. Hidden until you turn this on.'),
+        }),
+        setting('Show stations with nothing to play yet', pref('show_empty') == true, (v) => setState(() => pref('show_empty', v)), ),
+        setting('Hide mature stations', pref('hide_mature') == true, (v) => setState(() => pref('hide_mature', v)), sub: 'Strong language or themes.'),
+        setting('Show explicit stations', pref('show_explicit') == true, (v) => setState(() => pref('show_explicit', v)), sub: 'Sexual or graphic material.'),
         setting('Pictures only from stations I keep', (Native.call({'cmd': 'art_kept_only'}) as Map)['value'] == true, (v) => setState(() => Native.call({'cmd': 'art_kept_only', 'value': v})), sub: 'Other stations show by name alone.'),
         setting('Save ahead on Wi-Fi', provisions, (v) {
           Native.call({'cmd': 'provisions', 'value': v});
           setState(() => provisions = v);
-        }, sub: 'The next few hours of your kept stations, ready for when you have no signal.'),
+        }, sub: 'Your kept stations, for when there is no signal.'),
         if (Platform.isAndroid)
           action(wakeOn ? 'Wake to the radio at ${(wake['hour'] as num).toInt().toString().padLeft(2, '0')}:${(wake['minute'] as num).toInt().toString().padLeft(2, '0')}' : 'Wake to the radio', setWake,
               sub: wakeOn ? '${wake['name'] ?? 'The station'} rises from quiet each morning. Tap to change.' : 'A station instead of an alarm. If no sound comes, the phone\'s alarm rings.'),

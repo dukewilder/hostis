@@ -109,7 +109,8 @@ button.power.on .glyph{color:var(--ink)}
 .controls .buttons .btn[hidden]{display:none}
 .controls .buttons .btn .ic{width:20px;height:20px;margin:0}
 .controls .buttons .btn:hover,.controls .buttons .btn:focus-visible{background:rgba(237,228,206,.05);color:var(--ink)}
-.controls .buttons{overflow:hidden}
+.controls .buttons{position:relative}
+.controls .buttons #more{margin-right:0;border-right:0}
 .ic{width:18px;height:18px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:square}
 .btn .ic{margin:0 .1rem 0 -.15rem}
 .vu{width:124px;flex:0 0 auto;align-self:end}
@@ -192,7 +193,6 @@ button.small:hover{color:var(--black);background:var(--ink);border-color:var(--i
   background:linear-gradient(var(--redup),var(--redup)) 0 100%/4px 60% no-repeat,linear-gradient(var(--redup),var(--redup)) 6px 100%/4px 100% no-repeat,linear-gradient(var(--redup),var(--redup)) 12px 100%/4px 40% no-repeat;animation:bars .9s ease-in-out infinite alternate}
 @keyframes bars{to{background-size:4px 30%,4px 55%,4px 100%}}
 .row:last-child{border-bottom:1px solid var(--line-soft)}
-.morerows{display:flex;flex-direction:column;align-items:center;gap:.4rem;margin:1.4rem 0 0}.morerows .fine{margin:0;font-size:.95rem}
 .row:hover{background:rgba(237,228,206,.025)}
 .row.on{box-shadow:inset 2px 0 0 var(--red)}
 .row .meta{flex:1;min-width:0}
@@ -339,16 +339,25 @@ input[type=password]{background:var(--panel);color:var(--ink);border:1px solid r
 .st-live .power .glyph{color:var(--redup)}.st-live .power.on{border-color:var(--red);background:var(--blooddeep)}
 .st-livetime{font:400 .8rem var(--mono);letter-spacing:.14em;color:var(--redup);font-variant-numeric:tabular-nums}
 .tag{display:inline-block;margin-left:.55rem;padding:0 .35rem;border:1px solid var(--ghost);font:400 .64rem var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim);vertical-align:.2em}.tag.lv{border-color:var(--redup);color:var(--redup)}.tag.kp{border-color:var(--bonedim);color:var(--ink)}
-/* More: the station's less used actions, kept out of the row of buttons */
-.morebox{display:block}
-.morerow{padding:0 0 1.1rem;margin:0 0 1.1rem;border-bottom:1px solid var(--line)}
-.morebox .mhead{font:400 .95rem var(--sc);letter-spacing:.05em;color:var(--ink);margin:0 0 .3rem}
-.morebox #sleepbtns .btn{min-width:64px}
-.played{list-style:none;margin:0;padding:0;max-height:16rem;overflow-y:auto}
-.played li{display:grid;grid-template-columns:3.4rem 1fr;gap:.6rem;padding:.35rem 0;font-size:.95rem;color:var(--bonedim)}
-.played time{font:400 .72rem var(--mono);color:var(--dim);padding-top:.2rem}
-.played small{display:block;font:400 .7rem var(--sc);letter-spacing:.04em;color:var(--faint)}
-.controls .buttons #more[aria-expanded="true"]{background:rgba(237,228,206,.06);color:var(--ink)}
-.played li.none{display:block;text-align:center}
 /* Buttons that lead on are hostis.black's own: deep red and bone, never a red haze. */
 .lead-btn{background:var(--blooddeep)}.lead-btn:hover{background:#6e1414}.lead-btn .fc-sub{color:var(--soft)}
+
+/* More: a small menu over the page, for the actions a listener needs now and then. */
+.moremenu{position:absolute;right:0;bottom:calc(100% + 6px);z-index:30;width:min(320px,100%);background:#0b0a08;border:1px solid var(--ghost);box-shadow:0 -14px 34px rgba(0,0,0,.7)}
+.moremenu[hidden]{display:none}
+.mi{display:flex;align-items:center;justify-content:space-between;gap:.6rem;width:100%;min-height:46px;padding:.55rem .95rem;background:none;border:0;border-top:1px solid var(--line);color:var(--bonedim);font:400 .72rem var(--mono);letter-spacing:.14em;text-transform:uppercase;text-align:left;cursor:pointer}
+.moremenu>.mi:first-child,.moremenu>[hidden]+.mi{border-top:0}
+button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228,206,.05)}
+.sleeprow{cursor:default}
+#sleepbtns{display:flex;gap:2px}
+#sleepbtns button{min-width:36px;min-height:34px;padding:0 .35rem;background:none;border:1px solid var(--line);color:var(--dim);font:400 .72rem var(--mono);cursor:pointer}
+#sleepbtns button:hover{color:var(--ink);border-color:var(--faint)}
+#sleepbtns button[aria-pressed="true"]{color:var(--ink);border-color:var(--ink)}
+.played{list-style:none;margin:0;padding:.2rem .95rem .6rem;max-height:10rem;overflow-y:auto;border-top:1px solid var(--line)}
+.played[hidden]{display:none}
+.played li{display:grid;grid-template-columns:3rem 1fr;gap:.5rem;padding:.3rem 0;font-size:.92rem;color:var(--bonedim)}
+.played time{font:400 .7rem var(--mono);color:var(--dim);padding-top:.2rem}
+.played small{display:block;font:400 .7rem var(--sc);letter-spacing:.04em;color:var(--faint)}
+.played li.none{display:block;color:var(--dim)}
+.controls .buttons #more[aria-expanded="true"]{background:rgba(237,228,206,.06);color:var(--ink)}
+.sl{display:flex;flex-direction:column;gap:.15rem}.sl small{font-size:.62rem;letter-spacing:.08em;text-transform:none;color:var(--dim)}.sl small:empty{display:none}
