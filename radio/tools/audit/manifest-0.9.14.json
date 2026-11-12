@@ -1,18 +1,12 @@
 {
  "release": "0.9.14",
- "commit": "ed9a91ea7216c05333be1e07751ec2ebdc81fd3f",
+ "commit": "3dda41cd31e58acd736e6015c2dba76ed3c703ec",
  "machine": {
   "os": "Linux 6.18.44-fc-v378",
   "cpus": 2,
   "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)"
  },
- "artifacts": [
-  {
-   "file": "pyrate-radio-0.9.14-to-sign.apk",
-   "sha256": "891906e8762f9abc552073ceaa976bdaf5a4868cd64178142506360a292c3c51",
-   "bytes": 45228843
-  }
- ],
+ "artifacts": [],
  "requirements": [
   {
    "id": "NET-001",

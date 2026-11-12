@@ -55,3 +55,25 @@ PASS card with 512 signed bytes after its fields (stem answered: true): in the L
 PASS card with 513 signed bytes after its fields (stem answered: true): kept out of the Log
 PASS card with 120000 signed bytes after its fields (stem answered: true): kept out of the Log
 PASS after everything: the target still answers (Some(5) ms, target 33 MB, 20 fds)
+
+# PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav> cardwire cards cardsask logreply routes now, rerun on 3dda41c after the frequency field joined the card
+PASS baseline: the target answers a listener (Some(34) ms, target 33 MB, 14 fds)
+PASS cards asked 1638208 times (882 MB out) in 30 s: a listener is still served (Some(5) ms)
+PASS cards asked: target 33 -> peak 39 MB (limit 256 MB over)
+PASS log replies: 64 answered, the largest 1983 KB (frame limit 4096 KB)
+PASS log replies: target 79 -> peak 273 MB
+PASS log replies: a listener is still served (Some(16) ms)
+PASS log replies: the whole log still comes, page by page (Some(203) entries)
+PASS web /now/e1103faf7b3dc17e2284aa431a56368397eec46941954f96cb072dcfa28d6fbf: 391350 requests, p99 4 ms (limit 1000), target 275 -> peak 287 MB, a listener Some((200, 1, 626))
+PASS web /feed/e1103faf7b3dc17e2284aa431a56368397eec46941954f96cb072dcfa28d6fbf.xml: 323046 requests, p99 5 ms (limit 1000), target 287 -> peak 287 MB, a listener Some((200, 0, 626))
+PASS web /log.json: 276806 requests, p99 6 ms (limit 1000), target 111 -> peak 111 MB, a listener Some((200, 1, 626))
+PASS web /: 149493 requests, p99 11 ms (limit 1000), target 110 -> peak 111 MB, a listener Some((200, 3, 626))
+PASS web /art/0000000000000000000000000000000000000000000000000000000000000000.jpg: 439741 requests, p99 3 ms (limit 1000), target 111 -> peak 112 MB, a listener Some((200, 1, 626))
+PASS web /episode/e1103faf7b3dc17e2284aa431a56368397eec46941954f96cb072dcfa28d6fbf/0000000000000000000000000000000000000000000000000000000000000000.mp3: 402116 requests, p99 4 ms (limit 1000), target 112 -> peak 112 MB, a listener Some((200, 0, 626))
+PASS web /nothing: 454449 requests, p99 3 ms (limit 1000), target 95 -> peak 96 MB, a listener Some((200, 2, 626))
+PASS oversized card: the Log shows a name of 0 characters
+PASS card with 512 signed bytes after its fields (stem answered: true): in the Log
+PASS card with 513 signed bytes after its fields (stem answered: true): kept out of the Log
+PASS card with 120000 signed bytes after its fields (stem answered: true): kept out of the Log
+PASS after everything: the target still answers (Some(18) ms, target 100 MB, 13 fds)
+0 failed

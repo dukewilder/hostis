@@ -1,27 +1,60 @@
-# startup_probe, LAN, native (ed9a91e)
+# startup_probe, LAN, native, --features playback (3dda41c)
 network ready in 6.5 s (2 and 2 stations on the Lanterns)
 == first open
-node up 0.00 s; first station on the dial 0.1 s
-press play to sound: Some(0.20023395) s (total from open 0.3 s)
-station to station: Some(30.962290035) s
+node up 0.01 s; first station on the dial 0.1 s
+tune NOHEMU·D807
+        0.0 s  tuned:  
+sound: chunk 1 of a track, 5769 ms in
+        0.2 s  tuned: tuning First Light tone
+        0.3 s  tuned: playing First Light tone
+press play to sound: Some(0.301946818) s (total from open 0.4 s)
+tune PASOBE·A190
+        0.0 s  switched:  
+sound: chunk 2 of a track, 75 ms in
+        0.2 s  switched: playing Second Watch tone
+station to station: Some(0.200373315) s
+tune NOHEMU·D807
 ok   stop while tuning in: 0 ms of sound after it
+tune PASOBE·A190
+        0.0 s  back on:  
+sound: chunk 3 of a track, 384 ms in
+        0.3 s  back on: playing Second Watch tone
 after stop: tuned null now null
 == second open
+2 stations from the Log as last heard
 node up 0.01 s; first station on the dial 0.0 s
-press play to sound: Some(0.300379234) s (total from open 0.3 s)
-station to station: Some(0.300492896) s
+tune NOHEMU·D807
+        0.0 s  tuned:  
+sound: chunk 4 of a track, 2740 ms in
+        0.3 s  tuned: playing First Light tone
+press play to sound: Some(0.300527846) s (total from open 0.3 s)
+tune PASOBE·A190
+        0.0 s  switched:  
+sound: chunk 4 of a track, 3028 ms in
+        0.3 s  switched: playing Second Watch tone
+station to station: Some(0.30042649) s
+tune NOHEMU·D807
 ok   stop while tuning in: 0 ms of sound after it
+tune PASOBE·A190
+        0.0 s  back on:  
+        0.3 s  back on: playing Second Watch tone
 after stop: tuned null now null
-# browser_ux.py 8097 390
-time  name on the set 0.38 s, first row 0.39 s
+# browser_ux.py 8097 390 (3dda41c)
+time  name on the set 0.35 s, first row 0.36 s
 ok   a station is on the set within 1.5 s
-time  Listen to sound 0.75 s, stages ['finding', 'tuning']
+time  Listen to sound 0.7 s, stages ['finding']
 ok   Listen reaches sound
 ok   no title before its sound
 ok   the button says Stop while playing
 ok   Stop stops at once
 ok   and stays stopped
 ok   Stop pressed while tuning in stays stopped
+time  Listen to sound after the station sat on the set 8 s: 0.42 s
+ok   a station left on the set plays within a second of Listen
+ok   the station's actions sit on one line (4 of them)
+ok   More opens with the sleep timer
+ok   a sleep timer is set and shown
+ok   the timer cancels and Escape closes More
 ok   the Station page tab opens its section
 ok   the Settings tab opens its section
 ok   the Stations tab opens its section
@@ -31,19 +64,25 @@ ok   the mini player's button plays
 ok   and stops
 ok   no errors in the console
 all passed
-# browser_ux.py 8099 390
-time  name on the set 0.96 s, first row 0.97 s
+# browser_ux.py 8099 390 (3dda41c)
+time  name on the set 0.99 s, first row 1.01 s
 ok   a station is on the set within 1.5 s
-time  Listen to sound 0.67 s, stages ['tuning']
+time  Listen to sound 0.81 s, stages ['tuning']
 ok   Listen reaches sound
 ok   no title before its sound
 ok   the button says Stop while playing
-ok   the name changes at once on a switch (Open Mic)
-time  switch to sound 0.25 s
+ok   the name changes at once on a switch (Second Watch)
+time  switch to sound 0.67 s
 ok   a switch reaches sound
 ok   Stop stops at once
 ok   and stays stopped
 ok   Stop pressed while tuning in stays stopped
+time  Listen to sound after the station sat on the set 8 s: 0.44 s
+ok   a station left on the set plays within a second of Listen
+ok   the station's actions sit on one line (5 of them)
+ok   More opens with the sleep timer
+ok   a sleep timer is set and shown
+ok   the timer cancels and Escape closes More
 ok   the Station page tab opens its section
 ok   the Settings tab opens its section
 ok   the Stations tab opens its section
@@ -53,16 +92,22 @@ ok   the mini player's button plays
 ok   and stops
 ok   no errors in the console
 all passed
-# browser_ux.py 8097 1440
-time  name on the set 0.27 s, first row 0.27 s
+# browser_ux.py 8097 1440 (3dda41c)
+time  name on the set 0.28 s, first row 0.29 s
 ok   a station is on the set within 1.5 s
-time  Listen to sound 0.86 s, stages ['finding', 'tuning']
+time  Listen to sound 0.83 s, stages ['finding', 'tuning']
 ok   Listen reaches sound
 ok   no title before its sound
 ok   the button says Stop while playing
 ok   Stop stops at once
 ok   and stays stopped
 ok   Stop pressed while tuning in stays stopped
+time  Listen to sound after the station sat on the set 8 s: 0.43 s
+ok   a station left on the set plays within a second of Listen
+ok   the station's actions sit on one line (4 of them)
+ok   More opens with the sleep timer
+ok   a sleep timer is set and shown
+ok   the timer cancels and Escape closes More
 ok   the Station page tab opens its section
 ok   the Settings tab opens its section
 ok   the Stations tab opens its section
@@ -72,19 +117,25 @@ ok   the mini player's button plays
 ok   and stops
 ok   no errors in the console
 all passed
-# browser_ux.py 8099 1440
-time  name on the set 0.98 s, first row 0.98 s
+# browser_ux.py 8099 1440 (3dda41c)
+time  name on the set 1.02 s, first row 1.07 s
 ok   a station is on the set within 1.5 s
-time  Listen to sound 0.6 s, stages ['tuning']
+time  Listen to sound 0.97 s, stages ['tuning']
 ok   Listen reaches sound
 ok   no title before its sound
 ok   the button says Stop while playing
-ok   the name changes at once on a switch (Open Mic)
-time  switch to sound 0.24 s
+ok   the name changes at once on a switch (Second Watch)
+time  switch to sound 0.65 s
 ok   a switch reaches sound
 ok   Stop stops at once
 ok   and stays stopped
 ok   Stop pressed while tuning in stays stopped
+time  Listen to sound after the station sat on the set 8 s: 0.45 s
+ok   a station left on the set plays within a second of Listen
+ok   the station's actions sit on one line (5 of them)
+ok   More opens with the sleep timer
+ok   a sleep timer is set and shown
+ok   the timer cancels and Escape closes More
 ok   the Station page tab opens its section
 ok   the Settings tab opens its section
 ok   the Stations tab opens its section
@@ -94,3 +145,33 @@ ok   the mini player's button plays
 ok   and stops
 ok   no errors in the console
 all passed
+# browser_scale.py 8099 1000 390
+rows shown 60, footer '899 stations', names on the dial 65, longest task over 9 s of refreshes 0 ms
+after Show more: 120
+search for GAPIGA·66B5 -> 1 row(s)
+search for harbour -> 215 stations match
+stations with nothing to play kept out: 106 | footer 899 stations
+rows marked Same name in the first page: 4 | kinds chips: ['On air now', 'punk', 'music', 'folk', 'news', 'sound', 'talk', 'jazz', 'readings']
+after a kind chip: 235 stations
+errors: []
+# browser_ui.py 8099
+PASS a station shows
+PASS the console names no node or station
+PASS the chatter joins
+PASS the chatter can be left
+PASS a link served from a bare address points at hostis.black
+PASS forgetting clears what the browser keeps
+PASS the page's policy refuses nothing it needs
+PASS no page errors
+# browser_scope.py
+PASS a stranger's station goes straight to the open player, which tunes it and takes it out of the address bar: http://127.0.0.1:8099/
+PASS an invitation goes to the open player, which takes its key out of the address bar
+PASS hostis.black's dial holds only HOSTIS's: 1
+PASS no chatter on hostis.black
+PASS every station leads to the open player
+PASS the open player keeps what it is given
+PASS no page errors: []
+# browser_play.py 8099
+station: Gangway
+np: Low Tide | state: {'playing': True, 'heard': True, 'stage': 'tuning', 'trouble': None, 'station': '8e689c262f5db5a3c9b99fb7d1f380b4a0f35623cbf59455a01bf766fd5c3107', 'scheduled': 2, 'ahead_ms': 12172, 'ctx': 'running', 'neighbours': 1, 'stations': 2, 'view': 'list', 'webcodecs': True}
+errors: []
