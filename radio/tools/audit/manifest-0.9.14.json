@@ -1,0 +1,428 @@
+{
+ "release": "0.9.14",
+ "commit": "ed9a91ea7216c05333be1e07751ec2ebdc81fd3f",
+ "machine": {
+  "os": "Linux 6.18.44-fc-v378",
+  "cpus": 2,
+  "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)"
+ },
+ "artifacts": [
+  {
+   "file": "pyrate-radio-0.9.14-to-sign.apk",
+   "sha256": "891906e8762f9abc552073ceaa976bdaf5a4868cd64178142506360a292c3c51",
+   "bytes": 45228843
+  }
+ ],
+ "requirements": [
+  {
+   "id": "NET-001",
+   "gate": 1,
+   "finding": "F1",
+   "assertion": "a station's real carrier is found despite 64 false claims that came first",
+   "runner": "PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav> eclipse",
+   "evidence": "tools/audit/evidence/regression-0.9.14.txt",
+   "lines": [
+    "PASS carrier eclipse"
+   ],
+   "baseline": "FAIL on db87162: never found in 240 s",
+   "fix": "8d78947 0368370",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "ARC-001",
+   "gate": 1,
+   "finding": "F2",
+   "assertion": "carried logs stay within their budget; cardless stations refused; memory comes back",
+   "runner": "PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav> logflood",
+   "evidence": "tools/audit/evidence/regression-0.9.14.txt",
+   "lines": [
+    "PASS log flood: 20 stations",
+    "PASS log flood: logs on disk",
+    "PASS log flood: target ",
+    "PASS log flood: target memory",
+    "PASS log flood: a listener",
+    "PASS log flood: the station carried"
+   ],
+   "baseline": "398 MB of logs in 60 s, no bound",
+   "fix": "7973146 30714ef",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "ARC-003",
+   "gate": 1,
+   "finding": "F6",
+   "assertion": "log replies are paged by bytes and their memory shared and fixed",
+   "runner": "PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav> logreply",
+   "evidence": "tools/audit/evidence/regression-0.9.14.txt",
+   "lines": [
+    "PASS log replies: 64 answered",
+    "PASS log replies: target",
+    "PASS log replies: a listener",
+    "PASS log replies: the whole log"
+   ],
+   "baseline": "target killed at 6,040 MB",
+   "fix": "7973146 8d78947",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "KEY-009",
+   "gate": 1,
+   "finding": "F3",
+   "assertion": "signed bytes after a card's fields are bounded on the wire",
+   "runner": "PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav> cardwire",
+   "evidence": "tools/audit/evidence/regression-0.9.14.txt",
+   "lines": [
+    "PASS card with 512",
+    "PASS card with 513",
+    "PASS card with 120000"
+   ],
+   "baseline": "120 KB tail accepted",
+   "fix": "7973146",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "KEY-001",
+   "gate": 1,
+   "finding": "F5",
+   "assertion": "a revoked deputy's card shows no tip, no cover and none of its words as the station's",
+   "runner": "PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav> deputy",
+   "evidence": "tools/audit/evidence/regression-0.9.14.txt",
+   "lines": [
+    "PASS revoked deputy, fresh listener: no tip",
+    "PASS revoked deputy, fresh listener: no cover",
+    "PASS revoked deputy, fresh listener: none of its words"
+   ],
+   "baseline": "name 'Hijacked' shown",
+   "fix": "0368370 44c4036",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "DOS-002",
+   "gate": 1,
+   "finding": "F4",
+   "assertion": "a browser tab under slow, flood and oversized requests keeps playing within memory",
+   "runner": "tools/test/browser_attack.py <port> <relay> pentest <slow|flood|big> 60",
+   "evidence": "tools/audit/evidence/browser-f4-0.9.14.txt",
+   "lines": [
+    "PASS slow: the tab kept playing",
+    "PASS slow: browser memory",
+    "PASS flood: the tab kept playing",
+    "PASS flood: browser memory",
+    "PASS big: the tab kept playing",
+    "PASS big: browser memory"
+   ],
+   "baseline": "see browser-f4-0.9.12.txt",
+   "fix": "7973146",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "DOS-007",
+   "gate": 1,
+   "finding": "F7",
+   "assertion": "every web route answers at p99 under 1 s under 64 clients, a listener served",
+   "runner": "PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav> now routes",
+   "evidence": "tools/audit/evidence/regression-0.9.14.txt",
+   "lines": [
+    "PASS web /now/",
+    "PASS web /feed/",
+    "PASS web /log.json",
+    "PASS web /:",
+    "PASS web /art/",
+    "PASS web /episode/",
+    "PASS web /nothing"
+   ],
+   "baseline": "/now p99 9,966 ms",
+   "fix": "7973146",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "KEY-008",
+   "gate": 1,
+   "finding": "N1",
+   "assertion": "an entry nested 40,000 deep does not stop the node",
+   "runner": "PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav> nest",
+   "evidence": "tools/audit/evidence/regression-0.9.14.txt",
+   "lines": [
+    "PASS nested entry 40,000 deep"
+   ],
+   "baseline": "stack overflow at 30,000 deep",
+   "fix": "9468541",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "DOS-008",
+   "gate": 1,
+   "finding": "N5",
+   "assertion": "the costliest schedule a station can sign costs its listeners little",
+   "runner": "PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav> schedule",
+   "evidence": "tools/audit/evidence/regression-0.9.14.txt",
+   "lines": [
+    "PASS costly schedule: the day's bill",
+    "PASS costly schedule: what is on",
+    "PASS costly schedule: tuned and playing",
+    "PASS costly schedule: a listener"
+   ],
+   "baseline": "bill 6,537 ms with the store locked, 14% of a core playing (3885b65)",
+   "fix": "bd3951e 528a0e0",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "DOS-001",
+   "gate": 2,
+   "finding": "0.9.12",
+   "assertion": "stem floods, slow readers (with a long log beside them), stream floods and junk are bounded",
+   "runner": "PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav> stems slow flood",
+   "evidence": "tools/audit/evidence/regression-0.9.14.txt",
+   "lines": [
+    "PASS stem flood: 1",
+    "PASS stem flood: a listener",
+    "PASS junk stem",
+    "PASS slow readers: 640",
+    "PASS slow readers: still",
+    "PASS 400 identities"
+   ],
+   "baseline": "2.6 GB in 25 s (0.9.11); logreply then slow: listener timed out on 0.9.13 (95c77cc)",
+   "fix": "0.9.12 ed9a91e",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "DOS-009",
+   "gate": 1,
+   "finding": "0.9.14",
+   "assertion": "a crowd asking for cards as fast as it can holds memory flat and a listener is served",
+   "runner": "PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav> cardsask",
+   "evidence": "tools/audit/evidence/regression-0.9.14.txt",
+   "lines": [
+    "PASS cards asked ",
+    "PASS cards asked: target"
+   ],
+   "baseline": "new request",
+   "fix": "cb73f91 ed9a91e",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "NET-003",
+   "gate": 1,
+   "finding": "0.9.14",
+   "assertion": "a door hands on only signed, fresh carrier notes, and only for the stations it shows",
+   "runner": "cargo test -p pyrate-node --lib",
+   "evidence": "tools/audit/evidence/tests-0.9.14.txt",
+   "lines": [
+    "test net::tests::notes_pass_on_only_signed_fresh_notes_for_the_stations_shown ... ok"
+   ],
+   "baseline": "new",
+   "fix": "cb73f91",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "KEY-010",
+   "gate": 2,
+   "finding": "0.9.14",
+   "assertion": "a card's recordings count and name age ride after its fields; older cards read as unknown",
+   "runner": "cargo test -p pyrate-node --lib",
+   "evidence": "tools/audit/evidence/tests-0.9.14.txt",
+   "lines": [
+    "test net::tests::tracks_ride_after_explicit_and_older_cards_read_as_unknown ... ok"
+   ],
+   "baseline": "new",
+   "fix": "ed9a91e",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "UX-001",
+   "gate": 1,
+   "finding": "0.9.14",
+   "assertion": "no sound reaches the speaker after Stop pressed while tuning in",
+   "runner": "PYRATE_LAN_ANY=1 PYRATE_NULL_AUDIO=1 target/release/startup_probe <dir> <wav>",
+   "evidence": "tools/audit/evidence/ux-0.9.14.txt",
+   "lines": [
+    "ok   stop while tuning in: 0 ms"
+   ],
+   "baseline": "up to 24 s of sound after Stop (0.9.13)",
+   "fix": "619a19a",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "UX-002",
+   "gate": 1,
+   "finding": "0.9.14",
+   "assertion": "the browser names no song before its sound, Stop stops (also mid-connect), every section opens and Back returns",
+   "runner": "tools/test/browser_ux.py <port> <dir> <width>",
+   "evidence": "tools/audit/evidence/ux-0.9.14.txt",
+   "lines": [
+    "ok   no title before its sound",
+    "ok   Stop stops at once",
+    "ok   Stop pressed while tuning in stays stopped",
+    "ok   Back returns to the stations",
+    "ok   no errors in the console"
+   ],
+   "baseline": "title shown while searching (0.9.13)",
+   "fix": "cb73f91",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "FUZ-001",
+   "gate": 2,
+   "finding": "0.9.12",
+   "assertion": "mutated frames and requests panic nothing",
+   "runner": "PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav> fuzz netfuzz",
+   "evidence": "tools/audit/evidence/regression-0.9.14.txt",
+   "lines": [
+    "PASS decoder fuzz",
+    "PASS network fuzz"
+   ],
+   "baseline": "",
+   "fix": "0.9.12",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "NET-002",
+   "gate": 2,
+   "finding": "0.9.12",
+   "assertion": "a declined stem is handled once between two Lanterns",
+   "runner": "PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav> loop",
+   "evidence": "tools/audit/evidence/regression-0.9.14.txt",
+   "lines": [
+    "PASS declined stem"
+   ],
+   "baseline": "",
+   "fix": "0.9.12",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "WEB-001",
+   "gate": 2,
+   "finding": "0.9.12",
+   "assertion": "half-open web requests hold nothing",
+   "runner": "PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav> web",
+   "evidence": "tools/audit/evidence/regression-0.9.14.txt",
+   "lines": [
+    "PASS web: 2",
+    "PASS web: still served"
+   ],
+   "baseline": "",
+   "fix": "0.9.12",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "KEY-005",
+   "gate": 2,
+   "finding": "0.9.12",
+   "assertion": "an oversized card never reaches the Log",
+   "runner": "PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav> cards",
+   "evidence": "tools/audit/evidence/regression-0.9.14.txt",
+   "lines": [
+    "PASS oversized card"
+   ],
+   "baseline": "200,000 characters shown (0.9.11)",
+   "fix": "0.9.12",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "KEY-002",
+   "gate": 2,
+   "finding": "",
+   "assertion": "each kind of entry takes only the keys allowed it; no move, replay, fork or backdate",
+   "runner": "cargo test -p pyrate-core --test authority",
+   "evidence": "tools/audit/evidence/tests-0.9.14.txt",
+   "lines": [
+    "test each_kind_of_entry_takes_only_the_keys_allowed_it ... ok",
+    "test a_signed_entry_cannot_be_moved_replayed_forked_or_backdated ... ok"
+   ],
+   "baseline": "",
+   "fix": "d31f186",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "FUZ-002",
+   "gate": 2,
+   "finding": "N4 N5",
+   "assertion": "random signed logs never make the clock panic or take a second; the quick clock agrees with the walking one",
+   "runner": "cargo test -p pyrate-core --test clock_fuzz",
+   "evidence": "tools/audit/evidence/tests-0.9.14.txt",
+   "lines": [
+    "test the_clock_survives_any_log ... ok",
+    "test passing_over_changes_nothing_on_any_log ... ok",
+    "test passing_over_changes_nothing_on_any_rota ... ok",
+    "test remembered_answers_are_the_walked_answers ... ok",
+    "test the_costliest_schedules_a_station_can_sign ... ok",
+    "test a_rota_block_naming_thousands_of_recordings ... ok"
+   ],
+   "baseline": "4.7 s to say what is on, 82 s for a bill",
+   "fix": "bd3951e",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "ARC-004",
+   "gate": 2,
+   "finding": "N6",
+   "assertion": "a log torn by a crash is cut back and keeps what comes after",
+   "runner": "cargo test -p pyrate-node --lib",
+   "evidence": "tools/audit/evidence/tests-0.9.14.txt",
+   "lines": [
+    "test store::tests::a_log_torn_by_a_crash_is_cut_back_and_keeps_what_comes_after ... ok"
+   ],
+   "baseline": "",
+   "fix": "3885b65",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "ARC-007",
+   "gate": 2,
+   "finding": "N8",
+   "assertion": "over quota the hold lets go of orphans, then the largest carried station, never our own",
+   "runner": "cargo test -p pyrate-node --lib",
+   "evidence": "tools/audit/evidence/tests-0.9.14.txt",
+   "lines": [
+    "test store::tests::over_quota_the_hold_lets_go_of_orphans_then_the_largest_carried_station_never_our_own ... ok"
+   ],
+   "baseline": "769 MB spike, listener 7.3 s (528a0e0)",
+   "fix": "30714ef",
+   "result": "PASS",
+   "unmet": []
+  },
+  {
+   "id": "PRV-001",
+   "gate": 0,
+   "finding": "Gate 0",
+   "assertion": "privacy checks, the two that need playback included",
+   "runner": "PYRATE_NULL_AUDIO=1 PYRATE_LAN_ANY=1 target/release/privacy_test <dir> <wav>",
+   "evidence": "tools/audit/evidence/privacy-0.9.14.txt",
+   "lines": [
+    "PASS a phone asks carriers directly only when its owner says so",
+    "PASS with one node known and no two-hop route, nothing plays",
+    "PASS and the carrier was asked for nothing directly",
+    "PASS a broadcasting phone with one node in reach",
+    "PASS with the switch on, it plays",
+    "PASS with a Lantern beside the keeper",
+    "PASS with a second node in reach"
+   ],
+   "baseline": "two playback checks failed with no speaker",
+   "fix": "3885b65",
+   "result": "PASS",
+   "unmet": []
+  }
+ ]
+}

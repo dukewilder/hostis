@@ -1,0 +1,96 @@
+# startup_probe, LAN, native (ed9a91e)
+network ready in 6.5 s (2 and 2 stations on the Lanterns)
+== first open
+node up 0.00 s; first station on the dial 0.1 s
+press play to sound: Some(0.20023395) s (total from open 0.3 s)
+station to station: Some(30.962290035) s
+ok   stop while tuning in: 0 ms of sound after it
+after stop: tuned null now null
+== second open
+node up 0.01 s; first station on the dial 0.0 s
+press play to sound: Some(0.300379234) s (total from open 0.3 s)
+station to station: Some(0.300492896) s
+ok   stop while tuning in: 0 ms of sound after it
+after stop: tuned null now null
+# browser_ux.py 8097 390
+time  name on the set 0.38 s, first row 0.39 s
+ok   a station is on the set within 1.5 s
+time  Listen to sound 0.75 s, stages ['finding', 'tuning']
+ok   Listen reaches sound
+ok   no title before its sound
+ok   the button says Stop while playing
+ok   Stop stops at once
+ok   and stays stopped
+ok   Stop pressed while tuning in stays stopped
+ok   the Station page tab opens its section
+ok   the Settings tab opens its section
+ok   the Stations tab opens its section
+ok   Back returns to the stations
+ok   the mini player shows once the set is out of view
+ok   the mini player's button plays
+ok   and stops
+ok   no errors in the console
+all passed
+# browser_ux.py 8099 390
+time  name on the set 0.96 s, first row 0.97 s
+ok   a station is on the set within 1.5 s
+time  Listen to sound 0.67 s, stages ['tuning']
+ok   Listen reaches sound
+ok   no title before its sound
+ok   the button says Stop while playing
+ok   the name changes at once on a switch (Open Mic)
+time  switch to sound 0.25 s
+ok   a switch reaches sound
+ok   Stop stops at once
+ok   and stays stopped
+ok   Stop pressed while tuning in stays stopped
+ok   the Station page tab opens its section
+ok   the Settings tab opens its section
+ok   the Stations tab opens its section
+ok   Back returns to the stations
+ok   the mini player shows once the set is out of view
+ok   the mini player's button plays
+ok   and stops
+ok   no errors in the console
+all passed
+# browser_ux.py 8097 1440
+time  name on the set 0.27 s, first row 0.27 s
+ok   a station is on the set within 1.5 s
+time  Listen to sound 0.86 s, stages ['finding', 'tuning']
+ok   Listen reaches sound
+ok   no title before its sound
+ok   the button says Stop while playing
+ok   Stop stops at once
+ok   and stays stopped
+ok   Stop pressed while tuning in stays stopped
+ok   the Station page tab opens its section
+ok   the Settings tab opens its section
+ok   the Stations tab opens its section
+ok   Back returns to the stations
+ok   the mini player shows once the set is out of view
+ok   the mini player's button plays
+ok   and stops
+ok   no errors in the console
+all passed
+# browser_ux.py 8099 1440
+time  name on the set 0.98 s, first row 0.98 s
+ok   a station is on the set within 1.5 s
+time  Listen to sound 0.6 s, stages ['tuning']
+ok   Listen reaches sound
+ok   no title before its sound
+ok   the button says Stop while playing
+ok   the name changes at once on a switch (Open Mic)
+time  switch to sound 0.24 s
+ok   a switch reaches sound
+ok   Stop stops at once
+ok   and stays stopped
+ok   Stop pressed while tuning in stays stopped
+ok   the Station page tab opens its section
+ok   the Settings tab opens its section
+ok   the Stations tab opens its section
+ok   Back returns to the stations
+ok   the mini player shows once the set is out of view
+ok   the mini player's button plays
+ok   and stops
+ok   no errors in the console
+all passed

@@ -9,16 +9,18 @@ import hashlib, json, os, platform, subprocess, sys
 
 R = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 EV = "tools/audit/evidence"
-REG = f"{EV}/regression-0.9.13.txt"
-F4 = f"{EV}/browser-f4-0.9.13.txt"
-TESTS = f"{EV}/tests-0.9.13.txt"
-PRIV = f"{EV}/privacy-0.9.13.txt"
+V = sys.argv[1] if len(sys.argv) > 1 else "0.9.14"
+REG = f"{EV}/regression-{V}.txt"
+F4 = f"{EV}/browser-f4-{V}.txt"
+TESTS = f"{EV}/tests-{V}.txt"
+PRIV = f"{EV}/privacy-{V}.txt"
+UX = f"{EV}/ux-{V}.txt"
 H = "PYRATE_NULL_AUDIO=1 PYRATE_LOG_MB=64 PYRATE_LAN_ANY=1 target/release/pentest <dir> <wav>"
 
 # id, gate, finding, what must hold, runner, evidence, line prefixes, baseline, fix commits
 REQ = [
     ("NET-001", 1, "F1", "a station's real carrier is found despite 64 false claims that came first", f"{H} eclipse", REG, ["PASS carrier eclipse"], "FAIL on db87162: never found in 240 s", "8d78947 0368370"),
-    ("ARC-001", 1, "F2", "carried logs stay within their budget; cardless stations refused; memory comes back", f"{H} logflood", REG, ["PASS log flood: 20 stations", "PASS log flood: logs on disk", "PASS log flood: target 3", "PASS log flood: target memory", "PASS log flood: a listener", "PASS log flood: the station carried"], "398 MB of logs in 60 s, no bound", "7973146 30714ef"),
+    ("ARC-001", 1, "F2", "carried logs stay within their budget; cardless stations refused; memory comes back", f"{H} logflood", REG, ["PASS log flood: 20 stations", "PASS log flood: logs on disk", "PASS log flood: target ", "PASS log flood: target memory", "PASS log flood: a listener", "PASS log flood: the station carried"], "398 MB of logs in 60 s, no bound", "7973146 30714ef"),
     ("ARC-003", 1, "F6", "log replies are paged by bytes and their memory shared and fixed", f"{H} logreply", REG, ["PASS log replies: 64 answered", "PASS log replies: target", "PASS log replies: a listener", "PASS log replies: the whole log"], "target killed at 6,040 MB", "7973146 8d78947"),
     ("KEY-009", 1, "F3", "signed bytes after a card's fields are bounded on the wire", f"{H} cardwire", REG, ["PASS card with 512", "PASS card with 513", "PASS card with 120000"], "120 KB tail accepted", "7973146"),
     ("KEY-001", 1, "F5", "a revoked deputy's card shows no tip, no cover and none of its words as the station's", f"{H} deputy", REG, ["PASS revoked deputy, fresh listener: no tip", "PASS revoked deputy, fresh listener: no cover", "PASS revoked deputy, fresh listener: none of its words"], "name 'Hijacked' shown", "0368370 44c4036"),
@@ -26,7 +28,12 @@ REQ = [
     ("DOS-007", 1, "F7", "every web route answers at p99 under 1 s under 64 clients, a listener served", f"{H} now routes", REG, ["PASS web /now/", "PASS web /feed/", "PASS web /log.json", "PASS web /:", "PASS web /art/", "PASS web /episode/", "PASS web /nothing"], "/now p99 9,966 ms", "7973146"),
     ("KEY-008", 1, "N1", "an entry nested 40,000 deep does not stop the node", f"{H} nest", REG, ["PASS nested entry 40,000 deep"], "stack overflow at 30,000 deep", "9468541"),
     ("DOS-008", 1, "N5", "the costliest schedule a station can sign costs its listeners little", f"{H} schedule", REG, ["PASS costly schedule: the day's bill", "PASS costly schedule: what is on", "PASS costly schedule: tuned and playing", "PASS costly schedule: a listener"], "bill 6,537 ms with the store locked, 14% of a core playing (3885b65)", "bd3951e 528a0e0"),
-    ("DOS-001", 2, "0.9.12", "stem floods, slow readers, stream floods and junk are bounded", f"{H} stems slow flood", REG, ["PASS stem flood: 1", "PASS stem flood: a listener", "PASS junk stem", "PASS slow readers: 640", "PASS slow readers: still", "PASS 400 identities"], "2.6 GB in 25 s (0.9.11)", "0.9.12"),
+    ("DOS-001", 2, "0.9.12", "stem floods, slow readers (with a long log beside them), stream floods and junk are bounded", f"{H} stems slow flood", REG, ["PASS stem flood: 1", "PASS stem flood: a listener", "PASS junk stem", "PASS slow readers: 640", "PASS slow readers: still", "PASS 400 identities"], "2.6 GB in 25 s (0.9.11); logreply then slow: listener timed out on 0.9.13 (95c77cc)", "0.9.12 ed9a91e"),
+    ("DOS-009", 1, "0.9.14", "a crowd asking for cards as fast as it can holds memory flat and a listener is served", f"{H} cardsask", REG, ["PASS cards asked ", "PASS cards asked: target"], "new request", "cb73f91 ed9a91e"),
+    ("NET-003", 1, "0.9.14", "a door hands on only signed, fresh carrier notes, and only for the stations it shows", "cargo test -p pyrate-node --lib", TESTS, ["test net::tests::notes_pass_on_only_signed_fresh_notes_for_the_stations_shown ... ok"], "new", "cb73f91"),
+    ("KEY-010", 2, "0.9.14", "a card's recordings count and name age ride after its fields; older cards read as unknown", "cargo test -p pyrate-node --lib", TESTS, ["test net::tests::tracks_ride_after_explicit_and_older_cards_read_as_unknown ... ok"], "new", "ed9a91e"),
+    ("UX-001", 1, "0.9.14", "no sound reaches the speaker after Stop pressed while tuning in", "PYRATE_LAN_ANY=1 PYRATE_NULL_AUDIO=1 target/release/startup_probe <dir> <wav>", UX, ["ok   stop while tuning in: 0 ms"], "up to 24 s of sound after Stop (0.9.13)", "619a19a"),
+    ("UX-002", 1, "0.9.14", "the browser names no song before its sound, Stop stops (also mid-connect), every section opens and Back returns", "tools/test/browser_ux.py <port> <dir> <width>", UX, ["ok   no title before its sound", "ok   Stop stops at once", "ok   Stop pressed while tuning in stays stopped", "ok   Back returns to the stations", "ok   no errors in the console"], "title shown while searching (0.9.13)", "cb73f91"),
     ("FUZ-001", 2, "0.9.12", "mutated frames and requests panic nothing", f"{H} fuzz netfuzz", REG, ["PASS decoder fuzz", "PASS network fuzz"], "", "0.9.12"),
     ("NET-002", 2, "0.9.12", "a declined stem is handled once between two Lanterns", f"{H} loop", REG, ["PASS declined stem"], "", "0.9.12"),
     ("WEB-001", 2, "0.9.12", "half-open web requests hold nothing", f"{H} web", REG, ["PASS web: 2", "PASS web: still served"], "", "0.9.12"),
