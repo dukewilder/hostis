@@ -344,8 +344,12 @@ pub struct Inner {
     stem_misses: Mutex<HashMap<StationId, u32>>,
     /// Stem cargo relayed lately, by fingerprint: a stem that comes round again spreads.
     pub(crate) stem_seen: Mutex<std::collections::VecDeque<Hash>>,
+    /// Stems this node has been handed, for the attack harness.
+    pub(crate) stems_in: std::sync::atomic::AtomicU64,
     /// Nodes that failed to answer lately, and when: asked only after the others.
     pub(crate) failed: Mutex<HashMap<[u8; 32], u64>>,
+    /// Nodes that answered this one lately: trusted to keep a place among a station's carriers.
+    answered: Mutex<HashMap<[u8; 32], u64>>,
     /// The device's hold key, for the small files the node keeps beside its store.
     pub(crate) hold: hold::Hold,
     /// Where carriers said they can be reached, signed by each: the network's own address book.
@@ -427,9 +431,17 @@ impl ProtocolHandler for Proto {
                         inner.serve(other)
                     }
                 };
+                // The answer goes out within twenty seconds or not at all: a reader that stops
+                // reading frees its slot when the time runs out.
                 if let Ok(out) = postcard::to_stdvec(&resp) {
-                    let _ = send.write_all(&out).await;
-                    let _ = send.finish();
+                    match tokio::time::timeout(Duration::from_secs(20), send.write_all(&out)).await {
+                        Ok(Ok(())) => {
+                            let _ = send.finish();
+                        }
+                        _ => {
+                            let _ = send.reset(0u32.into());
+                        }
+                    }
                 }
             });
         }
@@ -517,7 +529,18 @@ impl Inner {
             anyhow::Ok(postcard::from_bytes(&bytes)?)
         };
         match tokio::time::timeout(Duration::from_secs(20), fut).await {
-            Ok(Ok(r)) => Ok(r),
+            Ok(Ok(r)) => {
+                let mut a = self.answered.lock().unwrap();
+                if a.len() >= 512 {
+                    let now = now_ms();
+                    a.retain(|_, t| now.saturating_sub(*t) < 24 * 3_600_000);
+                    if a.len() >= 512 {
+                        a.clear();
+                    }
+                }
+                a.insert(*node.as_bytes(), now_ms());
+                Ok(r)
+            }
             Ok(Err(e)) => {
                 self.conns.lock().unwrap().remove(&node);
                 Err(e)
@@ -849,7 +872,10 @@ impl Inner {
                 }
                 let l = log.entry(station).or_default();
                 let card = l.announce.as_ref().map(|a| a.head);
-                net::note_carrier(&mut l.carriers, node, head, card, now);
+                let answered = self.answered.lock().unwrap();
+                let trusted = |n: &[u8; 32]| answered.contains_key(n) || self.doors.iter().any(|d| d.as_bytes() == n);
+                net::note_carrier(&mut l.carriers, node, head, card, now, trusted);
+                drop(answered);
                 let ours = self.store.lock().unwrap().logs.get(&station).map(|x| x.len()).unwrap_or(0);
                 if head > ours {
                     return Some(station);
@@ -994,7 +1020,7 @@ impl Inner {
                     _ => None,
                 };
                 let explicit = log.explicit();
-                let card = net::Card { station: id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof, cover, accent, kinds, mature, tip, explicit };
+                let card = net::Card { station: id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof, cover, accent, kinds, mature, tip, explicit }.clipped();
                 // A card is signed afresh only when something on it changes, or every eight to
                 // twelve minutes: a card stamped every twenty seconds would tell the network, to
                 // the second, when its keeper's device is awake.
@@ -1369,7 +1395,7 @@ impl Inner {
             s.logs.iter().filter_map(|(id, a)| Some((*id, hex(&a.art()?.1?.hash)))).collect()
         };
         let log = self.log.lock().unwrap();
-        let mut v: Vec<(u64, Value)> = log
+        let mut v: Vec<(u64, Value, Option<net::Announce>)> = log
             .iter()
             .filter(|(_, l)| l.fresh(now))
             .filter_map(|(id, l)| {
@@ -1390,7 +1416,8 @@ impl Inner {
                 let show = !is_marooned && (is_kept || !kept_art_only);
                 let accent = a.accent.map(|c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]));
                 Some((aboard + if is_kept { 1 << 40 } else { 0 }, json!({
-                    "kinds": a.kinds, "mature": a.mature, "explicit": a.explicit, "tip": a.tip,
+                    "kinds": a.kinds, "mature": a.mature, "explicit": a.explicit,
+                    "tip": a.tip,
                     "cover": a.cover.filter(|_| show).map(|h| crate::hex(&h)),
                     "banner": banners.get(id).filter(|_| show),
                     "accent": accent,
@@ -1398,9 +1425,22 @@ impl Inner {
                     "port": a.port.as_deref().map(shown), "live": a.live, "aboard": aboard, "kept": is_kept, "marooned": is_marooned, "since": a.since,
                     "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),
                     "pocket": self.is_pocket(id),
-                })))
+                }), a.proof.is_some().then(|| a.clone())))
             })
             .collect();
+        drop(log);
+        // A deputy's card shows its tip address only once this device's log of the station is
+        // current and still names that deputy (checked with the Log let go).
+        {
+            let store = self.store.lock().unwrap();
+            for (_, j, deputy) in v.iter_mut() {
+                if let Some(a) = deputy {
+                    if !net::deputy_current(a, store.logs.get(&a.station)) {
+                        j["tip"] = Value::Null;
+                    }
+                }
+            }
+        }
         v.sort_by(|a, b| b.0.cmp(&a.0).then(a.1["name"].as_str().cmp(&b.1["name"].as_str())));
         json!(v.into_iter().map(|x| x.1).collect::<Vec<_>>())
     }
@@ -1964,7 +2004,9 @@ impl Node {
             strict: std::sync::atomic::AtomicBool::new(!cfg.dir.join("direct-ok").exists()),
             stem_misses: Mutex::new(HashMap::new()),
             stem_seen: Mutex::new(std::collections::VecDeque::new()),
+            stems_in: Default::default(),
             failed: Mutex::new(HashMap::new()),
+            answered: Mutex::new(HashMap::new()),
             hold,
             book: book.clone(),
             dark,
@@ -2101,6 +2143,17 @@ impl Node {
         }
 
         Ok(Self { rt, inner, _router: router })
+    }
+
+    #[doc(hidden)]
+    pub fn addr(&self) -> iroh::EndpointAddr {
+        self.inner.endpoint.addr()
+    }
+
+    /// For the attack harness: tasks alive on this node's runtime, and stems it was handed.
+    #[doc(hidden)]
+    pub fn load(&self) -> (usize, u64) {
+        (self.rt.metrics().num_alive_tasks(), self.inner.stems_in.load(std::sync::atomic::Ordering::Relaxed))
     }
 
     pub fn id(&self) -> EndpointId {

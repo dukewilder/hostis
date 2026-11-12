@@ -68,12 +68,7 @@ impl Hold {
         let old = dir.join("hold.key");
         if path != old {
             if let Ok(k) = std::fs::read(&old).map_err(anyhow::Error::from).and_then(|b| <[u8; 32]>::try_from(b.as_slice()).map_err(anyhow::Error::from)) {
-                std::fs::write(&path, k)?;
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
-                }
+                write_secret(&path, &k)?;
                 if std::fs::read(&path).ok().as_deref() == Some(&k[..]) {
                     crate::say("the hold key is copied to PYRATE_HOLD_KEY; once this Lantern runs, remove the old hold.key beside the data");
                     return Ok(Self::new(&k));
@@ -90,12 +85,7 @@ impl Hold {
         }
         let mut k = [0u8; 32];
         rand::RngCore::fill_bytes(&mut rand::thread_rng(), &mut k);
-        std::fs::write(&path, k)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
-        }
+        write_secret(&path, &k)?;
         Ok(Self::new(&k))
     }
 
@@ -222,3 +212,40 @@ fn unlock_pages(k: &[u8; 32]) {
 fn lock_pages(_: &[u8; 32]) {}
 #[cfg(not(unix))]
 fn unlock_pages(_: &[u8; 32]) {}
+
+/// Writes a secret so that no one else can read it at any moment: a new file opened readable by
+/// its owner alone, never through a link, then moved into place in one step.
+pub fn write_secret(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let tmp = path.with_file_name(format!(".{}.{}.tmp", path.file_name().and_then(|n| n.to_str()).unwrap_or("secret"), rand::random::<u64>()));
+    let mut o = std::fs::OpenOptions::new();
+    o.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.mode(0o600);
+    }
+    let mut f = o.open(&tmp)?;
+    let done = f.write_all(bytes).and_then(|_| f.sync_all()).and_then(|_| std::fs::rename(&tmp, path));
+    if done.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    done
+}
+
+#[cfg(all(test, unix))]
+mod secret_tests {
+    #[test]
+    fn secrets_are_never_readable_by_others() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = std::env::temp_dir().join(format!("pyrate-secret-{}", rand::random::<u64>()));
+        std::fs::create_dir_all(&d).unwrap();
+        let p = d.join("hold.key");
+        super::write_secret(&p, &[7; 32]).unwrap();
+        assert_eq!(std::fs::metadata(&p).unwrap().permissions().mode() & 0o777, 0o600);
+        super::write_secret(&p, &[8; 32]).unwrap();
+        assert_eq!(std::fs::read(&p).unwrap(), vec![8; 32]);
+        assert_eq!(std::fs::read_dir(&d).unwrap().count(), 1);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+}

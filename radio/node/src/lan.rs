@@ -17,12 +17,50 @@ use serde::{Deserialize, Serialize};
 use crate::{Inner, say};
 
 const PORT: u16 = 47823;
-const MAGIC: &[u8] = b"pyrate/lan/v1";
+const MAGIC: &[u8] = b"pyrate/lan/v2";
 
+/// A node's word that it is here: signed with its own key and dated, so no one on the network
+/// can speak for another node or replay an old beacon.
 #[derive(Serialize, Deserialize)]
 struct Beacon {
     node: [u8; 32],
     addrs: Vec<SocketAddr>,
+    at_ms: u64,
+    sig: Vec<u8>,
+}
+
+impl Beacon {
+    /// The node that signed this beacon, if it is the node it names and was sent within two
+    /// minutes: no one can name another node or replay an old beacon. The addresses are then
+    /// held to the one the beacon came from, so no one can point a node at an address it does
+    /// not hold.
+    fn signer(&self, now: u64) -> Option<EndpointId> {
+        let id = EndpointId::from_bytes(&self.node).ok()?;
+        let sig = <[u8; 64]>::try_from(self.sig.as_slice()).ok()?;
+        (now.abs_diff(self.at_ms) <= 120_000 && id.verify(&Self::message(&self.node, &self.addrs, self.at_ms), &iroh::Signature::from_bytes(&sig)).is_ok()).then_some(id)
+    }
+
+    fn message(node: &[u8; 32], addrs: &[SocketAddr], at_ms: u64) -> Vec<u8> {
+        let mut m = MAGIC.to_vec();
+        m.extend_from_slice(&postcard::to_stdvec(&(node, addrs, at_ms)).unwrap_or_default());
+        m
+    }
+}
+
+/// Beacons taken lately, by address and node: one every ten seconds from each node, eight nodes
+/// from any one address, a few hundred in all.
+fn fresh_sender(seen: &mut std::collections::HashMap<(std::net::IpAddr, [u8; 32]), u64>, from: std::net::IpAddr, node: [u8; 32], now: u64) -> bool {
+    seen.retain(|_, t| now.saturating_sub(*t) < 60_000);
+    let key = (from, node);
+    if let Some(t) = seen.get(&key) {
+        if now.saturating_sub(*t) < 10_000 {
+            return false;
+        }
+    } else if seen.len() >= 256 || seen.keys().filter(|(ip, _)| *ip == from).count() >= 8 {
+        return false;
+    }
+    seen.insert(key, now);
+    true
 }
 
 /// An address only the local network can reach: the only kind a beacon carries.
@@ -68,6 +106,7 @@ impl Inner {
             };
             say("listening for radios on this network");
             let mut buf = vec![0u8; 2048];
+            let mut seen = std::collections::HashMap::new();
             let mut tick = tokio::time::interval(Duration::from_secs(15));
             loop {
                 if !me.lan_on() {
@@ -80,21 +119,27 @@ impl Inner {
                         if addrs.is_empty() {
                             continue;
                         }
-                        let b = Beacon { node: *me.endpoint.id().as_bytes(), addrs };
+                        let (node, at_ms) = (*me.endpoint.id().as_bytes(), crate::now_ms());
+                        let sig = me.endpoint.secret_key().sign(&Beacon::message(&node, &addrs, at_ms)).to_bytes().to_vec();
+                        let b = Beacon { node, addrs, at_ms, sig };
                         if let Ok(body) = postcard::to_stdvec(&b) {
                             let msg = [MAGIC, &body].concat();
                             let _ = sock.send_to(&msg, (Ipv4Addr::BROADCAST, PORT)).await;
                         }
                     }
                     got = sock.recv_from(&mut buf) => {
-                        let Ok((n, _)) = got else { continue };
+                        let Ok((n, from)) = got else { continue };
                         let Some(body) = buf[..n].strip_prefix(MAGIC) else { continue };
                         let Ok(b) = postcard::from_bytes::<Beacon>(body) else { continue };
-                        let Ok(id) = EndpointId::from_bytes(&b.node) else { continue };
+                        let now = crate::now_ms();
+                        let Some(id) = b.signer(now) else { continue };
                         if id == me.endpoint.id() {
                             continue;
                         }
-                        let addrs: Vec<SocketAddr> = b.addrs.into_iter().filter(local).take(8).collect();
+                        if !fresh_sender(&mut seen, from.ip(), b.node, now) {
+                            continue;
+                        }
+                        let addrs: Vec<SocketAddr> = b.addrs.into_iter().filter(|a| a.ip() == from.ip()).filter(local).take(8).collect();
                         if addrs.is_empty() {
                             continue;
                         }
@@ -126,5 +171,43 @@ mod tests {
         assert!(super::local(&"192.168.1.9:4000".parse().unwrap()));
         assert!(super::local(&"[fe80::1]:4000".parse().unwrap()));
         assert!(!super::local(&"8.8.8.8:4000".parse().unwrap()));
+    }
+}
+
+#[cfg(test)]
+mod beacon_tests {
+    use super::*;
+
+    fn beacon(k: &iroh::SecretKey, addrs: Vec<SocketAddr>, at_ms: u64) -> Beacon {
+        let node = *k.public().as_bytes();
+        let sig = k.sign(&Beacon::message(&node, &addrs, at_ms)).to_bytes().to_vec();
+        Beacon { node, addrs, at_ms, sig }
+    }
+
+    #[test]
+    fn beacons_are_signed_dated_and_rate_limited() {
+        let k = iroh::SecretKey::generate();
+        let a: SocketAddr = "192.168.1.5:4000".parse().unwrap();
+        let now = 10_000_000;
+        assert_eq!(beacon(&k, vec![a], now).signer(now), Some(k.public()));
+        // Too old, or naming another node, or with its addresses changed: refused.
+        assert!(beacon(&k, vec![a], now - 200_000).signer(now).is_none());
+        let other = iroh::SecretKey::generate();
+        let mut forged = beacon(&k, vec![a], now);
+        forged.node = *other.public().as_bytes();
+        assert!(forged.signer(now).is_none());
+        let mut moved = beacon(&k, vec![a], now);
+        moved.addrs = vec!["192.168.1.9:4000".parse().unwrap()];
+        assert!(moved.signer(now).is_none());
+        let mut seen = std::collections::HashMap::new();
+        let ip = a.ip();
+        assert!(fresh_sender(&mut seen, ip, [1; 32], now));
+        assert!(!fresh_sender(&mut seen, ip, [1; 32], now + 5_000));
+        assert!(fresh_sender(&mut seen, ip, [2; 32], now + 5_000), "another node at the same address");
+        assert!(fresh_sender(&mut seen, ip, [1; 32], now + 11_000));
+        for i in 3..20u8 {
+            fresh_sender(&mut seen, ip, [i; 32], now + 12_000);
+        }
+        assert_eq!(seen.len(), 8, "no more than eight nodes from one address");
     }
 }
