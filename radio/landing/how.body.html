@@ -1,20 +1,70 @@
 <header class="masthead">
-<h1>How Pyrate Radio Works</h1>
-<p class="mh-sub">Pyrate Radio &#183; from the key to the speaker</p>
-<p class="mh-desc">What happens between a keeper&#8217;s microphone and your speaker, and why nobody can switch it off.</p>
+<h1>Nobody Can Switch It Off</h1>
+<p class="mh-sub">how Pyrate Radio works</p>
+<p class="mh-desc">No server, no account and nobody in charge. Every station lives on the devices that carry it, and no device on the way learns both who you are and what you hear.</p>
+<div class="ctas"><a class="lead-btn" href="{{OPEN_PLAYER}}"><span class="fc-lead">Open the full player</span><span class="fc-sub">every station &#183; any browser &#183; nothing to install</span></a></div>
 </header>
 <main id="main" class="long">
-<nav class="toc" aria-label="On this page"><a href="#station">The station</a><a href="#clock">The clock</a><a href="#sound">The sound</a><a href="#log">The Log</a><a href="#carrying">Carrying</a><a href="#through">Getting through</a><a href="#unseen">Unseen</a><a href="#stopping">Stopping it</a><a href="#trust">Trusting the build</a><a href="#limits">The limits</a></nav>
+
+
+<nav class="toc" aria-label="On this page"><a href="#promises">The promises</a><a href="#compared">Compared</a><a href="#take">What it would take</a><a href="#station">The station</a><a href="#clock">The clock</a><a href="#sound">The sound</a><a href="#log">The Log</a><a href="#carrying">Carrying</a><a href="#through">Getting through</a><a href="#unseen">Unseen</a><a href="#stopping">Stopping it</a><a href="#trust">Trusting the build</a><a href="#limits">The limits</a><a href="#questions">Questions</a></nav>
 
 <div class="prose lede">
 <p>Open the app and a station is already playing. The dial is full before the network has said a word, because your phone kept the Log from the last time it listened, and the sound comes from whichever phones, computers and Lanterns hold it, checked against the station's own key before a note of it plays. HOSTIS runs none of this. Take hostis.black off the internet tomorrow and every station on the dial plays on.</p>
 </div>
+<div class="divider"><span class="divider-glyph"></span></div>
+<section id="promises" class="free-band">
+<div class="sechead"><h2>The Promises</h2><span class="cap">what the design itself guarantees</span></div>
+<div class="promises">
+<div><b>No server to seize</b><p>HOSTIS runs no server the radio needs. Phones, computers, browser tabs and Lanterns pass the stations between them. Take hostis.black off the internet and every station on the dial plays on.</p></div>
+<div><b>No account, no name</b><p>You never sign up, and the radio never asks who you are. A listening phone publishes no address and takes a fresh network identity every time the app starts.</p></div>
+<div><b>Nobody sees who listens</b><p>Sound reaches you through two other devices. The first knows who asks and not what for. The second knows what is asked for and not who by. The count beside a station is built from tokens that change every hour.</p></div>
+<div><b>The keeper stays unknown</b><p>A broadcast leaves the keeper's device sealed, through a guard and along a stem of other radios, and surfaces about four devices from where it began. The first device to show it cannot tell whether it made it or passed it on.</p></div>
+<div><b>No single copy</b><p>Every chunk of every station sits on about eight devices across the fleet, and on the radios that played it. Silencing a station means reaching every one of them at once, in every country, and keeping them all offline for good.</p></div>
+<div><b>Only the key ends a station</b><p>A station is a key made on its keeper's own device and shown once as twenty-four words. Nobody else can change what it plays or take it off the air, HOSTIS included.</p></div>
+<div><b>Nothing can be forged</b><p>Every entry in a station's log is signed by its key, and every chunk of sound is checked against its fingerprint before it plays. A carrier can pass a station on and cannot change a note of it.</p></div>
+<div><b>It finds a way round</b><p>Block the doors and the devices already aboard keep each other. Run it through Tor. Pass stations over Wi-Fi with no internet at all, or as one file on a USB stick.</p></div>
+</div>
+</section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
+<section id="compared">
+<div class="sechead"><h2>Compared</h2><span class="cap">who holds the off switch</span></div>
+<div class="compare-wrap wide"><table class="compare">
+<thead><tr><th scope="col"><span class="vh">Question</span></th><th scope="col">A streaming service</th><th scope="col">Licensed FM</th><th scope="col" class="us">Pyrate Radio</th></tr></thead>
+<tbody>
+<tr><th scope="row">Who can take a station off</th><td>The company, or anyone who leans on it</td><td>The regulator, or whoever finds the transmitter</td><td class="us">Only the holder of its key</td></tr>
+<tr><th scope="row">Who knows what you hear</th><td>The company, tied to your account</td><td>Nobody</td><td class="us">No single device</td></tr>
+<tr><th scope="row">Starting a station</th><td>Their terms and their cut</td><td>A licence, a transmitter and a mast</td><td class="us">Free, in a minute, from a phone or a browser</td></tr>
+<tr><th scope="row">When one machine is seized</th><td>Everything on it stops</td><td>That station goes silent</td><td class="us">The rest carry on</td></tr>
+<tr><th scope="row">Reach</th><td>The whole internet</td><td>As far as the signal carries</td><td class="us">The whole internet, and rooms with none</td></tr>
+<tr><th scope="row">What it costs you</th><td>A subscription, or adverts</td><td>Nothing</td><td class="us">Nothing</td></tr>
+</tbody></table></div>
+</section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
+<section id="take">
+<div class="sechead"><h2>What It Would Take</h2><span class="cap">to stop it, one step at a time</span></div>
+<ol class="steps takes">
+<li><b>Take down hostis.black.</b> The full player lives on IPFS under a name of its own, pinned by anyone who runs a one-line script, and the app passes itself from phone to phone. Every station plays on.</li>
+<li><b>Block the doors into the network.</b> A device already aboard remembers every node it has met, and signed bearings carried on the network add new doors as they open.</li>
+<li><b>Block the relays.</b> Any Lantern can relay and anyone can light one. Where relays are blocked, Tor carries the traffic.</li>
+<li><b>Seize a Lantern, or a thousand.</b> Each chunk sits on about eight devices across the fleet and on the listeners' own radios. The rest hand it on.</li>
+<li><b>Seize a listener's phone.</b> Everything the radio keeps is sealed under a key the phone's own hardware holds. An emergency PIN, given up under force, wipes it.</li>
+<li><b>Lean on HOSTIS.</b> HOSTIS cannot remove a station, change what one plays or see who listens. An update needs two of three release keys kept in separate places and waits three days on every phone. A canary, signed monthly, says whether any order has come.</li>
+<li><b>Cut the internet.</b> Radios on the same Wi-Fi find each other with no internet, and a whole station travels as one file.</li>
+</ol>
+</section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
+<div class="sechead"><h2>The Whole Account</h2><span class="cap">from the key to the speaker</span></div>
+
 
 <div class="divider"><span class="divider-glyph"></span></div>
 <section id="station">
 <div class="sechead"><h2>The Station</h2><span class="cap">a key made on your own device</span></div>
 <div class="prose">
-<p>Raising a station makes an Ed25519 key pair on the phone, computer or browser tab in front of you. The public half is the station's id. Its frequency on the dial, between 87.5 and 108.0, and the black flag that stands for it where it has no art are both drawn from that id, so two stations can share a name and never a frequency, a flag or a key.</p>
+<p>Raising a station makes an Ed25519 key pair on the phone, computer or browser tab in front of you. The public half is the station's id. The black flag that stands for it where it has no art is drawn from that id, and so is the place its frequency starts from. Frequencies run to the kilohertz, 87.500 to 108.099, and the keeper claims one on the station's card, the place its key points at or the next free one above. If two stations ever claim one, the one a listener keeps holds it, else the one on the air longer, and the other moves up, so no two stations share a frequency on any radio. Two stations can share a name and never a key.</p>
 <p>The private half is shown to you once as twenty-four words. Whoever holds the words is the station. They stay on the device unless you write them down. Nobody keeps a copy, so nobody can recover them for you. Add a passphrase when you raise the station and the words alone open a different station, empty, so a photograph of the paper gives nothing away. The passphrase is stretched with Argon2id over 64 MiB of memory, which makes every guess at it slow and expensive.</p>
 <p>The device that broadcasts holds a deputy key, which can put things on the air and nothing more. Only the twenty-four words can end the station, appoint a deputy or revoke one. If a phone is lost or taken, type the words into another device and appoint it, and the old phone can no longer speak for the station.</p>
 <p>A station's name and line, each recording, its programme, its art, every notice and live broadcast, and in the end its strike are all entries in its log. Each entry is signed by the station's key and carries the fingerprint of the one before it. Any node can check the whole log against the id alone. A carrier can hand it on, and cannot add an entry, drop one, reorder them or change a word.</p>
@@ -49,7 +99,7 @@
 <p>The Log is the list of stations on the air, and every node keeps its own copy. Stations announce themselves with a card (name, line, home port, kinds, cover, whether they are mature or explicit, and how far their log runs), signed by the station and passed from node to node by gossip. Each node checks each card before it keeps it or passes it on, and keeps the last Log it heard sealed on its own disk, so the dial is full the moment the app opens.</p>
 <p>Every card carries proof of work, a puzzle that takes a phone a few seconds and has to be solved again for each station. Raising ten thousand junk stations costs ten thousand times the work of raising one. A Log holds at most 5,000 cards, and once it is full a newcomer gets in only by showing more work than the weakest card already there. The stations you raised and the ones you keep are never at stake.</p>
 <p>The count beside each station costs work too. Every listener adds a token that changes every hour, paid for in work and checked by every node, into a HyperLogLog sketch of 256 bytes. The sketch gives a number to within about six and a half percent and holds no name, so HOSTIS, the station and anyone watching can see that forty are aboard and never who the forty are.</p>
-<p>The Log sorts by how many are aboard, and HOSTIS ranks nothing. Each listener decides what reaches them. A hidden station leaves your Log and your dial, explicit stations stay off it until you ask for them, and lists of hidden stations pass from hand to hand for anyone who wants to use one.</p>
+<p>Each listener chooses the order (most listened, newest, on the air longest, or most backed up), and HOSTIS ranks nothing. Each listener decides what reaches them. A hidden station leaves your Log and your dial, explicit stations stay off it until you ask for them, and lists of hidden stations pass from hand to hand for anyone who wants to use one.</p>
 </div>
 </section>
 
@@ -79,7 +129,7 @@
 <section id="unseen">
 <div class="sechead"><h2>Unseen</h2><span class="cap">listeners, keepers and the device in your hand</span></div>
 <div class="prose">
-<p>A listening phone tells the network nothing about what it plays. It publishes no address and takes a fresh network identity each time the app starts, or each day on a phone that keeps a station. It fetches sound through two other devices. The first, a guard it keeps for weeks, sees who is asking and not what for. The second sees what is asked for and not who by. The clock tells the phone what it will need before it needs it, so the extra hops cost nothing you can hear. If a route is slow, a second one starts beside it through another device, and the first answer wins. If the phone cannot find two devices to route through, it waits. It asks a carrier directly only if you have turned on Connect directly when needed, in Settings, under Advanced, and the station page tells you when your own station is waiting.</p>
+<p>A listening phone tells the network nothing about what it plays. It publishes no address and takes a fresh network identity each time the app starts, or each day on a phone that keeps a station. It fetches sound through two other devices. The first, a guard it keeps for weeks, sees who is asking and not what for. The second sees what is asked for and not who by. The clock tells the phone what it will need before it needs it, so the extra hops cost nothing you can hear. The first page of a station's log goes through the one guard to four exits at once, and the first answer wins. If a route is slow later, a second one starts beside it through another device. If the phone cannot find two devices to route through, it waits. It asks a carrier directly only if you have turned on Connect directly when needed, in Settings, under Advanced, and the station page tells you when your own station is waiting.</p>
 <p>A broadcasting device never shows its station to the network itself. New entries and chunks leave sealed, through a guard that forwards a blob it cannot read to a second device, and that second device starts them along a stem of others, after the Dandelion++ design used in Bitcoin. At each step the cargo spreads with a chance of one in four, otherwise it moves on, so it surfaces about four devices from where it started. Every device relays stems, so the first device to show a station's new recording to the network cannot tell whether it made it or passed it on. Broadcasters keep the same first step for weeks, as Tor keeps its guards, so the stem never starts with a stranger drawn at random. If no second device will take the cargo, it waits: nothing is handed to the first step that would let it tie the station to the device, unless the owner has turned on Connect directly when needed.</p>
 <p>On the device, everything the radio keeps is sealed under a key held in the phone's secure hardware, or by Windows' data protection, the macOS keychain or a Linux desktop's keyring on a computer. Station names and titles are cleaned of hidden characters, a recorder's date never becomes a title, copied words leave the clipboard after ninety seconds, and the keyboard is told to learn nothing. Chatter lives in memory and is gone when the app closes. A plain icon named Radio, a PIN on your station and settings, and an emergency PIN to give up under force, which wipes the radio, are in Settings, under Privacy and safety. Wiping destroys the key that seals the hold, and with it everything on the device.</p>
 <p>A browser tab draws a new key on every visit, reaches the network through a relay, and fetches and broadcasts through two hops as the app does. The deputy key of a station raised in a browser, and any invitation, are sealed under a key the browser keeps to itself. A browser that cannot make that key keeps them only until the tab closes, and never in its lasting storage. Invitations and flocks go only to copies of the open player that the visitor's own browser checks against their IPFS names.</p>
@@ -121,5 +171,22 @@
 </section>
 
 <div class="divider"><span class="divider-glyph"></span></div>
+<section id="questions">
+<div class="sechead"><h2>Questions</h2><span class="cap">asked and answered</span></div>
+<div class="faq">
+<details class="fold"><summary>Who can see what I listen to?</summary><div>No single device learns both who you are and what you hear. Your phone fetches sound through two other devices, the first knowing who asks and not what, the second what and not who. Counts are made from anonymous tokens that change every hour. What your phone carries for others sits on it sealed, and it cannot tell what it holds.</div></details>
+<details class="fold"><summary>Can a station be taken down?</summary><div>Not from any one place. Its log and its sound are copied across every device that carries it, and any one of them can hand it on. Only the holder of its key can end it.</div></details>
+<details class="fold"><summary>Does my station need my phone to stay on?</summary><div>No. Its programme lives in its signed log and every listener works out what is playing from the log and the clock. Put a song on a loop, uninstall the app, and the song plays on.</div></details>
+<details class="fold"><summary>What happens if I lose my phone?</summary><div>Put your station's twenty-four words into the app on another device and the station is yours again. The old phone can no longer speak for it. Without the words nobody can recover it, HOSTIS included.</div></details>
+<details class="fold"><summary>How do people find my station?</summary><div>It is on the Log and on the dial, at a frequency of its own. Pass on its link, or print its poster, which carries a code that opens the station in any phone's browser.</div></details>
+<details class="fold"><summary>Can I make a private station?</summary><div>Yes, an invite-only station. It never shows on the Log. Its key is its invitation, and only whoever you hand it to can find it. Its listeners can see each other's devices, as in a private room.</div></details>
+<details class="fold"><summary>Can listeners talk?</summary><div>Each station has a chat for talk, cheers and requests the station can play next, and the radio saves none of it. A listener can also send the station a voice message only the station can open.</div></details>
+<details class="fold"><summary>Why &#8220;Pyrate&#8221;?</summary><div>It is the spelling in Captain Charles Johnson's General History of the Pyrates of 1724, read on this radio around the clock. The old law called the pirate <i>hostis humani generis</i>, the enemy of all mankind. HOSTIS takes the name. The rest is at <a href="https://hostis.black">hostis.black</a>.</div></details>
+</div>
+</section>
+
+<section class="last">
+<a class="lead-btn" href="{{OPEN_PLAYER}}"><span class="fc-lead">Open the full player</span><span class="fc-sub">every station &#183; any browser &#183; nothing to install</span></a>
 <p class="coda"><a href="./">Back to Pyrate Radio</a></p>
+</section>
 </main>

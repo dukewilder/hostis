@@ -26,7 +26,7 @@ button{background:none;border:0;color:inherit;padding:0;margin:0;cursor:pointer;
   linear-gradient(var(--c),var(--c)) 100% 0/13px 1px no-repeat,linear-gradient(var(--c),var(--c)) 100% 0/1px 13px no-repeat,
   linear-gradient(var(--c),var(--c)) 0 100%/13px 1px no-repeat,linear-gradient(var(--c),var(--c)) 0 100%/1px 13px no-repeat,
   linear-gradient(var(--c),var(--c)) 100% 100%/13px 1px no-repeat,linear-gradient(var(--c),var(--c)) 100% 100%/1px 13px no-repeat}
-.banner{position:absolute;inset:0 0 auto 0;height:320px;background-size:cover;background-position:center;opacity:.22;z-index:-1;filter:grayscale(1) contrast(1.1);
+.banner{position:absolute;inset:0 0 auto 0;height:320px;background-size:cover;background-position:center;opacity:.16;z-index:-1;filter:grayscale(1) contrast(1.1) blur(3px);
   -webkit-mask-image:linear-gradient(to bottom,#000,transparent);mask-image:linear-gradient(to bottom,#000,transparent)}
 .plate{display:flex;justify-content:space-between;align-items:center;gap:1rem;font:400 11px var(--mono);letter-spacing:.26em;text-transform:uppercase;color:var(--faint);
   padding:0 0 .8rem;margin:0 0 1.7rem;border-bottom:1px solid var(--line-soft)}
@@ -103,6 +103,13 @@ button.power:hover{background:rgba(197,40,40,.18);border-color:var(--redup)}
 button.power.on{background:transparent;border-color:var(--ink)}
 button.power.on .glyph{color:var(--ink)}
 .buttons{display:flex;gap:.5rem;flex-wrap:wrap}
+/* The station's actions as one toolbar: icon over a short word, equal cells, one row. */
+.controls .buttons{flex:1 1 0;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:0;border:1px solid var(--line);background:rgba(10,10,10,.6);min-width:0}
+.controls .buttons .btn{flex-direction:column;gap:.4rem;min-height:58px;padding:.55rem .25rem .5rem;border:0;border-right:1px solid var(--line);font-size:.69rem;letter-spacing:.12em;white-space:nowrap;margin-right:-1px}
+.controls .buttons .btn[hidden]{display:none}
+.controls .buttons .btn .ic{width:20px;height:20px;margin:0}
+.controls .buttons .btn:hover,.controls .buttons .btn:focus-visible{background:rgba(237,228,206,.05);color:var(--ink)}
+.controls .buttons{overflow:hidden}
 .ic{width:18px;height:18px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:square}
 .btn .ic{margin:0 .1rem 0 -.15rem}
 .vu{width:124px;flex:0 0 auto;align-self:end}
@@ -332,3 +339,14 @@ input[type=password]{background:var(--panel);color:var(--ink);border:1px solid r
 .st-live .power .glyph{color:var(--redup)}.st-live .power.on{border-color:var(--redup);background:rgba(237,85,85,.12)}
 .st-livetime{font:400 .8rem var(--mono);letter-spacing:.14em;color:var(--redup);font-variant-numeric:tabular-nums}
 .tag{display:inline-block;margin-left:.55rem;padding:0 .35rem;border:1px solid var(--ghost);font:400 .64rem var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim);vertical-align:.2em}.tag.lv{border-color:var(--redup);color:var(--redup)}.tag.kp{border-color:var(--bonedim);color:var(--ink)}
+/* More: the station's less used actions, kept out of the row of buttons */
+.morebox{display:block}
+.morerow{padding:0 0 1.1rem;margin:0 0 1.1rem;border-bottom:1px solid var(--line)}
+.morebox .mhead{font:400 .95rem var(--sc);letter-spacing:.05em;color:var(--ink);margin:0 0 .3rem}
+.morebox #sleepbtns .btn{min-width:64px}
+.played{list-style:none;margin:0;padding:0;max-height:16rem;overflow-y:auto}
+.played li{display:grid;grid-template-columns:3.4rem 1fr;gap:.6rem;padding:.35rem 0;font-size:.95rem;color:var(--bonedim)}
+.played time{font:400 .72rem var(--mono);color:var(--dim);padding-top:.2rem}
+.played small{display:block;font:400 .7rem var(--sc);letter-spacing:.04em;color:var(--faint)}
+#more[aria-expanded="true"]{border-color:var(--ink)}
+.played li.none{display:block;text-align:center}

@@ -221,7 +221,7 @@ class _LogPageState extends State<LogPage> {
       if (port != null && (s['port'] ?? '') != port) return false;
       if (onNow && s['live'] != true && ((nowOn[s['id']] as Map?)?['slot'] ?? '').toString().isEmpty) return false;
       if (q.isEmpty) return true;
-      return [s['name'], s['about'], s['call_sign'], s['port']].any((v) => (v ?? '').toString().toLowerCase().contains(q));
+      return [s['name'], s['about'], s['call_sign'], s['port'], freqLabel(s['id'] as String)].any((v) => (v ?? '').toString().toLowerCase().contains(q));
     }).toList();
     int since(Map s) => (s['since'] as num?)?.toInt() ?? 0;
     int kept(Map s) => s['kept'] == true ? 1 : 0;
@@ -437,7 +437,7 @@ class _LogPageState extends State<LogPage> {
                       ...seals(s),
                     ]),
                     const SizedBox(height: 2),
-                    if ((s['call_sign'] ?? '').toString().isNotEmpty) Text(s['call_sign'] ?? '', style: caps(11, color: boneFaint, spacing: 0.12)),
+                    Text('${s['call_sign'] ?? ''}  ${freqLabel(id)}'.trim(), style: caps(11, color: boneFaint, spacing: 0.12)),
                     if (on != null && (on['slot'] ?? '').toString().isNotEmpty)
                       Text((on['slot'] as String).toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: caps(11, color: boneDim, spacing: 0.18)),
                     if (on != null && (on['title'] ?? '').toString().isNotEmpty)

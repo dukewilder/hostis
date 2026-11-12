@@ -27,7 +27,7 @@ else:
     sha, size, magnet = "(build pending)", "?", "#"
 import json
 op = json.load(open(f"{R}/browser/www/open.json"))
-page = page.replace("{{OPEN_PLAYERS}}", json.dumps(op["players"])).replace("{{HARBOUR_IDS}}", json.dumps([h["id"] for h in json.load(open(f"{R}/browser/harbour.json", encoding="utf-8"))]))
+page = page.replace("{{OPEN_ORIGIN}}", op["players"][0].rstrip("/")).replace("{{OPEN_PLAYERS}}", json.dumps(op["players"])).replace("{{HARBOUR_IDS}}", json.dumps([h["id"] for h in json.load(open(f"{R}/browser/harbour.json", encoding="utf-8"))]))
 page = page.replace("{{VERSION}}", version).replace("{{SHA}}", sha).replace("{{SIZE}}", size).replace("{{MAGNET}}", magnet.replace("&", "&amp;"))
 # The computers' builds, when tools/fetch_desktop.sh has brought them: each with its checksum
 # and a torrent that seeds from this site.
@@ -56,13 +56,13 @@ foot = page[page.index("<footer>"):page.index("</footer>") + 9]
 desc = re.search(r'<meta name="description" content="([^"]*)">', head).group(1)
 for slug, body, title, about in [
     ("handbook", "handbook.body.html", "The Keeper's Handbook", "What Pyrate Radio does to keep a station keeper unknown, what only the keeper can do, and how the network stands."),
-    ("how-it-works", "how.body.html", "How Pyrate Radio Works", "How Pyrate Radio carries every station with no server, how it keeps listeners and keepers unseen, and what it would take to stop it."),
+    ("how-it-works", "how.body.html", "Nobody Can Switch It Off · How Pyrate Radio Works", "No server, no account and nobody in charge: how Pyrate Radio carries every station, keeps listeners and keepers unseen, and what it would take to stop it."),
 ]:
     h = head.replace('"https://hostis.black/pyrateradio/"', f'"https://hostis.black/pyrateradio/{slug}/"')
     h = re.sub(r"<title>.*?</title>", f"<title>{title} · Pyrate Radio · HOSTIS</title>", h)
     h = h.replace(f'content="{desc}"', f'content="{about}"').replace('content="Pyrate Radio"', f'content="{title}"')
     h = h.replace('href="favicon.png"', 'href="../favicon.png"').replace('href="apple-touch-icon.png"', 'href="../apple-touch-icon.png"')
-    text = open(f"{R}/landing/{body}", encoding="utf-8").read().replace('href="./', 'href="../').replace('href="../"', 'href="../"')
+    text = open(f"{R}/landing/{body}", encoding="utf-8").read().replace('href="./', 'href="../').replace('href="../"', 'href="../"').replace("{{OPEN_PLAYER}}", op["players"][0])
     os.makedirs(f"{out}/{slug}", exist_ok=True)
     open(f"{out}/{slug}/index.html", "w", encoding="utf-8").write(h + '<body>\n<a class="skip-link" href="#main">Skip to content</a>\n' + flag + "\n" + text + foot + "\n</body>\n</html>\n")
 shutil.copytree(f"{R}/browser/www/dist", f"{out}/listen")

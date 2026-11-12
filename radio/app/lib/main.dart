@@ -428,6 +428,7 @@ class Tuner extends ChangeNotifier {
         final showEmpty = pref('show_empty') == true;
         final listed = [for (final s in [...fresh, ...keep, ..._preview]) if (showEmpty || !emptyStation(s) || s['kept'] == true || s['id'] == mineId || s['id'] == tuned) s];
         markTwins(listed);
+        resolveFreqs(listed);
         stations = listed;
         // The dial follows the station, not its place in the list: when the Log reorders
         // or shrinks, the face turns back to what was tuned or shown, and tunes nothing.
@@ -442,9 +443,11 @@ class Tuner extends ChangeNotifier {
         }
         // The stations kept, the likeliest next, come aboard once the Log is in: their logs
         // and the sound on now, so turning to one plays at once.
+        // So does the station on the dial when nothing is playing yet, the one Listen would play.
         if (!_warmedKept && fresh.isNotEmpty) {
           _warmedKept = true;
-          final kept = fresh.where((s) => s['kept'] == true && s['id'] != tuned).take(4).map((s) => s['id']).toList();
+          final face = tuned == null && stations.isNotEmpty ? [stations.first['id']] : [];
+          final kept = {...face, ...fresh.where((s) => s['kept'] == true && s['id'] != tuned).map((s) => s['id'])}.take(4).toList();
           if (kept.isNotEmpty) Native.callAway({'cmd': 'warm', 'stations': kept});
         }
         if (tuned != null && station(tuned) == null && stations.isNotEmpty) {
@@ -1101,7 +1104,7 @@ class _StationFace extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Row(mainAxisSize: MainAxisSize.min, children: [
-          Text(frequency(id).toStringAsFixed(1), style: mono(15, color: bone)),
+          Text(freqLabel(id), style: mono(15, color: bone)),
           const SizedBox(width: 10),
           Text(s['call_sign'] ?? '', style: caps(12, color: boneFaint, spacing: 0.14)),
         ]),
