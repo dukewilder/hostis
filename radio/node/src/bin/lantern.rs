@@ -134,12 +134,7 @@ fn main() -> anyhow::Result<()> {
                 n += 1;
             }
         }
-        std::fs::write(&out, text)?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&out, std::fs::Permissions::from_mode(0o600))?;
-        }
+        pyrate_node::hold::write_secret(std::path::Path::new(&out), text.as_bytes())?;
         println!("the 24 words of {n} stations are in {out}: copy them onto paper, then delete the file");
         return Ok(());
     }

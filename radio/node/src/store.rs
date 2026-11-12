@@ -227,7 +227,7 @@ impl Store {
         let p = self.dir.join("keys").join(format!("{}.k2", self.hold.name(&what)));
         let mut plain = id.0.to_vec();
         plain.extend(key.seed());
-        fs::write(p, self.hold.seal(b"key", &plain))?;
+        crate::hold::write_secret(&p, &self.hold.seal(b"key", &plain))?;
         Ok(())
     }
 

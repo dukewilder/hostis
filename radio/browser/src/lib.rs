@@ -781,7 +781,7 @@ impl Ship {
                 }
                 let l = log.entry(station).or_default();
                 let card = l.announce.as_ref().map(|a| a.head);
-                net::note_carrier(&mut l.carriers, node, head, card, now);
+                net::note_carrier(&mut l.carriers, node, head, card, now, |n| self.harbour.iter().any(|h| h.as_bytes() == n));
                 drop(log);
                 let ours = self.archives.lock().unwrap().get(&station).map(|x| x.len()).unwrap_or(0);
                 (head > ours).then_some(station)
@@ -933,6 +933,7 @@ impl Ship {
                 station: *id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof,
                 cover: art.and_then(|a| a.0).map(|a| a.hash), accent: art.map(|a| a.2), kinds, mature, tip, explicit: log.explicit(),
             }
+            .clipped()
             .sign(&m.key),
         )
     }
@@ -1178,7 +1179,8 @@ impl Ship {
                 Some((aboard, json!({
                     "id": id.to_hex(), "call_sign": id.call_sign(), "name": shown(&a.name), "about": pyrate_core::chat::shown(&a.about), "mixed": pyrate_core::chat::mixed_script(&a.name),
                     "port": a.port.as_deref().map(shown), "live": a.live, "aboard": aboard, "since": a.since,
-                    "kinds": a.kinds, "mature": a.mature, "explicit": a.explicit, "tip": a.tip,
+                    "kinds": a.kinds, "mature": a.mature, "explicit": a.explicit,
+                    "tip": a.tip.as_ref().filter(|_| net::deputy_current(a, self.archives.lock().unwrap().get(id))),
                     "cover": a.cover.map(|h| hex(&h)), "banner": banners.get(id), "accent": accent,
                     "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),
                     "pocket": pockets.contains(id),

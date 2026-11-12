@@ -28,6 +28,25 @@ use crate::{Inner, net::{Announce, Gossip, Request, Response}, now_ms, say};
 const FLUFF: f64 = 0.25;
 /// Cargo this node has relayed lately, so a stem that comes round again spreads here.
 const STEM_MEMORY: usize = 512;
+/// Stems waiting to be shown, and their bytes in KiB: 32 and 32 MiB on a phone, 256 and
+/// 256 MiB on a Lantern.
+static WAITING: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(32);
+static WAITING_BYTES: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(32 * 1024);
+static WAITING_LANTERN: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(256);
+static WAITING_BYTES_LANTERN: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(256 * 1024);
+
+/// Whether a stem's cargo is what it claims: entries that parse, belong to the station and
+/// carry a valid signature, a card that is the station's and verifies, and chunks that match
+/// their hashes. At least one entry or a card.
+pub(crate) fn cargo_sound(station: &StationId, entries: &[Vec<u8>], chunks: &[(Hash, Vec<u8>)], announce: &Option<Announce>) -> bool {
+    if entries.is_empty() && announce.is_none() {
+        return false;
+    }
+    let entries_ok = entries.iter().all(|b| SignedEntry::from_bytes(b).is_ok_and(|e| e.entry.station == *station && e.verify().is_ok()));
+    let card_ok = announce.as_ref().is_none_or(|a| a.station == *station && a.verify());
+    let chunks_ok = chunks.iter().all(|(h, b)| blake3::hash(b).as_bytes() == h);
+    entries_ok && card_ok && chunks_ok
+}
 
 /// What one stem carries, as a fingerprint: the same cargo is the same stem.
 fn cargo_id(station: &StationId, entries: &[Vec<u8>], announce: &Option<Announce>) -> Hash {
@@ -283,6 +302,12 @@ impl Inner {
     /// A stem's cargo, arrived plain or sealed: passed on, or kept and shown after a wait.
     /// True when this node took it.
     pub(crate) async fn on_stem(self: &Arc<Self>, station: StationId, entries: Vec<Vec<u8>>, chunks: Vec<(Hash, Vec<u8>)>, announce: Option<Announce>) -> bool {
+        self.stems_in.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        // Cargo is checked before it is relayed or held: every entry signed and the station's
+        // own, the card the station's, every chunk matching its hash. Junk goes no further.
+        if !cargo_sound(&station, &entries, &chunks, &announce) {
+            return false;
+        }
         // A Lantern that carries only its own stations never ends a stranger's stem: it
         // hands the cargo on, so nothing of anyone else's lands on its disk. Nor does any
         // node end a stem for a station its owner chose not to carry.
@@ -320,8 +345,15 @@ impl Inner {
         // minute and a half for a recording, under a second and a half for the live air.
         let live = entries.iter().any(|b| SignedEntry::from_bytes(b).is_ok_and(|e| matches!(e.entry.body(), Body::Live { .. })));
         let wait = if live { rand::random::<u64>() % 1_500 } else { 20_000 + rand::random::<u64>() % 70_000 };
+        // What waits is held in memory, so the waiting is budgeted: a few hundred stems and a
+        // fixed number of bytes at once. Past that this node takes no more until some are shown.
+        let bytes = entries.iter().map(Vec::len).sum::<usize>() + chunks.iter().map(|c| c.1.len()).sum::<usize>();
+        let (count, budget) = if self.cfg.lantern { (&WAITING_LANTERN, &WAITING_BYTES_LANTERN) } else { (&WAITING, &WAITING_BYTES) };
+        let Ok(slot) = count.try_acquire() else { return false };
+        let Ok(held) = budget.try_acquire_many((bytes / 1024 + 1) as u32) else { return false };
         let me = self.clone();
         tokio::spawn(async move {
+            let (_slot, _held) = (slot, held);
             tokio::time::sleep(Duration::from_millis(wait)).await;
             me.fluff(station, entries, chunks, announce).await;
         });

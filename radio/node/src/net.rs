@@ -81,7 +81,41 @@ pub struct Card {
 
 const CARD_DOMAIN: &[u8] = b"pyrate/announce/v2\0";
 
+/// The most a card may say: a name, a line about the station, a port, eight kinds, a tip
+/// address and a deputy's appointment. A card past any of these is refused unread.
+pub const CARD_NAME: usize = 64;
+pub const CARD_ABOUT: usize = 600;
+pub const CARD_PORT: usize = 120;
+pub const CARD_KINDS: usize = 8;
+pub const CARD_KIND: usize = 32;
+pub const CARD_TIP: usize = 200;
+pub const CARD_PROOF: usize = 1024;
+
+fn clip(s: &str, n: usize) -> String {
+    s.chars().take(n).collect()
+}
+
 impl Card {
+    pub fn sane(&self) -> bool {
+        self.name.chars().count() <= CARD_NAME
+            && self.about.chars().count() <= CARD_ABOUT
+            && self.port.as_ref().is_none_or(|p| p.chars().count() <= CARD_PORT)
+            && self.kinds.len() <= CARD_KINDS
+            && self.kinds.iter().all(|k| k.chars().count() <= CARD_KIND)
+            && self.tip.as_ref().is_none_or(|t| t.len() <= CARD_TIP)
+            && self.proof.as_ref().is_none_or(|p| p.len() <= CARD_PROOF)
+    }
+
+    /// The card cut to what any node will take, for a station whose own words run long.
+    pub fn clipped(mut self) -> Self {
+        self.name = clip(&self.name, CARD_NAME);
+        self.about = clip(&self.about, CARD_ABOUT);
+        self.port = self.port.map(|p| clip(&p, CARD_PORT));
+        self.kinds = self.kinds.into_iter().take(CARD_KINDS).map(|k| clip(&k, CARD_KIND)).collect();
+        self.tip = self.tip.filter(|t| t.len() <= CARD_TIP);
+        self
+    }
+
     pub fn sign(self, key: &StationKey) -> Announce {
         let mut raw = postcard::to_stdvec(&self).unwrap_or_default();
         raw.extend(postcard::to_stdvec(&self.explicit).unwrap_or_default());
@@ -148,7 +182,7 @@ impl Announce {
     }
 
     pub fn verify(&self) -> bool {
-        if !pow_ok(&self.station, self.pow) {
+        if !self.card.sane() || !pow_ok(&self.station, self.pow) {
             return false;
         }
         let signer = match &self.proof {
@@ -164,6 +198,18 @@ impl Announce {
         };
         signer.verify(&self.message(), &self.sig).is_ok()
     }
+}
+
+/// Whether a card's signer is still the station's to trust, by this device's copy of the
+/// station's log. A master's card always is. A deputy's is only once the log here reaches the
+/// card's head and still names that deputy: until then nothing on the card that moves money,
+/// the tip address, is shown.
+pub fn deputy_current(a: &Announce, arch: Option<&pyrate_core::Archive>) -> bool {
+    let Some(p) = &a.proof else { return true };
+    let Some(arch) = arch else { return false };
+    let Ok(e) = pyrate_core::SignedEntry::from_bytes(p) else { return false };
+    let pyrate_core::Body::Deputy { key, .. } = &e.entry.body else { return false };
+    arch.len() >= a.head && arch.deputies().contains(key)
 }
 
 fn pow_hash(station: &StationId, nonce: u64) -> u32 {
@@ -330,6 +376,13 @@ pub fn relay_public(relay: &str) -> bool {
     if host == "localhost" || host.ends_with(".localhost") {
         return local_ok;
     }
+    // A name is checked here but resolved later, and could then point anywhere. Over https the
+    // relay must prove that name with a certificate before a byte of HTTP is sent, so a name
+    // turned to a private address gets nowhere; plain http has no such proof, so it takes a
+    // public address written out and no name.
+    if relay.starts_with("http://") {
+        return false;
+    }
     !host.is_empty() && host.contains('.') && host.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-') && ![".local", ".internal", ".lan", ".home.arpa", ".home", ".corp"].iter().any(|t| host.ends_with(t))
 }
 
@@ -342,7 +395,7 @@ mod relay_tests {
         for ok in ["https://relay.hostis.black/", "http://45.87.214.21:42779/", "https://euw1-1.relay.iroh.network./"] {
             assert!(relay_public(ok), "{ok}");
         }
-        for bad in ["http://127.0.0.1:3340", "http://localhost:3340/", "http://10.0.0.5/", "http://192.168.1.1:80/", "http://169.254.169.254/", "http://[::1]:3340/", "http://[fd00::1]/", "ftp://relay.example.org/", "http://user@relay.example.org/", "http://printer.local/", "http://100.64.0.1/", "http://0.0.0.0/"] {
+        for bad in ["http://127.0.0.1:3340", "http://localhost:3340/", "http://10.0.0.5/", "http://192.168.1.1:80/", "http://169.254.169.254/", "http://[::1]:3340/", "http://[fd00::1]/", "ftp://relay.example.org/", "http://user@relay.example.org/", "http://printer.local/", "http://100.64.0.1/", "http://0.0.0.0/", "http://relay.example.org/"] {
             assert!(!relay_public(bad), "{bad}");
         }
     }
@@ -393,13 +446,30 @@ pub const FAILED_MS: u64 = 10 * 60_000;
 
 /// Takes in a carrier's claim. Anyone can say they carry anything, so a claim never reaches
 /// past the station's own card, and a listing keeps only the freshest few.
-pub fn note_carrier(carriers: &mut std::collections::HashMap<[u8; 32], (u64, u64)>, node: [u8; 32], head: u64, card_head: Option<u64>, now: u64) {
-    carriers.insert(node, (card_head.map_or(head, |c| head.min(c)), now));
-    while carriers.len() > MAX_CARRIERS {
-        let Some(oldest) = carriers.iter().min_by_key(|(_, (_, seen))| *seen).map(|(n, _)| *n) else { break };
-        carriers.remove(&oldest);
+/// Notes a carrier's claim. A full list takes a newcomer only in place of a carrier silent for
+/// ten minutes, unless the newcomer is one this node trusts (one that has answered it, or a
+/// harbour), which takes the place of the stalest stranger. So a flood of fresh identities,
+/// each signing a claim, cannot push out the carriers that keep saying they are there.
+pub fn note_carrier(carriers: &mut std::collections::HashMap<[u8; 32], (u64, u64)>, node: [u8; 32], head: u64, card_head: Option<u64>, now: u64, trusted: impl Fn(&[u8; 32]) -> bool) {
+    let head = card_head.map_or(head, |c| head.min(c));
+    if carriers.contains_key(&node) || carriers.len() < MAX_CARRIERS {
+        carriers.insert(node, (head, now));
+        return;
+    }
+    let me_trusted = trusted(&node);
+    let victim = carriers
+        .iter()
+        .filter(|(n, (_, seen))| (me_trusted && !trusted(n)) || now.saturating_sub(*seen) > CARRIER_STALE_MS)
+        .min_by_key(|(_, (_, seen))| *seen)
+        .map(|(n, _)| *n);
+    if let Some(v) = victim {
+        carriers.remove(&v);
+        carriers.insert(node, (head, now));
     }
 }
+
+/// How long a carrier may go unheard before a newcomer may take its place on a full list.
+pub const CARRIER_STALE_MS: u64 = 10 * 60_000;
 
 /// Carriers in the order to ask them: the furthest copy of the log first (no claim counting
 /// past the card), the freshest word next, and any that failed lately last.
@@ -610,8 +680,8 @@ mod tests {
     #[test]
     fn a_false_claim_jumps_no_queue_and_a_flood_grows_nothing() {
         let mut c = std::collections::HashMap::new();
-        note_carrier(&mut c, [1; 32], 10, Some(10), 1_000);
-        note_carrier(&mut c, [2; 32], u64::MAX, Some(10), 2_000);
+        note_carrier(&mut c, [1; 32], 10, Some(10), 1_000, |_| false);
+        note_carrier(&mut c, [2; 32], u64::MAX, Some(10), 2_000, |_| false);
         let order = rank_carriers(&c, &[0; 32], Some(10), |_| false);
         assert_eq!(order, vec![[2; 32], [1; 32]], "a claim past the card counts as the card, and the fresher word goes first");
         let order = rank_carriers(&c, &[0; 32], Some(10), |n| *n == [2; 32]);
@@ -619,9 +689,15 @@ mod tests {
         for i in 0..1_000u32 {
             let mut n = [9u8; 32];
             n[..4].copy_from_slice(&i.to_le_bytes());
-            note_carrier(&mut c, n, 10, Some(10), 3_000 + i as u64);
+            note_carrier(&mut c, n, 10, Some(10), 3_000 + i as u64, |_| false);
         }
         assert_eq!(c.len(), MAX_CARRIERS);
+        assert!(c.contains_key(&[1; 32]) && c.contains_key(&[2; 32]), "a flood of fresh identities pushes out no carrier still speaking");
+        // A carrier silent past ten minutes gives way; a trusted one always finds a place.
+        note_carrier(&mut c, [5; 32], 10, Some(10), 3_000 + CARRIER_STALE_MS + 1, |_| false);
+        assert!(c.contains_key(&[5; 32]) && !c.contains_key(&[1; 32]));
+        note_carrier(&mut c, [6; 32], 10, Some(10), 3_000 + CARRIER_STALE_MS + 2, |n| *n == [6; 32]);
+        assert!(c.contains_key(&[6; 32]) && c.len() == MAX_CARRIERS);
     }
 
     #[test]
@@ -702,5 +778,35 @@ mod tests {
         assert!(a.verify());
         assert_eq!(a.name, "Later");
         assert_eq!(postcard::to_stdvec(&a).unwrap(), wire, "passed on byte for byte");
+    }
+}
+
+#[cfg(test)]
+mod card_limit_tests {
+    use super::*;
+
+    #[test]
+    fn long_cards_are_clipped_by_their_station_and_refused_from_anyone_else() {
+        let k = pyrate_core::StationKey::generate().unwrap();
+        let card = |name: String| Card { station: k.id(), head: 0, name, about: "a".repeat(5_000), port: Some("p".repeat(500)), live: false, at_ms: 1, pow: pow_find(&k.id()), since: 1, proof: None, cover: None, accent: None, kinds: (0..30).map(|i| format!("k{i}")).collect(), mature: false, tip: Some("t".repeat(300)), explicit: false };
+        assert!(!card("N".repeat(500)).sign(&k).verify());
+        let ok = card("Ñ".repeat(500)).clipped().sign(&k);
+        assert!(ok.verify());
+        assert_eq!(ok.name.chars().count(), CARD_NAME);
+        assert!(ok.tip.is_none() && ok.kinds.len() == CARD_KINDS);
+    }
+
+    #[test]
+    fn a_deputys_card_is_trusted_only_against_a_current_log() {
+        let master = pyrate_core::StationKey::generate().unwrap();
+        let deputy = pyrate_core::StationKey::generate().unwrap();
+        let mut arch = pyrate_core::Archive::new(master.id());
+        let proof = arch.write(&master, 1_000, pyrate_core::Body::Deputy { key: deputy.id().0, label: "x".into() }).unwrap().to_bytes().unwrap();
+        let c = Card { station: master.id(), head: arch.len(), name: "S".into(), about: String::new(), port: None, live: false, at_ms: 1, pow: pow_find(&master.id()), since: 1, proof: Some(proof), cover: None, accent: None, kinds: vec![], mature: false, tip: Some("x".into()), explicit: false }.sign(&deputy);
+        assert!(c.verify());
+        assert!(!deputy_current(&c, None));
+        assert!(deputy_current(&c, Some(&arch)));
+        arch.write(&master, 2_000, pyrate_core::Body::Revoke { key: deputy.id().0 }).unwrap();
+        assert!(!deputy_current(&c, Some(&arch)));
     }
 }
