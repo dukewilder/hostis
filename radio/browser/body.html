@@ -38,6 +38,7 @@
 <button id="pass" class="btn" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 13v7h14v-7"/></svg>Share</button>
 <button id="spin" class="btn"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h4l10 10h4M3 17h4l3-3M14 10l3-3h4M18 4l3 3-3 3M18 14l3 3-3 3"/></svg>Spin the dial</button>
 <button id="clip" class="btn" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12"/><path d="M16 10l5-3v10l-5-3"/></svg>Clip it</button>
+<button id="keep" class="btn open-only" hidden aria-pressed="false"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg><span>Keep</span></button>
 <button id="tip" class="btn" hidden><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v10M15 9.5h-4.2a1.8 1.8 0 0 0 0 3.6h2.4a1.8 1.8 0 0 1 0 3.6H9"/></svg>Tip</button>
 </div>
 </div>
@@ -63,6 +64,7 @@
 <div class="sechead harbour-only"><h2>HOSTIS on the Air</h2><span class="cap">tap a station to listen</span></div>
 <div class="sechead open-only"><h2>On the Air</h2><span class="cap">tap a station to listen</span></div>
 <div class="listbar"><input id="find" type="search" class="open-only" placeholder="Find a station" aria-label="Find a station" autocomplete="off"><div class="views" role="group" aria-label="How to show the stations"><button id="vlist" class="btn on" aria-pressed="true">List</button><button id="vchart" class="btn" aria-pressed="false">Map</button></div></div>
+<div class="listbar open-only"><div id="kinds" class="kinds" role="group" aria-label="Kinds of station"></div><label class="sortby"><span>Order</span><select id="sort" aria-label="Order of the list"><option value="aboard">Most listened</option><option value="newest">Newest</option><option value="longest">On the air longest</option></select></label></div>
 <div id="chart" class="chart" hidden></div>
 <div id="rows"></div>
 <div class="harbour-only everyone">
@@ -72,7 +74,7 @@
 </section>
 
 <section class="view" id="v-page" aria-label="Station page" hidden>
-<div class="pagehead"><h2 id="pname"></h2><p id="pabout" class="pabout"></p><p id="pmeta" class="pmeta"></p></div>
+<div class="pagehead"><h2 id="pname"></h2><p id="pabout" class="pabout"></p><p id="pmeta" class="pmeta"></p><p id="pnote" class="pnote" hidden></p></div>
 <p id="pagewait" class="fine">The station's schedule and notices appear here once its log arrives.</p>
 <div class="page" id="page" hidden>
 <div id="notices"></div>
@@ -158,6 +160,7 @@
 <label><input type="checkbox" id="sw-hiss"><span>Play a soft hiss while tuning in</span></label>
 <label class="open-only"><input type="checkbox" id="sw-mature"><span>Hide mature stations</span></label>
 <label class="open-only"><input type="checkbox" id="sw-explicit"><span>Show explicit stations</span></label>
+<label class="open-only"><input type="checkbox" id="sw-empty"><span>Show stations with nothing to play yet</span></label>
 <label><input type="checkbox" id="sw-art"><span>Show station pictures</span></label>
 </div>
 <div class="open-only">
@@ -169,7 +172,7 @@
 <p>Off, this browser always listens through two other radios, so the one with the station never sees you, and it waits when it cannot. On, it plays sooner on a quiet network, and the radio it asks can see this browser's relay.</p>
 </div></details>
 </div>
-<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your settings and hidden stations, the list of stations last on the air, your name and mutes in the chat, any invitations you opened, and the key of any station you started here (never its 24 words). The key and invitations are locked under a key the browser keeps to itself. None of it is sent anywhere.</p><p>Forgetting it all makes this browser new to the radio.</p></div></details>
+<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your settings, kept and hidden stations, the list of stations last on the air, your name and mutes in the chat, any invitations you opened, and the key of any station you started here (never its 24 words). The key and invitations are locked under a key the browser keeps to itself. None of it is sent anywhere.</p><p>Forgetting it all makes this browser new to the radio.</p></div></details>
 <p class="centre"><button id="forget" class="btn quiet">Forget this browser</button></p>
 </section>
 </main>

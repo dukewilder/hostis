@@ -6,7 +6,8 @@ url = sys.argv[1]
 proxy = os.environ.get("HTTPS_PROXY")
 def run():
   with sync_playwright() as p:
-    b = p.chromium.launch(proxy={"server": proxy}, args=["--autoplay-policy=no-user-gesture-required"])
+    # A page served from this machine is reached directly; everything else goes through the proxy.
+    b = p.chromium.launch(proxy={"server": proxy, "bypass": "127.0.0.1,localhost"}, args=["--autoplay-policy=no-user-gesture-required"])
     pg = b.new_context(ignore_https_errors=True).new_page()
     t0 = time.time(); T = lambda: time.time() - t0
     pg.goto(url, wait_until="domcontentloaded")
@@ -22,15 +23,17 @@ def run():
         return None
     r = {}
     r['stations'] = until(lambda s: s.get('stations', 0) > 0 and not pg.evaluate("document.getElementById('go').hidden"), 90, 'open')
-    pg.click('#go'); r['listen_to_sound'] = until(lambda s: s.get('scheduled', 0) > 0, 90, 'listen')
+    # 0.9.14 and later say when the first sound is heard; older players only what is scheduled.
+    sound = lambda s: s.get('heard') if 'heard' in s else s.get('scheduled', 0) > 0
+    pg.click('#go'); r['listen_to_sound'] = until(sound, 90, 'listen')
     first = S().get('station')
     rows = pg.query_selector_all('#rows .row')
     other = next((x for x in rows if x.get_attribute('data-id') != first), None)
     if other:
         other.click(); time.sleep(0.3)
-        r['switch_to_sound'] = until(lambda s: s.get('station') != first and s.get('scheduled', 0) > 0 and s.get('ahead_ms',0) > 0, 90, 'switch')
+        r['switch_to_sound'] = until(lambda s: s.get('station') != first and sound(s) and s.get('ahead_ms',0) > 0, 90, 'switch')
     pg.click('#go'); time.sleep(1.5); st = S(); r['after_stop'] = {k: st.get(k) for k in ('playing', 'scheduled', 'ctx')}
-    pg.click('#go'); r['relisten_to_sound'] = until(lambda s: s.get('scheduled', 0) > 0, 60, 'relisten')
+    pg.click('#go'); r['relisten_to_sound'] = until(sound, 60, 'relisten')
     r['total'] = T()
     print(json.dumps(r)); b.close()
 run()

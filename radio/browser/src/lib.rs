@@ -217,8 +217,10 @@ struct Ship {
     failed: Mutex<HashMap<[u8; 32], u64>>,
     /// Whether the visitor is listening: only then is the tab counted aboard.
     listening: std::sync::atomic::AtomicBool,
-    /// The first hop of this visit's private route.
+    /// The first hop of this visit's private routes.
     first_hop: Mutex<Option<EndpointId>>,
+    /// Exits whose route gave no answer lately, and when: drawn only after the others.
+    suspect: Mutex<HashMap<EndpointId, u64>>,
     /// Off unless the listener turns it on: carriers asked directly when two hops fail.
     direct_ok: std::sync::atomic::AtomicBool,
     /// Each station's clock, rebuilt only when its log grows: the player asks every second.
@@ -612,13 +614,22 @@ impl Ship {
 
     /// The first page of a log along two routes at once: the first answer with entries in it.
     async fn first_page(&self, station: StationId) -> Result<Response> {
-        let one = || async {
-            match self.ask_privately(&Ask::Log { station, from: 0 }).await {
+        let one = |exit: Option<EndpointId>| async move {
+            match self.ask_route(&Ask::Log { station, from: 0 }, exit).await {
                 Ok(Response::Entries(list)) if !list.is_empty() => Ok(Response::Entries(list)),
                 _ => Err(anyhow!("an exit with nothing")),
             }
         };
-        let mut tries: n0_future::FuturesUnordered<_> = (0..2).map(|_| Box::pin(one())).collect();
+        // Four routes at once through the visit's first hop, each to a different exit: a log the
+        // tab has never seen waits on the fastest of them, not on the first one drawn.
+        let nodes = self.route_nodes();
+        let first = if nodes.len() >= 2 { self.first_hop_for(&nodes) } else { None };
+        let exits = first.map(|f| self.exits(&nodes, &[f], 4)).unwrap_or_default();
+        let mut tries: n0_future::FuturesUnordered<_> = if exits.is_empty() {
+            (0..2).map(|_| Box::pin(one(None))).collect()
+        } else {
+            exits.iter().map(|e| Box::pin(one(Some(*e)))).collect()
+        };
         let mut last = Err(anyhow!("no route"));
         while let Some(r) = n0_future::StreamExt::next(&mut tries).await {
             if r.is_ok() {
@@ -669,7 +680,7 @@ impl Ship {
         // Two hops first: two routes at once, a third if both fail. The exits see a sealed
         // name and never this tab; the first hop sees this tab and never the name.
         let name = pyrate_core::seal::name(hash);
-        let one = || async {
+        let one = || async move {
             match self.ask_privately(&Ask::Sealed { station: *station, name }).await {
                 Ok(Response::Sealed(Some(sealed))) => pyrate_core::seal::unseal(hash, &sealed).ok_or_else(|| anyhow!("unopened")),
                 _ => Err(anyhow!("no answer")),
@@ -959,28 +970,74 @@ impl Ship {
     /// not what it asks; the exit, drawn each time and never the first hop, sees what is asked
     /// and not who by. Fewer than two nodes known, and nothing is sent.
     async fn ask_privately(&self, ask: &Ask) -> Result<Response> {
+        self.ask_route(ask, None).await
+    }
+
+    /// The visit's first hop, drawn once: from the radios this tab is already talking to where
+    /// it can (they know its address already, and they answer at once), else from any it knows.
+    fn first_hop_for(&self, nodes: &[EndpointId]) -> Option<EndpointId> {
+        let mut g = self.first_hop.lock().unwrap();
+        if g.is_none_or(|f| !nodes.contains(&f)) {
+            let near: Vec<EndpointId> = {
+                let n = self.neighbours.lock().unwrap();
+                nodes.iter().filter(|x| n.contains(*x)).copied().collect()
+            };
+            let pool = if near.is_empty() { nodes.to_vec() } else { near };
+            if pool.is_empty() {
+                return None;
+            }
+            *g = Some(pool[pick(pool.len())]);
+        }
+        *g
+    }
+
+    /// Exits for a request, as many as asked for and all different: radios that have not
+    /// failed a route in the last three minutes first, then the rest, never `not`.
+    fn exits(&self, nodes: &[EndpointId], not: &[EndpointId], n: usize) -> Vec<EndpointId> {
+        let now = self.now();
+        let suspect = self.suspect.lock().unwrap().clone();
+        let bad = |x: &EndpointId| suspect.get(x).is_some_and(|t| now.saturating_sub(*t) < 3 * 60_000);
+        let mut good: Vec<EndpointId> = nodes.iter().filter(|x| !not.contains(x) && !bad(x)).copied().collect();
+        let mut rest: Vec<EndpointId> = nodes.iter().filter(|x| !not.contains(x) && bad(x)).copied().collect();
+        let mut out = Vec::new();
+        while out.len() < n && (!good.is_empty() || !rest.is_empty()) {
+            let from = if !good.is_empty() { &mut good } else { &mut rest };
+            out.push(from.swap_remove(pick(from.len())));
+        }
+        out
+    }
+
+    /// One request two hops away. The first hop, drawn once a visit, sees this tab but not what
+    /// it asks; the exit, given or drawn each time and never the first hop, sees what is asked
+    /// and not who by. A route that does not answer marks its exit as suspect for three minutes,
+    /// since the first hop is a radio this tab is talking to; a first hop whose connection fails
+    /// is redrawn. Fewer than two nodes known, and nothing is sent.
+    async fn ask_route(&self, ask: &Ask, exit: Option<EndpointId>) -> Result<Response> {
         let nodes = self.route_nodes();
         if nodes.len() < 2 {
             return Err(anyhow!("one node only"));
         }
-        let first = {
-            let mut g = self.first_hop.lock().unwrap();
-            if g.is_none_or(|f| !nodes.contains(&f)) {
-                *g = Some(nodes[pick(nodes.len())]);
-            }
-            g.unwrap()
+        let first = self.first_hop_for(&nodes).ok_or_else(|| anyhow!("no first hop"))?;
+        let exit = match exit.filter(|e| *e != first) {
+            Some(e) => e,
+            None => *self.exits(&nodes, &[first], 1).first().ok_or_else(|| anyhow!("no exit"))?,
         };
-        let exits: Vec<EndpointId> = nodes.into_iter().filter(|n| *n != first).collect();
-        let exit = exits[pick(exits.len())];
         let plain = postcard::to_stdvec(ask)?;
         let (eph, ct, c) = pyrate_core::route::seal_to(exit.as_bytes(), &plain).ok_or_else(|| anyhow!("seal"))?;
         let blob = postcard::to_stdvec(&Hop::Sealed { eph, ct })?;
         let hop = postcard::to_stdvec(&Hop::Forward { next: *exit.as_bytes(), blob })?;
-        let raw = match timeout(Duration::from_secs(10), self.ask(first, &Request::Hop(hop))).await {
-            Ok(Ok(Response::Hop(raw))) => raw,
-            _ => {
-                // The first hop is gone or slow: the next request draws another.
+        let raw = match timeout(Duration::from_secs(8), self.ask(first, &Request::Hop(hop))).await {
+            Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => raw,
+            Ok(Err(_)) => {
+                // The first hop is gone: the next request draws another.
                 *self.first_hop.lock().unwrap() = None;
+                return Err(anyhow!("first hop gone"));
+            }
+            _ => {
+                self.suspect.lock().unwrap().insert(exit, self.now());
+                if !self.neighbours.lock().unwrap().contains(&first) {
+                    *self.first_hop.lock().unwrap() = None;
+                }
                 return Err(anyhow!("no answer"));
             }
         };
@@ -1021,6 +1078,8 @@ impl Ship {
             net::Card {
                 station: *id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof,
                 cover: art.and_then(|a| a.0).map(|a| a.hash), accent: art.map(|a| a.2), kinds, mature, tip, explicit: log.explicit(),
+                tracks: Some(log.library().map(|l| l.len() as u32).unwrap_or(0)),
+                named: log.named_since(),
             }
             .clipped()
             .sign(&m.key),
@@ -1268,6 +1327,7 @@ impl Ship {
                 Some((aboard, json!({
                     "id": id.to_hex(), "call_sign": id.call_sign(), "name": shown(&a.name), "about": pyrate_core::chat::shown(&a.about), "mixed": pyrate_core::chat::mixed_script(&a.name),
                     "port": a.port.as_deref().map(shown), "live": a.live, "aboard": aboard, "since": a.since,
+                    "tracks": a.tracks, "signed_ms": a.at_ms, "named": a.named,
                     "kinds": a.kinds, "mature": a.mature, "explicit": a.explicit, "tip": a.tip,
                     "cover": a.cover.map(|h| hex(&h)), "banner": banners.get(id), "accent": accent,
                     "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),
@@ -1490,6 +1550,7 @@ impl Radio {
             failed: Mutex::new(HashMap::new()),
             listening: std::sync::atomic::AtomicBool::new(false),
             first_hop: Mutex::new(None),
+            suspect: Mutex::new(HashMap::new()),
             direct_ok: std::sync::atomic::AtomicBool::new(false),
             clocks: Mutex::new(HashMap::new()),
             touched: Mutex::new(HashMap::new()),

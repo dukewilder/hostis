@@ -380,6 +380,8 @@ pub struct Inner {
     /// The latest signed notes heard from carriers, kept as they came so a newcomer asking for
     /// cards gets them too: per node, the relay it named; per station and node, its carrier note.
     notes: Mutex<net::Notes>,
+    /// For each carried station, the length of its log when this node last said it carries it.
+    said_head: Mutex<HashMap<StationId, u64>>,
     /// The device's hold key, for the small files the node keeps beside its store.
     pub(crate) hold: hold::Hold,
     /// Where carriers said they can be reached, signed by each: the network's own address book.
@@ -443,8 +445,11 @@ impl ProtocolHandler for Proto {
         // Lantern), four MiB each, twenty seconds to arrive, and all of them together within the
         // byte budget: no peer can make this node hold more than it can.
         let mine = Arc::new(tokio::sync::Semaphore::new(8));
+        // Four large answers at a time per connection: a crowd of identities each holds little
+        // of the page budget, and an exit relaying for many listeners still keeps pages moving.
+        let my_pages = Arc::new(tokio::sync::Semaphore::new(4));
         while let Ok((mut send, mut recv)) = conn.accept_bi().await {
-            let inner = inner.clone();
+            let (inner, my_pages) = (inner.clone(), my_pages.clone());
             let Ok(slot) = mine.clone().acquire_owned().await else { break };
             tokio::spawn(async move {
                 let _slot = slot;
@@ -452,14 +457,19 @@ impl ProtocolHandler for Proto {
                 let budget = if inner.cfg.lantern { &BYTES_LANTERN } else { &BYTES };
                 let Ok(Some((bytes, _held))) = tokio::time::timeout(Duration::from_secs(20), read_budgeted(&mut recv, budget)).await else { return };
                 let Ok(req) = postcard::from_bytes::<Request>(&bytes) else { return };
-                // A log page is the one large answer: it is built only when there is room for it,
-                // and the room is held until it has gone, so a crowd asking for long logs waits
+                // A log page and the cards are the large answers: each is built only when there is
+                // room for it, and the room is held until it has gone, so a crowd asking for long logs waits
                 // its turn instead of filling memory.
-                let _page = if matches!(req, Request::Log { .. } | Request::PocketLog { .. }) {
+                let _page = if matches!(req, Request::Log { .. } | Request::PocketLog { .. } | Request::Cards) {
                     let pages = if inner.cfg.lantern { &PAGES_LANTERN } else { &PAGES };
                     let k = (2 * pyrate_core::archive::PAGE_BYTES / 1024) as u32 + 2048;
-                    match tokio::time::timeout(Duration::from_secs(10), pages.acquire_many(k)).await {
-                        Ok(Ok(p)) => Some(p),
+                    let held = tokio::time::timeout(Duration::from_secs(10), async {
+                        let one = my_pages.acquire_owned().await.ok()?;
+                        let p = pages.acquire_many(k).await.ok()?;
+                        Some((one, p))
+                    });
+                    match held.await {
+                        Ok(Some(p)) => Some(p),
                         _ => return,
                     }
                 } else {
@@ -478,16 +488,23 @@ impl ProtocolHandler for Proto {
                         inner.serve(other)
                     }
                 };
-                // The answer goes out within twenty seconds or not at all: a reader that stops
-                // reading frees its slot when the time runs out.
+                // The answer goes out in pieces, each within five seconds, and the whole within a
+                // minute: a reader that stops reading frees its slot five seconds after it stops,
+                // while a slow one still gets its answer.
                 if let Ok(out) = postcard::to_stdvec(&resp) {
-                    match tokio::time::timeout(Duration::from_secs(20), send.write_all(&out)).await {
-                        Ok(Ok(())) => {
-                            let _ = send.finish();
+                    let started = std::time::Instant::now();
+                    let mut sent = true;
+                    for piece in out.chunks(64 << 10) {
+                        let gone = tokio::time::timeout(Duration::from_secs(5), send.write_all(piece)).await;
+                        if !matches!(gone, Ok(Ok(()))) || started.elapsed() > Duration::from_secs(60) {
+                            sent = false;
+                            break;
                         }
-                        _ => {
-                            let _ = send.reset(0u32.into());
-                        }
+                    }
+                    if sent {
+                        let _ = send.finish();
+                    } else {
+                        let _ = send.reset(0u32.into());
                     }
                 }
             });
@@ -592,7 +609,7 @@ impl Inner {
             return;
         }
         let Ok(Ok(Response::Cards(list))) = tokio::time::timeout(Duration::from_secs(15), self.ask(node, &Request::Cards)).await else { return };
-        let mut n = 0;
+        let (mut n, mut cards, mut notes) = (0, 0, 0);
         let now = now_ms();
         for b in list.into_iter().take(net::CARDS_ITEMS) {
             if b.len() > net::CARD_WIRE {
@@ -606,13 +623,16 @@ impl Inner {
             self.notes.lock().unwrap().keep(&g, &b, now);
             let Some(g) = g.from_network(now, node.as_bytes()) else { continue };
             let card = matches!(g, Gossip::Station(_));
+            if card {
+                cards += 1;
+            } else {
+                notes += 1;
+            }
             if self.on_gossip(g).is_some() && card {
                 n += 1;
             }
         }
-        if n > 0 {
-            say(&format!("{n} stations from {}", node.fmt_short()));
-        }
+        say(&format!("{cards} cards and {notes} carrier notes from {} ({n} logs behind)", node.fmt_short()));
     }
 
     /// The chunk on now and the one after it, for a station the listener may turn to next: in
@@ -1215,7 +1235,9 @@ impl Inner {
                     _ => None,
                 };
                 let explicit = log.explicit();
-                let card = net::Card { station: id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof, cover, accent, kinds, mature, tip, explicit }.clipped();
+                let tracks = Some(log.library().map(|l| l.len() as u32).unwrap_or(0));
+                let named = log.named_since();
+                let card = net::Card { station: id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof, cover, accent, kinds, mature, tip, explicit, tracks, named }.clipped();
                 // A card is signed afresh only when something on it changes, or every eight to
                 // twelve minutes: a card stamped every twenty seconds would tell the network, to
                 // the second, when its keeper's device is awake.
@@ -1266,7 +1288,19 @@ impl Inner {
         }
         let own_set: std::collections::HashSet<StationId> = self.store.lock().unwrap().own().into_iter().collect();
         let mut said_carrier = false;
+        // A carried station's card and carrier note go out when its log has grown since they
+        // last did, or on its turn: every four minutes, each station on its own ten seconds of
+        // the four. The network believes them for ten and fifteen minutes, and a newcomer asks a
+        // door for them all at once, so saying them every ten seconds only spent everyone's
+        // data: a Lantern carrying a thousand stations sent three hundred messages a second.
+        let slot = now / 10_000 % 24;
         for (station, head) in carried {
+            let turn = u64::from(station.0[0]) % 24 == slot;
+            let grown = self.said_head.lock().unwrap().get(&station) != Some(&head);
+            if !turn && !grown && !own_set.contains(&station) {
+                continue;
+            }
+            self.said_head.lock().unwrap().insert(station, head);
             // A pocket's carriers say so only to its members.
             if self.is_pocket(&station) {
                 let g = Gossip::Carrier { station, node: me, head };
@@ -1642,6 +1676,7 @@ impl Inner {
                     "accent": accent,
                     "id": hex, "call_sign": id.call_sign(), "name": shown(&a.name), "about": pyrate_core::chat::shown(&a.about), "mixed": pyrate_core::chat::mixed_script(&a.name),
                     "port": a.port.as_deref().map(shown), "live": a.live, "aboard": aboard, "kept": is_kept, "marooned": is_marooned, "since": a.since,
+                    "tracks": a.tracks, "signed_ms": a.at_ms, "named": a.named,
                     "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),
                     "pocket": self.is_pocket(id),
                 }), a.proof.is_some().then(|| (a.clone(), show))))
@@ -2264,6 +2299,7 @@ impl Node {
             cards_cache: Mutex::new(None),
             cards_asked: Mutex::new(Default::default()),
             notes: Mutex::new(net::Notes::default()),
+            said_head: Mutex::new(HashMap::new()),
             hold,
             book: book.clone(),
             dark,

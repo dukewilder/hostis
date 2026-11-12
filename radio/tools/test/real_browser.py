@@ -5,7 +5,7 @@ from playwright.sync_api import sync_playwright
 url = sys.argv[1]; secs = int(sys.argv[2]) if len(sys.argv) > 2 else 120
 proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
 with sync_playwright() as p:
-    b = p.chromium.launch(proxy={"server": proxy} if proxy else None, args=["--autoplay-policy=no-user-gesture-required"])
+    b = p.chromium.launch(proxy={"server": proxy, "bypass": "127.0.0.1,localhost"} if proxy else None, args=["--autoplay-policy=no-user-gesture-required"])
     ctx = b.new_context(ignore_https_errors=True)
     pg = ctx.new_page(); logs = []
     pg.on("console", lambda m: logs.append(f"{time.time()-t0:6.1f} console {m.type}: {m.text[:160]}"))
