@@ -120,8 +120,24 @@ mod framed {
         }
     }
 
+    std::thread_local! {
+        /// How many bodies deep the decoder is on this thread.
+        static DEPTH: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+    }
+
+    /// A body, or the bytes kept as they came when it cannot be read. An entry holds a body,
+    /// and a deputy's body holds the body it wrote: two deep at most. Anything deeper is never
+    /// a valid entry, so it is kept unread instead of decoded, and no stranger can nest bodies
+    /// until the decoder runs out of stack.
     pub fn decode(raw: Vec<u8>) -> Body {
-        match postcard::take_from_bytes::<Body>(&raw) {
+        let depth = DEPTH.with(|d| d.get());
+        if depth >= 2 {
+            return Body::Unknown(raw);
+        }
+        DEPTH.with(|d| d.set(depth + 1));
+        let r = postcard::take_from_bytes::<Body>(&raw);
+        DEPTH.with(|d| d.set(depth));
+        match r {
             Ok((b, rest)) if rest.is_empty() => b,
             _ => Body::Unknown(raw),
         }
