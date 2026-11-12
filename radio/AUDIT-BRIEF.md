@@ -170,3 +170,5 @@ The audit restarted from the code on 10 November 2026. Its findings, open and fi
 - 11 November 2026: signed 0.9.11 (cert af4c08f6…) live at hostis.black/pyrateradio with the computers' builds from run 43087563507. https relay chosen: Cloudflare Tunnel run inside gluetun, brief in tools/dukewilder-relay-tunnel.md. Waiting on Dylan moving hostis.black DNS to Cloudflare.
 
 - 11 November 2026: https://relay.hostis.black live through Cloudflare Tunnel (pyrate-tunnel in gluetun-radio, edge from the Proton exit). Harbour publishes it to pkarr and its relay is fixed at 42779. Browser player tested from hostis.black/pyrateradio/listen: The Numbers played with 13.7 s buffered, five stations found.
+
+- **Attack harness (0.9.12).** `PYRATE_LAN_ANY=1 target/release/pentest <empty dir> <wav> all` attacks a carry-all Lantern on this machine and prints PASS or FAIL. Run it after any change to networking, stems, cards, gossip or the web listener. AUDIT-2026-11c.md has what each attack does. Nearby radios (LAN) need 0.9.12 on both ends: beacons are now signed.

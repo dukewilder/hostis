@@ -496,3 +496,14 @@ A second outside audit reviewed 0.9.8. AUDIT-2026-11b.md has every finding, chec
 ## XLI. A door publishes where it can be reached (11 November 2026)
 
 The harbour reaches its own relay from inside its tunnel at a loopback address, and the lookup service was given that address, so phones and browsers that had never met the harbour were sent to themselves. A Lantern with `PYRATE_RELAY_LOCAL` and `PYRATE_RELAY_URL` now publishes the public address in place of the inside one. Browsers still cannot use a plain-http relay: until the HOSTIS relay answers over https at relay.hostis.black, the open player depends on Lanterns homed on relays it can reach.
+
+## XLII. Attacked, not read (11 November 2026)
+
+The third outside audit asked for tests in place of more reading, and `node/src/bin/pentest.rs` now turns malicious peers on a real carry-all Lantern on one machine. Its first run took the target from 32 MB to 2.6 GB in 25 seconds with a flood of stems, showed a revoked deputy's tip address to a new listener, and put a 200,000 character name in the Log. Every attack now passes. AUDIT-2026-11c.md records each finding, what the harness measured and what changed.
+
+- **Cargo is checked before it moves.** A stem's entries, card and chunks are verified on arrival, so junk is refused at once and relayed nowhere, and the stems waiting to be shown are held to a fixed count and a fixed number of bytes.
+- **Nothing a stranger sends is held without a limit.** Answers go out within twenty seconds. Cards are bounded field by field. Local beacons are signed, dated and held to the address they came from.
+- **A carrier keeps its place by speaking.** A full list of carriers takes a newcomer only in place of one silent for ten minutes, so a flood of fresh identities cannot push out the real carriers of a station.
+- **Money follows only a current log.** A deputy's card shows a tip address only once this device holds the station's log up to the card and the log still names that deputy.
+- **A relay over plain http is an address, not a name.** Names over https only, where the certificate proves them.
+- **Secrets are private from their first byte.**
