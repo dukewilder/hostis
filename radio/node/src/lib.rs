@@ -2160,6 +2160,32 @@ impl Node {
         self.inner.endpoint.id()
     }
 
+    /// For the attack harness: meets another node by its address and joins the Log through it.
+    #[doc(hidden)]
+    pub fn join(&self, addr: iroh::EndpointAddr) {
+        let id = addr.id;
+        self.inner.book.add_endpoint_info(addr);
+        let tx = self.inner.gossip_tx.lock().unwrap().clone();
+        if let Some(tx) = tx {
+            let _ = self.rt.block_on(tx.join_peers(vec![id]));
+        }
+    }
+
+    /// For the attack harness: writes an entry on one of this node's own stations.
+    #[doc(hidden)]
+    pub fn write_entry(&self, station: StationId, body: Body) -> Result<()> {
+        self.inner.store.lock().unwrap().write(station, now_ms(), body)?;
+        Ok(())
+    }
+
+    /// For the attack harness: bytes of this node's logs on disk, and how many it holds.
+    #[doc(hidden)]
+    pub fn log_bytes(&self) -> (u64, usize) {
+        let s = self.inner.store.lock().unwrap();
+        let disk = std::fs::read_dir(self.inner.cfg.dir.join("logs")).map(|d| d.flatten().filter_map(|f| f.metadata().ok()).map(|m| m.len()).sum()).unwrap_or(0);
+        (disk, s.logs.len())
+    }
+
     /// Raises colours with the master key in hand: it flies them, appoints this
     /// device's deputy, and is then forgotten. Returns the station and the master's
     /// 24 words, shown once. A Lantern (`keep_master`) keeps the master itself.
