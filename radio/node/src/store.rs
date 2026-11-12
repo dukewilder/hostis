@@ -113,6 +113,9 @@ pub struct Store {
     /// Carried stations whose logs outgrew `budget.per_station`, and when: no more is taken
     /// of them for a week.
     full: HashMap<StationId, u64>,
+    /// The chunks and pictures of this node's own stations, kept until one of their logs
+    /// changes: a request for any chunk then costs a lookup, not a walk through every own log.
+    own_named: Option<(Vec<([u8; 32], u64)>, HashSet<Hash>)>,
     /// Carried stations let go to stay within budget, and when: not fetched again for six
     /// hours unless someone here listens to them.
     evicted: HashMap<StationId, u64>,
@@ -168,6 +171,7 @@ impl Store {
             ballast: HashSet::new(),
             budget: LogBudget::PHONE,
             full: HashMap::new(),
+            own_named: None,
             evicted: HashMap::new(),
             arrived: HashMap::new(),
             listened: HashMap::new(),
@@ -479,6 +483,48 @@ impl Store {
         Ok(())
     }
 
+    /// Whether a chunk or picture belongs to one of this node's own stations.
+    pub fn is_own_named(&mut self, h: &Hash) -> bool {
+        let mut sig: Vec<([u8; 32], u64)> = self.keys.keys().map(|id| (id.0, self.logs.get(id).map_or(0, |a| a.len()))).collect();
+        sig.sort_unstable();
+        if self.own_named.as_ref().is_none_or(|(s, _)| *s != sig) {
+            let mut set = HashSet::new();
+            for id in self.keys.keys() {
+                set.extend(self.chunks_of(id));
+                set.extend(self.logs.get(id).map(|a| a.art_hashes()).unwrap_or_default());
+            }
+            self.own_named = Some((sig, set));
+        }
+        self.own_named.as_ref().is_some_and(|(_, set)| set.contains(h))
+    }
+
+    /// What a station's log names that this disk lacks, looked for from entry `from` on: at most
+    /// `want` chunks and `want` pictures, after looking at no more than `look` names. Returns
+    /// them and the entry to look from next (0 once the end is reached), so a carrier works
+    /// through a long log a slice at a time and never holds the store for the whole of it.
+    pub fn missing_from(&self, id: &StationId, from: usize, look: usize, want: usize) -> (Vec<Hash>, Vec<Hash>, usize) {
+        let Some(a) = self.logs.get(id) else { return (vec![], vec![], 0) };
+        let es = a.entries();
+        let from = if from >= es.len() { 0 } else { from };
+        let (mut chunks, mut pics, mut looked) = (Vec::new(), Vec::new(), 0usize);
+        for (i, e) in es.iter().enumerate().skip(from) {
+            if looked >= look || (chunks.len() >= want && pics.len() >= want) {
+                return (chunks, pics, i);
+            }
+            let (c, p): (Vec<Hash>, Vec<Hash>) = match e.entry.body() {
+                Body::Track { chunks, .. } | Body::Release { chunks, .. } => (chunks.iter().map(|c| c.hash).collect(), vec![]),
+                Body::Live { chunk, .. } => (vec![chunk.hash], vec![]),
+                Body::Art { cover, banner, .. } => (vec![], cover.iter().chain(banner.iter()).map(|a| a.hash).collect()),
+                Body::TrackArt { art, .. } => (vec![], vec![art.hash]),
+                _ => continue,
+            };
+            looked += c.len() + p.len();
+            chunks.extend(c.into_iter().filter(|h| !self.has_chunk(h)));
+            pics.extend(p.into_iter().filter(|h| !self.has_chunk(h)));
+        }
+        (chunks, pics, 0)
+    }
+
     pub fn chunks_of(&self, id: &StationId) -> Vec<Hash> {
         let Some(a) = self.logs.get(id) else { return vec![] };
         let mut out = Vec::new();
@@ -699,36 +745,86 @@ impl Store {
 
     pub fn enforce_quota(&self) -> Result<u64> {
         self.sweep_log_files();
-        let own_art = self.own().iter().filter_map(|id| self.logs.get(id)).flat_map(|a| a.art_hashes()).collect::<Vec<_>>();
-        let keep: HashSet<String> = self.own().iter().flat_map(|id| self.chunks_of(id)).chain(own_art).chain(self.ballast.iter().copied()).flat_map(|h| self.file_names(&h)).collect();
-        let mut whose: HashMap<String, StationId> = HashMap::new();
-        for id in self.logs.keys() {
-            for h in self.chunks_of(id) {
-                for n in self.file_names(&h) {
-                    whose.entry(n).or_insert(*id);
-                }
-            }
-        }
+        // Most of the time the hold is within its quota and nothing more is done. (Every five
+        // minutes this built a name for every chunk every carried log names, three strings
+        // each: a flood of long logs made it hundreds of megabytes, under the store's lock.)
+        let files = self.chunk_files()?;
         let mut total = 0u64;
-        let mut orphans = Vec::new();
-        let mut by: HashMap<StationId, (u64, Vec<(SystemTime, u64, PathBuf)>)> = HashMap::new();
-        for f in self.chunk_files()? {
+        let mut on_disk: HashMap<String, (SystemTime, u64, PathBuf)> = HashMap::new();
+        let mut legacy = false;
+        for f in &files {
             let m = f.metadata()?;
             total += m.len();
-            let name = f.file_name().to_string_lossy().to_string();
-            if keep.contains(&name) {
-                continue;
+            legacy |= f.path().parent().and_then(|p| p.parent()).is_some_and(|p| p.ends_with("chunks"));
+        }
+        if total <= self.quota {
+            return Ok(0);
+        }
+        for f in files {
+            let m = f.metadata()?;
+            on_disk.insert(f.file_name().to_string_lossy().to_string(), (m.modified().unwrap_or(SystemTime::UNIX_EPOCH), m.len(), f.path()));
+        }
+        // Names are worked out only to find files that are on the disk, so memory goes with the
+        // files held, not with the logs. Files from before the hold are looked for only if
+        // there are any.
+        let names = |h: &Hash| -> Vec<String> {
+            let name = pyrate_core::seal::name(h);
+            let mut v = vec![self.hold.name(&name)];
+            if legacy {
+                v.push(hex(&name));
+                v.push(hex(h));
             }
-            let e = (m.modified().unwrap_or(SystemTime::UNIX_EPOCH), m.len(), f.path());
-            match whose.get(&name) {
-                Some(id) => {
-                    let g = by.entry(*id).or_default();
-                    g.0 += m.len();
-                    g.1.push(e);
+            v
+        };
+        let named = |a: &Archive| -> Vec<Hash> {
+            let mut out = Vec::new();
+            for e in a.entries() {
+                match e.entry.body() {
+                    Body::Track { chunks, .. } | Body::Release { chunks, .. } => out.extend(chunks.iter().map(|c| c.hash)),
+                    Body::Live { chunk, .. } => out.push(chunk.hash),
+                    _ => {}
                 }
-                None => orphans.push(e),
+            }
+            out
+        };
+        // Our own sound and art and the ballast are never let go.
+        let own: Vec<StationId> = self.own();
+        for id in &own {
+            let Some(a) = self.logs.get(id) else { continue };
+            for h in named(a).into_iter().chain(a.art_hashes()) {
+                for n in names(&h) {
+                    on_disk.remove(&n);
+                }
             }
         }
+        for h in &self.ballast {
+            for n in names(h) {
+                on_disk.remove(&n);
+            }
+        }
+        let mut by: HashMap<StationId, (u64, Vec<(SystemTime, u64, PathBuf)>)> = HashMap::new();
+        for (id, a) in &self.logs {
+            if own.contains(id) {
+                continue;
+            }
+            for e in a.entries() {
+                let hs: Vec<Hash> = match e.entry.body() {
+                    Body::Track { chunks, .. } | Body::Release { chunks, .. } => chunks.iter().map(|c| c.hash).collect(),
+                    Body::Live { chunk, .. } => vec![chunk.hash],
+                    _ => continue,
+                };
+                for h in hs {
+                    for n in names(&h) {
+                        if let Some(f) = on_disk.remove(&n) {
+                            let g = by.entry(*id).or_default();
+                            g.0 += f.1;
+                            g.1.push(f);
+                        }
+                    }
+                }
+            }
+        }
+        let mut orphans: Vec<(SystemTime, u64, PathBuf)> = on_disk.into_values().collect();
         orphans.sort();
         for g in by.values_mut() {
             g.1.sort();
@@ -887,6 +983,55 @@ mod tests {
         let (a, torn) = read_sealed_len(&id, &[1; 32], &fs::read(&path).unwrap());
         assert!(a.is_empty() && torn.is_none());
         assert_eq!(fs::metadata(&path).unwrap().len(), size);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn over_quota_the_hold_lets_go_of_orphans_then_the_largest_carried_station_never_our_own() {
+        let dir = std::env::temp_dir().join(format!("pyrate-quota-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut s = Store::open_with(&dir, 1 << 30, Some([5; 32])).unwrap();
+        let chunk = |i: u32| -> (Hash, Vec<u8>) {
+            let b: Vec<u8> = (0..1000u32).map(|j| (i.wrapping_mul(31).wrapping_add(j)) as u8).collect();
+            (*blake3::hash(&b).as_bytes(), b)
+        };
+        let track = |hs: &[Hash]| Body::Track { title: "t".into(), by: "".into(), source: "s".into(), channels: 2, bitrate: 64_000, chunks: hs.iter().map(|h| pyrate_core::Chunk { hash: *h, len: 1000, frames: 50 }).collect() };
+        // Our own station, two chunks.
+        let mine = StationKey::generate().unwrap();
+        let mid = mine.id();
+        s.add_key(StationKey::from_seed(mine.seed())).unwrap();
+        let own: Vec<(Hash, Vec<u8>)> = (0..2).map(chunk).collect();
+        s.write(mid, 1_000, track(&own.iter().map(|c| c.0).collect::<Vec<_>>())).unwrap();
+        // Two carried stations, four chunks and one.
+        let carried = |s: &mut Store, n: std::ops::Range<u32>| -> (StationId, Vec<Hash>) {
+            let k = StationKey::generate().unwrap();
+            let cs: Vec<(Hash, Vec<u8>)> = n.map(chunk).collect();
+            let mut a = Archive::new(k.id());
+            let e = a.write(&k, 1_000, track(&cs.iter().map(|c| c.0).collect::<Vec<_>>())).unwrap().clone();
+            s.put_entries(k.id(), vec![e]).unwrap();
+            for (h, b) in &cs {
+                s.put_chunk(h, b).unwrap();
+            }
+            (k.id(), cs.into_iter().map(|c| c.0).collect())
+        };
+        for (h, b) in &own {
+            s.put_chunk(h, b).unwrap();
+        }
+        let (_, big) = carried(&mut s, 10..14);
+        let (_, small) = carried(&mut s, 20..21);
+        let (orphan, ob) = chunk(99);
+        s.put_chunk(&orphan, &ob).unwrap();
+        let one = fs::metadata(s.chunk_path(&orphan)).unwrap().len();
+        // Room for five of the eight.
+        s.quota = one * 5;
+        let freed = s.enforce_quota().unwrap();
+        assert_eq!(freed, one * 3);
+        assert!(!s.has_chunk(&orphan), "the orphan goes first");
+        assert!(own.iter().all(|c| s.has_chunk(&c.0)), "our own sound stays");
+        assert!(s.has_chunk(&small[0]), "the small station is left alone");
+        assert_eq!(big.iter().filter(|h| s.has_chunk(h)).count(), 2, "the largest station gives up two");
+        // Within quota, nothing is touched.
+        assert_eq!(s.enforce_quota().unwrap(), 0);
         let _ = fs::remove_dir_all(&dir);
     }
 }

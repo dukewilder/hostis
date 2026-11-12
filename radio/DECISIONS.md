@@ -507,3 +507,14 @@ The third outside audit asked for tests in place of more reading, and `node/src/
 - **Money follows only a current log.** A deputy's card shows a tip address only once this device holds the station's log up to the card and the log still names that deputy.
 - **A relay over plain http is an address, not a name.** Names over https only, where the certificate proves them.
 - **Secrets are private from their first byte.**
+
+## XLIII. A station pays for its own schedule (12 November 2026)
+
+The fourth outside audit sent seven findings and a test plan. Each was attacked on the unfixed code, fixed and attacked again; our own pass found seven more. AUDIT-2026-11d.md has every finding, what the harness measured before and after, and the release gates.
+
+- **Logs are carried within a budget.** A signature proves who wrote an entry, not that it is worth the space. Logs carried for others share 128 MB on a phone and 1 GB on a Lantern, no station more than half; a newcomer nobody here listens to goes first, and a station's own logs are never counted.
+- **Replies are measured in bytes.** A log goes out in pages of 2 MiB, and the memory every page in flight may take is shared and fixed.
+- **A carrier's place is earned by serving.** A carrier that has handed over real data, a neighbour or a harbour outranks every claim, and claims that arrive first cannot fill the list.
+- **An unconfirmed deputy is shown as unconfirmed.** Co-hosts each hold their own appointment, so the newest card still names the station; one this device cannot check against the log shows no tip and no cover, and says so.
+- **What a station signs, its own listeners pay for.** Every listener works out the schedule, so the schedule's cost is the station's choice. The clock now does the work once where it can, passes over empty stretches, and stops a bill at a fixed amount of work. A rota naming twenty thousand recordings took 4.7 s to say what was on; it takes 4 ms.
+- **A crash loses only the entry being written.** A torn record is cut off when the log opens, and a station's own entries reach the disk before anyone hears of them.

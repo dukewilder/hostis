@@ -399,9 +399,42 @@ impl Inner {
         {
             // Only chunks the station's signed log names are taken aboard: no one can fill a
             // carrier's disk with junk that merely matches its own hash.
+            // The log is searched from its end for the chunks this stem carries, and no
+            // further than 200,000 names back: a stem brings new sound, and building a set of
+            // every chunk a long log names for each stem cost a carrier a second and tens of
+            // megabytes a stem.
             let s = self.store.lock().unwrap();
-            let named: std::collections::HashSet<Hash> = s.chunks_of(&station).into_iter().collect();
-            let pics: std::collections::HashSet<Hash> = s.logs.get(&station).map(|a| a.art_hashes()).unwrap_or_default().into_iter().collect();
+            let carried: std::collections::HashSet<Hash> = chunks.iter().map(|(h, _)| *h).collect();
+            let mut named: std::collections::HashSet<Hash> = std::collections::HashSet::new();
+            let mut pics: std::collections::HashSet<Hash> = std::collections::HashSet::new();
+            if let Some(a) = s.logs.get(&station) {
+                let mut looked = 0usize;
+                for e in a.entries().iter().rev() {
+                    if looked > 200_000 || named.len() + pics.len() >= carried.len() {
+                        break;
+                    }
+                    looked += 1;
+                    match e.entry.body() {
+                        Body::Track { chunks, .. } | Body::Release { chunks, .. } => {
+                            looked += chunks.len();
+                            named.extend(chunks.iter().map(|c| c.hash).filter(|h| carried.contains(h)));
+                        }
+                        Body::Live { chunk, .. } => {
+                            looked += 1;
+                            if carried.contains(&chunk.hash) {
+                                named.insert(chunk.hash);
+                            }
+                        }
+                        Body::Art { cover, banner, .. } => pics.extend(cover.iter().chain(banner.iter()).map(|a| a.hash).filter(|h| carried.contains(h))),
+                        Body::TrackArt { art, .. } => {
+                            if carried.contains(&art.hash) {
+                                pics.insert(art.hash);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
             for (h, b) in &chunks {
                 if named.contains(h) {
                     let _ = s.put_chunk(h, b);
