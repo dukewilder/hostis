@@ -1145,8 +1145,10 @@ impl Ship {
         let Some(a) = archives.get(station) else { return json!({ "kind": "searching" }) };
         if let Some(last) = a.entries().last() {
             if matches!(last.entry.body(), Body::Live { .. }) && self.now().saturating_sub(last.entry.at_ms) < 25_000 {
-                let tail: Vec<Value> = a
-                    .entries()
+                // Only the end of the log is looked at: a station live for weeks has hundreds of
+                // thousands of live entries, and the player wants the last twelve.
+                let es = a.entries();
+                let tail: Vec<Value> = es[es.len().saturating_sub(256)..]
                     .iter()
                     .filter_map(|e| match e.entry.body() {
                         Body::Live { chunk, channels, .. } => {
