@@ -1,6 +1,6 @@
 {
  "release": "0.9.13",
- "commit": "30714ef337399cf73f889586b8813dc3fd34ea97",
+ "commit": "02e4dc316d1d3671a8ed61e7b40b4c41aff21405",
  "machine": {
   "os": "Linux 6.18.44-fc-v378",
   "cpus": 2,
@@ -8,9 +8,29 @@
  },
  "artifacts": [
   {
-   "file": "pentest-final2",
-   "sha256": "db4d373893d0f48bd8746940f97b8aad0eb0d90eb42320c37973bd9b0277e176",
-   "bytes": 33785832
+   "file": "pyrate-radio-0.9.13-to-sign.apk",
+   "sha256": "5c3b2de965d9141469078742fed004b52ad2fbf6be1782ac0dfe2753e0c3a769",
+   "bytes": 45064363
+  },
+  {
+   "file": "pyrate-radio-linux-x64.tar.gz",
+   "sha256": "04baf76d98592101a507dd19c33fe4c1ce9e847fdbcdb4cead297ff543d61e11",
+   "bytes": 22952381
+  },
+  {
+   "file": "pyrate-radio-macos.zip",
+   "sha256": "034e5ce1a7b149220d18c4923a5be06192adcb150f0e8bc584705140b882c300",
+   "bytes": 39652256
+  },
+  {
+   "file": "pyrate-radio-windows.zip",
+   "sha256": "f5d6dba6484ba19577e45561e3a488f563cf07b0e00429cea3fcf2f1a8a90f02",
+   "bytes": 23897662
+  },
+  {
+   "file": "pyrate_browser_bg.wasm",
+   "sha256": "32112f10c28a254e99ce03903405748c53c18c16b9c7a7ac31fd684c623db767",
+   "bytes": 3474908
   },
   {
    "file": "lantern",
@@ -18,9 +38,9 @@
    "bytes": 33177888
   },
   {
-   "file": "pyrate_browser_bg.wasm",
-   "sha256": "32112f10c28a254e99ce03903405748c53c18c16b9c7a7ac31fd684c623db767",
-   "bytes": 3474908
+   "file": "pentest-final2",
+   "sha256": "db4d373893d0f48bd8746940f97b8aad0eb0d90eb42320c37973bd9b0277e176",
+   "bytes": 33785832
   }
  ],
  "requirements": [
