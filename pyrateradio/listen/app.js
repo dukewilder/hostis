@@ -1,21 +1,23 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=d7bf41ff9c';
+import init, { Radio } from './pkg/pyrate_browser.js?v=74cf785605';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
 // and nothing else, and it joins the network only when the visitor presses Listen.
-const HARBOUR_STATIONS = [{"id": "f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "name": "The Public Domain", "call_sign": "GAHAGU·3695"}, {"id": "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a", "name": "Readings", "call_sign": "DEVAKA·F42C"}, {"id": "1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069", "name": "The Numbers", "call_sign": "LOGEHO·95A5"}, {"id": "8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd", "name": "Netlabel", "call_sign": "KAMANO·62C1"}, {"id": "23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a", "name": "Poets' Corner", "call_sign": "VOVUFE·F376"}];
+const HARBOUR_STATIONS = [{"id": "f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "name": "The Public Domain", "call_sign": "GAHAGU·3695", "art": "art/the-public-domain.jpg", "banner_art": "art/the-public-domain-banner.jpg"}, {"id": "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a", "name": "Readings", "call_sign": "DEVAKA·F42C", "art": "art/readings.jpg", "banner_art": "art/readings-banner.jpg"}, {"id": "1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069", "name": "The Numbers", "call_sign": "LOGEHO·95A5", "art": "art/the-numbers.jpg", "banner_art": "art/the-numbers-banner.jpg"}, {"id": "8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd", "name": "Netlabel", "call_sign": "KAMANO·62C1", "art": "art/netlabel.jpg", "banner_art": "art/netlabel-banner.jpg"}, {"id": "23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a", "name": "Poets' Corner", "call_sign": "VOVUFE·F376", "art": "art/poets-corner.jpg", "banner_art": "art/poets-corner-banner.jpg"}];
 const EMBED = document.documentElement.classList.contains('embed');
 // Where this copy plays. 'harbour' is hostis.black's own copy: HOSTIS's stations and nothing
 // else, so nothing on that domain belongs to anyone else. Every other station, invitation and
 // flock goes straight to an open player, the same set served where no one owns it (IPFS, a
 // Lantern). 'open' is that copy: the whole Log, the chatter and the colours.
 const SCOPE = "harbour";
-const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeifyjyj7j4iz46nwbzov4hno434crufnu2gjt5qerwbph2uu3qb5uu.ipfs.inbrowser.link/", "https://bafybeifyjyj7j4iz46nwbzov4hno434crufnu2gjt5qerwbph2uu3qb5uu.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeifyjyj7j4iz46nwbzov4hno434crufnu2gjt5qerwbph2uu3qb5uu/"];
+const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeibliqutdu2tzczbkgiijocvj4ydgwi4mmn23otmvtrbo5njiy6jdu.ipfs.inbrowser.link/", "https://bafybeibliqutdu2tzczbkgiijocvj4ydgwi4mmn23otmvtrbo5njiy6jdu.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeibliqutdu2tzczbkgiijocvj4ydgwi4mmn23otmvtrbo5njiy6jdu/"];
 const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
 const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
+// HOSTIS's stations carry their pictures in the page, so they show before the network answers.
+const baked = (id, k = 'art') => !sw.art() ? null : HARBOUR_STATIONS.find(h => h.id === id)?.[k] || null;
 const lastId = () => { if (SHARED) return ''; try { return sessionStorage.getItem('pyrate.cur') || '' } catch (e) { return '' } };
 const passedId = () => { const id = location.hash.slice(1); return /^[0-9a-f]{64}$/.test(id) ? id : null };
 const inSet = s => !HOSTIS_ONLY || isHarbour(s.id);
@@ -47,7 +49,14 @@ const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 let radio = null, stations = [], cur = null, playing = false, gen = 0, bootAt = 0, booting = null;
-let ctx = null, gain = null, sources = [], meter = null;
+let ctx = null, gain = null, bus = null, sources = [], meter = null;
+// Where the set is with the station it plays, said the same way on the set, in the mini player,
+// in the tab's title and on the phone's own controls. `stage` is how far tuning in has got;
+// `firstAt` is when the first sound of this tuning starts, in the sound card's time. The
+// title shows only from that moment, so nothing names a song before it is heard.
+let stage = null, firstAt = null, fadeNext = false, busySince = 0, showSeq = 0, hissG = null;
+const STAGES = { connecting: 'Connecting to the radio network', finding: 'Finding the station', tuning: 'Tuning in' };
+const heard = () => playing && firstAt !== null && !!ctx && ctx.currentTime >= firstAt - 0.02;
 const pics = new Map();
 
 // An IPFS gateway that serves by path (/ipfs/<name>/) gives every page it serves one shared
@@ -131,8 +140,34 @@ function rememberHarbours() {
 function marooned() { try { return new Set(JSON.parse(store('pyrate.maroon') || '[]')) } catch (e) { return new Set() } }
 function setMarooned(s) { store('pyrate.maroon', JSON.stringify([...s])) }
 // The listener's own switches. Explicit stays off and art stays on until they say otherwise.
-const sw = { mature: () => store('pyrate.hide_mature') === '1', explicit: () => store('pyrate.show_explicit') === '1', art: () => store('pyrate.hide_art') !== '1' };
-function allowed(s) { return !((s.explicit && !sw.explicit()) || (sw.mature() && (s.mature || s.explicit))) }
+const sw = { mature: () => store('pyrate.hide_mature') === '1', explicit: () => store('pyrate.show_explicit') === '1', art: () => store('pyrate.hide_art') !== '1', hiss: () => store('pyrate.hiss') !== '0', empty: () => store('pyrate.show_empty') === '1' };
+// A station that says it has no recordings and is not live has nothing to play yet: it stays
+// out of the list and the dial until it does, unless the listener keeps it or asks to see them.
+const empty = s => s.tracks === 0 && !s.live;
+function allowed(s) { return !((s.explicit && !sw.explicit()) || (sw.mature() && (s.mature || s.explicit)) || (empty(s) && !sw.empty() && !keptSet.has(s.id))) }
+
+// ---- What this browser keeps of its own choosing ------------------------------------------
+// Kept stations come first in the list. The list is sealed under the browser's own key, like
+// invitations, so a copy of the profile does not say what its owner listens to.
+let keptSet = new Set();
+function saveKept() { keepSealed('pyrate.kept', JSON.stringify([...keptSet])) }
+
+// Two stations whose names read alike, letter for letter or by look-alike letters from other
+// alphabets: the one that has worn the name longer is shown as it is, and the newer ones say
+// so beside their names. Nothing is hidden or judged; the listener sees which came first.
+const LOOK = { 'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'і': 'i', 'ј': 'j', 'ѕ': 's', 'к': 'k', 'м': 'm', 'н': 'h', 'т': 't', 'в': 'b', 'ο': 'o', 'α': 'a', 'ν': 'v', 'ρ': 'p', 'τ': 't', 'ι': 'i', 'κ': 'k', 'ε': 'e', 'υ': 'u', '0': 'o', '1': 'l' };
+const skel = name => [...norm(name)].map(c => LOOK[c] || c).join('').replace(/[^a-z0-9]/g, '');
+function twins(list) {
+  const first = new Map();
+  const age = s => s.named || s.since || 0;
+  for (const s of list) { const k = skel(s.name); if (!k) continue; const f = first.get(k); if (!f || age(s) < age(f)) first.set(k, s) }
+  for (const s of list) { const f = first.get(skel(s.name)); s.twin = !!f && f.id !== s.id }
+}
+// Kinds as stations write them, gathered into one spelling: "Hip-Hop", "hip hop" and "hiphop"
+// are one kind.
+const kindOf = k => norm(k).replace(/[-_./]+/g, ' ').replace(/\s+/g, ' ').trim();
+const played = []; let sleepAt = null, sleepT = null; // What this tab has heard, kept in memory only, and the sleep timer.
+let kindOn = null, sortBy = store('pyrate.sort') || 'aboard', kindsKey = '';
 
 // The flag every station flies until it raises a picture: its key, drawn.
 function bits(id) { const b = []; for (const c of id) { const v = parseInt(c, 16); for (let i = 3; i >= 0; i--) b.push((v >> i) & 1) } return b }
@@ -147,7 +182,9 @@ async function pic(station, hash) {
   if (pics.has(hash)) { const p = pics.get(hash); pics.delete(hash); pics.set(hash, p); return p }
   if (Date.now() - (picFailed.get(hash) || 0) < 120000) return null;
   const p = radio.fetch(station, hash).then(b => { if (b.length > 2000000) throw 'too large'; return URL.createObjectURL(new Blob([b], { type: 'image/jpeg' })) })
-    .catch(() => { pics.delete(hash); picFailed.set(hash, Date.now()); return null });
+    // In the first seconds the radio may not have its routes yet: a picture that does not come
+    // then is asked for again at the next look, not held back for two minutes.
+    .catch(() => { pics.delete(hash); if (Date.now() - bootAt > 15000) picFailed.set(hash, Date.now()); return null });
   pics.set(hash, p);
   while (pics.size > 200) { const [k, old] = pics.entries().next().value; pics.delete(k); old.then(u => u && u !== $('cover').src && URL.revokeObjectURL(u)) }
   return p;
@@ -218,7 +255,7 @@ class Decoder {
 function audio() {
   if (ctx) return;
   ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000, latencyHint: 'playback' });
-  gain = ctx.createGain();
+  gain = ctx.createGain(); bus = ctx.createGain(); gain.connect(bus);
   meter = ctx.createAnalyser(); meter.fftSize = 1024; gain.connect(meter); vu();
   // On iPhones and iPads a page's own audio stops when the screen locks. Sent through an
   // audio element instead, it keeps playing and shows on the lock screen. An iPad's Safari
@@ -227,13 +264,37 @@ function audio() {
   // A call or another app can take the sound away; when it gives it back, the set picks up.
   ctx.onstatechange = () => { if (playing && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => { }) };
   if (apple && ctx.createMediaStreamDestination) {
-    const dest = ctx.createMediaStreamDestination(); gain.connect(dest);
-    const el = $('a'); el.srcObject = dest.stream; el.play().catch(() => { gain.disconnect(); gain.connect(meter); gain.connect(ctx.destination) });
+    const dest = ctx.createMediaStreamDestination(); bus.connect(dest);
+    const el = $('a'); el.srcObject = dest.stream; el.play().catch(() => { bus.disconnect(); bus.connect(ctx.destination) });
     el.onpause = () => { if (playing) el.play().catch(() => { }) };
-  } else gain.connect(ctx.destination);
+  } else bus.connect(ctx.destination);
 }
 
 function stopAll() { for (const s of sources) { try { s.stop() } catch (e) { } } sources = [] }
+// The sound already queued fades out over a moment instead of cutting off mid-note.
+function fadeOut() {
+  if (!ctx) return;
+  const t = ctx.currentTime, g = gain.gain;
+  g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(0, t + 0.15);
+  for (const s of sources) { try { s.stop(t + 0.16) } catch (e) { } }
+  sources = [];
+}
+// A soft hiss while the set tunes in, so pressing Listen is heard at once. It is made here,
+// from noise, and gives way to the station's sound the moment that starts.
+function hiss(on, at) {
+  if (!ctx) return;
+  if (!hissG) {
+    hissG = ctx.createGain(); hissG.gain.value = 0;
+    const n = ctx.createBuffer(1, 96000, 48000), d = n.getChannelData(0);
+    for (let i = 0, b = 0; i < d.length; i++) { b = 0.86 * b + 0.14 * (Math.random() * 2 - 1); d[i] = b * 2.2 }
+    const src = ctx.createBufferSource(); src.buffer = n; src.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 0.4;
+    src.connect(f); f.connect(hissG); hissG.connect(bus); src.start();
+  }
+  const g = hissG.gain, t = at ?? ctx.currentTime;
+  if (at === undefined) { g.cancelScheduledValues(t); g.setValueAtTime(g.value, t) }
+  g.setTargetAtTime(on && sw.hiss() ? 0.05 : 0, t, on ? 0.12 : 0.18);
+}
 
 function schedule(chs, skipMs, when) {
   const skip = Math.min(Math.round(skipMs * 48), chs[0].length);
@@ -244,18 +305,44 @@ function schedule(chs, skipMs, when) {
   buf.copyToChannel((chs[1] || chs[0]).subarray(skip), 1);
   const src = ctx.createBufferSource(); src.buffer = buf; src.connect(gain); src.start(when);
   sources.push(src); src.onended = () => { sources = sources.filter(x => x !== src) };
+  if (fadeNext) {
+    fadeNext = false;
+    const g = gain.gain; g.cancelScheduledValues(when); g.setValueAtTime(0, when); g.linearRampToValueAtTime(1, when + 0.3);
+    hiss(false, when);
+    if (firstAt === null) { firstAt = when; setTimeout(() => { power(); paint() }, Math.max(0, (when - ctx.currentTime) * 1000) + 30) }
+  }
   return when + n / 48000;
 }
 
-function status(t) { $('np').textContent = t; $('by').textContent = ''; $('slot').textContent = ''; $('prog').style.width = '0'; $('time').textContent = '' }
+// A word the set keeps showing after it has stopped, until Listen is pressed again.
+let note = null;
+function status(t) { note = t; paint() }
 // A trouble the player is in, shown in place of the title until it clears.
 let trouble = null, aheadMs = 0;
 
 // ---- The set: frequencies, the dial glass, the lamps and the meter ----------------------
 // Every station sits at the same place on every dial: its frequency comes from its key.
-const fq = id => (875 + parseInt(id.slice(0, 6), 16) % 206) / 10;
+// Every station has a frequency of its own, to the kilohertz: the one its card claims, or for a
+// card from before claims the one its key points at (the tenth it always had, and two figures
+// more). If two ever claim one, the one this browser keeps holds it, else the one on the air
+// longer, and the other moves to the next free place up the dial.
+const prefFreq = id => (875 + parseInt(id.slice(0, 6), 16) % 206) * 100 + parseInt(id.slice(6, 10), 16) % 100;
+const FLOW = 87500, FHIGH = 108099;
+let freqs = new Map();
+function resolveFreqs(list) {
+  const m = new Map(), taken = new Set();
+  const order = [...list].sort((a, b) => (keptSet.has(b.id) - keptSet.has(a.id)) || (a.since || 9e15) - (b.since || 9e15) || (a.id < b.id ? -1 : 1));
+  for (const s of order) {
+    let f = s.freq >= FLOW && s.freq <= FHIGH ? s.freq : prefFreq(s.id);
+    for (let i = 0; taken.has(f) && i < 20600; i++) f = f >= FHIGH ? FLOW : f + 1;
+    taken.add(f); m.set(s.id, f);
+  }
+  freqs = m;
+}
+const fq = id => (freqs.get(id) ?? prefFreq(id)) / 1000;
+const fqs = id => fq(id).toFixed(3);
 // Inset from the glass's edges, so the end numerals and names stay readable.
-const at = f => 3 + (f - 87.5) / 20.5 * 94;
+const at = f => 3 + (f - 87.5) / 20.6 * 94;
 let dialIds = '', order = [];
 function scale() {
   let h = '';
@@ -264,19 +351,41 @@ function scale() {
   let t = ''; for (let a = -48; a <= 48; a += 12) { const r = a * Math.PI / 180; t += '<line x1="' + (60 + 46 * Math.sin(r)) + '" y1="' + (64 - 46 * Math.cos(r)) + '" x2="' + (60 + 52 * Math.sin(r)) + '" y2="' + (64 - 52 * Math.cos(r)) + '"/>' }
   $('ticks').innerHTML = t;
 }
+// With hundreds of stations on the air the glass names the eighty most listened and the one
+// on the set; the rest are a search away in the list.
+const DIAL_NAMES = 80;
 function dial(list) {
-  const ids = list.map(s => s.id + (s.live ? '*' : '')).join();
+  // The eighty most listened, the station on the set, and the stations this browser keeps.
+  const named = list.slice(0, DIAL_NAMES);
+  for (const s of list.slice(DIAL_NAMES)) if (s.id === cur?.id || keptSet.has(s.id)) named.push(s);
+  const ids = named.map(s => s.id + (s.live ? '*' : '')).join() + '#' + (cur?.id || '');
   if (ids === dialIds) return;
-  dialIds = ids; order = [...list].sort((a, b) => fq(a.id) - fq(b.id));
+  dialIds = ids; order = named.sort((a, b) => fq(a.id) - fq(b.id));
   // The track stands in from the glass's ends (player.css), so a name at 88 or 108 is never cut.
-  $('track').style.width = Math.max($('glass').clientWidth - 72, order.length * 92) + 'px';
+  $('track').style.width = Math.max($('glass').clientWidth - 72, Math.min(order.length, DIAL_NAMES) * 60) + 'px';
   $('names').innerHTML = '';
-  order.forEach((s, i) => {
-    const b = document.createElement('button'); b.textContent = s.name || s.call_sign; b.dataset.id = s.id; b.title = fq(s.id).toFixed(1) + '  ' + (s.name || '');
-    b.style.left = at(fq(s.id)) + '%'; b.style.top = (i % 3) * 20 + 'px'; b.classList.toggle('live', !!s.live); b.setAttribute('role', 'option');
+  // Each name goes in the first of three rows with room for it, so no two names overlap; a
+  // name with no room left stays off the glass (the station on the set always has one), and
+  // the needle still finds it.
+  const wide = $('track').clientWidth || 1, taken = [[], [], []], xOf = new Map();
+  const place = s => {
+    const w = Math.min(176, 14 + 7.4 * (s.name || s.call_sign || '').length), x = Math.min(Math.max(wide * at(fq(s.id)) / 100, w / 2), wide - w / 2), l = x - w / 2 - 4, h = x + w / 2 + 4;
+    xOf.set(s.id, x);
+    const r = taken.findIndex(row => row.every(([a, b]) => h <= a || l >= b));
+    if (r >= 0) taken[r].push([l, h]);
+    return r;
+  };
+  const onSet = order.find(s => s.id === cur?.id), rowOf = new Map();
+  if (onSet) rowOf.set(onSet.id, place(onSet));
+  for (const s of order) if (!rowOf.has(s.id)) rowOf.set(s.id, place(s));
+  for (const s of order) {
+    const r = rowOf.get(s.id); if (r < 0) continue;
+    const b = document.createElement('button'); b.textContent = s.name || s.call_sign; b.dataset.id = s.id; b.title = fqs(s.id) + '  ' + (s.name || '');
+    b.style.left = (xOf.has(s.id) ? xOf.get(s.id) / wide * 100 : at(fq(s.id))) + '%'; b.style.top = r * 24 + 'px'; b.classList.toggle('live', !!s.live); b.setAttribute('role', 'option');
     b.onclick = e => { e.stopPropagation(); tuneTo(s) };
+    b.onpointerenter = () => prepare(s.id);
     $('names').appendChild(b);
-  });
+  }
   if (cur) needle(cur.id, false);
 }
 function needle(id, smooth = true) {
@@ -284,7 +393,7 @@ function needle(id, smooth = true) {
   document.querySelectorAll('#names button').forEach(b => { const on = b.dataset.id === id; b.classList.toggle('on', on); b.setAttribute('aria-selected', on) });
   const g = $('glass'), x = $('track').offsetLeft + $('track').clientWidth * at(fq(id)) / 100;
   if (g.scrollWidth > g.clientWidth) g.scrollTo({ left: x - g.clientWidth / 2, behavior: smooth ? 'smooth' : 'auto' });
-  $('freq').textContent = fq(id).toFixed(1);
+  $('freq').textContent = fqs(id);
 }
 function tuneTo(s) { if (playing) listen(s); else show(s) }
 $('glass').addEventListener('click', e => {
@@ -295,9 +404,9 @@ $('glass').addEventListener('click', e => {
 $('glass').addEventListener('keydown', e => {
   if (!order.length || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
   e.preventDefault();
-  const i = order.findIndex(s => s.id === cur?.id), n = e.key === 'ArrowRight' ? i + 1 : i - 1;
-  tuneTo(order[(n + order.length) % order.length]);
+  stepDial(e.key === 'ArrowRight' ? 1 : -1);
 });
+function stepDial(d) { if (!order.length) return; const i = order.findIndex(s => s.id === cur?.id); tuneTo(order[(i + d + order.length) % order.length]) }
 function lamps(live) { $('lamp').classList.toggle('on', !!live); $('air').classList.toggle('on', !!live); $('rx').classList.toggle('on', playing && sources.length > 0) }
 // The meter follows the sound, with a needle's weight.
 // It rests once nothing plays and the needle has fallen, and wakes when the radio does.
@@ -345,8 +454,9 @@ const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 // stumble (a decoder that will not load, a chunk that will not decode) starts the step again
 // rather than ending the loop, and says so on the set.
 async function play(id, g) {
-  let playhead = null, next = 0, track = null, dec = null, liveSeq = null, misses = 0, wait = 1200, stumbles = 0;
-  const reset = () => { stopAll(); playhead = null; next = 0; track = null; liveSeq = null; dec?.close(); dec = null };
+  let playhead = null, next = 0, track = null, dec = null, liveSeq = null, misses = 0, wait = 600, stumbles = 0, syncing = null, syncedAt = 0;
+  const reset = () => { stopAll(); fadeNext = true; playhead = null; next = 0; track = null; liveSeq = null; dec?.close(); dec = null };
+  const said = (st, t) => { if (stage !== st || trouble !== t) { stage = st; trouble = t; paint() } };
   while (g === gen) {
     try {
       const queued = Math.max(0, next - ctx.currentTime) * 1000; aheadMs = Math.round(queued);
@@ -358,11 +468,21 @@ async function play(id, g) {
       }
       const at = playhead ?? radio.now() + 400;
       const p = JSON.parse(radio.plan(id, at));
-      if (p.kind === 'struck') { reset(); trouble = null; status('This station has ended.'); refresh(); return }
-      // A log not found yet is looked for less and less often, up to every fifteen seconds.
-      if (p.kind === 'searching') { if (!queued) status('Searching the Log'); await radio.sync(id).catch(() => { }); await sleep(wait); wait = Math.min(15000, wait * 1.6); continue }
-      wait = 1200;
-      if (p.kind === 'dead air' || p.kind === 'off air') { if (!queued) { reset(); status(p.kind === 'off air' ? offAir(p.back_at) : 'Dead air') } await sleep(4000); continue }
+      if (p.kind === 'struck') { reset(); hiss(false); trouble = null; stop(); refresh(); return }
+      // A log not here yet: the set plays the moment it arrives, and asks again every second
+      // or three while it does not.
+      if (p.kind === 'searching') {
+        if (!queued) said('finding', null);
+        // The log is asked for in the background and the plan looked at every 150 ms, so the
+        // first page of the log plays as soon as it lands, while the rest still comes in.
+        if (!syncing && Date.now() - syncedAt > wait) syncing = radio.sync(id).catch(() => 0).finally(() => { syncing = null; syncedAt = Date.now(); wait = Math.min(3000, wait * 1.5) });
+        await sleep(150);
+        continue;
+      }
+      wait = 600;
+      if (!queued && stage === 'finding') said('tuning', null);
+      // Off the air or silent: nothing to hear, so the set stops tuning and says why.
+      if (p.kind === 'dead air' || p.kind === 'off air') { if (!queued) { reset(); hiss(false); if (firstAt === null) firstAt = ctx.currentTime; said(null, null) } await sleep(4000); continue }
       let chunk, ch, ms, seq = null;
       if (p.kind === 'live') {
         const t = p.tail;
@@ -376,10 +496,11 @@ async function play(id, g) {
         chunk = p.chunk; ch = p.channels; ms = p.chunk_ms;
       }
       let bytes;
-      try { bytes = await radio.fetch(id, chunk); misses = 0; trouble = null } catch (e) {
+      try { bytes = await radio.fetch(id, chunk); misses = 0; if (trouble) said(stage, null) } catch (e) {
+        if (g !== gen) return;
         // Said only once the queue is nearly dry: a miss with seconds still queued is not heard.
-        if (++misses > 2 && queued < 4000) trouble = 'Still looking for the station';
-        await sleep(1500); continue;
+        if (++misses > 2 && queued < 4000 && firstAt !== null) { said(stage, 'Signal lost. Tuning in again'); if (queued < 1000) hiss(true) }
+        await sleep(misses > 4 ? 1500 : 700); continue;
       }
       if (g !== gen) return;
       if (p.kind === 'track' && (track !== p.track || !dec || playhead === null)) { dec?.close(); dec = await Decoder.make(ch); track = p.track }
@@ -406,29 +527,76 @@ async function play(id, g) {
       if (e instanceof WebAssembly.RuntimeError) return wrecked();
       console.warn(e); reset();
       // The portable decoder that would not load is the one stumble worth giving up on.
-      if (++stumbles > 5) { trouble = null; status('This browser could not play the station. Try reloading the page.'); stop(); return }
-      trouble = 'The player stumbled. Starting again';
+      if (++stumbles > 5) { stop(); status('This browser could not play the station. Try reloading the page.'); return }
+      said(stage, 'The player stumbled. Starting again');
       await sleep(800 * stumbles);
     }
   }
   dec?.close();
 }
 
-// ---- The page ------------------------------------------------------------------------
-async function nowPlaying() {
-  if (!cur || !radio) return;
-  const p = JSON.parse(radio.plan(cur.id, radio.now()));
-  lamps(p.kind === 'live');
-  if (playing && trouble) { status(trouble); return }
-  if (p.kind === 'struck') { status('This station has ended.'); return }
-  if (p.kind === 'live') { $('np').textContent = 'Live from the station'; $('by').textContent = ''; $('slot').textContent = ''; $('prog').style.width = '100%'; $('time').textContent = '' }
-  else if (p.kind === 'track') {
-    $('np').textContent = p.title || ''; $('by').textContent = p.by || ''; $('slot').textContent = p.slot || '';
-    $('prog').style.width = Math.min(100, p.position_ms / p.duration_ms * 100) + '%'; $('time').textContent = mmss(p.position_ms) + ' of ' + mmss(p.duration_ms);
-    const url = await pic(cur.id, p.art || cur.cover); art(url);
-    if ('mediaSession' in navigator && playing) navigator.mediaSession.metadata = new MediaMetadata({ title: p.title || cur.name, artist: p.by || '', album: cur.name, artwork: url ? [{ src: url, sizes: '512x512', type: 'image/jpeg' }] : [] });
-  } else if (p.kind === 'off air') status(offAir(p.back_at));
-  else if (!playing) status(p.kind === 'dead air' ? 'Dead air' : '');
+// ---- What the set says ------------------------------------------------------------------
+// One reading of the state, put everywhere at once. While the set tunes in, it says how far it
+// has got, with a moving line, and never a title: the title shows once its sound is heard.
+let artWant = null, prefetched = '', showAt = 0, soundy = false, lastUse = Date.now();
+for (const ev of ['pointerdown', 'keydown', 'scroll', 'touchstart']) addEventListener(ev, () => { lastUse = Date.now() }, { passive: true, capture: true });
+
+// A station the listener is about to choose (a row pointed at or touched, the stations on the
+// dial either side): its log and the sound on now come aboard first, so the tap plays at once.
+// Each at most once in half a minute, and nothing is counted or said about it.
+const prepared = new Map();
+async function prepare(id) {
+  if (!radio || !id || id === cur?.id && playing || Date.now() - (prepared.get(id) || 0) < 30000) return;
+  prepared.set(id, Date.now());
+  try { radio.warm(id) } catch (e) { return }
+  for (let i = 0; i < 20; i++) {
+    const p = JSON.parse(radio.plan(id, radio.now()));
+    if (p.kind === 'track') { radio.fetch(id, p.chunk).catch(() => { }); if (p.next) radio.fetch(id, p.next).catch(() => { }); return }
+    if (p.kind !== 'searching') return;
+    await sleep(500);
+  }
+}
+function paint() {
+  if (!cur) return;
+  const p = radio ? JSON.parse(radio.plan(cur.id, radio.now())) : null, on = heard();
+  lamps(p?.kind === 'live');
+  let line = null, busy = false;
+  if (!playing && note) line = note;
+  else if (playing && trouble) { line = trouble; busy = true }
+  else if (playing && !on) { line = STAGES[stage] || STAGES.tuning; busy = true }
+  else if (p?.kind === 'struck') line = 'This station has ended.';
+  else if (p?.kind === 'off air') line = offAir(p.back_at);
+  else if (p?.kind === 'dead air') line = 'Nothing on the air right now';
+  const track = !line && p?.kind === 'track', live = !line && p?.kind === 'live';
+  soundy = track || live;
+  if (on && track && p.title && played.at(-1)?.key !== cur.id + p.track) { played.push({ key: cur.id + p.track, at: Date.now(), title: p.title, by: p.by || '', station: cur.name || '' }); if (played.length > 50) played.shift(); if (!$('morebox').hidden) playedList() }
+  $('np').textContent = line ?? (track ? p.title || '' : live ? 'Live from the station' : '');
+  $('by').textContent = track ? p.by || '' : '';
+  // Before Listen, the line says what is on now, so a title is never mistaken for one playing.
+  $('slot').textContent = !(track || live) ? '' : playing ? p.slot || '' : p.slot ? 'On now · ' + p.slot : 'On now';
+  $('prog').style.width = track ? Math.min(100, p.position_ms / p.duration_ms * 100) + '%' : live ? '100%' : '0';
+  $('time').textContent = track ? mmss(p.position_ms) + ' of ' + mmss(p.duration_ms) : '';
+  $('progbar').classList.toggle('busy', busy);
+  $('set').classList.toggle('tuning', busy);
+  // Past ten seconds a wait gets a reason, and past forty-five a way out.
+  if (!busy) busySince = 0; else if (!busySince) busySince = Date.now();
+  const waited = busySince ? Date.now() - busySince : 0;
+  $('hint').hidden = waited < 10000;
+  $('hint').textContent = waited > 45000 && stage === 'finding' ? 'No radio carrying this station has answered yet. Keep waiting, or try another station.' : stage === 'connecting' ? 'Still connecting. Some networks block the radio; another network, or the app, may get through.' : 'Still tuning in. The first station takes longest.';
+  // The picture: the recording's own if it has one, the station's otherwise.
+  const want = (track && p.art) || cur.cover || null, c = cur.id;
+  if (want !== artWant) { artWant = want; if (!want) art(null); else pic(c, want).then(u => { if (cur?.id === c && artWant === want) { if (u) art(u); else artWant = undefined } }) }
+  // A station on the set and not yet playing: its sound comes aboard ahead, the piece on now and
+  // the one after, for as long as someone is using the page, so Listen starts at once.
+  if (!playing && track && p.chunk !== prefetched && !document.hidden && Date.now() - Math.max(showAt, lastUse) < 600000) { prefetched = p.chunk; radio.fetch(c, p.chunk).catch(() => { }); if (p.next) radio.fetch(c, p.next).catch(() => { }) }
+  mini(line ?? (track ? [p.title, p.by].filter(Boolean).join(' · ') : live ? 'Live' : ''));
+  if ('mediaSession' in navigator) {
+    if (playing && (on || stage)) {
+      const m = navigator.mediaSession.metadata, title = track && on ? p.title || cur.name : cur.name, by = track && on ? p.by || '' : line || '';
+      if (!m || m.title !== title || m.artist !== by) pic(c, want).then(u => { u = u || baked(c); if (cur?.id === c) navigator.mediaSession.metadata = new MediaMetadata({ title, artist: by, album: cur.name, artwork: u ? [{ src: u, sizes: '512x512', type: 'image/jpeg' }] : [] }) });
+    }
+    navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
+  }
 }
 
 // ---- The station's page: notices, up next and the week, from its own log ---------------
@@ -454,19 +622,35 @@ function ics(l, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 
+// The station page's heading: what the station says of itself, whether or not its log is here.
+function pageHead() {
+  if (!cur) return;
+  $('pname').textContent = cur.name || cur.call_sign || 'A station';
+  $('pabout').textContent = cur.about || '';
+  $('pmeta').textContent = [cur.call_sign, fqs(cur.id) + ' on the dial', (cur.kinds || []).join(', '), cur.port, cur.aboard !== undefined && !cur.cached ? cur.aboard + ' listening' : '', cur.carriers ? cur.carriers + (cur.carriers === 1 ? ' radio carries it' : ' radios carry it') : ''].filter(Boolean).join('  ·  ');
+  $('key').textContent = 'Key  ' + cur.id.match(/.{1,4}/g).join(' ');
+  // What a listener may want to know before staying: a newer station with an older one's name,
+  // nothing to play yet, or a keeper long gone (the station plays on from those who carry it).
+  const away = cur.signed_ms && radio ? radio.now() - cur.signed_ms : 0, notes = [];
+  if (cur.twin && !isHarbour(cur.id)) notes.push('Another station with this name has been on the air longer. Check the call sign before you share this one.');
+  if (empty(cur)) notes.push('This station has nothing to play yet.');
+  if (away > 365 * 86400e3) notes.push('Its keeper has not been aboard for over a year.');
+  else if (away > 30 * 86400e3) notes.push('Its keeper has not been aboard for over a month.');
+  $('pnote').hidden = !notes.length; $('pnote').textContent = notes.join(' ');
+}
+
 let pageFor = null, pageAt = 0, pageV = null;
 function page(force) {
   if (!cur || !radio) return;
   if (force || pageFor !== cur.id || Date.now() - pageAt > 30000) { pageV = JSON.parse(radio.page(cur.id, 7)); pageFor = cur.id; pageAt = Date.now() }
   const v = pageV;
-  if (!v) { $('page').hidden = true; return }
-  $('page').hidden = false;
+  $('page').hidden = $('week-box').hidden = !v; $('pagewait').hidden = !!v;
+  if (!v) return;
   $('notices').innerHTML = (v.notices || []).map(n => '<div class="notice">' + esc(n.text) + '<small>' + esc(dayOf(n.at_ms) + ' ' + hm(n.at_ms)) + '</small></div>').join('');
   const next = (v.next || []).filter(n => n.start_ms > radio.now()).slice(0, 5);
   $('nexth').hidden = !next.length;
   $('next').innerHTML = next.map(n => '<div class="li"><span class="t">' + hm(n.start_ms) + '</span><span class="w">' + esc(n.title) + (n.by ? ' <em>' + esc(n.by) + '</em>' : '') + '</span></div>').join('');
   $('how').textContent = (!v.now && v.back_at ? offAir(v.back_at) + ' ' : '') + howItPlays(v.programme);
-  $('key').textContent = 'Key  ' + cur.id.match(/.{1,4}/g).join(' ');
   const now = radio.now(); let last = null, h = '', days = 0;
   const ls = (v.listings || []).filter(l => l.kind !== 'hours');
   for (const [i, l] of ls.entries()) {
@@ -485,98 +669,221 @@ function page(force) {
   $('listings').querySelectorAll('.cal').forEach(b => b.onclick = () => ics(ls[+b.dataset.i], v.name || cur.name));
 }
 
-function art(url) { const c = $('cover'); if (url) { if (c.src !== url) c.src = url; c.hidden = false; $('flag').hidden = true } else { c.hidden = true; $('flag').hidden = false } }
+function art(url) { const c = $('cover'); url = url || baked(cur?.id); if (url) { if (c.src !== url) c.src = url; c.hidden = false; $('flag').hidden = true } else { c.hidden = true; $('flag').hidden = false } }
 
+// Puts a station on the set. The name, the dial and the controls change at once; its pictures
+// follow when they come, and a picture that comes after the set has moved on is dropped.
 async function show(s) {
   if (hailFor && hailFor !== s.id) dropHail();
+  const seq = ++showSeq, moved = cur?.id !== s.id;
   cur = s;
+  if (moved) { showAt = Date.now(); flag($('flag'), s.id, s.live); artWant = undefined; art(null); $('banner').style.backgroundImage = ''; $('passbox').hidden = $('tipbox').hidden = $('clipbox').hidden = true }
   // On hostis.black the chatter is in the open player: this station's room, one tap away.
   if (SCOPE === 'harbour') $('chatopen').href = OPEN_PLAYERS[0] + '#' + s.id;
-  flag($('flag'), s.id, s.live); art(await pic(s.id, s.cover));
-  const b = await pic(s.id, s.banner); $('banner').style.backgroundImage = b ? 'url(' + b + ')' : '';
-  $('name').textContent = s.name || s.call_sign; $('cs').textContent = s.call_sign + (s.aboard !== undefined ? '  ' + s.aboard + ' listening' : '');
-  lamps(s.live); needle(s.id); power(); $('tip').hidden = !s.tip; $('tipbox').hidden = true;
+  $('name').textContent = s.name || s.call_sign || 'A station';
+  $('cs').textContent = (s.call_sign || '') + (s.provisional ? '  unconfirmed' : '') + (s.aboard !== undefined ? '  ' + s.aboard + ' listening' : '');
+  $('cs').title = s.provisional ? 'Signed by a co-host. Shown as unconfirmed until this player has the station\'s own log.' : '';
+  lamps(s.live); needle(s.id); $('tip').hidden = !s.tip;
+  $('keep').hidden = HOSTIS_ONLY || !!s.pocket; $('keep').setAttribute('aria-pressed', keptSet.has(s.id)); $('keep').querySelector('span').textContent = keptSet.has(s.id) ? 'Kept' : 'Keep';
   // A pocket station is passed on only by its keeper's invitation.
-  $('pass').hidden = !!s.pocket; $('maroon').hidden = false; if (s.pocket) $('clip').hidden = true;
-  document.querySelectorAll('.row').forEach(r => r.classList.toggle('on', r.dataset.id === s.id));
+  $('pass').hidden = !!s.pocket; $('maroon').hidden = false;
+  document.querySelectorAll('.row').forEach(r => { const on = r.dataset.id === s.id; r.classList.toggle('on', on); r.setAttribute('aria-current', on) });
   // A pocket's id never goes in the address bar or the history.
-  if (isPocket(s)) history.replaceState(null, '', location.pathname);
+  if (isPocket(s)) history.replaceState(history.state, '', location.pathname);
   // The station tuned stays out of the address bar, so it never lands in history or a synced
   // browser. The tab alone remembers it, for a reload, and forgets it when it closes.
-  else { if (location.hash) history.replaceState(null, '', location.pathname + location.search); if (!SHARED) try { sessionStorage.setItem('pyrate.cur', s.id) } catch (e) { } }
-  radio.tune(s.id);
-  // The stations either side on the dial come aboard ahead, so turning to one plays at once.
-  const shown = stations.filter(inSet), i = shown.findIndex(x => x.id === s.id);
-  if (i >= 0 && shown.length > 1) for (const d of [1, -1]) { const n = shown[(i + d + shown.length) % shown.length]; if (n.id !== s.id) try { radio.warm(n.id) } catch (e) { } }
-  nowPlaying(); page(true); chatter();
+  else { if (location.hash) history.replaceState(history.state, '', location.pathname + location.search); if (!SHARED && !EMBED) try { sessionStorage.setItem('pyrate.cur', s.id) } catch (e) { } }
+  pageHead(); power();
+  if (moved && stations.length) rows();
+  if (radio) {
+    radio.tune(s.id);
+    // The stations either side on the dial come aboard ahead, so turning to one plays at once.
+    const shown = stations.filter(inSet), i = shown.findIndex(x => x.id === s.id);
+    if (i >= 0 && shown.length > 1) for (const d of [1, -1]) { const n = shown[(i + d + shown.length) % shown.length]; if (n.id !== s.id) prepare(n.id) }
+    page(true); chatter();
+  }
+  paint();
+  const b = await pic(s.id, s.banner);
+  const bb = b || baked(s.id, 'banner_art');
+  if (seq === showSeq) $('banner').style.backgroundImage = bb ? 'url(' + bb + ')' : '';
 }
 
-function listen(s) {
-  audio(); ctx.resume();
-  const g = ++gen; stopAll(); playing = true; show(s); power(); vu();
+// Listen: the set says so at once, with the hiss, and plays the moment it can. Turning to
+// another station fades the last one out first. Pressed before the radio has joined the
+// network, it joins and then plays.
+async function listen(s) {
+  audio(); ctx.resume().catch(() => { });
+  const g = ++gen;
+  fadeOut();
+  playing = true; trouble = null; note = null; firstAt = null; fadeNext = true; busySince = 0; stage = radio ? 'tuning' : 'connecting';
+  hiss(true); show(s); vu(); power();
+  if (!radio) {
+    await (booting ??= boot());
+    if (g !== gen) return;
+    if (!radio) { stop(); return }
+    s = stations.find(x => x.id === s.id) || s; stage = 'tuning'; show(s);
+  }
   radio.listening(true);
   play(s.id, g);
 }
 
-function stop() { gen++; stopAll(); playing = false; trouble = null; power(); lamps(false); ctx?.suspend(); radio?.listening(false) }
-function power() { $('clip').hidden = !(playing && clipType()) || isPocket(cur); const g = $('go'); g.hidden = false; g.classList.toggle('on', playing); g.querySelector('.glyph').textContent = playing ? '■\uFE0E' : '▶\uFE0E'; g.querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen';
+// Stop always stops: whatever the set was doing, tuning in, searching or playing, ends here.
+function stop() {
+  gen++; playing = false; trouble = null; stage = null; firstAt = null;
+  hiss(false); fadeOut();
+  const g = gen; setTimeout(() => { if (g === gen && !playing) ctx?.suspend() }, 300);
+  radio?.listening(false); power(); paint();
+}
+function power() {
+  const busy = playing && !heard();
+  for (const b of [$('go'), $('mini-go')]) { b.classList.toggle('on', playing); b.classList.toggle('busy', busy); b.querySelector('.glyph').textContent = playing ? '■︎' : '▶︎' }
+  $('go').querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen';
+  $('mini-go').setAttribute('aria-label', playing ? 'Stop' : 'Listen');
+  $('clip').hidden = !(playing && heard() && soundy && clipType()) || isPocket(cur);
   // The tab says what it is playing, so a listener with many tabs can find the radio.
-  if (!EMBED && cur) document.title = (playing ? '\u25B6\uFE0E ' : '') + (cur.name || cur.call_sign || 'A station') + ' · Pyrate Radio' }
+  if (!EMBED && cur) document.title = (playing ? '▶︎ ' : '') + (cur.name || cur.call_sign || 'A station') + ' · Pyrate Radio';
+}
 
 // A row's cover is fetched only once the row comes into view.
 const lazy = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => {
   if (!e.isIntersecting) return; lazy.unobserve(e.target);
   const mini = e.target.querySelector('.mini'), s = stations.find(x => x.id === e.target.dataset.id);
-  if (s?.cover) pic(s.id, s.cover).then(u => { if (u) mini.innerHTML = '<img alt="" src="' + u + '">' });
+  if (s?.cover) pic(s.id, s.cover).then(u => { if (u) { mini.classList.add('pic'); mini.innerHTML = '<img alt="" src="' + u + '">' } else if (e.target.isConnected) setTimeout(() => lazy.observe(e.target), 4000) });
 }), { rootMargin: '200px' }) : null;
-let rowsKey = '';
+let rowsKey = '', rowsMax = 60;
+const query = () => norm($('find')?.value || '');
 function rows() {
-  const m = marooned();
-  const shown = stations.filter(s => !m.has(s.id) && allowed(s) && inSet(s));
+  const m = marooned(), q = query();
+  let shown = stations.filter(s => !m.has(s.id) && allowed(s) && inSet(s));
+  kinds(shown);
+  if (kindOn) shown = shown.filter(s => kindOn === 'live' ? s.live : (s.kinds || []).some(k => kindOf(k) === kindOn));
+  const by = { newest: (a, b) => (b.since || 0) - (a.since || 0), longest: (a, b) => (a.since || 0) - (b.since || 0), carried: (a, b) => (b.carriers || 0) - (a.carriers || 0) }[sortBy];
+  if (by) shown = [...shown].sort(by);
+  if (keptSet.size) shown = [...shown.filter(s => keptSet.has(s.id)), ...shown.filter(s => !keptSet.has(s.id))];
   const box = $('rows');
   dial(shown); if (!$('chart').hidden) chart();
+  // A search reads names, call signs, what a station says of itself, its kinds, its home port and
+  // its place on the dial ("91.1" finds every station there).
+  const list = q ? shown.filter(s => norm([s.name, s.call_sign, s.about, (s.kinds || []).join(' '), s.port, fqs(s.id)].join(' ')).includes(q)) : shown;
   // The list is rebuilt only when something in it changed, not on every refresh.
-  const key = shown.map(s => [s.id, s.name, s.live, s.aboard, s.cover, s.pocket, s.explicit, s.mature, s.about].join('|')).join('\n') + '#' + (cur?.id || '') + '#' + (shown.length ? '' : Math.floor(Date.now() / 30000));
+  // Sixty rows at a time: a long Log is paged, and the rest is a search or a tap away.
+  const more = list.length - rowsMax;
+  const page = list.slice(0, rowsMax);
+  const key = page.map(s => [s.id, s.name, s.live, s.aboard, s.cover, s.pocket, s.explicit, s.mature, s.about, s.cached, s.twin, keptSet.has(s.id)].join('|')).join('\n') + '#' + list.length + '#' + (cur?.id || '') + playing + '#' + q + '#' + (shown.length ? '' : Math.floor(Date.now() / 30000));
   if (key === rowsKey) return;
   rowsKey = key; box.innerHTML = '';
   if (!shown.length) {
     const long = bootAt && Date.now() - bootAt > 90000;
-    box.innerHTML = '<p class="fine">' + (long ? 'No station has reached this tab yet. ' + (radio?.neighbours() ? 'The network is here but quiet; stations may be hidden by your switches below.' : 'Nothing on this network has answered: it may block peer-to-peer traffic. Another network, or the app, may get through.') : 'Listening for station cards. The first come in within a minute.') + '</p>';
+    // Rows drawn empty while the first cards come, then a reason if none do.
+    box.innerHTML = long ? '<p class="fine">' + (radio?.neighbours() ? 'The network is here, but no station has reached this tab yet. Your settings may be hiding them.' : 'Nothing on this network has answered. It may block the radio. Another network, or the app, may get through.') + '</p>'
+      : '<div class="row skel"></div><div class="row skel"></div><div class="row skel"></div><p class="fine">Finding stations on the air</p>';
     return;
   }
-  for (const s of shown) {
+  if (!list.length) { box.innerHTML = '<p class="fine">No station on the air matches that.</p>'; return }
+  for (const s of page) {
     const r = document.createElement('div'); r.className = 'row'; r.dataset.id = s.id;
-    r.innerHTML = '<div class="mini"></div><div class="meta"><div class="name"></div><div class="cs"></div><div class="about"></div></div><div class="count"></div>';
+    r.setAttribute('role', 'button'); r.tabIndex = 0;
+    r.innerHTML = '<div class="mini"></div><div class="meta"><div class="name"></div><div class="about"></div><div class="cs"></div></div><div class="count"></div>';
     const mini = r.querySelector('.mini');
     flag(mini, s.id, s.live);
-    if (s.cover) { mini.classList.add('pic'); if (lazy) lazy.observe(r); else pic(s.id, s.cover).then(u => { if (u) mini.innerHTML = '<img alt="" src="' + u + '">' }) }
-    const nm = r.querySelector('.name'); nm.textContent = s.name;
+    if (baked(s.id)) { mini.classList.add('pic'); mini.innerHTML = '<img alt="" src="' + baked(s.id) + '">' }
+    else if (s.cover) { if (lazy) lazy.observe(r); else pic(s.id, s.cover).then(u => { if (u) { mini.classList.add('pic'); mini.innerHTML = '<img alt="" src="' + u + '">' } }) }
+    const nm = r.querySelector('.name'); nm.textContent = s.name || s.call_sign;
     // What a station says of itself, as hairline tags: the open air in bright red, the rest in bone.
-    for (const [t, c] of [[s.live && 'On air', 'lv'], [s.mixed && !isHarbour(s.id) && 'False colours?', ''], [s.pocket && 'Private', ''], [s.explicit ? 'Explicit' : s.mature && 'Mature', '']]) if (t) { const g = document.createElement('span'); g.className = 'tag ' + c; g.textContent = t; nm.append(g) }
-    r.querySelector('.cs').textContent = s.call_sign; r.querySelector('.about').textContent = s.about || '';
-    r.querySelector('.count').innerHTML = s.aboard + '<small>LISTENING</small><span class="fq">' + fq(s.id).toFixed(1) + '</span>';
-    r.classList.toggle('on', cur?.id === s.id);
-    r.onclick = () => listen(s);
+    for (const [t, c] of [[s.live && 'On air', 'lv'], [keptSet.has(s.id) && 'Kept', 'kp'], [s.mixed && !isHarbour(s.id) && 'False colours?', ''], [s.twin && !isHarbour(s.id) && 'Same name as an older station', ''], [s.pocket && 'Private', ''], [s.explicit ? 'Explicit' : s.mature && 'Mature', ''], [empty(s) && 'Nothing to play yet', '']]) if (t) { const g = document.createElement('span'); g.className = 'tag ' + c; g.textContent = t; nm.append(g) }
+    r.querySelector('.about').textContent = s.about || ''; r.querySelector('.cs').textContent = s.call_sign + '  ' + fqs(s.id);
+    r.querySelector('.count').innerHTML = s.aboard !== undefined && !s.cached ? s.aboard + '<small>listening</small>' : '';
+    const on = cur?.id === s.id;
+    r.classList.toggle('on', on); r.classList.toggle('playing', on && playing); r.setAttribute('aria-current', on);
+    r.setAttribute('aria-label', (s.name || s.call_sign) + (s.live ? ', on air' : '') + (on && playing ? ', playing' : ''));
+    // A tap plays it. The station already playing is left playing, and the set comes into view.
+    const go = () => { if (on && playing) $('set').scrollIntoView({ behavior: 'smooth' }); else listen(s) };
+    r.onclick = go; r.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go() } };
+    r.onpointerenter = r.ontouchstart = r.onfocus = () => prepare(s.id);
     box.appendChild(r);
   }
+  if (more > 0) {
+    const b = document.createElement('p'); b.className = 'centre morerows';
+    b.innerHTML = '<button class="btn">Show ' + Math.min(60, more) + ' more</button><span class="fine">' + list.length + ' stations' + (q ? ' match' : '') + '</span>';
+    b.querySelector('button').onclick = () => { rowsMax += 60; rows() };
+    box.appendChild(b);
+  }
+}
+$('find')?.addEventListener('input', () => { rowsMax = 60; rows() });
+// The kinds the stations on the air give themselves, the ten most given, as filters; and On air.
+function kinds(list) {
+  const box = $('kinds'); if (!box || HOSTIS_ONLY) return;
+  const n = new Map();
+  for (const s of list) for (const k of new Set((s.kinds || []).map(kindOf))) if (k) n.set(k, (n.get(k) || 0) + 1);
+  const top = [...n.entries()].filter(([, c]) => c >= 2 || list.length < 20).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 10).map(([k]) => k);
+  if (kindOn && kindOn !== 'live' && !top.includes(kindOn)) top.push(kindOn);
+  const live = list.some(s => s.live);
+  const key = top.join('|') + live + kindOn;
+  if (key === kindsKey) return;
+  kindsKey = key; box.innerHTML = '';
+  for (const k of [...(live ? ['live'] : []), ...top]) {
+    const b = document.createElement('button'); b.className = 'btn' + (kindOn === k ? ' on' : ''); b.setAttribute('aria-pressed', kindOn === k);
+    b.textContent = k === 'live' ? 'On air now' : k;
+    b.onclick = () => { kindOn = kindOn === k ? null : k; rowsMax = 60; rowsKey = ''; rows() };
+    box.appendChild(b);
+  }
+}
+$('sort').value = sortBy;
+$('sort').onchange = () => { sortBy = $('sort').value; store('pyrate.sort', sortBy); rowsMax = 60; rows() };
+
+// The stations shown before the network answers: HOSTIS's own on hostis.black, and on the
+// open player the ones this browser saw on the air last time, kept for three days.
+const CARDS = 'pyrate.cards';
+function cachedCards() {
+  if (HOSTIS_ONLY) return HARBOUR_STATIONS;
+  try { const c = JSON.parse(store(CARDS) || 'null'); if (c && Date.now() - c.at < 3 * 86400e3 && Array.isArray(c.l)) return c.l.filter(s => /^[0-9a-f]{64}$/.test(s.id)).map(s => ({ ...s, cached: true })) } catch (e) { }
+  return [];
+}
+let cardsAt = 0;
+function keepCards(live) {
+  if (HOSTIS_ONLY || live.length < 3 || Date.now() - cardsAt < 30000) return;
+  cardsAt = Date.now();
+  store(CARDS, JSON.stringify({ at: cardsAt, l: live.filter(s => !s.pocket).slice(0, 60).map(s => ({ id: s.id, name: s.name, call_sign: s.call_sign, about: s.about, kinds: s.kinds, port: s.port, explicit: s.explicit, mature: s.mature, cover: s.cover })) }));
+}
+// Kept cards stand in until the network has given as many, or for a minute.
+function merged(live) {
+  const have = new Set(live.map(s => s.id)), keep = HOSTIS_ONLY || (Date.now() - bootAt < 60000 && live.length < 12);
+  return keep ? [...live, ...cachedCards().filter(s => !have.has(s.id))] : live;
+}
+
+// The stations a listener is likely to play next come aboard as soon as the radio joins:
+// on hostis.black every HOSTIS station, elsewhere the last one played and the three most heard.
+// Asked again at every refresh for the first minute and a half, until each log is here.
+function warmUp() {
+  if (!radio || Date.now() - bootAt > 90000) return;
+  const ids = HOSTIS_ONLY ? HARBOUR_STATIONS.map(s => s.id) : [lastId(), ...stations.filter(s => !s.cached && !s.pocket).slice(0, 3).map(s => s.id)];
+  for (const id of new Set(ids)) if (id && id !== cur?.id && /^[0-9a-f]{64}$/.test(id)) prepare(id);
 }
 
 function refresh() {
   if (!radio) return;
-  stations = JSON.parse(radio.stations()).filter(inSet);
+  const live = JSON.parse(radio.stations()).filter(inSet);
+  keepCards(live);
+  stations = merged(live);
+  twins(stations); resolveFreqs(stations);
   const n = radio.neighbours();
-  $('signal').textContent = (flocking ? 'Playing in step with the host · ' : '') + (n ? n + (n === 1 ? ' radio nearby' : ' radios nearby') + ' · ' + stations.length + ' on the air' : 'Connecting');
+  $('signal').textContent = (flocking ? 'Playing in step with the host · ' : '') + (n ? 'Connected · ' + live.length + (live.length === 1 ? ' station' : ' stations') + ' on the air' : Date.now() - bootAt > 30000 ? 'Still connecting' : 'Connecting');
   $('flockleave').hidden = !flocking;
-  rows();
-  if (cur) { const u = stations.find(x => x.id === cur.id); if (u) { const pic0 = cur.cover, ban0 = cur.banner; cur = u; $('cs').textContent = u.call_sign + '  ' + u.aboard + ' listening'; $('name').textContent = u.name; if (u.cover !== pic0 || u.banner !== ban0) show(u) } }
-  else { const id = wanted || location.hash.slice(1) || lastId(); const s = stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id) && stations.find(x => allowed(x) && inSet(x) && !marooned().has(x.id))); if (s) show(s) }
+  rows(); warmUp();
+  if (cur) { const u = stations.find(x => x.id === cur.id); if (u && !u.cached) { const pic0 = cur.cover, ban0 = cur.banner, name0 = cur.name; cur = u; if (u.cover !== pic0 || u.banner !== ban0 || u.name !== name0) show(u); else { $('cs').textContent = u.call_sign + (u.aboard !== undefined ? '  ' + u.aboard + ' listening' : ''); pageHead() } } }
+  else { const s = firstStation(); if (s) show(s) }
+}
+// The station the set opens on: one passed in a link, the last one this tab played, or the most heard.
+function firstStation() {
+  const id = wanted || passedId() || lastId();
+  return stations.find(x => x.id === id) || (!/^[0-9a-f]{64}$/.test(id || '') && stations.find(x => allowed(x) && inSet(x) && !marooned().has(x.id)));
 }
 
 // A flock link (#flock=...): this tab plays in step with the phone that showed it.
 function flockFollow() {
   const h = location.hash; if (!radio || !h.includes('flock=')) return false;
   try { radio.flock_join(h) } catch (e) { return false }
-  history.replaceState(null, '', location.pathname);
+  history.replaceState(history.state, '', location.pathname);
   flocking = setInterval(() => { if (!radio) return; const id = radio.flock_station(); if (id && cur?.id !== id) { const s = stations.find(x => x.id === id) || { id, call_sign: '', name: 'The host\'s station' }; playing ? listen(s) : show(s) } }, 3000);
   refresh();
   return true;
@@ -605,9 +912,9 @@ function followLink() {
   const id = wanted || location.hash.slice(1) || lastId();
   if (!/^[0-9a-f]{64}$/.test(id) || cur?.id === id || (HOSTIS_ONLY && !isHarbour(id))) return;
   // On an Android phone, a passed station can go straight to the app if it is there.
-  if (/Android/.test(navigator.userAgent) && !pockets.has(id)) { $('appopen').href = 'intent://station/' + id + '#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url=' + encodeURIComponent('https://hostis.black/pyrateradio/#set') + ';end'; $('appnote').hidden = false }
+  if (/Android/.test(navigator.userAgent) && !pockets.has(id) && id !== lastId()) { $('appopen').href = 'intent://station/' + id + '#Intent;scheme=pyrate;package=black.hostis.pyrate;S.browser_fallback_url=' + encodeURIComponent('https://hostis.black/pyrateradio/#set') + ';end'; $('appnote').hidden = false }
   const s = stations.find(x => x.id === id) || { id, call_sign: id.slice(0, 8).toUpperCase(), name: pockets.has(id) ? 'A private station' : 'A passed-on station', pocket: pockets.has(id) };
-  show(s);
+  if (playing) listen(s); else show(s);
 }
 
 // Space or K turns the set on and off, as on any player, unless the listener is typing.
@@ -616,16 +923,13 @@ addEventListener('keydown', e => {
   if (e.target.closest?.('input,textarea,select,button,a,[contenteditable],#glass') || $('go').hidden) return;
   e.preventDefault(); $('go').click();
 });
-$('go').onclick = async () => {
-  if (playing) return stop();
-  if (!cur) return;
-  if (!radio) { audio(); ctx.resume(); $('np').textContent = 'Connecting'; await (booting ??= boot()); if (!radio) return; cur = stations.find(x => x.id === cur.id) || cur }
-  listen(cur);
-};
+const toggle = () => { if (playing) stop(); else if (cur) listen(cur) };
+$('go').onclick = toggle; $('mini-go').onclick = toggle;
+// Hovering over Listen brings the station's sound aboard, so the press plays at once.
+$('go').addEventListener('pointerenter', () => { prefetched = ''; showAt = Date.now() });
 $('spin').onclick = () => {
-  const m = marooned(), pool = (radio ? stations : HARBOUR_STATIONS).filter(s => !m.has(s.id) && allowed(s) && inSet(s) && s.id !== cur?.id);
-  if (!radio) { if (pool.length) dormant(pool[Math.floor(Math.random() * pool.length)]); return }
-  if (pool.length) { listen(pool[Math.floor(Math.random() * pool.length)]); scrollTo({ top: 0, behavior: 'smooth' }) }
+  const m = marooned(), pool = (stations.length ? stations : HARBOUR_STATIONS).filter(s => !m.has(s.id) && allowed(s) && inSet(s) && s.id !== cur?.id);
+  if (pool.length) listen(pool[Math.floor(Math.random() * pool.length)]);
 };
 // ---- The chart of the seas: stations by the home port they name ------------------------
 let chartData = null, chartLoad = null; const ports = new Map();
@@ -647,7 +951,7 @@ async function chart() {
     dots += '<g class="dot' + (s.live ? ' live' : '') + (cur?.id === s.id ? ' on' : '') + '" data-id="' + s.id + '" tabindex="0" role="button" aria-label="' + esc(s.name + ', ' + s.port) + '"><circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3.4"/><title>' + esc(s.name + ', ' + s.port) + '</title></g>';
   }
   $('chart').innerHTML = '<svg viewBox="0 20 720 290" role="img" aria-label="The chart of the seas"><path class="land" d="' + chartData.land + '"/>' + dots + '</svg><p class="fine">' + (n ? n + (n === 1 ? ' station names' : ' stations name') + ' a home town. The rest name none.' : 'No station on the air has named a home port yet.') + '</p>';
-  $('chart').querySelectorAll('.dot').forEach(d => { const go = () => { const s = stations.find(x => x.id === d.dataset.id); if (s) { tuneTo(s); scrollTo({ top: 0, behavior: 'smooth' }) } }; d.onclick = go; d.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go() } } });
+  $('chart').querySelectorAll('.dot').forEach(d => { const go = () => { const s = stations.find(x => x.id === d.dataset.id); if (s) { listen(s); $('set').scrollIntoView({ behavior: 'smooth' }) } }; d.onclick = go; d.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go() } } });
 }
 function view(c) { $('chart').hidden = !c; $('rows').hidden = c; $('vchart').classList.toggle('on', c); $('vlist').classList.toggle('on', !c); $('vchart').setAttribute('aria-pressed', c); $('vlist').setAttribute('aria-pressed', !c); if (c) chart() }
 $('vlist').onclick = () => view(false); $('vchart').onclick = () => view(true);
@@ -738,7 +1042,7 @@ async function clipIt() {
     if (img) g.drawImage(img, ax + 1, ay + 1, A - 2, A - 2);
     else { const b = bits(st.id); g.font = '700 30px "JetBrains Mono"'; for (let r = 0; r < 6; r++) for (let c = 0; c < 9; c++) { const half = c < 5 ? c : 8 - c, on = b[(r * 5 + half) % b.length]; g.fillStyle = on ? bone : 'rgba(237,228,206,.12)'; g.fillText(on ? '1' : '0', ax + 60 + c * 35, ay + 120 + r * 38) } }
     g.fillStyle = bone; g.font = '800 54px Cinzel'; g.fillText(fit((st.name || st.call_sign).toUpperCase(), '800 54px Cinzel', W - 120), W / 2, 650);
-    g.fillStyle = faint; g.font = '28px "JetBrains Mono"'; g.fillText(fq(st.id).toFixed(1) + ' on the dial', W / 2, 700);
+    g.fillStyle = faint; g.font = '28px "JetBrains Mono"'; g.fillText(fqs(st.id) + ' on the dial', W / 2, 700);
     g.fillStyle = 'rgba(237,228,206,.82)'; g.font = 'italic 38px "IM Fell English"'; g.fillText(fit($('np').textContent, 'italic 38px "IM Fell English"', W - 140), W / 2, 780);
     g.fillStyle = faint; g.font = '600 20px Cinzel'; g.fillText(fit($('by').textContent.toUpperCase(), '600 20px Cinzel', W - 140), W / 2, 822);
     // The meter, from the sound itself.
@@ -802,8 +1106,9 @@ $('pass').onclick = () => {
 $('pclose').onclick = () => { $('passbox').hidden = true; $('pcopy').textContent = 'Copy the link' };
 $('maroon').onclick = () => {
   if (!cur || !confirm('Hide ' + cur.name + '? It leaves this browser\'s Log until you show it again in Settings.')) return;
-  const m = marooned(); m.add(cur.id); setMarooned(m); stop(); cur = null; history.replaceState(null, '', location.pathname); refresh();
+  const m = marooned(); m.add(cur.id); setMarooned(m); stop(); cur = null; history.replaceState(history.state, '', location.pathname); goView('list'); refresh();
 };
+$('mhide').onclick = () => $('maroon').onclick();
 $('mlist').onclick = () => {
   const m = marooned();
   const names = new Map(stations.map(s => [s.id, s.name]));
@@ -817,7 +1122,7 @@ $('mtake').onclick = () => {
 };
 $('sw-direct').checked = store('pyrate.direct') === '1';
 $('sw-direct').onchange = () => { store('pyrate.direct', $('sw-direct').checked ? '1' : '0'); radio?.set_direct_ok($('sw-direct').checked) };
-for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-explicit', 'pyrate.show_explicit', '1'], ['sw-art', 'pyrate.hide_art', '0']]) {
+for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-explicit', 'pyrate.show_explicit', '1'], ['sw-art', 'pyrate.hide_art', '0'], ['sw-empty', 'pyrate.show_empty', '1']]) {
   const el = $(id); el.checked = on === '1' ? store(key) === '1' : store(key) !== '1';
   el.onchange = () => { store(key, (el.checked ? on : (on === '1' ? '0' : '1'))); forgetPics(); rowsKey = ''; refresh(); if (cur) show(cur) };
 }
@@ -870,7 +1175,7 @@ function studioShow() {
   $('st-mine').hidden = !on; $('st-new').hidden = on || !$('st-show').hidden;
   if (!on) return;
   const k = JSON.parse(radio.mine()).find(m => m.id === mineCur);
-  $('st-mname').textContent = k?.name || 'Your station'; $('st-mcs').textContent = (k?.call_sign || '') + '  ' + fq(mineCur).toFixed(1);
+  $('st-mname').textContent = k?.name || 'Your station'; $('st-mcs').textContent = (k?.call_sign || '') + '  ' + fqs(mineCur);
   flag($('st-flag'), mineCur, false);
 }
 function studioStatus() {
@@ -936,7 +1241,7 @@ $('st-tabonly').onchange = () => {
   if ($('st-tabonly').checked) { try { sessionStorage.setItem('pyrate.mine', JSON.stringify(l)) } catch (e) { } unstore('pyrate.mine'); $('st-locknote').textContent = 'The key goes when this tab closes. The 24 words bring it back.' }
   else { try { sessionStorage.removeItem('pyrate.mine') } catch (e) { } keepSealed('pyrate.mine', JSON.stringify(l)); $('st-locknote').textContent = 'The key stays in this browser, locked.' }
 };
-$('raisego').onclick = () => $('studio').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
 $('st-raise').onclick = async () => {
   if (sealed() && !mineMem) { stNote('Unlock your stations first.'); return }
   const name = $('st-name').value.trim(); if (!name) { stNote('A station needs a name.'); $('st-name').focus(); return }
@@ -967,7 +1272,7 @@ $('st-restore').onclick = async () => {
   } catch (e) { stNote(String(e)) }
 };
 $('st-another').onclick = () => { mineCur = null; $('st-name').value = $('st-about').value = $('st-kinds').value = ''; studioShow() };
-$('st-tune').onclick = () => { const s = stations.find(x => x.id === mineCur) || { id: mineCur, name: $('st-mname').textContent, call_sign: '' }; tuneTo(s); scrollTo({ top: 0, behavior: 'smooth' }) };
+$('st-tune').onclick = () => { const s = stations.find(x => x.id === mineCur) || { id: mineCur, name: $('st-mname').textContent, call_sign: '' }; listen(s); $('set').scrollIntoView({ behavior: 'smooth' }) };
 
 // libopus in a worker, one job at a time.
 let enc = null, encSeq = 0; const encWait = new Map();
@@ -1093,12 +1398,13 @@ async function boot() {
   if (handOff()) return;
   // An invitation's key leaves the address bar before anything else happens.
   const invite = location.hash.includes('pocket=') ? location.hash : null;
-  if (invite) history.replaceState(null, '', location.pathname);
+  if (invite) history.replaceState(history.state, '', location.pathname);
   scale();
   $('signal').textContent = 'Connecting';
-  try { await init() } catch (e) { $('name').textContent = 'This browser cannot run the radio'; return }
+  try { await init() } catch (e) { $('signal').textContent = 'This browser cannot run the radio. Try another browser, or the app.'; stop(); return }
   // The sealed secrets come back before anything uses them.
   try { pocketsMem = JSON.parse(await dopen(keptAnywhere('pyrate.pockets') || '[]') || '[]') } catch (e) { pocketsMem = [] }
+  try { keptSet = new Set(JSON.parse(await dopen(keptAnywhere('pyrate.kept') || '[]') || '[]').filter(id => /^[0-9a-f]{64}$/.test(id))) } catch (e) { keptSet = new Set() }
   if (!sealed() && !tabKeys()) { const m = store('pyrate.mine'); if (m) { const t = await dopen(m); try { const l = validKeys(JSON.parse(t || '[]')); if (l.length) { mineMem = l; if (t === m) keepSealed('pyrate.mine', m) } } catch (e) { } } }
   // The counting key is replaced every thirty days, so a key taken from this browser cannot
   // tie its tokens back further than that.
@@ -1109,29 +1415,34 @@ async function boot() {
   for (let tries = 0; !radio; tries++) {
     try { radio = await Radio.start(rememberHarbours(), key, RELAYS) } catch (e) {
       console.warn(e);
-      $('name').textContent = 'Could not reach a relay';
-      $('signal').textContent = 'Trying again. If it never connects, this network may block the radio. Try another network, or the app.';
+      $('signal').textContent = 'Could not reach the network. Trying again. If it never connects, this network may block the radio; try another, or the app.';
       await sleep(Math.min(60000, 5000 * 2 ** tries));
     }
   }
-  $('name').textContent = '';
   radio.set_direct_ok(store('pyrate.direct') === '1');
   bootAt = Date.now();
   if (!HOSTIS_ONLY) for (const l of savedPockets()) pocketJoin(l, false);
   if (invite) pocketJoin(invite, true);
   else if (!flockFollow()) followLink();
   refresh();
-  setInterval(refresh, 4000); setInterval(nowPlaying, 1000); setInterval(() => page(false), 5000);
+  setInterval(refresh, 4000); setInterval(() => { paint(); power() }, 1000); setInterval(() => page(false), 5000);
+  // The first cards come within seconds: the list is looked at more often until they do.
+  for (const ms of [700, 1500, 2500]) setTimeout(refresh, ms);
   studioBoot();
   window.addEventListener('hashchange', () => handOff() || followLink());
-  if ('mediaSession' in navigator) { navigator.mediaSession.setActionHandler('play', () => cur && listen(cur)); navigator.mediaSession.setActionHandler('pause', stop); navigator.mediaSession.setActionHandler('stop', stop) }
+  if ('mediaSession' in navigator) {
+    const act = (a, f) => { try { navigator.mediaSession.setActionHandler(a, f) } catch (e) { } };
+    act('play', () => cur && !playing && listen(cur)); act('pause', stop); act('stop', stop);
+    // Next and previous on a lock screen or headset turn the dial, as the arrow keys do.
+    act('nexttrack', () => stepDial(1)); act('previoustrack', () => stepDial(-1));
+  }
 }
 // The node in the tab is built to stop dead on a fault rather than carry on in a bad state.
 // When it does, the set says so and comes back aboard once by itself, on the same station
 // (never a pocket, whose id stays out of the address bar), and offers a reload after that.
 function wrecked() {
   if (wrecked.done) return; wrecked.done = true;
-  gen++; stopAll(); playing = false; power(); radio = null;
+  gen++; stopAll(); hiss(false); playing = false; firstAt = null; power(); radio = null;
   let last = 0; try { last = +(sessionStorage.getItem('pyrate.wrecked') || 0) } catch (e) { }
   const again = Date.now() - last > 300000;
   status(again ? 'Something went wrong. Reconnecting.' : 'Something went wrong and the radio stopped. Reload the page.');
@@ -1148,13 +1459,49 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && pl
 
 // For anyone looking under the hood: what the player is doing.
 let tapped = null;
-window.pyrate = { mine: () => kept().map(k => k.id), tap: () => { if (!ctx) return null; if (!tapped) { tapped = ctx.createMediaStreamDestination(); gain.connect(tapped) } return tapped.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, station: cur?.id, scheduled: sources.length, ahead_ms: playing ? aheadMs : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, webcodecs }) };
+window.pyrate = { node: () => radio?.id(), mine: () => kept().map(k => k.id), tap: () => { if (!ctx) return null; if (!tapped) { tapped = ctx.createMediaStreamDestination(); gain.connect(tapped) } return tapped.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, heard: heard(), stage, trouble, station: cur?.id, scheduled: sources.length, ahead_ms: playing ? aheadMs : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, view: viewOn, webcodecs }) };
+// ---- Finding the way: the sections under the set -------------------------------------------
+// Stations, the station page, starting a station and settings each have their own view. The
+// browser's Back button steps back through them, and nothing about them goes in the address.
+const VIEWS = ['list', 'page', 'studio', 'settings'];
+let viewOn = 'list';
+function goView(v, push = true) {
+  if (!VIEWS.includes(v) || (v === 'studio' && SCOPE !== 'open')) v = 'list';
+  const again = v === viewOn;
+  viewOn = v;
+  for (const x of VIEWS) $('v-' + x).hidden = x !== v;
+  document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-current', t.dataset.v === v));
+  if (push && !again) history.pushState({ v }, '');
+  if (v === 'page') { pageHead(); page(true) }
+  // The section comes into view under the tabs, unless it already is.
+  if (push && $('tabs').getBoundingClientRect().top > innerHeight * 0.45 || push && again) $('tabs').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => goView(t.dataset.v));
+addEventListener('popstate', e => goView(e.state?.v || 'list', false));
+$('pagego').onclick = $('artgo').onclick = () => goView('page');
+$('keep').onclick = () => {
+  if (!cur) return;
+  if (keptSet.has(cur.id)) keptSet.delete(cur.id); else keptSet.add(cur.id);
+  saveKept(); show(cur); rowsKey = ''; rows();
+};
+
+// ---- The mini player: the station and Listen, kept in reach once the set scrolls away ----
+function mini(line) {
+  if (!cur) return;
+  $('mini-name').textContent = cur.name || cur.call_sign || '';
+  $('mini-np').textContent = line || '';
+  const m = $('mini-art'), u = !$('cover').hidden && $('cover').src;
+  if (u) { if (m.dataset.u !== u) { m.dataset.u = u; m.innerHTML = '<img alt="" src="' + u + '">' } }
+  else if (m.dataset.u !== cur.id) { m.dataset.u = cur.id; flag(m, cur.id, cur.live) }
+  $('mini').classList.toggle('live', !!cur.live);
+}
+if (!EMBED && 'IntersectionObserver' in window) new IntersectionObserver(es => { for (const e of es) $('mini').hidden = e.intersectionRatio > 0.15 || !cur }, { threshold: [0, 0.15, 0.3] }).observe($('set'));
+$('mini-up').onclick = () => $('set').scrollIntoView({ behavior: 'smooth' });
+
 // The set at rest, before it joins the network: a HOSTIS station, or the one passed on.
 function dormant(s) {
-  cur = s; flag($('flag'), s.id, false); art(null);
-  $('name').textContent = s.name; $('cs').textContent = s.call_sign || ''; $('freq').textContent = fq(s.id).toFixed(1);
-  dial(HARBOUR_STATIONS);
-  needle(s.id, false); power(); $('pass').hidden = true; $('np').textContent = 'Press Listen to tune in.'; $('by').textContent = '';
+  dial(HARBOUR_STATIONS); show(s);
+  $('pass').hidden = true;
 }
 // Inside the landing page, the set tells its host how tall it is.
 if (document.documentElement.classList.contains('embed') && parent !== window) {
@@ -1167,8 +1514,51 @@ document.querySelectorAll('a.openlink').forEach(a => { if (!a.id) a.href = OPEN_
 // unchecked, and point to one the browser checks.
 if (SCOPE === 'open' && !EMBED && !checked(location.origin + '/')) { const c = OPEN_PLAYERS.find(checked); if (c) { $('st-checked').href = c; $('st-unchecked').hidden = false } }
 if (SHARED) { const m = location.pathname.match(/^\/ipfs\/([a-z2-7]{20,})\//); $('sharedgo').href = m ? 'https://' + m[1] + '.ipfs.inbrowser.link/' + location.hash : OPEN_PLAYERS[0] || '#'; $('sharednote').hidden = false }
+$('sw-hiss').checked = sw.hiss();
+$('sw-hiss').onchange = () => { store('pyrate.hiss', $('sw-hiss').checked ? '1' : '0'); if (playing && !heard()) hiss(true) };
+// On hostis.black's own page the station tiles turn this set, from the page that holds it.
+if (EMBED) addEventListener('message', e => { if (e.origin !== location.origin || e.data?.pyrate !== 'tune' || !isHarbour(e.data.id)) return; const s = stations.find(x => x.id === e.data.id) || HARBOUR_STATIONS.find(h => h.id === e.data.id); if (s) tuneTo(s) });
 if (EMBED) { scale(); const p = passedId(); dormant(p && isHarbour(p) ? HARBOUR_STATIONS.find(h => h.id === p) : HARBOUR_STATIONS[0]); $('signal').textContent = '' }
-else booting = boot();
+else {
+  // The page shows its stations and a station on the set before the network answers, so
+  // Listen works from the first moment; pressed early, it waits for the network and plays.
+  // A reload keeps the section it was on.
+  scale(); const v0 = history.state?.v; history.replaceState({ v: v0 || 'list' }, ''); if (v0 && v0 !== 'list') goView(v0, false);
+  stations = cachedCards().filter(inSet); rows();
+  if (!foreign(location.hash)) { const s = firstStation() || (passedId() && !HOSTIS_ONLY ? { id: passedId(), call_sign: passedId().slice(0, 8).toUpperCase(), name: 'A passed-on station' } : null); if (s) show(s) }
+  booting = boot();
+}
 // In the page, the radio's engine loads from this site while the page is read, so Listen
 // starts at once. Nothing goes to the network itself until Listen is pressed.
 if (EMBED) { const warm = () => init().catch(() => { }); if ('requestIdleCallback' in window) requestIdleCallback(warm, { timeout: 2500 }); else setTimeout(warm, 1200) }
+
+// ---- More: clip, sleep timer, recently played, hide ------------------------------------
+function playedList() {
+  const hm = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  $('played').innerHTML = played.length ? [...played].reverse().map(h => '<li><time>' + hm(h.at) + '</time><span>' + esc(h.title) + '<small>' + esc([h.by, h.station].filter(Boolean).join(' · ')) + '</small></span></li>').join('') : '<li class="none">Nothing yet.</li>';
+}
+function moreOpen(o) { $('morebox').hidden = !o; $('more').setAttribute('aria-expanded', o); if (o) sleepSay(); else { $('played').hidden = true; $('playedgo').setAttribute('aria-expanded', false) } }
+$('more').onclick = () => moreOpen($('morebox').hidden);
+addEventListener('keydown', e => { if (e.key === 'Escape' && !$('morebox').hidden) { moreOpen(false); $('more').focus() } });
+addEventListener('pointerdown', e => { if (!$('morebox').hidden && !e.target.closest('#morebox,#more')) moreOpen(false) });
+$('clip').addEventListener('click', () => moreOpen(false));
+$('mhide').addEventListener('click', () => moreOpen(false));
+$('playedgo').onclick = () => { const o = $('played').hidden; $('played').hidden = !o; $('playedgo').setAttribute('aria-expanded', o); if (o) playedList() };
+let sleepMin = 0;
+function sleepSay() {
+  $('sleepsay').textContent = sleepAt ? 'until ' + new Date(sleepAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+  $('sleepoff').hidden = !sleepAt; $('more').querySelector('span').textContent = sleepAt ? 'Sleep' : 'More';
+  for (const b of $('sleepbtns').querySelectorAll('[data-m]')) b.setAttribute('aria-pressed', !!sleepAt && +b.dataset.m === sleepMin);
+}
+function sleepIn(min) {
+  clearTimeout(sleepT); sleepT = null; sleepAt = min ? Date.now() + min * 60000 : null; sleepMin = min || 0;
+  if (min) sleepT = setTimeout(() => {
+    // Thirty seconds down to silence, then Stop, then the level back for next time.
+    const t = ctx?.currentTime ?? 0;
+    if (ctx && playing) { bus.gain.cancelScheduledValues(t); bus.gain.setValueAtTime(bus.gain.value, t); bus.gain.linearRampToValueAtTime(0, t + 30) }
+    setTimeout(() => { if (playing) stop(); if (ctx) { bus.gain.cancelScheduledValues(ctx.currentTime); bus.gain.setValueAtTime(1, ctx.currentTime + 0.4) } sleepAt = null; sleepMin = 0; sleepSay() }, ctx && playing ? 30000 : 0);
+  }, min * 60000);
+  sleepSay();
+}
+for (const b of $('sleepbtns').querySelectorAll('[data-m]')) b.onclick = () => sleepIn(+b.dataset.m);
+$('sleepoff').onclick = () => sleepIn(null);
