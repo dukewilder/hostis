@@ -43,6 +43,30 @@ pub fn open(queue: SharedQueue) -> Result<Output> {
     Ok(Output { _stream: stream })
 }
 
+/// No speaker at all, for tests on machines without one (PYRATE_NULL_AUDIO=1): the queue is
+/// drained at 48 kHz in real time, as a device would, so playout and its status behave as on a
+/// phone. Never chosen on its own.
+pub fn drain(queue: SharedQueue) -> ! {
+    let start = std::time::Instant::now();
+    let mut taken: u64 = 0;
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let owed = (start.elapsed().as_secs_f64() * 48_000.0) as u64;
+        let mut q = queue.lock().unwrap_or_else(|e| e.into_inner());
+        while taken < owed {
+            taken += 1;
+            if q.samples.len() >= 2 {
+                q.samples.pop_front();
+                q.samples.pop_front();
+                q.played += 1;
+                q.starved = false;
+            } else {
+                q.starved = true;
+            }
+        }
+    }
+}
+
 fn out_stream<T: cpal::SizedSample + cpal::FromSample<f32>>(device: &cpal::Device, config: &cpal::StreamConfig, queue: SharedQueue, channels: usize, rate: f64) -> Result<cpal::Stream> {
     let step = 48_000.0 / rate;
     let mut phase = 0.0f64;

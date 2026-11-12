@@ -102,6 +102,11 @@ object Ship {
         server = s
         val open = java.util.concurrent.atomic.AtomicInteger(0)
         val ends = System.currentTimeMillis() + 15 * 60_000
+        // Closed at fifteen minutes even if nobody comes.
+        thread(isDaemon = true) {
+            try { Thread.sleep(15 * 60_000L) } catch (e: Exception) {}
+            if (server === s) passStop()
+        }
         thread(isDaemon = true) {
             while (!s.isClosed) {
                 val sock = try { s.accept() } catch (e: Exception) { break }
@@ -119,7 +124,16 @@ object Ship {
                     try {
                         sock.use { k ->
                             k.soTimeout = 15_000
-                            val line = k.getInputStream().bufferedReader().readLine() ?: ""
+                            // The request line only, and no more than 2 KB of it: a line
+                            // with no end cannot fill the phone's memory.
+                            val inp = k.getInputStream()
+                            val sb = StringBuilder()
+                            while (sb.length < 2048) {
+                                val b = inp.read()
+                                if (b < 0 || b == '\n'.code) break
+                                sb.append(b.toChar())
+                            }
+                            val line = sb.toString().trimEnd('\r')
                             val path = line.split(' ').getOrNull(1) ?: ""
                             val out = k.getOutputStream()
                             when (path) {

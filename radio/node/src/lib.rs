@@ -2273,12 +2273,17 @@ impl Node {
             let i2 = inner.clone();
             rt.spawn(async move { playout::run(i2).await });
             // The output stream lives on its own thread for the life of the process.
-            std::thread::spawn(move || match player::open(queue) {
-                Ok(out) => loop {
-                    std::thread::park();
-                    let _ = &out;
-                },
-                Err(e) => say(&format!("no audio output: {e}")),
+            std::thread::spawn(move || {
+                if std::env::var_os("PYRATE_NULL_AUDIO").is_some_and(|v| v != "0") {
+                    player::drain(queue);
+                }
+                match player::open(queue) {
+                    Ok(out) => loop {
+                        std::thread::park();
+                        let _ = &out;
+                    },
+                    Err(e) => say(&format!("no audio output: {e}")),
+                }
             });
         }
 
