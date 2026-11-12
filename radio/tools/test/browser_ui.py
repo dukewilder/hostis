@@ -15,7 +15,7 @@ with sync_playwright() as p:
         if "Gangway" in (pg.text_content("#name") or ""): break
     check("a station shows", "Gangway" in (pg.text_content("#name") or ""))
     check("the console names no node or station", not any(l.startswith("pyrate:") for l in logs))
-    pg.wait_for_selector("#chatgo", state="visible", timeout=60000)
+    pg.click(".tab[data-v=page]"); pg.wait_for_selector("#chatgo", state="visible", timeout=60000)
     pg.click("#chatgo")
     for i in range(20):
         time.sleep(1)
@@ -28,7 +28,7 @@ with sync_playwright() as p:
     check("a link served from a bare address points at hostis.black", link.startswith("https://hostis.black/pyrateradio/listen/#"))
     pg.evaluate("localStorage.setItem('pyrate.name', 'Test')")
     pg.on("dialog", lambda d: d.accept())
-    pg.click("#forget"); time.sleep(4)
+    pg.click(".tab[data-v=settings]"); pg.click("#forget"); time.sleep(4)
     check("forgetting clears what the browser keeps", pg.evaluate("Object.keys(localStorage).filter(k => k.startsWith('pyrate.') && k !== 'pyrate.token' && k !== 'pyrate.harbours').length") == 0)
     check("the page's policy refuses nothing it needs", not any("Content Security Policy" in l for l in logs))
     check("no page errors", not errs)

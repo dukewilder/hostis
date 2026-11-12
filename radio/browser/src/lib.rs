@@ -232,6 +232,8 @@ struct Ship {
     /// The first hop of this visit's stems, kept for the visit.
     stem_guard: Mutex<Option<EndpointId>>,
     sailing: std::sync::atomic::AtomicBool,
+    /// Peers already asked for the cards they know.
+    cards_asked: Mutex<HashSet<EndpointId>>,
 }
 
 /// A relay named in a link someone passed on: HTTPS only, so a link cannot send the tab's
@@ -291,6 +293,7 @@ impl Ship {
                     })
                     .unwrap_or_default(),
             ),
+            Request::Cards => Response::Cards(vec![]),
             Request::PocketChatter { tag } => {
                 let found = self.pockets.lock().unwrap().iter().find(|(_, (k, _))| pyrate_core::pocket::tag(k) == tag).map(|(st, (k, _))| (*st, *k));
                 let Some((st, key)) = found else { return Response::Chatter(vec![]) };
@@ -529,7 +532,10 @@ impl Ship {
         let mut private = false;
         for _ in 0..32 {
             let from = self.archives.lock().unwrap().get(&station).map(|a| a.len()).unwrap_or(0);
-            let Ok(Response::Entries(raw)) = self.ask_privately(&Ask::Log { station, from }).await else { continue };
+            // A log this tab has never seen goes out along two routes at once; the first to
+            // bring entries wins.
+            let asked = if from == 0 { self.first_page(station).await } else { self.ask_privately(&Ask::Log { station, from }).await };
+            let Ok(Response::Entries(raw)) = asked else { continue };
             let got = raw.len();
             // An exit that found no carrier answers with nothing. For a log this tab has never
             // seen, that is no answer at all, so another exit is asked.
@@ -602,6 +608,25 @@ impl Ship {
             say(&format!("log {}: {added} entries", station.call_sign()));
         }
         Ok(added)
+    }
+
+    /// The first page of a log along two routes at once: the first answer with entries in it.
+    async fn first_page(&self, station: StationId) -> Result<Response> {
+        let one = || async {
+            match self.ask_privately(&Ask::Log { station, from: 0 }).await {
+                Ok(Response::Entries(list)) if !list.is_empty() => Ok(Response::Entries(list)),
+                _ => Err(anyhow!("an exit with nothing")),
+            }
+        };
+        let mut tries: n0_future::FuturesUnordered<_> = (0..2).map(|_| Box::pin(one())).collect();
+        let mut last = Err(anyhow!("no route"));
+        while let Some(r) = n0_future::StreamExt::next(&mut tries).await {
+            if r.is_ok() {
+                return r;
+            }
+            last = r;
+        }
+        last
     }
 
     /// A pocket station's log from its hosts and members, sealed, asked for by its tag.
@@ -758,6 +783,33 @@ impl Ship {
         l.sketches.retain(|h, _| h + 2 >= now_hour);
         if l.heard.entry(hour).or_default().insert(token) {
             l.sketches.entry(hour).or_default().add(&token);
+        }
+    }
+
+    /// Asks a peer for the cards it knows, once, and takes each as gossip would bring it.
+    async fn cards_from(self: &Arc<Self>, node: EndpointId) {
+        if !self.cards_asked.lock().unwrap().insert(node) {
+            return;
+        }
+        let Ok(Response::Cards(list)) = self.ask(node, &Request::Cards).await else { return };
+        let now = self.now();
+        for b in list.into_iter().take(net::CARDS_ITEMS) {
+            if b.len() > net::CARD_WIRE {
+                continue;
+            }
+            // Cards, then the carriers' signed notes: each taken as gossip from that node, and
+            // checked against its own signature or dropped. With them the tab can reach the
+            // carriers through two hops at once, without waiting for the network to repeat them.
+            let Ok(g) = postcard::from_bytes::<Gossip>(&b) else { continue };
+            if !matches!(g, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Harbour { .. }) {
+                continue;
+            }
+            let Some(g) = g.from_network(now, node.as_bytes()) else { continue };
+            if let Some(st) = self.on_gossip(g) {
+                if *self.tuned.lock().unwrap() == Some(st) {
+                    self.sync_soon(st);
+                }
+            }
         }
     }
 
@@ -1446,9 +1498,16 @@ impl Radio {
             mine: Mutex::new(HashMap::new()),
             stem_guard: Mutex::new(None),
             sailing: std::sync::atomic::AtomicBool::new(false),
+            cards_asked: Mutex::new(HashSet::new()),
         });
         *proto.0.lock().unwrap() = Some(ship.clone());
 
+        // The harbours are asked for the cards they know at once, so the dial fills in one round
+        // trip instead of waiting for gossip.
+        for h in ship.harbour.iter().take(3) {
+            let (s, h) = (ship.clone(), *h);
+            spawn(async move { s.cards_from(h).await });
+        }
         let s2 = ship.clone();
         spawn(async move {
             say(&format!("node {} up, joining the Log through {} harbour peers", s2.ep.id().fmt_short(), s2.harbour.len()));
@@ -1478,6 +1537,10 @@ impl Radio {
                     Ok(Event::Received(m)) => m,
                     Ok(Event::NeighborUp(n)) => {
                         s2.neighbours.lock().unwrap().insert(n);
+                        if s2.log.lock().unwrap().len() < 8 && s2.cards_asked.lock().unwrap().len() < 6 {
+                            let s4 = s2.clone();
+                            spawn(async move { s4.cards_from(n).await });
+                        }
                         continue;
                     }
                     Ok(Event::NeighborDown(n)) => {

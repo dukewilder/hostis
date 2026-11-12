@@ -197,7 +197,10 @@ impl Inner {
         // pages are limited by bytes, so a long log comes in several.
         for _ in 0..32 {
             let from = self.store.lock().unwrap().logs.get(&station).map(|a| a.len()).unwrap_or(0);
-            let Ok(raw) = self.ask_privately(&Ask::Log { station, from }).await else {
+            // A log this phone has never seen is asked for along two routes at once, and the
+            // first to bring entries is taken: tuning a new station waits on the faster exit.
+            let asked = if from == 0 { self.first_page(station).await } else { self.ask_privately(&Ask::Log { station, from }).await };
+            let Ok(raw) = asked else {
                 tries += 1;
                 if tries >= 3 {
                     break;
@@ -228,6 +231,27 @@ impl Inner {
         } else {
             Err(anyhow!("no private route answered"))
         }
+    }
+
+    /// The first page of a log along two routes at once: the first answer with entries in it.
+    async fn first_page(&self, station: StationId) -> Result<Vec<u8>> {
+        use n0_future::StreamExt;
+        let one = || async {
+            let raw = self.ask_privately(&Ask::Log { station, from: 0 }).await?;
+            match postcard::from_bytes::<Response>(&raw) {
+                Ok(Response::Entries(list)) if !list.is_empty() => Ok(raw),
+                _ => Err(anyhow!("an exit with nothing")),
+            }
+        };
+        let mut tries: n0_future::FuturesUnordered<_> = (0..2).map(|_| Box::pin(one())).collect();
+        let mut last = Err(anyhow!("no route"));
+        while let Some(r) = tries.next().await {
+            if r.is_ok() {
+                return r;
+            }
+            last = r;
+        }
+        last
     }
 
     pub(crate) async fn private_chunk(&self, station: StationId, hash: Hash, keep: bool) -> Result<Vec<u8>> {
