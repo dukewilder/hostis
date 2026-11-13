@@ -268,6 +268,10 @@ struct Ship {
     connecting: Mutex<HashSet<EndpointId>>,
     /// How long each radio has lately taken to answer, in milliseconds, smoothed.
     answers: Mutex<HashMap<EndpointId, f64>>,
+    /// Radios that turned a hop away lately (a tab, a phone that relays for nobody), and when:
+    /// left out of routes and stems for half an hour. And those that carried a route this visit.
+    norelay: Mutex<HashMap<EndpointId, u64>>,
+    relayed: Mutex<HashSet<EndpointId>>,
 }
 
 /// A relay named in a link someone passed on: HTTPS only, so a link cannot send the tab's
@@ -1074,7 +1078,18 @@ impl Ship {
         nodes.retain(|n| *n != self.ep.id());
         nodes.sort();
         nodes.dedup();
-        nodes
+        // A radio that turned a hop away lately is left out, while two others remain.
+        let now = raw_now();
+        let away: HashSet<EndpointId> = self.norelay.lock().unwrap().iter().filter(|(_, t)| now.saturating_sub(**t) < 30 * 60_000).map(|(n, _)| *n).collect();
+        let kept: Vec<EndpointId> = nodes.iter().filter(|n| !away.contains(*n)).copied().collect();
+        if kept.len() >= 2 { kept } else { nodes }
+    }
+
+    /// Notes that a radio turned a hop away, so routes and stems pass over it for a while.
+    fn turned_away(&self, n: EndpointId) {
+        if !self.harbour.contains(&n) {
+            self.norelay.lock().unwrap().insert(n, raw_now());
+        }
     }
 
     /// One request two hops away. The first hop is drawn once a visit and sees this tab but
@@ -1199,8 +1214,24 @@ impl Ship {
         say(&format!("route {} via {} to {} ({} known): {} in {} ms", what, first.fmt_short(), exit.fmt_short(), known,
             match &r { Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => "answered".to_string(), Ok(Ok(_)) => "empty".into(), Ok(Err(e)) => format!("first hop failed: {e}"), Err(_) => "timed out".into() }, raw_now() - t));
         let raw = match r {
-            Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => raw,
+            Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => {
+                let mut ok = self.relayed.lock().unwrap();
+                ok.insert(first);
+                ok.insert(exit);
+                raw
+            }
             Ok(Err(_)) => return Err(RouteFail::FirstHop),
+            // An empty answer: the first hop relays for nobody, or the exit it reached does not.
+            // A first hop that has carried a route this visit is believed; one that has not is
+            // the likelier to have said no, and it is the one left out.
+            Ok(Ok(Response::Hop(_))) => {
+                let proven = self.relayed.lock().unwrap().contains(&first);
+                self.turned_away(if proven { exit } else { first });
+                if !proven {
+                    return Err(RouteFail::FirstHop);
+                }
+                return Err(RouteFail::NoAnswer);
+            }
             _ => return Err(RouteFail::NoAnswer),
         };
         let open = pyrate_core::route::open_answer(&c, &raw).ok_or(RouteFail::Other)?;
@@ -1267,12 +1298,21 @@ impl Ship {
             .filter_map(|n| EndpointId::from_bytes(&n).ok()).filter(|n| *n != self.ep.id()).collect();
         known.sort();
         known.dedup();
+        let now_raw = raw_now();
+        let away: HashSet<EndpointId> = self.norelay.lock().unwrap().iter().filter(|(_, t)| now_raw.saturating_sub(**t) < 30 * 60_000).map(|(n, _)| *n).collect();
+        known.retain(|n| !away.contains(n));
         let mut g = self.stem_guard.lock().unwrap();
-        if g.is_some_and(|x| known.contains(&x) || self.harbour.contains(&x)) {
+        if g.is_some_and(|x| !away.contains(&x) && (known.contains(&x) || self.harbour.contains(&x))) {
             return *g;
         }
-        let others: Vec<EndpointId> = known.iter().filter(|n| !self.harbour.contains(n)).copied().collect();
-        *g = if !others.is_empty() { Some(others[pick(others.len())]) } else if !self.harbour.is_empty() { Some(self.harbour[pick(self.harbour.len())]) } else { known.first().copied() };
+        // Not one that has been slow or silent lately: a carrier note outlives the phone or test
+        // node that sent it by ten minutes, and a guard that never answers holds up every stem.
+        // One that has carried a route this visit first.
+        let quick = |n: &EndpointId| self.answers.lock().unwrap().get(n).is_none_or(|ms| *ms < 5_000.0);
+        let others: Vec<EndpointId> = known.iter().filter(|n| !self.harbour.contains(n) && quick(n)).copied().collect();
+        let proven: Vec<EndpointId> = others.iter().filter(|n| self.relayed.lock().unwrap().contains(*n)).copied().collect();
+        let pool = if !proven.is_empty() { proven } else { others };
+        *g = if !pool.is_empty() { Some(pool[pick(pool.len())]) } else if !self.harbour.is_empty() { Some(self.harbour[pick(self.harbour.len())]) } else { known.first().copied() };
         *g
     }
 
@@ -1309,16 +1349,26 @@ impl Ship {
         // Two hops out first: the first hop forwards a sealed blob it cannot read to a second
         // node, which starts the stem. Neither learns both this tab and its station.
         let first = self.stem_guard().or_else(|| self.harbour.first().copied());
-        let others: Vec<EndpointId> = self.route_nodes().into_iter().filter(|n| Some(*n) != first).collect();
+        let mut others: Vec<EndpointId> = self.route_nodes().into_iter().filter(|n| Some(*n) != first).collect();
         if let (Some(g), false) = (first, others.is_empty()) {
-            let x = others[pick(others.len())];
-            let ask = Ask::Stem { station: id, entries: entries.clone(), chunks: chunks.clone(), announce: Some(announce.clone()) };
-            if let Some((eph, ct, c)) = postcard::to_stdvec(&ask).ok().and_then(|p| pyrate_core::route::seal_to(x.as_bytes(), &p)) {
-                let fwd = postcard::to_stdvec(&Hop::Sealed { eph, ct }).ok().and_then(|blob| postcard::to_stdvec(&Hop::Forward { next: *x.as_bytes(), blob }).ok());
-                if let Some(fwd) = fwd {
-                    if let Ok(Ok(Response::Hop(raw))) = timeout(Duration::from_secs(30), self.ask(g, &Request::Hop(fwd))).await {
+            // Up to three second nodes a turn, each a different one, so one that turns the cargo
+            // away costs a moment and not the next turn. A guard that turns everything away,
+            // or does not answer, is let go and another drawn.
+            for _ in 0..3 {
+                if others.is_empty() {
+                    break;
+                }
+                let x = others.swap_remove(pick(others.len()));
+                let ask = Ask::Stem { station: id, entries: entries.clone(), chunks: chunks.clone(), announce: Some(announce.clone()) };
+                let Some((eph, ct, c)) = postcard::to_stdvec(&ask).ok().and_then(|p| pyrate_core::route::seal_to(x.as_bytes(), &p)) else { break };
+                let Some(fwd) = postcard::to_stdvec(&Hop::Sealed { eph, ct }).ok().and_then(|blob| postcard::to_stdvec(&Hop::Forward { next: *x.as_bytes(), blob }).ok()) else { break };
+                let wait = if self.relayed.lock().unwrap().contains(&g) { 30 } else { 10 };
+                match timeout(Duration::from_secs(wait), self.ask(g, &Request::Hop(fwd))).await {
+                    Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => {
+                        self.relayed.lock().unwrap().insert(g);
                         let took = pyrate_core::route::open_answer(&c, &raw).and_then(|p| postcard::from_bytes::<Response>(&p).ok());
                         if matches!(took, Some(Response::Sealed(Some(_)))) {
+                            self.relayed.lock().unwrap().insert(x);
                             let mut mine = self.mine.lock().unwrap();
                             if let Some(m) = mine.get_mut(&id) {
                                 m.sailed = m.sailed.max(wrote);
@@ -1329,6 +1379,23 @@ impl Ship {
                             }
                             return true;
                         }
+                    }
+                    Ok(Ok(Response::Hop(_))) => {
+                        if self.relayed.lock().unwrap().contains(&g) {
+                            self.turned_away(x);
+                        } else {
+                            self.turned_away(g);
+                            *self.stem_guard.lock().unwrap() = None;
+                            break;
+                        }
+                    }
+                    _ => {
+                        // No answer at all: a guard gone quiet is left out for a while.
+                        if !self.relayed.lock().unwrap().contains(&g) {
+                            self.turned_away(g);
+                        }
+                        *self.stem_guard.lock().unwrap() = None;
+                        break;
                     }
                 }
             }
@@ -1767,6 +1834,8 @@ impl Radio {
             hop_misses: std::sync::atomic::AtomicU32::new(0),
             connecting: Mutex::new(HashSet::new()),
             answers: Mutex::new(HashMap::new()),
+            norelay: Mutex::new(HashMap::new()),
+            relayed: Mutex::new(HashSet::new()),
         });
         *proto.0.lock().unwrap() = Some(ship.clone());
 
