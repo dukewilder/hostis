@@ -13,6 +13,7 @@ mod pocket;
 pub mod hop;
 pub mod trust;
 pub mod clockfix;
+mod desk;
 pub mod net;
 pub mod page;
 #[cfg(feature = "playback")]
@@ -346,6 +347,8 @@ pub struct Inner {
     pub(crate) art_mem: Mutex<art::Shelf>,
     /// The live broadcast in progress: station and when it began.
     live: Mutex<Option<(StationId, u64)>>,
+    /// The live desk the broadcast is made on (desk.rs).
+    pub(crate) desk: desk::Desk,
     handle: tokio::runtime::Handle,
     ballast_ok: std::sync::atomic::AtomicBool,
     /// What this phone gives the fleet, in bytes: 1 GB, or more as a drawer Lantern.
@@ -1868,99 +1871,40 @@ impl Inner {
         self.store.lock().unwrap().logs.get(id).cloned()
     }
 
-    /// ON AIR. Samples from `source` become six-second Talk chunks and Live entries
-    /// until the broadcast is ended. `source` is the microphone, or a file played in real time.
-    pub fn go_live(self: &Arc<Self>, station: StationId, file: Option<PathBuf>) -> Result<()> {
+    /// ON AIR. The live desk's air (desk.rs) becomes six-second chunks and Live entries until
+    /// the broadcast is ended: the microphone with whatever else is on the desk, or with
+    /// `file`, a recording played in real time in the microphone's place, ending with it.
+    pub fn go_live(self: &Arc<Self>, station: StationId, file: Option<PathBuf>) -> Result<Value> {
         if self.live.lock().unwrap().is_some() {
             anyhow::bail!("already on air");
         }
         if !self.store.lock().unwrap().keys.contains_key(&station) {
             anyhow::bail!("not our station");
         }
+        // The microphone loses its mains hum, which would date and place the broadcast, and
+        // takes the keeper's voice disguise if one is set.
+        let tries = self.desk.ready(file, self.disguise());
         let started = now_ms();
         *self.live.lock().unwrap() = Some((station, started));
-        let buf: Arc<Mutex<Vec<i16>>> = Arc::new(Mutex::new(Vec::new()));
-        let me = self.clone();
-        let b2 = buf.clone();
-        std::thread::spawn(move || {
-            // Hold the source open for as long as the broadcast lasts.
-            #[cfg(feature = "playback")]
-            let _mic = if file.is_none() {
-                match player::open_input(b2.clone()) {
-                    Ok(i) => Some(i),
-                    Err(e) => {
-                        say(&format!("no microphone: {e}"));
-                        *me.live.lock().unwrap() = None;
-                        return;
-                    }
-                }
-            } else {
-                None
-            };
-            let file_pcm: Option<Vec<i16>> = file.and_then(|p| {
-                let got = pyrate_core::ingest::ingest_voiced(&p, Profile::Talk, me.disguise()).ok()?;
-                let mut d = pyrate_core::audio::ChunkDecoder::new(1).ok()?;
-                Some(got.chunks.iter().flat_map(|(_, b)| d.decode(b).unwrap_or_default()).collect())
-            });
-            let Ok(mut enc) = pyrate_core::ChunkEncoder::new(Profile::Talk) else { return };
-            // The microphone loses its mains hum, which would date and place the broadcast, and
-            // takes the keeper's voice disguise if one is set. A file was treated when ingested.
-            let mut voice = pyrate_core::voice::Voice::new(true, me.disguise());
-            let mut fed = 0usize;
-            say(&format!("ON AIR {}", station.call_sign()));
-            while me.live.lock().unwrap().is_some_and(|(s, t)| s == station && t == started) {
-                std::thread::sleep(Duration::from_millis(200));
-                let pcm: Vec<i16> = match &file_pcm {
-                    Some(f) => {
-                        let due = (now_ms().saturating_sub(started) * 48) as usize;
-                        let end = due.min(f.len());
-                        let out = f[fed.min(end)..end].to_vec();
-                        fed = end;
-                        if fed >= f.len() {
-                            *me.live.lock().unwrap() = None;
-                        }
-                        out
-                    }
-                    None => {
-                        let mut p = std::mem::take(&mut *b2.lock().unwrap());
-                        voice.run(&mut p);
-                        p
-                    }
-                };
-                let Ok(chunks) = enc.push(&pcm) else { break };
-                for (c, bytes) in chunks {
-                    let mut s = me.store.lock().unwrap();
-                    if s.put_chunk(&c.hash, &bytes).is_ok() {
-                        let _ = s.write(station, now_ms(), Body::Live { chunk: c, channels: 1, bitrate: 24_000 });
-                    }
-                    drop(s);
-                    // A pocket station never goes down the public stem: its members fetch from
-                    // the keeper, who tells them it is on the air on the pocket's own topic.
-                    if me.cfg.private && !me.is_pocket(&station) {
-                        let m2 = me.clone();
-                        me.handle.spawn(async move { m2.stem_push(station, None).await });
-                    }
-                }
+        desk::kick(self);
+        let Some(tries) = tries else { return Ok(json!({ "ok": true })) };
+        match self.desk.mic_answer(tries, Duration::from_secs(5)) {
+            Ok(()) => Ok(json!({ "ok": true })),
+            // A show of music alone can go out without a microphone; a show of nothing cannot.
+            Err(e) if self.desk.has_music() => {
+                let note = format!("No microphone ({e}). On the air without it.");
+                self.desk.say(&note);
+                Ok(json!({ "ok": true, "note": note }))
             }
-            // What is left of the last six seconds goes out, then the end of the broadcast, so
-            // listeners go back to the schedule at once.
-            {
-                let mut s = me.store.lock().unwrap();
-                if let Ok(Some((c, bytes))) = enc.finish() {
-                    if s.put_chunk(&c.hash, &bytes).is_ok() {
-                        let _ = s.write(station, now_ms(), Body::Live { chunk: c, channels: 1, bitrate: 24_000 });
-                    }
+            Err(e) => {
+                let mut l = self.live.lock().unwrap();
+                if *l == Some((station, started)) {
+                    *l = None;
                 }
-                let _ = s.write(station, now_ms() + 1, Body::LiveEnd);
+                say(&format!("no microphone: {e}"));
+                Err(anyhow!("no microphone: {e}"))
             }
-            if me.cfg.private && !me.is_pocket(&station) {
-                let m2 = me.clone();
-                me.handle.spawn(async move { m2.stem_push(station, None).await });
-            }
-            say(&format!("off the air {}", station.call_sign()));
-            let _ = buf;
-        });
-        Ok(())
+        }
     }
 }
 
@@ -2352,6 +2296,7 @@ impl Node {
             np: Mutex::new(Value::Null),
             art_mem: Mutex::new(art::Shelf::default()),
             live: Mutex::new(None),
+            desk: desk::Desk::new(),
             handle: rt.handle().clone(),
             ballast_ok: std::sync::atomic::AtomicBool::new(false),
             ballast_bytes: std::sync::atomic::AtomicU64::new(cfg.ballast),
@@ -2762,7 +2707,9 @@ impl Node {
                 let heard_ms = inner.queue.lock().unwrap().played / 48;
                 #[cfg(not(feature = "playback"))]
                 let heard_ms = 0u64;
-                let live = inner.live.lock().unwrap().map(|(s, t)| json!({ "station": s.to_hex(), "since_ms": now_ms().saturating_sub(t) }));
+                // The broadcast's station and time while on the air, with the desk's state while
+                // it is in use; null otherwise.
+                let live = inner.desk.state(inner, false, false);
                 Ok(json!({ "node": self.id().to_string(), "mine": mine, "jobs": jobs, "tuned": tuned, "now": np, "live": live, "heard_ms": heard_ms }))
             }
             // Where links for stations other than HOSTIS's point (the app's open player).
@@ -3359,12 +3306,16 @@ impl Node {
             }),
             "go_live" => {
                 let st = station()?;
-                inner.go_live(st, req["file"].as_str().map(PathBuf::from))?;
-                Ok(json!({ "ok": true }))
+                inner.go_live(st, req["file"].as_str().map(PathBuf::from))
             }
+            // The desk's thread sees the broadcast gone within a hundredth of a second, sends
+            // what is left of it and signs its end.
             "end_live" => {
                 *inner.live.lock().unwrap() = None;
                 Ok(json!({ "ok": true }))
+            }
+            "desk" | "desk_set" | "desk_devices" | "deck_add" | "deck_play" | "deck_pause" | "deck_next" | "deck_remove" | "pad_load" | "pad_fire" | "pad_clear" => {
+                desk::call(inner, cmd, req)
             }
             // Striking takes the master: from the 24 words on a phone, which holds only a deputy,
             // or from the key itself on a Lantern that keeps it.

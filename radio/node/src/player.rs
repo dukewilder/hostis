@@ -146,14 +146,37 @@ fn out_stream<T: cpal::SizedSample + cpal::FromSample<f32>>(device: &cpal::Devic
     )?)
 }
 
-/// The microphone, as 48 kHz mono i16 pushed into a shared buffer.
+/// The microphone, or another input, as 48 kHz i16 pushed into a shared buffer: one channel
+/// for a voice, two (interleaved) for an interface.
 pub struct Input {
     _stream: cpal::Stream,
 }
 
 pub fn open_input(buf: Arc<Mutex<Vec<i16>>>) -> Result<Input> {
+    open_input_from(None, 1, buf)
+}
+
+/// The inputs this device offers, by name, its default first.
+pub fn input_names() -> Vec<String> {
     let host = cpal::default_host();
-    let device = host.default_input_device().ok_or_else(|| anyhow!("no microphone"))?;
+    let mut v: Vec<String> = host.default_input_device().and_then(|d| d.name().ok()).into_iter().collect();
+    if let Ok(all) = host.input_devices() {
+        for n in all.filter_map(|d| d.name().ok()) {
+            if n != "null" && !v.contains(&n) {
+                v.push(n);
+            }
+        }
+    }
+    v
+}
+
+/// An input by name, or the default when `name` is None, giving `want` channels (1 or 2).
+pub fn open_input_from(name: Option<&str>, want: usize, buf: Arc<Mutex<Vec<i16>>>) -> Result<Input> {
+    let host = cpal::default_host();
+    let device = match name {
+        Some(n) => host.input_devices()?.find(|d| d.name().ok().as_deref() == Some(n)).ok_or_else(|| anyhow!("that input is not there"))?,
+        None => host.default_input_device().ok_or_else(|| anyhow!("no microphone"))?,
+    };
     let supported = device.default_input_config()?;
     let rate = supported.sample_rate().0 as f64;
     let channels = supported.channels() as usize;
@@ -161,35 +184,58 @@ pub fn open_input(buf: Arc<Mutex<Vec<i16>>>) -> Result<Input> {
     if channels == 0 {
         return Err(anyhow!("the microphone reports no channels"));
     }
+    let want = want.clamp(1, 2);
     let stream = match supported.sample_format() {
-        cpal::SampleFormat::I16 => in_stream::<i16>(&device, &config, buf, channels, rate)?,
-        cpal::SampleFormat::U16 => in_stream::<u16>(&device, &config, buf, channels, rate)?,
-        cpal::SampleFormat::I32 => in_stream::<i32>(&device, &config, buf, channels, rate)?,
-        _ => in_stream::<f32>(&device, &config, buf, channels, rate)?,
+        cpal::SampleFormat::I16 => in_stream::<i16>(&device, &config, buf, channels, rate, want)?,
+        cpal::SampleFormat::U16 => in_stream::<u16>(&device, &config, buf, channels, rate, want)?,
+        cpal::SampleFormat::I32 => in_stream::<i32>(&device, &config, buf, channels, rate, want)?,
+        _ => in_stream::<f32>(&device, &config, buf, channels, rate, want)?,
     };
     stream.play()?;
     Ok(Input { _stream: stream })
 }
 
-fn in_stream<T: cpal::SizedSample>(device: &cpal::Device, config: &cpal::StreamConfig, buf: Arc<Mutex<Vec<i16>>>, channels: usize, rate: f64) -> Result<cpal::Stream>
+fn in_stream<T: cpal::SizedSample>(device: &cpal::Device, config: &cpal::StreamConfig, buf: Arc<Mutex<Vec<i16>>>, channels: usize, rate: f64, want: usize) -> Result<cpal::Stream>
 where
     f32: cpal::FromSample<T>,
 {
     let step = rate / 48_000.0;
-    let mut phase = 0.0f64;
+    // Where the next 48 kHz frame falls, in the device's frames from the start of this
+    // callback's data; below zero it lies between the last callback's final frame and this one's first.
+    let mut pos = 0.0f64;
+    let mut prev = [0f32; 2];
     Ok(device.build_input_stream(
         config,
         move |data: &[T], _| {
-            let mut out = buf.lock().unwrap_or_else(|e| e.into_inner());
             let frames = data.len() / channels;
-            // Average the channels, then step through at 48 kHz.
-            while (phase as usize) < frames {
-                let i = phase as usize * channels;
-                let s: f32 = data[i..i + channels].iter().map(|x| <f32 as cpal::FromSample<T>>::from_sample_(*x)).sum::<f32>() / channels as f32;
-                out.push((s.clamp(-1.0, 1.0) * 32767.0) as i16);
-                phase += step;
+            if frames == 0 {
+                return;
             }
-            phase -= frames as f64;
+            // One channel is the average of them all; two are the first two, or one twice.
+            let frame = |i: usize| -> [f32; 2] {
+                let f = &data[i * channels..(i + 1) * channels];
+                let s = |x: &T| <f32 as cpal::FromSample<T>>::from_sample_(*x);
+                if want == 1 {
+                    [f.iter().map(s).sum::<f32>() / channels as f32; 2]
+                } else {
+                    [s(&f[0]), s(&f[channels.min(2) - 1])]
+                }
+            };
+            let mut out = buf.lock().unwrap_or_else(|e| e.into_inner());
+            // Between device frames the sound is drawn as a straight line, so a 44.1 kHz
+            // microphone comes out at 48 kHz without the grit of picking the nearest frame.
+            while pos + 1.0 < frames as f64 {
+                let i = pos.floor();
+                let t = (pos - i) as f32;
+                let a = if i < 0.0 { prev } else { frame(i as usize) };
+                let b = frame((i + 1.0) as usize);
+                for c in 0..want {
+                    out.push(((a[c] + (b[c] - a[c]) * t).clamp(-1.0, 1.0) * 32767.0) as i16);
+                }
+                pos += step;
+            }
+            prev = frame(frames - 1);
+            pos -= frames as f64;
         },
         |e| eprintln!("mic: {e}"),
         None,
