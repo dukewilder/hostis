@@ -1,9 +1,9 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=abde4ec2fa';
+import init, { Radio } from './pkg/pyrate_browser.js?v=cc92b085d2';
 
-const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442,1e048373355a2901497e8307a89f63f421ea1746b2a98419251236160e303ddb,f6d5c5276a98baf5d4964683115e9f0f6095e713f46bec34c25c29a66e46d753";
+const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442,f6d5c5276a98baf5d4964683115e9f0f6095e713f46bec34c25c29a66e46d753";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
 // and nothing else, and it joins the network only when the visitor presses Listen.
 const HARBOUR_STATIONS = [{"id": "f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "name": "The Public Domain", "call_sign": "GAHAGU·3695", "art": "art/the-public-domain.jpg", "banner_art": "art/the-public-domain-banner.jpg", "about": "Music and speech off records from 1925 and before. Each New Year's Day another year of them goes free.", "kinds": ["music"]}, {"id": "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a", "name": "Readings", "call_sign": "DEVAKA·F42C", "art": "art/readings.jpg", "banner_art": "art/readings-banner.jpg", "about": "Captain Johnson's General History of the Pyrates, The Pirates Own Book and Treasure Island, read aloud chapter by chapter.", "kinds": ["talk"]}, {"id": "1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069", "name": "The Numbers", "call_sign": "LOGEHO·95A5", "art": "art/the-numbers.jpg", "banner_art": "art/the-numbers-banner.jpg", "kinds": ["talk"]}, {"id": "8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd", "name": "Netlabel", "call_sign": "KAMANO·62C1", "art": "art/netlabel.jpg", "banner_art": "art/netlabel-banner.jpg", "about": "Electronic, ambient and experimental records their makers set free under Creative Commons. Ambient alone through the small hours.", "kinds": ["music"]}, {"id": "23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a", "name": "Poets' Corner", "call_sign": "VOVUFE·F376", "art": "art/poets-corner.jpg", "banner_art": "art/poets-corner-banner.jpg", "about": "Blake, Dickinson, Shelley, Owen and over a hundred more poets, read aloud. Nobody owns a word of it.", "kinds": ["talk"]}, {"id": "dce68389447e6319303ddbc67bb874863559b8f93015bf810a3b18d0b1eab572", "name": "Shanties", "call_sign": "HUHIZI·554C", "art": "art/shanties.jpg", "banner_art": "art/shanties-banner.jpg", "about": "Shanties, sea songs and pirate songs off 78s, field recordings and Navy band records, every one free to air.", "kinds": ["music"]}];
@@ -13,7 +13,7 @@ const EMBED = document.documentElement.classList.contains('embed');
 // flock goes straight to an open player, the same set served where no one owns it (IPFS, a
 // Lantern). 'open' is that copy: the whole Log, the chatter and the colours.
 const SCOPE = "harbour";
-const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeih2i6ddyyvtlxcuj6f6qnnnn5kcef5ak22tlagudnk722dzmacjue.ipfs.inbrowser.link/", "https://bafybeih2i6ddyyvtlxcuj6f6qnnnn5kcef5ak22tlagudnk722dzmacjue.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeih2i6ddyyvtlxcuj6f6qnnnn5kcef5ak22tlagudnk722dzmacjue/"];
+const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeicn3r6beebyzfbhi63rpljezmljoc55r75jfdhl27x62j5dssnpuy.ipfs.inbrowser.link/", "https://bafybeicn3r6beebyzfbhi63rpljezmljoc55r75jfdhl27x62j5dssnpuy.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeicn3r6beebyzfbhi63rpljezmljoc55r75jfdhl27x62j5dssnpuy/"];
 const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
 const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
 // HOSTIS's stations carry their pictures in the page, so they show before the network answers.
