@@ -1283,6 +1283,7 @@ impl Ship {
                 tracks: Some(log.library().map(|l| l.len() as u32).unwrap_or(0)),
                 named: log.named_since(),
                 freq: Some(freq),
+                link_only: log.link_only(),
             }
             .clipped()
             .sign(&m.key),
@@ -2307,6 +2308,16 @@ impl Radio {
         Ok(())
     }
 
+    /// Whether the station keeps itself off the public dial, heard by its link and by those who
+    /// keep it. Otherwise it joins the dial a day after it first went on the air.
+    pub fn listing_set(&self, id: &str, link_only: bool) -> Result<(), JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        if self.ship.archives.lock().unwrap().get(&st).map(|a| a.link_only()) != Some(link_only) {
+            self.ship.write_own(st, Body::Listing { link_only })?;
+        }
+        Ok(())
+    }
+
     /// New art for the station: `kind` is "cover" or "banner", `raw` any picture the page has
     /// already turned upright and cropped. It is drawn again here by the app's own code, so what
     /// travels is the same plain JPEG of the same size the app makes, with nothing else in it;
@@ -2399,7 +2410,8 @@ impl Radio {
             let landed = log.get(id).map(|l| l.carriers.iter().filter(|(n, (_, seen))| **n != me && now.saturating_sub(*seen) < 10 * 60_000).map(|(_, (h, _))| *h).max().unwrap_or(0)).unwrap_or(0);
             let carriers = log.get(id).map(|l| l.carriers.iter().filter(|(n, (_, seen))| **n != me && now.saturating_sub(*seen) < 10 * 60_000).count()).unwrap_or(0);
             json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": shown(&name), "entries": len, "tracks": tracks, "landed": landed, "carriers": carriers,
-                    "unsent": m.unsent.len(), "chunks": m.chunks.len(), "pow": m.pow.is_some(), "listable": m.pow.is_some_and(|p| net::pow_bits(id, p) >= net::LIST_BITS) })
+                    "unsent": m.unsent.len(), "chunks": m.chunks.len(), "pow": m.pow.is_some(), "listable": m.pow.is_some_and(|p| net::pow_bits(id, p) >= net::LIST_BITS),
+                    "link_only": a.is_some_and(|a| a.link_only()), "dial_at": a.and_then(|a| a.entries().first()).map(|e| e.entry.at_ms + net::LIST_AGE_MS) })
         }).collect();
         json!(v).to_string()
     }

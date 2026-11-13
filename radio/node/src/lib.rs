@@ -1318,7 +1318,8 @@ impl Inner {
                 let explicit = log.explicit();
                 let tracks = Some(log.library().map(|l| l.len() as u32).unwrap_or(0));
                 let named = log.named_since();
-                let card = net::Card { station: id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof, cover, accent, kinds, mature, tip, explicit, tracks, named, freq }.clipped();
+                let link_only = log.link_only();
+                let card = net::Card { station: id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof, cover, accent, kinds, mature, tip, explicit, tracks, named, freq, link_only }.clipped();
                 // A card is signed afresh only when something on it changes, or every eight to
                 // twelve minutes: a card stamped every twenty seconds would tell the network, to
                 // the second, when its keeper's device is awake.
@@ -2714,6 +2715,10 @@ impl Node {
                     json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": name.as_deref().map(shown), "tracks": tracks,
                         // Whether this device has done the work for the station to be listed.
                         "listable": inner.pow.lock().unwrap().get(&id).is_some_and(|p| net::pow_bits(&id, *p) >= net::LIST_BITS),
+                        // Kept to its link by its keeper; and when it joins the dial otherwise, a
+                        // day after it first went on the air.
+                        "link_only": a.is_some_and(|a| a.link_only()),
+                        "dial_at": a.and_then(|a| a.entries().first()).map(|e| e.entry.at_ms + net::LIST_AGE_MS),
                         "direct": inner.direct.lock().unwrap().contains(&id),
                         // Three stems with no taker and no leave to go direct: the station waits.
                         "waiting": !inner.direct.lock().unwrap().contains(&id) && inner.stem_misses.lock().unwrap().get(&id).is_some_and(|m| *m >= 3),
@@ -2758,6 +2763,12 @@ impl Node {
                 if let Some(explicit) = req["explicit"].as_bool() {
                     if s.logs.get(&st).map(|a| a.explicit()) != Some(explicit) {
                         s.write(st, now_ms(), Body::Rating { explicit })?;
+                    }
+                }
+                // Whether the station keeps itself off the public dial, heard by its link only.
+                if let Some(link_only) = req["link_only"].as_bool() {
+                    if s.logs.get(&st).map(|a| a.link_only()) != Some(link_only) {
+                        s.write(st, now_ms(), Body::Listing { link_only })?;
                     }
                 }
                 Ok(json!({ "ok": true }))
