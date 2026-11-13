@@ -63,3 +63,9 @@ Report, in this order:
 5. Everything each station file asks you to report, including every `station <name>: <id>` line. Contraband's id is new.
 6. Everything from Part 7.
 7. The sizes of the `-retired` folders. Ask Dylan whether they may be deleted, and delete nothing until he says yes.
+
+Addendum (Part 4b). From Dylan's computer, every route whose last radio is the hold (1e048373…) fails, even through the releases Lantern beside it, and a browser cannot reach the hold at all ("No addressing information available"). In Part 4, also report for the hold and for pyrate-releases:
+- the container's command and arguments (`docker inspect -f '{{.Config.Cmd}} {{.Args}}' <container>`);
+- the names only of its environment variables that start with PYRATE_, and the values of PYRATE_RELAY_URL, PYRATE_RELAY_LOCAL and PYRATE_QUIET if set (nothing else);
+- every line of the last hour of its log containing "hop", "refus" or "relay".
+Change nothing.
