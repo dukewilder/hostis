@@ -10,12 +10,15 @@ with sync_playwright() as p:
     b = p.chromium.launch(); pg = b.new_page(); logs = []; errs = []
     pg.on("console", lambda m: logs.append(m.text)); pg.on("pageerror", lambda e: errs.append(str(e)))
     pg.goto(f"http://127.0.0.1:{sys.argv[1]}/index.html")
+    # The first open lands on the most listened station on the list: on the test network that is
+    # Gangway or a test station, so any station the list holds will do.
+    on = lambda: pg.evaluate("(() => { const s = window.pyrate?.state?.(); return !!(s && s.station && window.pyrate.card(s.station) && (document.getElementById('name').textContent || '').trim()) })()")
     for i in range(40):
         time.sleep(1)
-        if "Gangway" in (pg.text_content("#name") or ""): break
-    check("a station shows", "Gangway" in (pg.text_content("#name") or ""))
+        if on(): break
+    check("a station shows", on())
     check("the console names no node or station", not any(l.startswith("pyrate:") for l in logs))
-    pg.click(".tab[data-v=page]"); pg.wait_for_selector("#chatgo", state="visible", timeout=60000)
+    pg.click(".tab[data-v=radio]"); pg.click("#pagego"); pg.wait_for_selector("#chatgo", state="visible", timeout=60000)
     pg.click("#chatgo")
     for i in range(20):
         time.sleep(1)
@@ -29,7 +32,8 @@ with sync_playwright() as p:
     pg.evaluate("localStorage.setItem('pyrate.name', 'Test')")
     pg.on("dialog", lambda d: d.accept())
     pg.click(".tab[data-v=settings]"); pg.click("#forget"); time.sleep(4)
-    check("forgetting clears what the browser keeps", pg.evaluate("Object.keys(localStorage).filter(k => k.startsWith('pyrate.') && k !== 'pyrate.token' && k !== 'pyrate.harbours').length") == 0)
+    left = pg.evaluate("Object.keys(localStorage).filter(k => k.startsWith('pyrate.') && k !== 'pyrate.token' && k !== 'pyrate.harbours')")
+    check("forgetting clears what the browser keeps" + (f" ({left})" if left else ""), not left)
     check("the page's policy refuses nothing it needs", not any("Content Security Policy" in l for l in logs))
     check("no page errors", not errs)
     if errs: print(errs[:3])

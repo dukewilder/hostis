@@ -23,6 +23,9 @@ def wait(pg, js, secs):
         if pg.evaluate(js): return True
         time.sleep(0.25)
     raise TimeoutError(js)
+def within(pg, js, secs):
+    try: return wait(pg, js, secs)
+    except TimeoutError: return False
 
 tmp = tempfile.mkdtemp(prefix="station-")
 def tone(name, f, secs):
@@ -37,7 +40,10 @@ im = Image.new("RGB", (2600, 700), (20, 60, 120)); ImageDraw.Draw(im).ellipse([1
 TIP = "4AdUndXHHZ6cfufTMvppY6JwXNouMBzSkbLYfpAV5Usx3skxNgYeYTRj5UzqtReoS44qo9mtmXCqY45DJ852K5Jv2684Rge"
 KINDS = ["music", "jazz", "talk", "shanties", "folk"]
 def view(pg, v):
-    if pg.evaluate("window.pyrate.state().view") != v: pg.click(f".tab[data-v={v}]")
+    if pg.evaluate("window.pyrate.state().view") == v: return
+    # The station page opens over the radio, from its Page button.
+    if v == "page": pg.click(".tab[data-v=radio]"); pg.click("#pagego")
+    else: pg.click(f".tab[data-v={v}]")
 
 errs = []
 try:
@@ -60,13 +66,18 @@ try:
         a.set_input_files("#st-files", [KEEP, DROP])
         wait(a, "document.querySelectorAll('#st-queue .qi.done').length === 2", 90)
         check(a.is_visible("#ys") and a.text_content("#ys-lib-v") == "2 recordings", "the keeper's panel shows the station and its two recordings")
+        within(a, "!document.getElementById('st-dial').hidden", 30)
+        check("joins the dial" in (a.text_content("#st-dialnote") or "") and sid in (a.text_content("#st-link") or ""), "the keeper is told the station plays by its link and when it joins the dial: " + repr(a.text_content("#st-dialnote")))
+        # A stranger, with no link, who meets the station only in the list once it is listed.
+        d = tab(1440, 900); d.on("pageerror", lambda e: errs.append("stranger: " + str(e)))
+        d.goto(URL); wait(d, "document.getElementById('signal').textContent.includes('Connected')", 90)
         # A listener, in a browser of its own, tunes to the station.
         c = tab(1440, 900)
         c.on("pageerror", lambda e: errs.append("listener: " + str(e)))
         c.goto(URL + "#" + sid)
         try: wait(c, "document.getElementById('name').textContent === 'Ship Shape'", 240)
         except TimeoutError: print("keeper: " + a.text_content("#st-status") + " / listener: " + c.text_content("#name") + "\n" + "\n".join(sorted(set(stems)))); raise
-        c.click(".tab[data-v=page]")
+        view(c, "page")
 
         # Every change at once, as a keeper would make them. The tabs and the mini player stay
         # fixed on the screen, and a click scrolled under them would land on them.
@@ -135,6 +146,20 @@ try:
         check(c.locator(f".row[data-id='{sid}']").count() == 1, f"the music filter lists the station ({sum(k in chips for k in KINDS)} of its five kinds in the filters)")
         c.locator("#kinds button", has_text="music").first.click(); view(c, "page")
 
+        # Listed: a day after it first went on the air (a minute in a test build, PYRATE_LIST_AGE_MS)
+        # and once the keeper's browser has done its work, the station is in a stranger's list.
+        inlist = f"!!document.querySelector('#rows .row[data-id=\"{sid}\"]')"
+        view(d, "list"); t_l = time.time()
+        check(within(d, inlist, 300), f"a stranger's list shows the station once it is listed ({round(time.time() - t_l)} s more)")
+        # Kept off the dial: out of strangers' lists, and its link still plays.
+        a.check("#st-linkonly"); t_o = time.time()
+        check("Off the dial" in (a.text_content("#st-dialnote") or ""), "the keeper's switch keeps it off the dial")
+        gone = None
+        while time.time() - t_o < 300 and gone is None:
+            if not d.evaluate(inlist): gone = round(time.time() - t_o)
+            time.sleep(2)
+        check(gone is not None, f"a station kept off the dial leaves strangers' lists ({gone} s)")
+        check(c.evaluate("window.pyrate.state().station") == sid, "and its link still plays it")
         # The notice comes down, and the station calls itself explicit.
         a.click("#ys-notices summary") if not a.is_visible("#ys-noticelist") else None
         a.click("#ys-noticelist [data-down]")
