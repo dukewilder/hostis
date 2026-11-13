@@ -22,13 +22,17 @@ pub enum Profile {
     Music,
     /// Mono, 24 kbit/s.
     Talk,
+    /// Mono music, 32 kbit/s: old records and anything else recorded in one channel, at half
+    /// the bytes of stereo and the same sound. Chosen for a whole station, so every chunk of it
+    /// is one size.
+    Mono,
 }
 
 impl Profile {
     pub fn channels(self) -> u8 {
         match self {
             Profile::Music => 2,
-            Profile::Talk => 1,
+            Profile::Talk | Profile::Mono => 1,
         }
     }
 
@@ -36,6 +40,7 @@ impl Profile {
         match self {
             Profile::Music => 64_000,
             Profile::Talk => 24_000,
+            Profile::Mono => 32_000,
         }
     }
 }
@@ -64,7 +69,7 @@ pub struct ChunkEncoder {
 impl ChunkEncoder {
     pub fn new(profile: Profile) -> Result<Self> {
         let app = match profile {
-            Profile::Music => Application::Audio,
+            Profile::Music | Profile::Mono => Application::Audio,
             Profile::Talk => Application::Voip,
         };
         let mut enc = opus::Encoder::new(SAMPLE_RATE, opus_channels(profile.channels())?, app)?;

@@ -957,7 +957,7 @@ impl Coder {
     fn new(profile: Profile) -> Result<Self> {
         use opusic_sys as ox;
         let ch = profile.channels() as i32;
-        let app = if profile == Profile::Music { ox::OPUS_APPLICATION_AUDIO } else { ox::OPUS_APPLICATION_VOIP };
+        let app = if profile != Profile::Talk { ox::OPUS_APPLICATION_AUDIO } else { ox::OPUS_APPLICATION_VOIP };
         // SAFETY: each state is a block of the size libopus asks for, which it initialises
         // before anything else touches it.
         unsafe {
