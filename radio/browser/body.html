@@ -131,7 +131,7 @@
 <p>A second lock on your 24 words. Forget it and the station is gone for good.</p>
 <label class="field"><span>Passphrase</span><input id="st-ppass" type="password" autocomplete="new-password" placeholder="Optional"></label>
 </div></details>
-<p class="centre"><button id="st-raise" class="lead-btn"><span class="fc-lead">Raise colours</span><span class="fc-sub">you can change all of this later</span></button></p>
+<p class="centre"><button id="st-raise" class="lead-btn"><span class="fc-lead">Raise colours</span><span class="fc-sub">all but the passphrase can change later</span></button></p>
 <p id="st-note" class="fine" role="status"></p>
 <details class="fold"><summary>Bring back a station with its 24 words</summary><div><textarea id="st-words" spellcheck="false" autocomplete="off" aria-label="The station's 24 words"></textarea><label class="field"><span>Passphrase, if you set one</span><input id="st-rpass" type="password" autocomplete="off"></label><p class="centre"><button id="st-restore" class="btn">Bring it back</button></p></div></details>
 <details class="fold"><summary>How private is broadcasting from a browser?</summary><div><p>Your station passes through other people's radios before it reaches anyone, so no listener can trace it to this tab. The relay this page connects through can see your address, though never what you send. Open this page in Tor Browser to hide your address from the relay too. The app on a phone is more private still.</p></div></details>
@@ -147,6 +147,43 @@
 <div id="st-mine" hidden>
 <div class="st-card"><div id="st-flag" class="mini"></div><div class="meta"><div id="st-mname" class="name"></div><div id="st-mcs" class="cs"></div></div><button id="st-tune" class="btn">Listen</button></div>
 <p id="st-status" class="st-status" role="status"></p>
+<div id="ys" class="ys" role="region" aria-label="Your station">
+<div class="dk-plate"><span>Your station</span><span id="ys-note" class="ys-note" role="status"></span></div>
+<details class="ys-fold" id="ys-colours"><summary><span class="ys-t">Name and port</span><span class="ys-v" id="ys-colours-v"></span></summary><div class="ys-body">
+<label class="field"><span>Station name</span><input id="ys-name" maxlength="40" autocomplete="off"></label>
+<label class="field"><span>What it plays</span><input id="ys-about" maxlength="140" autocomplete="off"></label>
+<label class="field"><span>Home port</span><input id="ys-port" maxlength="120" autocomplete="off" placeholder="A town or city, if you like"></label>
+<label class="field"><span>Tip address</span><input id="ys-tip" maxlength="200" autocomplete="off" spellcheck="false" placeholder="A Monero or Bitcoin address"></label>
+<p class="ys-act"><button class="blood" data-save="colours">Save</button></p>
+</div></details>
+<details class="ys-fold" id="ys-details"><summary><span class="ys-t">Kinds and ratings</span><span class="ys-v" id="ys-details-v"></span></summary><div class="ys-body">
+<label class="field"><span>Kinds</span><input id="ys-kinds" maxlength="100" autocomplete="off" placeholder="Up to five, with commas: jazz, talk, shanties"></label>
+<p id="ys-kindnote" class="fine" role="status" hidden>Five at most. The rest are left off.</p>
+<div class="switches"><label><input type="checkbox" id="ys-mature"><span>Mature: strong language or themes</span></label><label><input type="checkbox" id="ys-explicit"><span>Explicit: sexual or graphic material</span></label></div>
+<p class="ys-act"><button class="blood" data-save="details">Save</button></p>
+</div></details>
+<details class="ys-fold" id="ys-art"><summary><span class="ys-t">Pictures</span><span class="ys-v" id="ys-art-v"></span></summary><div class="ys-body ys-pics">
+<div class="ys-pic"><div class="ys-frame sq" id="ys-cover"><span>Cover</span></div><div class="ys-btns"><label class="btn">Choose<input type="file" accept="image/*" id="ys-coverfile"></label><button class="btn quiet" id="ys-coverclear">Take down</button></div></div>
+<div class="ys-pic wide"><div class="ys-frame ban" id="ys-banner"><span>Banner</span></div><div class="ys-btns"><label class="btn">Choose<input type="file" accept="image/*" id="ys-bannerfile"></label><button class="btn quiet" id="ys-bannerclear">Take down</button></div></div>
+</div></details>
+<details class="ys-fold" id="ys-sched"><summary><span class="ys-t">Schedule</span><span class="ys-v" id="ys-sched-v"></span></summary><div class="ys-body">
+<div class="ys-modes" role="radiogroup" aria-label="How it plays"><label><input type="radio" name="ys-mode" value="shuffle"><span>Shuffle</span></label><label><input type="radio" name="ys-mode" value="in_order"><span>In order</span></label><label><input type="radio" name="ys-mode" value="newest_first"><span>Newest first</span></label><label><input type="radio" name="ys-mode" value="daily"><span>Same time daily</span></label><label><input type="radio" name="ys-mode" value="weekly"><span>Same time weekly</span></label></div>
+<p class="fine" id="ys-modenote"></p>
+<div class="ys-when" id="ys-when" hidden><label class="field" id="ys-dayf"><span>Day</span><select id="ys-day"><option value="0">Monday</option><option value="1">Tuesday</option><option value="2">Wednesday</option><option value="3">Thursday</option><option value="4">Friday</option><option value="5">Saturday</option><option value="6">Sunday</option></select></label><label class="field"><span>From</span><input type="time" id="ys-start" value="18:00"></label></div>
+<div class="switches"><label><input type="checkbox" id="ys-live"><span>Keep an hour each day for going live</span></label></div>
+<div class="ys-when" id="ys-livewhen" hidden><label class="field"><span>At</span><input type="time" id="ys-liveat" value="20:00"></label><label class="field"><span>For</span><select id="ys-livelen"><option value="30">Half an hour</option><option value="60" selected>An hour</option><option value="90">An hour and a half</option><option value="120">Two hours</option></select></label></div>
+<p class="fine" id="ys-zone" hidden></p>
+<p class="ys-act"><button class="blood" data-save="sched">Save</button></p>
+</div></details>
+<details class="ys-fold" id="ys-notices"><summary><span class="ys-t">Notices</span><span class="ys-v" id="ys-notices-v"></span></summary><div class="ys-body">
+<textarea id="ys-notice" maxlength="600" placeholder="A word to listeners, on the station's page" aria-label="A notice"></textarea>
+<p class="ys-act"><button class="blood" data-save="notice">Post</button></p>
+<div id="ys-noticelist" class="ys-list"></div>
+</div></details>
+<details class="ys-fold" id="ys-lib"><summary><span class="ys-t">Recordings</span><span class="ys-v" id="ys-lib-v"></span></summary><div class="ys-body">
+<div id="ys-library" class="ys-list"></div>
+</div></details>
+</div>
 <label class="drop" id="st-drop"><input type="file" id="st-files" multiple accept="audio/*,video/mp4,video/webm,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.webm"><span class="drop-lead">Drop recordings here</span><span class="drop-sub">or click to choose them</span></label>
 <div class="st-opts"><label><input type="checkbox" id="st-talk"><span>Spoken word</span></label><label><input type="checkbox" id="st-disguise"><span>Disguise my voice</span></label></div>
 <div id="st-queue" class="st-queue"></div>

@@ -478,6 +478,61 @@ input[type=range].dk-f{-webkit-appearance:none;appearance:none;flex:1;min-width:
   .dk-padfoot .dk-fader{flex:1 1 auto}
   .dk-more>div{grid-template-columns:minmax(0,1fr)}
 }
+/* Your station: everything the station says of itself, one ruled panel of folds, each showing
+   what it holds now. The buttons that write carry the blood. */
+.ys{background:#0b0a08;border:1px solid var(--ghost);margin:0 0 1.4rem;text-align:left}
+.ys-note{font:400 10.5px var(--mono);letter-spacing:.12em;text-transform:none;color:var(--bonedim);text-align:right;min-width:0;padding:.4rem 0}
+.ys .dk-plate{min-height:44px}
+.ys-fold{border-top:1px solid var(--line)}
+.ys-fold>summary{display:flex;align-items:center;gap:1rem;min-height:54px;padding:.5rem 1.1rem;cursor:pointer;list-style:none}
+.ys-fold>summary::-webkit-details-marker{display:none}
+.ys-fold>summary::before{content:"+";flex:0 0 14px;font-family:var(--mono);color:var(--red)}
+.ys-fold[open]>summary::before{content:"\2212"}
+.ys-fold>summary:hover .ys-t{color:var(--ink)}
+.ys-t{flex:0 0 auto;font:400 1.05rem var(--serif);color:var(--bonedim);transition:color .15s}
+.ys-v{margin-left:auto;min-width:0;font:400 .7rem var(--mono);letter-spacing:.08em;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ys-body{padding:.2rem 1.1rem 1.3rem 2.9rem}
+.ys-body .field input,.ys-body .field select{width:100%}
+.ys-body [hidden]{display:none}
+.ys-body .switches{justify-content:flex-start;margin:0 0 .6rem}
+.ys-body textarea{min-height:5rem;margin:0 0 .6rem;font:400 1rem var(--serif);color:var(--ink)}
+.ys-act{display:flex;justify-content:flex-end;margin:.4rem 0 0}
+button.blood,label.blood{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:.6rem 1.5rem;font:600 .78rem var(--carved);letter-spacing:.24em;text-transform:uppercase;color:var(--ink);background:var(--blooddeep);border:1px solid var(--red);cursor:pointer;transition:background .18s}
+button.blood:hover,label.blood:hover{background:#6e1414}
+button.blood:disabled{opacity:.5;cursor:default}
+.ys-pics{display:grid;grid-template-columns:200px minmax(0,1fr);gap:1.4rem;align-items:start}
+.ys-pic{min-width:0}
+.ys-frame{position:relative;display:grid;place-items:center;border:1px dashed rgba(237,228,206,.26);background:var(--black) center/cover no-repeat;margin:0 0 .6rem}
+.ys-frame.sq{aspect-ratio:1}.ys-frame.ban{aspect-ratio:3}
+.ys-frame.full{border-style:solid;border-color:var(--line)}
+.ys-frame span{font:400 10.5px var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--faint)}
+.ys-frame.full span{display:none}
+.ys-btns{display:flex;gap:.4rem;flex-wrap:wrap}
+.ys-btns .btn{min-height:40px;padding:.3rem .8rem;font-size:.66rem;position:relative;cursor:pointer}
+.ys-btns input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.ys-modes{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .6rem}
+.ys-modes label{position:relative;cursor:pointer}
+.ys-modes input{position:absolute;opacity:0;width:1px;height:1px}
+.ys-modes span{display:inline-flex;align-items:center;min-height:40px;padding:.3rem .85rem;border:1px solid var(--ghost);font:400 .68rem var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--bonedim);transition:background .15s,color .15s,border-color .15s}
+.ys-modes label:hover span{border-color:var(--faint);color:var(--ink)}
+.ys-modes input:checked+span{background:var(--ink);border-color:var(--ink);color:var(--black)}
+.ys-modes input:focus-visible+span{outline:1px solid var(--redup);outline-offset:2px}
+.ys-body .fine{text-align:left;font-size:.95rem;margin:0 0 .8rem}
+.ys-when{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:0 1rem;max-width:26rem}
+.ys-when[hidden]{display:none}
+input[type=time]{background:var(--panel);color:var(--ink);border:1px solid rgba(237,228,206,.24);border-radius:0;font:400 1rem var(--mono);padding:0 .7rem;min-height:44px;color-scheme:dark}
+.ys-list{margin:.4rem 0 0;max-height:22rem;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(237,228,206,.22) transparent}
+.ys-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:.8rem;min-height:52px;padding:.35rem 0;border-bottom:1px solid var(--line-soft)}
+.ys-row .w{min-width:0;color:var(--bonedim);line-height:1.4;overflow-wrap:anywhere}
+.ys-row .w em{display:block;font:400 .66rem var(--mono);font-style:normal;letter-spacing:.08em;color:var(--dim)}
+.ys-row .btn{min-height:38px;padding:.3rem .75rem;font-size:.64rem}
+.ys-list>.fine{text-align:left;margin:.4rem 0}
+@media (max-width:720px){
+  .ys-body{padding:.2rem .9rem 1.2rem}
+  .ys-fold>summary{padding:.5rem .9rem}
+  .ys-pics{grid-template-columns:minmax(0,1fr)}
+  .ys-pic:first-child{max-width:180px}
+}
 .tag{display:inline-block;margin-left:.55rem;padding:0 .35rem;border:1px solid var(--ghost);font:400 .64rem var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim);vertical-align:.2em}.tag.lv{border-color:var(--redup);color:var(--redup)}.tag.kp{border-color:var(--bonedim);color:var(--ink)}
 /* Buttons that lead on are hostis.black's own: deep red and bone, never a red haze. */
 .lead-btn{background:var(--blooddeep)}.lead-btn:hover{background:#6e1414}.lead-btn .fc-sub{color:var(--soft)}
