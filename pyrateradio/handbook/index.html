@@ -6,6 +6,7 @@
 <title>The Keeper's Handbook · Pyrate Radio · HOSTIS</title>
 <meta name="description" content="What Pyrate Radio does to keep a station keeper unknown, what only the keeper can do, and how the network stands.">
 <meta name="author" content="HOSTIS">
+<meta name="robots" content="index, follow, max-image-preview:large">
 <link rel="canonical" href="https://hostis.black/pyrateradio/handbook/">
 <meta name="theme-color" content="#030303">
 <meta name="color-scheme" content="dark">
@@ -16,15 +17,18 @@
 <meta property="og:site_name" content="HOSTIS">
 <meta property="og:locale" content="en_GB">
 <meta property="og:image" content="https://hostis.black/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The HOSTIS skull and crossbones over columns of ones and zeros">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@hostis_black">
 <meta name="twitter:creator" content="@hostis_black">
 <meta name="twitter:title" content="The Keeper's Handbook">
 <meta name="twitter:description" content="Radio that anyone can raise, that every listener carries, and that nobody can switch off.">
 <meta name="twitter:image" content="https://hostis.black/og-image.png">
-<link rel="icon" type="image/png" sizes="48x48" href="../favicon.png">
-<link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png">
-<link rel="preconnect" href="https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link" crossorigin>
+<meta name="twitter:image:alt" content="The HOSTIS skull and crossbones over columns of ones and zeros">
+<link rel="icon" type="image/png" sizes="48x48" href="/favicon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <style>
 @font-face {
   font-family: 'Cinzel';
@@ -251,8 +255,9 @@ footer .f-contact a:hover,footer .f-source a:hover{color:#c52828;border-color:#c
 .rite>i:nth-of-type(1){top:-4px;left:-4px}.rite>i:nth-of-type(2){top:-4px;right:-4px}.rite>i:nth-of-type(3){bottom:-4px;left:-4px}.rite>i:nth-of-type(4){bottom:-4px;right:-4px}
 .rite h2{font:400 clamp(1.7rem,3.4vw,2.4rem) var(--sc);letter-spacing:.04em;color:var(--ink);text-align:center;margin:0 0 2rem}
 .rite .centre{margin-top:2.2rem}
-.toc{display:flex;flex-wrap:wrap;justify-content:center;gap:.3rem 1.4rem;font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;margin:2.2rem 0 0;line-height:2}
-.toc a{color:var(--dim);white-space:nowrap}.toc a:hover{color:var(--redup)}
+/* a read-more link to the full account: a quiet line, not a button */
+.readmore{display:inline-flex;align-items:center;gap:.6rem;min-height:44px;font:400 .76rem var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
+.readmore span{border-bottom:1px solid var(--faint);padding-bottom:2px;transition:border-color .2s}.readmore:hover span{border-color:var(--red)}.readmore::after{content:"\2192";color:var(--redup);font-family:var(--mono)}
 .promises{display:grid;grid-template-columns:repeat(2,1fr);gap:1.6rem 2.4rem}
 .promises.three{grid-template-columns:repeat(3,1fr);gap:1.8rem 2rem}
 @media (max-width:900px){.promises.three{grid-template-columns:repeat(2,1fr)}}
@@ -339,13 +344,14 @@ code{font:400 .82em var(--mono);color:var(--ink)}
 .faq{max-width:640px;margin:0 auto}
 .long .prose p{text-align:left}
 .long .lede{margin:2.4rem 0 0}.long .lede p{font-size:19px;line-height:1.7;color:var(--bonedim)}
-.long .toc{margin:0 0 .4rem}
+
 .leavingnote{display:none;max-width:560px;margin:0 auto 1.6rem;padding:1rem 1.25rem;border:1px solid var(--ghost);background:#0b0a08;font-style:italic;text-align:center;color:var(--bonedim)}
 html.leaving .leavingnote{display:block}html.leaving .hero .ctas,html.leaving .hero .free,html.leaving .dialband,html.leaving main>section,html.leaving main>.divider,html.leaving .stick{display:none}
 @media (max-width:900px){.tiles{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:.6rem;padding:0 1rem;margin-left:50%;width:100vw;transform:translateX(-50%);scrollbar-width:none}.tiles::-webkit-scrollbar{display:none}.tile{flex:0 0 min(62vw,240px);scroll-snap-align:center}.tile+.tile{margin-left:0}}
 @media (max-width:760px){.pillars,.promises,.two{grid-template-columns:1fr}.pillars div+div{margin:-1px 0 0}.two .card+.card{margin:-1px 0 0}.setframe iframe{height:760px}}
 @media (max-width:560px){.desk{grid-template-columns:1fr}.desk a+a{margin:-1px 0 0}}
 </style>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "HOSTIS", "item": "https://hostis.black/"}, {"@type": "ListItem", "position": 2, "name": "Pyrate Radio", "item": "https://hostis.black/pyrateradio/"}, {"@type": "ListItem", "position": 3, "name": "The Keeper's Handbook", "item": "https://hostis.black/pyrateradio/handbook/"}]}</script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
