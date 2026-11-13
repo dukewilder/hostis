@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=c13317eabd';
+import init, { Radio } from './pkg/pyrate_browser.js?v=a00877dcf6';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -13,7 +13,7 @@ const EMBED = document.documentElement.classList.contains('embed');
 // flock goes straight to an open player, the same set served where no one owns it (IPFS, a
 // Lantern). 'open' is that copy: the whole Log, the chatter and the colours.
 const SCOPE = "harbour";
-const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeifzn37243kn7siu26bqlskopywk43b3vtmbtgnpsuqj64637nypaa.ipfs.inbrowser.link/", "https://bafybeifzn37243kn7siu26bqlskopywk43b3vtmbtgnpsuqj64637nypaa.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeifzn37243kn7siu26bqlskopywk43b3vtmbtgnpsuqj64637nypaa/"];
+const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeicybosgqaoo2lodybca5xxv7fz23gopyaqyevnx2f6qmmmujqsrlu.ipfs.inbrowser.link/", "https://bafybeicybosgqaoo2lodybca5xxv7fz23gopyaqyevnx2f6qmmmujqsrlu.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeicybosgqaoo2lodybca5xxv7fz23gopyaqyevnx2f6qmmmujqsrlu/"];
 const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
 const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
 // HOSTIS's stations carry their pictures in the page, so they show before the network answers.
@@ -547,6 +547,9 @@ for (const ev of ['pointerdown', 'keydown', 'scroll', 'touchstart']) addEventLis
 const prepared = new Map();
 async function prepare(id) {
   if (!radio || !id || id === cur?.id && playing || Date.now() - (prepared.get(id) || 0) < 30000) return;
+  // The station on the set comes first: nothing else is fetched while it is still tuning in, or
+  // before its log is here, so the others never slow the one about to play.
+  if (cur && id !== cur.id && (playing && !heard() || !radio.has_log(cur.id))) return;
   prepared.set(id, Date.now());
   try { radio.warm(id) } catch (e) { return }
   for (let i = 0; i < 20; i++) {
