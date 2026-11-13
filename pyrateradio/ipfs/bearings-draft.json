@@ -1,8 +1,10 @@
 {
  "pyrate": "bearings",
- "at": 1794551666335,
+ "at": 1794572005158,
  "doors": [
-  "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442"
+  "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442",
+  "1e048373355a2901497e8307a89f63f421ea1746b2a98419251236160e303ddb",
+  "f6d5c5276a98baf5d4964683115e9f0f6095e713f46bec34c25c29a66e46d753"
  ],
  "players": [
   "https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/",
@@ -38,20 +40,20 @@
    "cid": "bafybeif736juxf2nquix2g7xpvp3keyqb6owbvkrl7dmnryw5mihpnpjra"
   },
   {
-   "name": "pyrate-radio-0.9.14-macos.zip",
+   "name": "pyrate-radio-0.9.15-macos.zip",
    "cid": "bafybeihyewrtun64y6t23qo6dihmo4mfagam7qz65pnp6f2xgrmwwhgjcu"
   },
   {
-   "name": "pyrate-radio-0.9.14-windows.zip",
+   "name": "pyrate-radio-0.9.15-windows.zip",
    "cid": "bafybeihmjdx4cgatsckivs46du7lxh2k75yldzq6utjaq53jdhpd6r7rca"
   },
   {
-   "name": "pyrate-radio-0.9.14-linux-x64.tar.gz",
+   "name": "pyrate-radio-0.9.15-linux-x64.tar.gz",
    "cid": "bafybeihslsyq3lowomvudc5oxm3tncwlhbgeqdiob2up737p2g4uwrce54"
   },
   {
-   "name": "source/pyrate-radio-src-1b86d80.tar.gz",
-   "cid": "bafybeihcp3g7g56fdju6xqyj733ee4zst2owiqys4kfwamshcahod55zim"
+   "name": "source/pyrate-radio-src-fd90aa6.tar.gz",
+   "cid": "bafybeiegslnezt2uc4mmmzvb255qmuw6tikz4ib7f6o2dt25b5q37lzwhq"
   }
  ]
 }

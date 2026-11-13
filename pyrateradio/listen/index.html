@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-6MBa8wXKLGTYFDz3rGwbGGk4F/lu0RO4nT6soMe1ZC4='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https: wss:; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<link rel="modulepreload" href="app.js?v=0860a5bd56">
-<link rel="modulepreload" href="pkg/pyrate_browser.js?v=0860a5bd56">
-<link rel="preload" href="pkg/pyrate_browser_bg.0860a5bd56.wasm" as="fetch" type="application/wasm" crossorigin>
+<link rel="modulepreload" href="app.js?v=abde4ec2fa">
+<link rel="modulepreload" href="pkg/pyrate_browser.js?v=abde4ec2fa">
+<link rel="preload" href="pkg/pyrate_browser_bg.abde4ec2fa.wasm" as="fetch" type="application/wasm" crossorigin>
 <link rel="preload" href="fonts/im-fell-dw-pica-sc-400-860d6a62.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/jetbrains-mono-400-cfd8dabe.woff2" as="font" type="font/woff2" crossorigin>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -14,10 +14,19 @@
 <meta name="description" content="Radio that anyone can raise, that every listener carries, and that nobody can switch off. Plays in the browser.">
 <meta name="theme-color" content="#030303">
 <meta name="color-scheme" content="dark">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="https://hostis.black/pyrateradio/listen/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://hostis.black/pyrateradio/listen/">
+<meta property="og:locale" content="en_GB">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "HOSTIS", "item": "https://hostis.black/"}, {"@type": "ListItem", "position": 2, "name": "Pyrate Radio", "item": "https://hostis.black/pyrateradio/"}, {"@type": "ListItem", "position": 3, "name": "Listen", "item": "https://hostis.black/pyrateradio/listen/"}]}</script>
 <meta property="og:title" content="Pyrate Radio · Listen">
-<meta property="og:description" content="Every station on the Log, played in the browser from whoever carries it.">
+<meta property="og:description" content="The HOSTIS stations, played in the browser from whoever carries them.">
 <meta property="og:site_name" content="HOSTIS">
 <meta property="og:image" content="https://hostis.black/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The HOSTIS skull and crossbones over columns of ones and zeros">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@hostis_black">
 <link rel="icon" type="image/png" sizes="48x48" href="favicon.png">
@@ -245,8 +254,8 @@ button{background:none;border:0;color:inherit;padding:0;margin:0;cursor:pointer;
 .centre{text-align:center}
 
 /* the masthead, cut down: the radio comes first */
-.top{padding:38px 18px 22px}
-.top .mh-title{font-size:clamp(30px,6vw,60px)}
+.top{padding:26px 18px 18px}
+.top .mh-title{font-size:clamp(28px,3.4vw,44px)}
 .top .mh-title a{color:var(--ink)}.top .mh-title a:hover{color:var(--ink)}
 .top .mh-sub{font-size:clamp(14px,2.4vw,17px);margin-top:8px}
 .signalrow{display:flex;gap:.9rem;justify-content:center;align-items:center;flex-wrap:wrap;margin:16px 0 0;min-height:30px}
@@ -307,22 +316,33 @@ button{background:none;border:0;color:inherit;padding:0;margin:0;cursor:pointer;
 .hint{font-style:italic;color:var(--dim);font-size:1rem;line-height:1.5;margin:.8rem 0 0;max-width:30rem}
 .time{font:400 .72rem var(--mono);letter-spacing:.08em;color:var(--faint);margin-top:.6rem;min-height:1em;font-variant-numeric:tabular-nums}
 
-/* the dial: every station printed where its frequency falls, behind glass */
+/* the dial: a mark for every station where its frequency falls, behind glass, and names only
+   around the needle, each on a hairline down to its mark */
 .glass{position:relative;margin-top:2.1rem;height:128px;border:1px solid var(--line);background:radial-gradient(120% 140% at 50% 0%,#141310 0%,var(--black) 70%);
-  box-shadow:inset 0 0 26px rgba(0,0,0,.9),inset 0 1px 0 rgba(237,228,206,.05);overflow-x:auto;overflow-y:hidden;cursor:pointer;
-  scrollbar-width:thin;scrollbar-color:rgba(237,228,206,.22) transparent;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+  box-shadow:inset 0 0 26px rgba(0,0,0,.9),inset 0 1px 0 rgba(237,228,206,.05);overflow:hidden;cursor:pointer;touch-action:pan-y;user-select:none;-webkit-user-select:none}
 .glass:focus-visible{outline:1px solid var(--red);outline-offset:-1px}
 .track{position:relative;height:100%;margin:0 36px}
-.scale{position:absolute;left:0;right:0;bottom:0;height:40px}
+.scale{position:absolute;left:0;right:0;bottom:0;height:40px;pointer-events:none}
 .scale i{position:absolute;bottom:0;width:1px;height:6px;background:var(--ghost)}
 .scale i.major{height:13px;background:var(--dim)}
 .scale b{position:absolute;bottom:17px;transform:translateX(-50%);font:400 .68rem var(--mono);letter-spacing:.06em;color:var(--dim)}
-.names{position:absolute;left:0;right:0;top:8px;height:72px}
-.names button{position:absolute;transform:translateX(-50%);padding:0 .45rem;min-height:24px;font:400 .68rem var(--mono);letter-spacing:.14em;text-transform:uppercase;
-  color:var(--dim);white-space:nowrap;max-width:11rem;overflow:hidden;text-overflow:ellipsis;line-height:1.4;transition:color .15s}
+.names{position:absolute;left:0;right:0;top:9px;height:26px}
+.names button{position:absolute;top:0;padding:0;min-height:26px;font:400 .68rem var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--faint);white-space:nowrap;max-width:9.5rem;overflow:hidden;text-overflow:ellipsis;line-height:26px;transition:color .15s}
 .names button:hover{color:var(--ink)}
 .names button.on{color:var(--ink)}
 .names button.live::before{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--redup);margin-right:.45rem;vertical-align:middle}
+.leads{position:absolute;left:0;top:37px;width:100%;height:calc(100% - 37px - 52px);overflow:visible;pointer-events:none}
+.leads line{stroke:rgba(237,228,206,.2);stroke-width:1}
+.leads line.on{stroke:none}
+.marks{position:absolute;left:0;right:0;bottom:40px;height:12px;pointer-events:none}
+.marks i{position:absolute;bottom:0;width:1px;height:9px;background:rgba(237,228,206,.32)}
+.marks i.named{background:var(--bonedim)}
+.marks i.live{background:var(--redup)}
+.marks i.hi{background:var(--ink);height:12px}
+.peek{position:absolute;bottom:56px;padding:.1rem .5rem;font:400 .66rem var(--mono);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;color:var(--ink);
+  background:var(--black);border:1px solid var(--ghost);pointer-events:none;z-index:3}
+.peek[hidden]{display:none}
 .needle{position:absolute;top:0;bottom:0;width:1px;background:var(--red);left:50%;transition:left .7s cubic-bezier(.2,.75,.2,1);pointer-events:none}
 .needle::before{content:'';position:absolute;top:-5px;left:-4px;width:9px;height:9px;background:var(--red);transform:rotate(45deg)}
 
@@ -367,18 +387,44 @@ button.power.on .glyph{color:var(--ink)}
 #tipbox input{width:100%;margin:0 0 .6rem}
 #clipbox video{flex:0 0 auto;width:min(200px,46vw);aspect-ratio:9/16;background:var(--black);border:1px solid var(--line)}
 
-/* the sections: tabs that stay in reach, and one section at a time under them */
-.tabs{position:sticky;top:0;z-index:20;display:flex;justify-content:center;gap:0;max-width:980px;margin:1.8rem auto 0;background:rgba(3,3,3,.94);
-  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
-.tab{flex:1 1 0;display:flex;align-items:center;justify-content:center;gap:.55rem;min-height:54px;padding:.4rem .6rem;font:400 .74rem var(--mono);letter-spacing:.14em;text-transform:uppercase;
-  color:var(--dim);border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s}
-.tab:hover{color:var(--ink)}
-.tab[aria-current="true"]{color:var(--ink);border-bottom-color:var(--red)}
-.set button:focus-visible,.tab:focus-visible,.mp-main:focus-visible,.mp-go:focus-visible,.below button:focus-visible{outline:1px solid var(--redup);outline-offset:2px}
-.tab .ic{width:19px;height:19px}
-.below{max-width:760px;margin:0 auto;padding:2.2rem 1.4rem 0}
+/* the app: the HOSTIS bar, one screen at a time, and the tabs. The page itself never scrolls
+   or bounces: each screen scrolls within itself, as an installed app's does. */
+html:not(.embed),html:not(.embed) body{height:100%;overflow:hidden;overscroll-behavior:none}
+html:not(.embed) body{display:flex;flex-direction:column;padding-bottom:0}
+html:not(.embed) .flagbar{flex:0 0 auto;padding-top:calc(11px + env(safe-area-inset-top))}
+.shell{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+.below{order:1;flex:1 1 auto;min-height:0;position:relative;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
 .below section{padding:0;max-width:none;margin:0}
-.view[hidden]{display:none}
+.below>section.view{min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+  padding:1.8rem max(1rem,calc((100% - 760px)/2)) 2.6rem;scrollbar-width:thin;scrollbar-color:rgba(237,228,206,.18) transparent}
+.below>section#v-radio{padding:0 max(.6rem,calc((100% - 980px)/2)) 2rem}
+.below section.set{padding:1.25rem 2rem 1.7rem;max-width:980px;margin:0 auto}
+.view[hidden]{display:none!important}
+.tabs{order:3;flex:0 0 auto;display:flex;background:var(--black);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+.tab{flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.32rem;min-height:64px;padding:.3rem .2rem;font:400 .66rem var(--mono);
+  letter-spacing:.12em;text-transform:uppercase;color:var(--faint);border-top:2px solid transparent;margin-top:-1px;transition:color .15s,border-color .15s,background .15s}
+.tab:hover{color:var(--ink)}
+.tab[aria-current="true"]{color:var(--ink);border-top-color:var(--red)}
+.set button:focus-visible,.tab:focus-visible,.mp-main:focus-visible,.mp-go:focus-visible,.below button:focus-visible{outline:1px solid var(--redup);outline-offset:2px}
+.tab .ic{width:22px;height:22px}
+/* the station page, over the radio: Back at its head */
+.backbar{display:flex;align-items:center;margin:-.6rem 0 1rem}
+.back{display:inline-flex;align-items:center;gap:.5rem;min-height:44px;padding:0 .9rem 0 .4rem;margin-left:-.4rem;font:400 .72rem var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.back:hover{color:var(--ink)}.back .ic{width:20px;height:20px}
+/* on a computer: the tabs down the side, and the list beside the set where there is room */
+@media (min-width:768px){
+  html:not(.embed) .shell{display:grid;grid-template-columns:212px minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
+  .tabs{grid-column:1;grid-row:1/3;flex-direction:column;border-top:0;border-right:1px solid var(--line);padding:1.4rem 0 env(safe-area-inset-bottom)}
+  .tab{flex:0 0 auto;flex-direction:row;justify-content:flex-start;gap:1rem;min-height:56px;padding:0 1.6rem;font-size:.74rem;letter-spacing:.16em;border-top:0;margin-top:0;border-left:2px solid transparent}
+  .tab[aria-current="true"]{border-left-color:var(--red);background:rgba(237,228,206,.035)}
+  .tab .ic{width:20px;height:20px}
+  .below{grid-column:2;grid-row:1}
+  .miniplayer{grid-column:2;grid-row:2}
+  .below.pair{grid-template-columns:minmax(0,1fr) minmax(380px,34%)}
+  .below.pair>.view+.view{border-left:1px solid var(--line)}
+  .below.pair>section.view:not(#v-radio){padding:1.8rem 1.4rem 2.6rem}
+  .below.pair .listbar,.below.pair .views{flex-wrap:wrap}
+}
 .below .sechead{margin-bottom:1.1rem}
 .below .sechead h2{font-size:clamp(17px,2.4vw,21px)}
 .below .gap{margin-top:3rem}
@@ -484,16 +530,14 @@ textarea{display:block;width:100%;min-height:9rem;padding:.7rem;margin:1rem 0 .6
 .sayrow input{flex:1 1 10rem}
 
 @media (max-width:720px){
-  .tab{flex-direction:column;gap:.2rem;font-size:.62rem;letter-spacing:.08em;min-height:58px;padding:.35rem .2rem}
   .kinds{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;flex-basis:100%;padding-bottom:2px}.kinds::-webkit-scrollbar{display:none}
   .kinds .btn{flex:0 0 auto}
-  .tabs{margin-top:1.2rem}
-  .below{padding:1.6rem 1rem 0}
   .hint{font-size:.95rem}
   .top{padding:16px 14px 8px}
-  .top .mh-title{font-size:30px}.top .mh-sub{font-size:13px;margin-top:4px}
+  .top{padding:14px 14px 4px}
+  .top .mh-title{font-size:26px}.top .mh-sub{display:none}
   .signalrow{margin-top:10px}
-  .set{padding:1rem 1rem 1.3rem;margin:0 .6rem}
+  .below section.set{padding:1rem 1rem 1.3rem;margin:0}
   .plate{font-size:9px;letter-spacing:.2em}.plate span:last-child{display:none}
   .plate{margin-bottom:1.1rem}
   .face{grid-template-columns:104px minmax(0,1fr);gap:1rem;align-items:start}
@@ -506,7 +550,7 @@ textarea{display:block;width:100%;min-height:9rem;padding:.7rem;margin:1rem 0 .6
   .slot{margin-top:.8rem;font-size:9.5px}
   .set .np{font-size:1.15rem}
   .glass{margin-top:1.2rem;height:112px}
-  .names{top:6px}
+  .names{top:6px}.track{margin:0 16px}
   .controls{justify-content:center}
   button.power{flex:1 1 100%;justify-content:center}
   .buttons{justify-content:center}
@@ -519,8 +563,8 @@ textarea{display:block;width:100%;min-height:9rem;padding:.7rem;margin:1rem 0 .6
 /* inside another page, the set alone */
 html.embed,html.embed body{background:transparent;min-height:0}
 html.embed body::before,html.embed body::after{display:none}
-html.embed .flagbar,html.embed .top,html.embed .divider,html.embed .below,html.embed footer,html.embed #maroon,html.embed .skip-link,html.embed .tabs,html.embed .miniplayer,html.embed .takeset,html.embed #pagego{display:none!important}
-html.embed .set{margin:0}
+html.embed .flagbar,html.embed .top,html.embed .divider,html.embed .view:not(#v-radio),html.embed footer,html.embed #maroon,html.embed .skip-link,html.embed .tabs,html.embed .miniplayer,html.embed .takeset,html.embed #pagego{display:none!important}
+html.embed .set{margin:0}html.embed .below{display:block}html.embed .below>section#v-radio{padding:0;overflow:visible}html.embed .takeset,html.embed .appnote{display:none!important}
 #listings>p{color:var(--dim);font-style:italic;text-align:center;font-size:1rem}
 
 /* the two copies: hostis.black's holds HOSTIS's own stations, the open player every station */
@@ -528,15 +572,14 @@ html.embed .set{margin:0}
 .openlink:not(.lead-btn){border-bottom:1px solid var(--faint)}.openlink:not(.lead-btn):hover{border-color:var(--red)}
 .everyone{margin-top:1.6rem}
 .leavingnote{display:none;max-width:560px;margin:0 auto 1.6rem;padding:1rem 1.25rem;border:1px solid var(--ghost);background:#0b0a08;font-style:italic;text-align:center;color:var(--bonedim)}
-html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,html.leaving .below,html.leaving .tabs,html.leaving .takeset{display:none}
+html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,html.leaving .view:not(#v-radio),html.leaving .tabs,html.leaving .takeset{display:none}
 .appnote{max-width:980px;margin:1rem auto 0;text-align:center;font-style:italic;color:var(--dim)}.appnote a{border-bottom:1px solid var(--faint);font-style:normal;font:400 .72rem var(--mono);letter-spacing:.13em;text-transform:uppercase}
 .takeset{max-width:980px;margin:1.1rem auto 0;text-align:center}
 .takeset a{display:inline-flex;flex-wrap:wrap;justify-content:center;gap:.3rem 1rem;align-items:baseline;padding:.75rem 1.2rem;border:1px solid var(--line);color:var(--ink);transition:border-color .18s,background .18s}
 .takeset a:hover{border-color:var(--faint);color:var(--ink)}
 .ts-lead{font:400 1.05rem var(--sc);letter-spacing:.05em}.ts-sub{font:400 .68rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
 /* the mini player: the station and Listen, at the foot of the screen once the set scrolls away */
-.miniplayer{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;align-items:stretch;max-width:760px;margin:0 auto;background:rgba(10,10,10,.97);
-  border:1px solid var(--line);border-bottom:0;box-shadow:0 -10px 30px rgba(0,0,0,.6);padding-bottom:env(safe-area-inset-bottom)}
+.miniplayer{order:2;position:relative;z-index:30;display:flex;align-items:stretch;min-height:64px;background:var(--panel);border-top:1px solid var(--line)}
 .miniplayer[hidden]{display:none}
 .mp-main{flex:1;min-width:0;display:flex;align-items:center;gap:.8rem;padding:.55rem .8rem;text-align:left}
 .mp-art{flex:0 0 auto;width:48px;height:48px;display:grid;grid-template-columns:repeat(9,1fr);align-content:center;font-family:var(--mono);font-size:.3rem;line-height:1.1;padding:.2rem;border:1px solid var(--line);background:var(--black);overflow:hidden}
@@ -549,7 +592,6 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 .mp-go{flex:0 0 auto;width:64px;display:grid;place-items:center;border-left:1px solid var(--line)}
 .mp-go .glyph{font:400 1rem var(--mono);color:var(--redup);display:inline-grid;place-items:center;width:2.4rem;height:2.4rem;border:1px solid var(--red);border-radius:50%;position:relative}
 .mp-go.on .glyph{color:var(--ink);border-color:var(--ink)}
-body:has(.miniplayer:not([hidden])) footer{padding-bottom:84px}
 
 /* raising colours from the tab */
 .field{display:block;margin:0 0 1rem}
@@ -713,6 +755,61 @@ input[type=range].dk-f{-webkit-appearance:none;appearance:none;flex:1;min-width:
   .dk-padfoot .dk-fader{flex:1 1 auto}
   .dk-more>div{grid-template-columns:minmax(0,1fr)}
 }
+/* Your station: everything the station says of itself, one ruled panel of folds, each showing
+   what it holds now. The buttons that write carry the blood. */
+.ys{background:#0b0a08;border:1px solid var(--ghost);margin:0 0 1.4rem;text-align:left}
+.ys-note{font:400 10.5px var(--mono);letter-spacing:.12em;text-transform:none;color:var(--bonedim);text-align:right;min-width:0;padding:.4rem 0}
+.ys .dk-plate{min-height:44px}
+.ys-fold{border-top:1px solid var(--line)}
+.ys-fold>summary{display:flex;align-items:center;gap:1rem;min-height:54px;padding:.5rem 1.1rem;cursor:pointer;list-style:none}
+.ys-fold>summary::-webkit-details-marker{display:none}
+.ys-fold>summary::before{content:"+";flex:0 0 14px;font-family:var(--mono);color:var(--red)}
+.ys-fold[open]>summary::before{content:"\2212"}
+.ys-fold>summary:hover .ys-t{color:var(--ink)}
+.ys-t{flex:0 0 auto;font:400 1.05rem var(--serif);color:var(--bonedim);transition:color .15s}
+.ys-v{margin-left:auto;min-width:0;font:400 .7rem var(--mono);letter-spacing:.08em;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ys-body{padding:.2rem 1.1rem 1.3rem 2.9rem}
+.ys-body .field input,.ys-body .field select{width:100%}
+.ys-body [hidden]{display:none}
+.ys-body .switches{justify-content:flex-start;margin:0 0 .6rem}
+.ys-body textarea{min-height:5rem;margin:0 0 .6rem;font:400 1rem var(--serif);color:var(--ink)}
+.ys-act{display:flex;justify-content:flex-end;margin:.4rem 0 0}
+button.blood,label.blood{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:.6rem 1.5rem;font:600 .78rem var(--carved);letter-spacing:.24em;text-transform:uppercase;color:var(--ink);background:var(--blooddeep);border:1px solid var(--red);cursor:pointer;transition:background .18s}
+button.blood:hover,label.blood:hover{background:#6e1414}
+button.blood:disabled{opacity:.5;cursor:default}
+.ys-pics{display:grid;grid-template-columns:200px minmax(0,1fr);gap:1.4rem;align-items:start}
+.ys-pic{min-width:0}
+.ys-frame{position:relative;display:grid;place-items:center;border:1px dashed rgba(237,228,206,.26);background:var(--black) center/cover no-repeat;margin:0 0 .6rem}
+.ys-frame.sq{aspect-ratio:1}.ys-frame.ban{aspect-ratio:3}
+.ys-frame.full{border-style:solid;border-color:var(--line)}
+.ys-frame span{font:400 10.5px var(--mono);letter-spacing:.22em;text-transform:uppercase;color:var(--faint)}
+.ys-frame.full span{display:none}
+.ys-btns{display:flex;gap:.4rem;flex-wrap:wrap}
+.ys-btns .btn{min-height:40px;padding:.3rem .8rem;font-size:.66rem;position:relative;cursor:pointer}
+.ys-btns input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.ys-modes{display:flex;flex-wrap:wrap;gap:.4rem;margin:.2rem 0 .6rem}
+.ys-modes label{position:relative;cursor:pointer}
+.ys-modes input{position:absolute;opacity:0;width:1px;height:1px}
+.ys-modes span{display:inline-flex;align-items:center;min-height:40px;padding:.3rem .85rem;border:1px solid var(--ghost);font:400 .68rem var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--bonedim);transition:background .15s,color .15s,border-color .15s}
+.ys-modes label:hover span{border-color:var(--faint);color:var(--ink)}
+.ys-modes input:checked+span{background:var(--ink);border-color:var(--ink);color:var(--black)}
+.ys-modes input:focus-visible+span{outline:1px solid var(--redup);outline-offset:2px}
+.ys-body .fine{text-align:left;font-size:.95rem;margin:0 0 .8rem}
+.ys-when{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:0 1rem;max-width:26rem}
+.ys-when[hidden]{display:none}
+input[type=time]{background:var(--panel);color:var(--ink);border:1px solid rgba(237,228,206,.24);border-radius:0;font:400 1rem var(--mono);padding:0 .7rem;min-height:44px;color-scheme:dark}
+.ys-list{margin:.4rem 0 0;max-height:22rem;overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(237,228,206,.22) transparent}
+.ys-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:.8rem;min-height:52px;padding:.35rem 0;border-bottom:1px solid var(--line-soft)}
+.ys-row .w{min-width:0;color:var(--bonedim);line-height:1.4;overflow-wrap:anywhere}
+.ys-row .w em{display:block;font:400 .66rem var(--mono);font-style:normal;letter-spacing:.08em;color:var(--dim)}
+.ys-row .btn{min-height:38px;padding:.3rem .75rem;font-size:.64rem}
+.ys-list>.fine{text-align:left;margin:.4rem 0}
+@media (max-width:720px){
+  .ys-body{padding:.2rem .9rem 1.2rem}
+  .ys-fold>summary{padding:.5rem .9rem}
+  .ys-pics{grid-template-columns:minmax(0,1fr)}
+  .ys-pic:first-child{max-width:180px}
+}
 .tag{display:inline-block;margin-left:.55rem;padding:0 .35rem;border:1px solid var(--ghost);font:400 .64rem var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim);vertical-align:.2em}.tag.lv{border-color:var(--redup);color:var(--redup)}.tag.kp{border-color:var(--bonedim);color:var(--ink)}
 /* Buttons that lead on are hostis.black's own: deep red and bone, never a red haze. */
 .lead-btn{background:var(--blooddeep)}.lead-btn:hover{background:#6e1414}.lead-btn .fc-sub{color:var(--soft)}
@@ -736,25 +833,55 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 .played li.none{display:block;color:var(--dim)}
 .controls .buttons #more[aria-expanded="true"]{background:rgba(237,228,206,.06);color:var(--ink)}
 .sl{display:flex;flex-direction:column;gap:.15rem}.sl small{font-size:.62rem;letter-spacing:.08em;text-transform:none;color:var(--dim)}.sl small:empty{display:none}
+
+/* the end of raising: the station, its place, and its first recording */
+.st-born{text-align:center;padding:1.6rem 1rem 1.4rem;margin:0 0 1rem;border:1px solid var(--line);background:linear-gradient(180deg,var(--panel2),var(--panel))}
+.st-born[hidden]{display:none}
+.born-lead{font:400 clamp(1.5rem,5vw,2rem) var(--sc);letter-spacing:.04em;color:var(--ink);margin:0 0 .4rem}
+.born-lead::before{content:'';display:inline-block;width:7px;height:7px;background:var(--red);transform:rotate(45deg);margin:0 .8rem .3rem 0;vertical-align:middle}
+.born-sub{font-style:italic;color:var(--bonedim);margin:0 0 1.1rem}
+.born-sub span{font:400 .95em var(--mono);font-style:normal;color:var(--ink)}
+.st-status.on::before{content:'\2713';margin-right:.55rem;color:var(--bonedim)}
+/* the dial and the link: one calm line, the link, and the switch to keep it off the dial */
+.st-dial{text-align:center;margin:0 0 1.4rem}
+.st-dial[hidden]{display:none}
+.st-dialnote{font-style:italic;color:var(--dim);margin:0 0 .5rem}
+.st-link{font:400 .74rem var(--mono);letter-spacing:.04em;color:var(--bonedim);overflow-wrap:anywhere;margin:0 0 .6rem}
+.st-dial .row-btns{justify-content:center;margin:0 0 .4rem}
+.st-dial .switches{margin-top:.6rem}.st-dial .switches label>span{display:flex;flex-direction:column;text-align:left;line-height:1.35}
+.st-dial .switches small{font-style:italic;font-size:.88rem;color:var(--dim)}
+.st-work{display:block;width:120px;height:1px;margin:0 auto .7rem;background:var(--ghost);position:relative;overflow:hidden}
+.st-work[hidden]{display:none}
+.st-work::after{content:'';position:absolute;top:0;left:-40%;width:40%;height:1px;background:var(--bonedim);animation:working 1.8s ease-in-out infinite}
+@keyframes working{to{left:100%}}
+@media (prefers-reduced-motion:reduce){.st-work::after{animation:none;left:30%}}
 </style>
 <script>if(/[?&]embed/.test(location.search))document.documentElement.classList.add('embed')</script>
 </head>
 <body>
 <a class="skip-link" href="#set">Skip to the radio</a>
 <nav class="flagbar" aria-label="HOSTIS"><a class="fb-mark" href="https://hostis.black/"><span class="sk" aria-hidden="true"><svg viewBox="0 -719.5 919 1000" style="width:.919em;height:1em;vertical-align:-.2805em;overflow:visible" fill="currentColor"><path transform="scale(1,-1)" d="M233 -61Q217 -61 201.0 -48.0Q185 -35 173 -13Q141 -10 121.0 9.5Q101 29 101 63Q101 80 121.0 92.5Q141 105 162 105Q173 105 182.5 97.0Q192 89 196 79Q207 93 219 105L245 132Q258 145 269.5 158.5Q281 172 291 186L293 212Q293 243 260 267Q227 291 227 314Q227 323 230.5 334.5Q234 346 243 350Q236 363 231.5 390.0Q227 417 227 445Q227 458 228.0 471.5Q229 485 231 498Q222 511 211.5 523.5Q201 536 189 549Q178 562 167.0 574.5Q156 587 146 599Q130 573 100 573Q76 573 63.5 582.0Q51 591 51 615Q51 649 70.5 667.5Q90 686 123 687Q134 708 150.5 721.0Q167 734 183 734Q197 734 207.5 726.0Q218 718 218 704Q218 699 217.5 694.5Q217 690 215 685Q211 677 211 667Q211 665 217.5 654.0Q224 643 233.0 630.0Q242 617 250.0 606.0Q258 595 261 593Q292 653 345.5 682.5Q399 712 466 712Q529 712 579.5 687.0Q630 662 662 606Q667 610 677.0 623.5Q687 637 695.5 651.0Q704 665 704 669Q704 674 703.5 679.0Q703 684 701 688Q697 695 697 706Q697 720 708.0 728.0Q719 736 732 736Q766 736 789 687Q826 687 847.0 668.5Q868 650 868 618Q868 597 849.0 583.0Q830 569 810 569Q798 569 787.5 579.0Q777 589 773 601Q764 590 755.0 579.0Q746 568 735 557Q725 547 715.0 535.5Q705 524 697 512Q700 496 702.0 479.0Q704 462 704 445Q704 420 701.0 396.5Q698 373 690 350Q697 344 701.0 333.0Q705 322 705 313Q705 294 687 280Q669 267 654.0 251.0Q639 235 639 212L640 184Q658 159 681 134Q692 122 703.0 109.5Q714 97 724 85Q729 95 738.0 103.0Q747 111 758 111Q782 111 802.0 92.0Q822 73 822 50Q822 -8 765 -8L752 -7Q741 -28 725.0 -41.5Q709 -55 692 -55Q679 -55 668.0 -46.5Q657 -38 657 -24Q657 -19 658.5 -14.0Q660 -9 661 -5Q664 3 664 13Q664 18 655.5 32.0Q647 46 636.0 60.5Q625 75 619 80L615 77Q606 47 575 33H576Q542 14 520.0 8.0Q498 2 466 2Q435 2 414.0 7.5Q393 13 356 33H357Q328 46 316 78L313 80Q308 77 295.5 61.0Q283 45 272.0 28.0Q261 11 261 6Q261 2 262.5 -2.0Q264 -6 265 -11Q267 -15 268.0 -20.0Q269 -25 269 -30Q269 -44 258.0 -52.5Q247 -61 233 -61ZM691 535Q698 546 706.0 557.5Q714 569 725 576Q733 590 745.0 604.0Q757 618 771 626Q776 617 785.5 608.5Q795 600 807 600Q823 600 833.0 607.0Q843 614 843 630Q843 647 826.0 655.0Q809 663 783 663H775Q771 681 761.0 693.0Q751 705 738 705Q731 705 723.5 700.0Q716 695 716 687Q716 680 718 677L725 661Q726 658 726 652Q726 651 718.5 642.5Q711 634 700.5 622.5Q690 611 681.0 602.0Q672 593 670 592Q678 579 682.5 564.5Q687 550 691 535ZM236 522Q244 552 254 578Q251 579 247 585L219 615Q215 620 211.5 624.0Q208 628 205 632L193 645Q189 649 189 650Q189 656 191 659L198 675Q199 678 199 685Q199 693 191.5 698.0Q184 703 176 703Q163 703 152.5 692.0Q142 681 137 663H132Q108 663 92.0 654.0Q76 645 76 629Q76 614 87.5 608.5Q99 603 114 603Q125 603 134.0 609.5Q143 616 148 624Q162 614 173.0 603.0Q184 592 191 581Q206 558 214 553Q218 550 223.5 542.5Q229 535 236 522ZM475 457Q482 457 495 462L522 473Q537 479 554.5 483.5Q572 488 590 488Q602 488 615 478L626 469Q629 467 632.0 465.5Q635 464 637 462L644 471Q639 490 636.0 507.0Q633 524 633 543Q633 557 634.5 571.5Q636 586 640 599Q620 642 574.0 668.0Q528 694 466 694Q406 694 360.0 670.0Q314 646 293 603Q293 584 296 564Q299 545 299 524Q299 511 296.0 498.0Q293 485 289 472L296 463Q308 474 325.5 483.0Q343 492 359 492Q394 492 425 475Q458 457 475 457ZM253 451Q264 452 272.0 467.5Q280 483 284.0 505.5Q288 528 288 550Q288 554 288.0 557.5Q288 561 287 565L283 581Q270 558 260.0 533.0Q250 508 250 479Q250 465 253 451ZM679 453V482Q679 509 673.0 533.0Q667 557 653 579L647 550Q644 537 644 521Q644 513 648.0 504.5Q652 496 658 487L670 470Q676 462 679 453ZM473 481Q467 481 451.0 485.0Q435 489 417.5 494.5Q400 500 387.0 505.5Q374 511 374 514Q374 517 377 517L378 516L401 509L429 501Q443 497 456.5 494.5Q470 492 479 492Q480 492 482.5 492.5Q485 493 489 494Q493 495 498.0 496.5Q503 498 510 499L562 511L582 516Q586 517 588.5 518.0Q591 519 592 519L599 518Q601 518 605 516Q603 514 599 514Q586 514 570.5 510.5Q555 507 535 498Q516 489 500.0 485.0Q484 481 473 481ZM466 20Q508 20 543.5 38.5Q579 57 601.0 88.5Q623 120 623 160Q623 184 617 206Q610 211 604.0 217.0Q598 223 593 230Q602 235 617 237Q625 245 634.0 253.5Q643 262 652 271Q660 279 667.5 289.0Q675 299 680 310L672 324L668 332Q666 334 666 337Q666 346 673 357Q680 368 680 378Q680 384 680.0 389.0Q680 394 679 398Q678 403 678.0 406.5Q678 410 678 414V423L662 443Q656 445 650.5 447.5Q645 450 640 452L620 463Q611 468 599.5 472.5Q588 477 573 477Q561 477 547.5 474.0Q534 471 519 463Q489 448 473 448Q451 448 416 463Q382 478 358 478Q343 478 313 460Q297 451 287.0 445.5Q277 440 272 438Q271 435 268.0 433.0Q265 431 261 429L248 422L247 410Q247 400 250.0 393.5Q253 387 256 382L263 372Q266 366 266 361Q266 358 265.5 356.0Q265 354 265 352L262 344Q259 337 259 329V325L252 311Q276 273 304 259Q334 244 346 232L338 231Q330 230 323.0 226.5Q316 223 316 217Q316 213 316.0 210.0Q316 207 317 203L318 189Q314 182 313.0 173.0Q312 164 312 155Q312 128 319 106L344 79Q353 51 388.0 35.5Q423 20 466 20ZM355 345Q315 345 298.5 361.0Q282 377 282 408Q282 424 295.5 436.5Q309 449 329.0 456.0Q349 463 368 463Q394 463 414.5 451.0Q435 439 435 419Q435 407 426.0 397.5Q417 388 407 383Q399 367 386.5 356.0Q374 345 355 345ZM577 345Q559 345 540.5 358.0Q522 371 509.5 388.5Q497 406 497 419Q497 439 518.0 451.0Q539 463 564 463Q584 463 603.5 456.0Q623 449 636.5 436.5Q650 424 650 408Q650 377 633.5 361.0Q617 345 577 345ZM340 312 309 322 299 332Q293 336 289 340V346Q291 345 298.0 342.5Q305 340 315 337Q337 329 348 329Q363 329 373.0 332.0Q383 335 390 339Q398 344 406.5 352.0Q415 360 425 370L423 360L376 316ZM588 312 548 326 512 356 511 361 528 346Q539 336 549.5 332.5Q560 329 580 329Q591 329 613 337L639 346V340Q633 334 615 325L600 317ZM442 236Q433 236 425.5 248.0Q418 260 418 269Q418 276 423.5 290.0Q429 304 436.5 319.5Q444 335 452.0 346.0Q460 357 466 357Q476 357 485.5 341.0Q495 325 498 308Q504 301 509.0 290.0Q514 279 514 269Q514 260 506.0 248.0Q498 236 490 236Q476 236 466 246Q456 236 442 236ZM561 89Q548 89 535.0 93.5Q522 98 510 103L488 99Q482 98 476.0 97.5Q470 97 465 97Q454 97 441 102Q429 105 417 105Q412 105 403.0 104.0Q394 103 385 101L367 98Q363 97 359.0 96.0Q355 95 353 94Q351 96 351 100V103Q351 107 351.5 111.5Q352 116 353 120L354 127L351 141Q350 145 350.0 148.5Q350 152 350 156Q350 162 361.5 171.5Q373 181 385 186Q392 188 399.0 192.0Q406 196 416 201Q434 210 465 210Q491 210 510.5 205.0Q530 200 555 183L577 154V130L575 114Q581 108 581 101Q581 94 573.5 91.5Q566 89 561 89ZM565 122V141Q565 144 564.5 147.0Q564 150 563 153L561 165L546 176L539 175L531 179Q528 187 520 187H519Q508 187 503 183Q499 189 484.5 192.0Q470 195 454 195Q453 195 451.0 194.5Q449 194 447 194L439 192Q439 190 436 190H431L419 184Q417 186 415.0 187.0Q413 188 410 188Q404 188 401.5 182.5Q399 177 399 172L389 173L378 169L371 160L359 157L362 131L376 136L382 148L383 164L388 168L389 142L403 153Q412 155 417 161V181L423 183L429 157L446 160L443 183L449 186L455 160L464 159V188H471V160L485 161L487 186L496 184L493 159L506 152H512L514 181L519 180L518 153L525 154Q536 154 542 147L541 172L547 171L545 144L550 134ZM550 104 561 109 555 122 540 116Q543 124 543 129Q543 135 535.0 140.5Q527 146 519 149L517 123L511 126V148Q509 149 505.5 149.5Q502 150 500 151Q497 152 494.0 152.5Q491 153 488 154V127L480 125L478 152L461 155L460 129H456L453 155L428 152L430 128H426L420 149L408 138L405 123H402Q401 126 398.5 130.5Q396 135 392 135H390L385 116Q381 118 378.0 122.0Q375 126 374 130Q371 129 367.5 127.0Q364 125 362 123L365 110L376 115L385 106L396 120L409 113L420 127L434 119L443 109L455 125Q457 120 461.5 115.5Q466 111 472 111Q482 111 488 119L496 126Q513 111 523.0 107.5Q533 104 550 104ZM223 -29Q231 -29 240.0 -24.5Q249 -20 249 -10Q249 0 244 7Q239 15 239 22Q239 24 247.0 34.0Q255 44 266.5 57.0Q278 70 287.5 80.5Q297 91 300 93L293 105L291 121Q290 125 290.5 129.0Q291 133 291 137V154Q284 143 274.5 133.5Q265 124 254 116Q232 81 198 54Q193 62 184.0 69.0Q175 76 164 76Q145 76 135.0 68.5Q125 61 125 50Q125 31 144.0 21.0Q163 11 187 11Q190 -2 200.5 -15.5Q211 -29 223 -29ZM701 -22Q713 -22 723.5 -9.0Q734 4 738 17Q752 13 765 13Q797 13 797 38Q797 56 786.0 69.0Q775 82 756 82Q746 82 736.5 75.0Q727 68 722 60Q707 70 695.0 84.5Q683 99 673 114Q663 121 655.0 132.0Q647 143 641 153Q641 149 641.5 144.0Q642 139 642 136V133Q642 112 630 92Q634 88 647.5 73.0Q661 58 673.5 44.0Q686 30 686 28Q686 21 681 13Q676 3 676 -4Q676 -14 684.5 -18.0Q693 -22 701 -22ZM464 76Q459 76 454.5 78.0Q450 80 446 81Q442 83 438.0 84.0Q434 85 429 86H425Q421 86 416.5 85.5Q412 85 406 84L405 86Q415 93 426 94Q434 90 444.5 87.0Q455 84 464 84Q472 84 479 87Q485 90 493 90H512Q513 90 517 88L525 85Q527 84 532.0 82.0Q537 80 537 79Q537 77 534 77Q518 86 500 86Q492 86 482 81Q474 76 464 76Z"/></svg></span>HOSTIS</a></nav>
+<div class="shell" id="shell">
+<nav class="tabs" id="tabs" aria-label="Sections">
+<button class="tab" data-v="radio" aria-current="true"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="12"/><path d="M6 8l11-5"/><circle cx="8.5" cy="14" r="2.3"/><path d="M14 12.5h4M14 15.5h4"/></svg><span>Radio</span></button>
+<button class="tab" data-v="list"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h1.5M4 12h1.5M4 18h1.5"/></svg><span>Stations</span></button>
+<button class="tab open-only" data-v="studio"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="10.5" r="2"/><path d="M12 12.5V21"/><path d="M8.6 13.9a4.8 4.8 0 1 1 6.8 0M5.8 16.7a8.8 8.8 0 1 1 12.4 0"/></svg><span>Broadcast</span></button>
+<button class="tab" data-v="settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span>Settings</span></button>
+</nav>
+<main class="below" id="below">
+<section class="view radio" id="v-radio" aria-label="Radio">
 <header class="masthead top">
 <p class="mh-title"><a href="../">Pyrate Radio</a></p>
 <p class="mh-sub harbour-only">HOSTIS&#8217;s own stations &#183; every other plays in the <a class="openlink" href="#">open player</a></p>
 <p class="mh-sub open-only">the open player &#183; every station on the air, in any browser</p>
 <p class="signalrow"><span id="signal" class="signal" role="status"></span><button id="flockleave" class="btn quiet" hidden>Stop playing in step</button></p>
 </header>
-
 <p class="leavingnote" role="status">This station is not one of HOSTIS&#8217;s. Taking you to the open player.</p>
 <section class="set" id="set" aria-label="Now playing" tabindex="-1">
 <div id="banner" class="banner"></div>
 <div class="plate" aria-hidden="true"><span>Receiver</span><span class="band">88 to 108</span><span>Pyrate Radio</span></div>
 <div class="face">
-<button class="art" id="artgo" aria-label="Open the station page"><img id="cover" class="cover" alt="" hidden><div id="flag" class="flag"></div></button>
+<button class="art" id="artgo" aria-label="Open the station page"><img id="cover" class="cover" alt="" width="512" height="512" hidden><div id="flag" class="flag"></div></button>
 <div class="tell">
 <div class="lamps"><span id="lamp" class="lamp" title="Lit when the station is broadcasting live"></span><span id="air" class="airword">On air</span><span class="sep"></span><span id="rx" class="rx" title="Lit while sound is arriving"></span><span class="rxword">Signal</span></div>
 <h1 id="name"></h1>
@@ -770,7 +897,7 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 </div>
 
 <div class="glass" id="glass" tabindex="0" role="listbox" aria-label="The dial. Arrow keys tune.">
-<div class="track" id="track"><div class="scale" id="scale"></div><div class="names" id="names"></div><div class="needle" id="needle"></div></div>
+<div class="track" id="track"><div class="names" id="names"></div><svg class="leads" id="leads" aria-hidden="true"></svg><div class="marks" id="marks" aria-hidden="true"></div><div class="scale" id="scale"></div><div class="needle" id="needle"></div><div class="peek" id="peek" aria-hidden="true" hidden></div></div>
 </div>
 
 <div class="controls">
@@ -796,20 +923,11 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 <div id="tipbox" class="passbox" hidden><div class="passtext"><p class="boxhead">Tip the station</p><p>Straight from your wallet to the station.</p><p class="link" id="tipaddr"></p><input id="tipnote" maxlength="140" placeholder="A note for the station" aria-label="A note for the station"><p class="fine" id="tiphow"></p><div class="row-btns"><a id="tipgo" class="btn">Open my wallet</a><button id="tipcopy" class="btn">Copy the address</button><button id="tipclose" class="btn quiet">Close</button></div></div></div>
 <audio id="a" playsinline></audio>
 </section>
-
 <p id="sharednote" class="appnote" hidden>This copy keeps nothing after you leave. <a id="sharedgo" href="#">Open the player at its own address</a></p>
-<p id="appnote" class="appnote" hidden>Pyrate Radio on this phone? <a id="appopen" href="#">Open this station in the app</a></p>
-<p class="takeset"><a href="../#set"><span class="ts-lead">Take the set</span><span class="ts-sub">android &#183; windows &#183; mac &#183; linux &#183; plays with the screen off</span></a></p>
+<p id="appnote" class="appnote" hidden>Pyrate Radio on this phone? <a id="appopen" href="#">Open this station in the app<p class="takeset"><a href="../#set"><span class="ts-lead">Take the set</span><span class="ts-sub">android &#183; windows &#183; mac &#183; linux &#183; plays with the screen off</span></a></p>
+</section>
 
-<nav class="tabs" id="tabs" aria-label="Sections">
-<button class="tab" data-v="list" aria-current="true"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Stations</span></button>
-<button class="tab" data-v="page"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span>Station page</span></button>
-<button class="tab open-only" data-v="studio"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Broadcast</span></button>
-<button class="tab" data-v="settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg><span>Settings</span></button>
-</nav>
-
-<main class="below" id="below">
-<section class="view log" id="v-list" aria-label="Stations">
+<section class="view log" id="v-list" aria-label="Stations" hidden>
 <div class="sechead harbour-only"><h2>HOSTIS on the Air</h2></div>
 <div class="sechead open-only"><h2>On the Air</h2></div>
 <div class="listbar"><input id="find" type="search" class="open-only" placeholder="Find a station" aria-label="Find a station" autocomplete="off"><div class="views" role="group" aria-label="How to show the stations"><button id="vlist" class="btn on" aria-pressed="true">List</button><button id="vchart" class="btn" aria-pressed="false">Map</button></div></div>
@@ -823,6 +941,7 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 </section>
 
 <section class="view" id="v-page" aria-label="Station page" hidden>
+<div class="backbar"><button id="pageback" class="back" aria-label="Back to the radio"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg><span>Back</span></button></div>
 <div class="pagehead"><h2 id="pname"></h2><p id="pabout" class="pabout"></p><p id="pmeta" class="pmeta"></p><p id="pnote" class="pnote" hidden></p></div>
 <p id="pagewait" class="fine">The station's schedule and notices appear here once its log arrives.</p>
 <div class="page" id="page" hidden>
@@ -853,7 +972,7 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 
 <section class="view open-only studio" id="v-studio" aria-label="Start a station" hidden>
 <div id="studio">
-<div class="sechead"><h2>Start a Station</h2><span class="cap">from this browser</span></div>
+<div class="sechead"><h2 id="st-head">Start a Station</h2><span class="cap">from this browser</span></div>
 <p id="st-finding" class="st-status" role="status" hidden>Finding your station</p>
 <div id="st-lock" hidden>
 <p class="fine">Your stations in this browser are locked with a passphrase.</p>
@@ -873,7 +992,7 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 <p>A second lock on your 24 words. Forget it and the station is gone for good.</p>
 <label class="field"><span>Passphrase</span><input id="st-ppass" type="password" autocomplete="new-password" placeholder="Optional"></label>
 </div></details>
-<p class="centre"><button id="st-raise" class="lead-btn"><span class="fc-lead">Raise colours</span><span class="fc-sub">you can change all of this later</span></button></p>
+<p class="centre"><button id="st-raise" class="lead-btn"><span class="fc-lead">Raise colours</span><span class="fc-sub">all but the passphrase can change later</span></button></p>
 <p id="st-note" class="fine" role="status"></p>
 <details class="fold"><summary>Bring back a station with its 24 words</summary><div><textarea id="st-words" spellcheck="false" autocomplete="off" aria-label="The station's 24 words"></textarea><label class="field"><span>Passphrase, if you set one</span><input id="st-rpass" type="password" autocomplete="off"></label><p class="centre"><button id="st-restore" class="btn">Bring it back</button></p></div></details>
 <details class="fold"><summary>How private is broadcasting from a browser?</summary><div><p>Your station passes through other people's radios before it reaches anyone, so no listener can trace it to this tab. The relay this page connects through can see your address, though never what you send. Open this page in Tor Browser to hide your address from the relay too. The app on a phone is more private still.</p></div></details>
@@ -887,8 +1006,56 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 <p class="centre"><button id="st-done" class="btn" disabled>Continue</button></p>
 </div>
 <div id="st-mine" hidden>
+<div id="st-born" class="st-born" hidden>
+<p class="born-lead">Colours raised</p>
+<p class="born-sub">Your station plays by its link from now on, at <span id="st-bfreq"></span> on the dial.</p>
+<p class="centre"><label class="blood" for="st-files">Add your first recording</label></p>
+</div>
 <div class="st-card"><div id="st-flag" class="mini"></div><div class="meta"><div id="st-mname" class="name"></div><div id="st-mcs" class="cs"></div></div><button id="st-tune" class="btn">Listen</button></div>
 <p id="st-status" class="st-status" role="status"></p>
+<div id="st-dial" class="st-dial" hidden>
+<p id="st-dialnote" class="st-dialnote"></p><i id="st-work" class="st-work" aria-hidden="true" hidden></i>
+<p class="st-link" id="st-link"></p>
+<div class="row-btns"><button id="st-copy" class="btn">Copy the link</button><button id="st-sharego" class="btn">Share the link</button></div>
+<div class="switches"><label><input type="checkbox" id="st-linkonly"><span>Keep it off the dial<small>Heard only by its link and by those who keep it.</small></span></label></div>
+</div>
+<div id="ys" class="ys" role="region" aria-label="Your station">
+<div class="dk-plate"><span>Your station</span><span id="ys-note" class="ys-note" role="status"></span></div>
+<details class="ys-fold" id="ys-colours"><summary><span class="ys-t">Name and port</span><span class="ys-v" id="ys-colours-v"></span></summary><div class="ys-body">
+<label class="field"><span>Station name</span><input id="ys-name" maxlength="40" autocomplete="off"></label>
+<label class="field"><span>What it plays</span><input id="ys-about" maxlength="140" autocomplete="off"></label>
+<label class="field"><span>Home port</span><input id="ys-port" maxlength="120" autocomplete="off" placeholder="A town or city, if you like"></label>
+<label class="field"><span>Tip address</span><input id="ys-tip" maxlength="200" autocomplete="off" spellcheck="false" placeholder="A Monero or Bitcoin address"></label>
+<p class="ys-act"><button class="blood" data-save="colours">Save</button></p>
+</div></details>
+<details class="ys-fold" id="ys-details"><summary><span class="ys-t">Kinds and ratings</span><span class="ys-v" id="ys-details-v"></span></summary><div class="ys-body">
+<label class="field"><span>Kinds</span><input id="ys-kinds" maxlength="100" autocomplete="off" placeholder="Up to five, with commas: jazz, talk, shanties"></label>
+<p id="ys-kindnote" class="fine" role="status" hidden>Five at most. The rest are left off.</p>
+<div class="switches"><label><input type="checkbox" id="ys-mature"><span>Mature: strong language or themes</span></label><label><input type="checkbox" id="ys-explicit"><span>Explicit: sexual or graphic material</span></label></div>
+<p class="ys-act"><button class="blood" data-save="details">Save</button></p>
+</div></details>
+<details class="ys-fold" id="ys-art"><summary><span class="ys-t">Pictures</span><span class="ys-v" id="ys-art-v"></span></summary><div class="ys-body ys-pics">
+<div class="ys-pic"><div class="ys-frame sq" id="ys-cover"><span>Cover</span></div><div class="ys-btns"><label class="btn">Choose<input type="file" accept="image/*" id="ys-coverfile"></label><button class="btn quiet" id="ys-coverclear">Take down</button></div></div>
+<div class="ys-pic wide"><div class="ys-frame ban" id="ys-banner"><span>Banner</span></div><div class="ys-btns"><label class="btn">Choose<input type="file" accept="image/*" id="ys-bannerfile"></label><button class="btn quiet" id="ys-bannerclear">Take down</button></div></div>
+</div></details>
+<details class="ys-fold" id="ys-sched"><summary><span class="ys-t">Schedule</span><span class="ys-v" id="ys-sched-v"></span></summary><div class="ys-body">
+<div class="ys-modes" role="radiogroup" aria-label="How it plays"><label><input type="radio" name="ys-mode" value="shuffle"><span>Shuffle</span></label><label><input type="radio" name="ys-mode" value="in_order"><span>In order</span></label><label><input type="radio" name="ys-mode" value="newest_first"><span>Newest first</span></label><label><input type="radio" name="ys-mode" value="daily"><span>Same time daily</span></label><label><input type="radio" name="ys-mode" value="weekly"><span>Same time weekly</span></label></div>
+<p class="fine" id="ys-modenote"></p>
+<div class="ys-when" id="ys-when" hidden><label class="field" id="ys-dayf"><span>Day</span><select id="ys-day"><option value="0">Monday</option><option value="1">Tuesday</option><option value="2">Wednesday</option><option value="3">Thursday</option><option value="4">Friday</option><option value="5">Saturday</option><option value="6">Sunday</option></select></label><label class="field"><span>From</span><input type="time" id="ys-start" value="18:00"></label></div>
+<div class="switches"><label><input type="checkbox" id="ys-live"><span>Keep an hour each day for going live</span></label></div>
+<div class="ys-when" id="ys-livewhen" hidden><label class="field"><span>At</span><input type="time" id="ys-liveat" value="20:00"></label><label class="field"><span>For</span><select id="ys-livelen"><option value="30">Half an hour</option><option value="60" selected>An hour</option><option value="90">An hour and a half</option><option value="120">Two hours</option></select></label></div>
+<p class="fine" id="ys-zone" hidden></p>
+<p class="ys-act"><button class="blood" data-save="sched">Save</button></p>
+</div></details>
+<details class="ys-fold" id="ys-notices"><summary><span class="ys-t">Notices</span><span class="ys-v" id="ys-notices-v"></span></summary><div class="ys-body">
+<textarea id="ys-notice" maxlength="600" placeholder="A word to listeners, on the station's page" aria-label="A notice"></textarea>
+<p class="ys-act"><button class="blood" data-save="notice">Post</button></p>
+<div id="ys-noticelist" class="ys-list"></div>
+</div></details>
+<details class="ys-fold" id="ys-lib"><summary><span class="ys-t">Recordings</span><span class="ys-v" id="ys-lib-v"></span></summary><div class="ys-body">
+<div id="ys-library" class="ys-list"></div>
+</div></details>
+</div>
 <label class="drop" id="st-drop"><input type="file" id="st-files" multiple accept="audio/*,video/mp4,video/webm,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.webm"><span class="drop-lead">Drop recordings here</span><span class="drop-sub">or click to choose them</span></label>
 <div class="st-opts"><label><input type="checkbox" id="st-talk"><span>Spoken word</span></label><label><input type="checkbox" id="st-disguise"><span>Disguise my voice</span></label></div>
 <div id="st-queue" class="st-queue"></div>
@@ -971,20 +1138,19 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 <p>A station few people carry starts sooner. The radios carrying it can then see this connection, which the usual two steps keep from them.</p>
 </div></details>
 </div>
-<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your settings, kept and hidden stations, the list of stations last on the air, your name and mutes in the chat, any invitations you opened, and the key of any station you started here (never its 24 words). The key and invitations are locked under a key the browser keeps to itself. None of it is sent anywhere.</p></div></details>
+<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your settings, kept and hidden stations, the list of stations last on the air, your name and mutes in the chat, any invitations you opened, and the key of any station you started here (never its 24 words). The key and invitations are locked under a key the browser keeps to itself.<span class="harbour-only"> On this page it also keeps the schedules of all of HOSTIS&#8217;s stations alike, so the next visit starts sooner.</span> None of it is sent anywhere.</p></div></details>
 <p class="centre"><button id="forget" class="btn quiet">Forget this browser</button></p>
-</section>
-</main>
-
-<div id="mini" class="miniplayer" hidden>
-<button id="mini-up" class="mp-main" aria-label="Back to the radio"><span id="mini-art" class="mp-art" aria-hidden="true"></span><span class="mp-text"><span id="mini-name" class="mp-name"></span><span id="mini-np" class="mp-np"></span></span></button>
-<button id="mini-go" class="mp-go" aria-label="Listen"><span class="glyph" aria-hidden="true"></span></button>
-</div>
 <footer>
 <p class="f-contact">Email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>
 <p class="f-copy">no rights reserved &#183; all copies welcome</p>
 <p class="f-source"><a href="https://github.com/dukewilder/hostis" target="_blank" rel="noopener noreferrer">source code</a></p>
 </footer>
-<script type="module" src="app.js?v=0860a5bd56"></script>
+</section>
+</main>
+<div id="mini" class="miniplayer" hidden>
+<button id="mini-up" class="mp-main" aria-label="Back to the radio"><span id="mini-art" class="mp-art" aria-hidden="true"></span><span class="mp-text"><span id="mini-name" class="mp-name"></span><span id="mini-np" class="mp-np"></span></span></button>
+<button id="mini-go" class="mp-go" aria-label="Listen"><span class="glyph" aria-hidden="true"></span></button>
+</div>
+<script type="module" src="app.js?v=abde4ec2fa"></script>
 </body>
 </html>
