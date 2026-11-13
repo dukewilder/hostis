@@ -97,6 +97,8 @@ fn js(e: anyhow::Error) -> JsValue {
 struct Listing {
     announce: Option<Announce>,
     carriers: HashMap<[u8; 32], (u64, u64)>,
+    /// Listeners' decks for this station, by deck key, reached only in three hops.
+    decks: HashMap<[u8; 32], net::DeckNote>,
     sketches: HashMap<u64, Sketch>,
     heard: HashMap<u64, HashSet<[u8; 32]>>,
 }
@@ -121,13 +123,16 @@ impl Listing {
 
 /// A private route's hop, as the nodes read it: forward a sealed request, or open one. The
 /// variants and their order are the node's (`node/src/hop.rs`); a tab only ever sends these two.
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 enum Hop {
     Forward { next: [u8; 32], blob: Vec<u8> },
     Sealed { eph: [u8; 32], ct: Vec<u8> },
     /// A station's entries and chunks on the stem: the tab broadcasts as a phone does, never
     /// showing the network its own station first. `hops` is always zero.
     Stem { station: StationId, entries: Vec<Vec<u8>>, chunks: Vec<(Hash, Vec<u8>)>, announce: Option<Announce>, hops: u8 },
+    /// Tab to tab only: an offer of a direct link from a requester to its guard, answered with
+    /// the guard's own. A node knows no such hop and gives nothing back.
+    Rtc { sdp: String },
 }
 
 /// A station this tab keeps: the key it signs with (a deputy, or the master while it is
@@ -152,13 +157,18 @@ const STEM_BYTES: usize = 3 * 1024 * 1024;
 
 /// What a tab asks an exit for. The order is the node's (`node/src/hop.rs`).
 #[allow(dead_code)]
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 enum Ask {
     Log { station: StationId, from: u64 },
     Chunk { station: StationId, hash: Hash },
     Token { station: StationId, hour: u64, token: [u8; 32], nonce: u64 },
     Sealed { station: StationId, name: Hash },
     Stem { station: StationId, entries: Vec<Vec<u8>>, chunks: Vec<(Hash, Vec<u8>)>, announce: Option<Announce> },
+    /// The middle of a three-hop route: pass `blob` to `next`, and the answer back under this
+    /// hop's seal. A tab with the switch on is a middle; the requester is never seen.
+    Relay { next: [u8; 32], blob: Vec<u8> },
+    /// The way in to a deck: `lead` (sealed to this radio) names the listener; `blob` goes to it.
+    Lead { lead: Vec<u8>, blob: Vec<u8> },
 }
 
 /// Why a route failed: its first hop could not be reached, or the hop gave no answer.
@@ -173,6 +183,7 @@ impl Ask {
     fn station(&self) -> Option<StationId> {
         match self {
             Ask::Log { station, .. } | Ask::Chunk { station, .. } | Ask::Token { station, .. } | Ask::Sealed { station, .. } | Ask::Stem { station, .. } => Some(*station),
+            Ask::Relay { .. } | Ask::Lead { .. } => None,
         }
     }
 }
@@ -200,6 +211,123 @@ impl Hold {
             self.bytes -= old.len();
         }
     }
+}
+
+/// One of this tab's decks: a station it serves to the crew, under a key made for the deck
+/// alone, reached only through `intro`, whose lead names this tab. The note names neither.
+struct Deck {
+    station: StationId,
+    seed: [u8; 32],
+    id: [u8; 32],
+    intro: Option<EndpointId>,
+    lead: Vec<u8>,
+    said: u64,
+    /// Kept as ballast (a station it does not play), not played.
+    ballast: bool,
+    /// The sealed names of this station's chunks the tab has fetched, with when: a deck serves
+    /// only what it has held for the last ten minutes, or stock it kept.
+    names: HashMap<Hash, (Hash, u64)>,
+}
+
+/// A tab's part in the crew: what it passes on for others, the decks it serves, and what it
+/// knows of the other radios of the crew. All of it in memory, gone when the tab closes, but
+/// ballast a computer keeps for the next visit (see `stock_take`).
+#[derive(Default)]
+struct Crew {
+    /// Radios of the crew heard of: the relay each named and when.
+    radios: HashMap<EndpointId, (String, u64)>,
+    /// Relays of the nodes heard of, from their own notes: for remembering quick peers.
+    relays: HashMap<EndpointId, String>,
+    /// When this tab first heard of each radio: a newcomer is never its first hop.
+    first_seen: HashMap<EndpointId, u64>,
+    /// This visit's first hops so far: the guard set, which a middle is never drawn from.
+    guards: Vec<EndpointId>,
+    /// The guards kept from earlier visits: first choice for a first hop while they answer, so
+    /// a crowd of new radios cannot become a returning listener's first hop.
+    kept: Vec<EndpointId>,
+    /// Stations played this visit: never drawn as ballast, so nothing played is kept on disk.
+    played: HashSet<StationId>,
+    decks: Vec<Deck>,
+    said_crew: u64,
+    /// Bytes passed on in the current minute, and that minute.
+    minute: (u64, u64),
+    /// What this tab fetched for itself lately, and when: its own listening rate.
+    own: VecDeque<(u64, usize)>,
+    /// Chunks being fetched now, so a second ask waits on the first fetch.
+    inflight: HashSet<Hash>,
+    /// When each station last brought this tab a chunk: a station not heard for a minute is cold.
+    warm: HashMap<StationId, u64>,
+    /// Decks that gave nothing lately, and when.
+    suspect: HashMap<[u8; 32], u64>,
+    /// Bytes passed on for others today, and the day.
+    today: (u64, u64),
+    from_decks: u64,
+    from_others: u64,
+    bytes_decks: u64,
+    bytes_others: u64,
+    served: u64,
+    served_stock: u64,
+    refused: u64,
+    /// The most of a minute's budget ever passed on, as a share of it: never above one.
+    peak: f64,
+    /// Chunk asks of the crew's decks, by outcome (see `deck_fetch`).
+    tries: [u64; 6],
+    /// When this tab's crew first ticked, and whether a ballast chunk is on its way.
+    born: u64,
+    ballast_busy: bool,
+    /// Radios a hop could not reach in the last minute, and when.
+    unreached: HashMap<EndpointId, u64>,
+    /// The direct link to the guard: guards it was tried with this visit, bytes it carried, bytes
+    /// the guard's leg took over the relay, and asks over a link that were not forwards (refused).
+    rtc_tried: HashSet<EndpointId>,
+    /// Requesters this tab has offered a direct link as their guard: they may see its address,
+    /// so none of them is ever a way in to its decks.
+    rtc_clients: HashSet<EndpointId>,
+    rtc_bytes: u64,
+    relay_first_bytes: u64,
+    rtc_refused: u64,
+    rtc_served: u64,
+    ballast_hour: u64,
+    /// Ballast chunks fetched and not yet handed to the page to keep.
+    stock_out: Vec<(StationId, Hash, Vec<u8>)>,
+    /// Chunks kept from earlier visits: sealed name to station and address.
+    stock: HashMap<Hash, (StationId, Hash)>,
+}
+
+/// A computer passes on up to six times its own listening, a phone once: each carries itself
+/// and some. Its own listening counts as at least 96 kbit/s.
+const BUDGET_FLOOR: u64 = 720 * 1024;
+/// How long a radio must be known before it may be a first hop: ten minutes for a node, half
+/// an hour for a radio known only as crew (a tab, most likely, which costs nothing to make).
+const NEWCOMER_MS: u64 = 10 * 60_000;
+const NEWCOMER_TAB_MS: u64 = 30 * 60_000;
+/// How long a radio's word that it is of the crew is believed: it says so every two minutes, so
+/// one silent for four has most likely gone (a closed tab says nothing as it goes).
+const CREW_FRESH_MS: u64 = 4 * 60_000;
+/// How long a deck or a middle that gave nothing is passed over: long enough that a gone one
+/// costs little, short enough that one that only stumbled comes back soon.
+const SUSPECT_MS: u64 = 45_000;
+
+/// One three-hop request as a tab builds it (the node's `hop::three_hops`): what goes to the
+/// first hop, and the ciphers that open the answer, outermost first.
+fn three_hops(middle: &[u8; 32], exit: &[u8; 32], ask: &[u8], deck: Option<(&[u8; 32], &[u8])>) -> Option<(Vec<u8>, Vec<pyrate_core::route::Cipher>)> {
+    use pyrate_core::route::seal_to;
+    let mut ciphers = Vec::new();
+    let (eph, ct, c) = seal_to(exit, ask)?;
+    ciphers.push(c);
+    let mut to = *exit;
+    let mut inner = postcard::to_stdvec(&Hop::Sealed { eph, ct }).ok()?;
+    if let Some((intro, lead)) = deck {
+        let (eph, ct, c) = seal_to(intro, &postcard::to_stdvec(&Ask::Lead { lead: lead.to_vec(), blob: inner }).ok()?)?;
+        ciphers.push(c);
+        to = *intro;
+        inner = postcard::to_stdvec(&Hop::Sealed { eph, ct }).ok()?;
+    }
+    let (eph, ct, c) = seal_to(middle, &postcard::to_stdvec(&Ask::Relay { next: to, blob: inner }).ok()?)?;
+    ciphers.push(c);
+    ciphers.reverse();
+    let blob = postcard::to_stdvec(&Hop::Sealed { eph, ct }).ok()?;
+    Some((postcard::to_stdvec(&Hop::Forward { next: *middle, blob }).ok()?, ciphers))
 }
 
 /// A station's chatter as this tab holds it: the room's sender and the last lines.
@@ -272,6 +400,15 @@ struct Ship {
     /// left out of routes and stems for half an hour. And those that carried a route this visit.
     norelay: Mutex<HashMap<EndpointId, u64>>,
     relayed: Mutex<HashSet<EndpointId>>,
+    /// The tab's node seed, for opening what the crew seals to it.
+    secret: [u8; 32],
+    /// "Carry the radio while you listen". Off is the tab as it was: it passes nothing on,
+    /// serves nothing, and fetches through no deck.
+    crew_on: std::sync::atomic::AtomicBool,
+    /// A phone (touch, or on mobile data): it passes on no more than it listens to, and keeps
+    /// no ballast.
+    mobile: std::sync::atomic::AtomicBool,
+    crew: Mutex<Crew>,
 }
 
 /// A relay named in a link someone passed on: HTTPS only, so a link cannot send the tab's
@@ -316,6 +453,7 @@ impl Ship {
             Request::SealedChunk { .. } => Response::Sealed(None),
             Request::Flock { .. } => Response::Flock { now_ms: 0, station: None },
             Request::PocketLog { .. } => Response::Entries(vec![]),
+            // Hops are answered in `on_hop`, never here.
             Request::Hop(_) => Response::Hop(vec![]),
             // A pocket's lines go only to whoever asks by its tag, and sealed.
             Request::Chatter { station } if self.pockets.lock().unwrap().contains_key(&station) => Response::Chatter(vec![]),
@@ -495,6 +633,33 @@ impl Ship {
     }
 
     async fn ask(&self, node: EndpointId, req: &Request) -> Result<Response> {
+        // To the tab's own guard, over the direct link when one is open; back on the relay at
+        // once if it fails. No other radio is ever asked this way.
+        let first = *self.first_hop.lock().unwrap() == Some(node);
+        let forward = matches!(req, Request::Hop(b) if matches!(postcard::from_bytes::<Hop>(b), Ok(Hop::Forward { .. })));
+        if first && forward && self.crew_on() && self.crew.lock().unwrap().rtc_tried.contains(&node) {
+            let out = postcard::to_stdvec(req)?;
+            if let Ok(p) = rtc_ask(&node.to_string(), &out) {
+                if let Ok(v) = wasm_bindgen_futures::JsFuture::from(p).await {
+                    let b = js_sys::Uint8Array::new(&v).to_vec();
+                    if let Ok(r) = postcard::from_bytes::<Response>(&b) {
+                        self.crew.lock().unwrap().rtc_bytes += (out.len() + b.len()) as u64;
+                        return Ok(r);
+                    }
+                }
+            }
+        }
+        let r = self.ask_relay(node, req).await;
+        if first {
+            if let Ok(Response::Hop(b)) = &r {
+                let n = postcard::to_stdvec(req).map(|x| x.len()).unwrap_or(0) + b.len();
+                self.crew.lock().unwrap().relay_first_bytes += n as u64;
+            }
+        }
+        r
+    }
+
+    async fn ask_relay(&self, node: EndpointId, req: &Request) -> Result<Response> {
         let c = match self.conn(node).await {
             Ok(c) => c,
             Err(e) => {
@@ -724,11 +889,25 @@ impl Ship {
         let nodes = self.route_nodes();
         let first = if nodes.len() >= 2 { self.first_hop_for(&nodes) } else { None };
         let exits = first.map(|f| self.exits_for(&nodes, &[f], 4, Some(station))).unwrap_or_default();
-        let mut tries: n0_future::FuturesUnordered<_> = if exits.is_empty() {
-            (0..2).map(|_| Box::pin(one(None))).collect()
+        type Try<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Response>> + 'a>>;
+        let mut tries: n0_future::FuturesUnordered<Try> = if exits.is_empty() {
+            (0..2).map(|_| Box::pin(one(None)) as Try).collect()
         } else {
-            exits.iter().map(|e| Box::pin(one(Some(*e)))).collect()
+            exits.iter().map(|e| Box::pin(one(Some(*e))) as Try).collect()
         };
+        // With the switch on, a deck of the station beside them: a listener's tab answers as
+        // soon as a Lantern, and every page it gives is one a Lantern did not.
+        let warm = self.crew.lock().unwrap().warm.get(&station).is_some_and(|t| raw_now().saturating_sub(*t) < 60_000);
+        if self.crew_on() && warm {
+            if let Some((deck, Some(note))) = self.keeper(&station, &station.0, 0) {
+                tries.push(Box::pin(async move {
+                    match self.ask_deck(&Ask::Log { station, from: 0 }, deck, &note).await {
+                        Ok(Response::Entries(list)) if !list.is_empty() => Ok(Response::Entries(list)),
+                        _ => Err(anyhow!("a deck with nothing")),
+                    }
+                }));
+            }
+        }
         let mut last = Err(anyhow!("no route"));
         while let Some(r) = n0_future::StreamExt::next(&mut tries).await {
             if r.is_ok() {
@@ -770,6 +949,86 @@ impl Ship {
     }
 
     async fn fetch(&self, station: &StationId, hash: &Hash) -> Result<Vec<u8>> {
+        self.fetch_via(station, hash, true).await
+    }
+
+    /// A chunk, fetched once however many ask for it at the same time. With the switch on, the
+    /// crew's deck that keeps it is asked first, three hops away, and an ordinary route at once
+    /// if it has nothing; a station not heard from for a minute asks both together, so the first
+    /// Listen never waits on a deck. `decks` false for a deck fetching for another: no deck ever
+    /// waits on a second deck.
+    async fn fetch_via(&self, station: &StationId, hash: &Hash, decks: bool) -> Result<Vec<u8>> {
+        if let Some(b) = self.hold.lock().unwrap().get(hash) {
+            return Ok(b);
+        }
+        if !self.crew.lock().unwrap().inflight.insert(*hash) {
+            for _ in 0..120 {
+                sleep(Duration::from_millis(100)).await;
+                if let Some(b) = self.hold.lock().unwrap().get(hash) {
+                    return Ok(b);
+                }
+                if !self.crew.lock().unwrap().inflight.contains(hash) {
+                    break;
+                }
+            }
+            return Err(anyhow!("the fetch beside this one failed"));
+        }
+        struct Done<'a>(&'a Mutex<Crew>, Hash);
+        impl Drop for Done<'_> {
+            fn drop(&mut self) {
+                self.0.lock().unwrap().inflight.remove(&self.1);
+            }
+        }
+        let _done = Done(&self.crew, *hash);
+        let pocket = self.pockets.lock().unwrap().contains_key(station);
+        // Not for a station just tuned: the first Listen waits on nothing but the quickest route.
+        let cold = !self.crew.lock().unwrap().warm.get(station).is_some_and(|t| raw_now().saturating_sub(*t) < 60_000);
+        let use_decks = decks && !pocket && self.crew_on() && !cold;
+        type Try<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<(Vec<u8>, bool)>> + 'a>>;
+        let deck: Try = Box::pin(async move { self.deck_fetch(station, hash).await.map(|b| (b, true)) });
+        let plain: Try = Box::pin(async move { self.fetch_ordinary(station, hash).await.map(|b| (b, false)) });
+        let r = if !use_decks {
+            plain.await
+        } else {
+            // Warm, the deck goes first and an ordinary route follows when the deck fails or
+            // has not answered in two seconds, so a deck that has gone costs at most that. Cold,
+            // both go at once.
+            let gave_up = Arc::new(std::sync::atomic::AtomicBool::new(cold));
+            let g2 = gave_up.clone();
+            let deck: Try = Box::pin(async move {
+                let r = deck.await;
+                if r.is_err() {
+                    g2.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+                r
+            });
+            let plain: Try = Box::pin(async move {
+                for _ in 0..20 {
+                    if gave_up.load(std::sync::atomic::Ordering::Relaxed) {
+                        break;
+                    }
+                    sleep(Duration::from_millis(100)).await;
+                }
+                plain.await
+            });
+            let mut both: n0_future::FuturesUnordered<Try> = [deck, plain].into_iter().collect();
+            let mut last = Err(anyhow!("no route"));
+            while let Some(r) = n0_future::StreamExt::next(&mut both).await {
+                if r.is_ok() {
+                    last = r;
+                    break;
+                }
+                last = r;
+            }
+            last
+        };
+        let (b, from_deck) = r?;
+        self.hold.lock().unwrap().put(*hash, b.clone());
+        self.got(station, hash, b.len(), from_deck);
+        Ok(b)
+    }
+
+    async fn fetch_ordinary(&self, station: &StationId, hash: &Hash) -> Result<Vec<u8>> {
         if let Some(b) = self.hold.lock().unwrap().get(hash) {
             return Ok(b);
         }
@@ -925,7 +1184,7 @@ impl Ship {
             // checked against its own signature or dropped. With them the tab can reach the
             // carriers through two hops at once, without waiting for the network to repeat them.
             let Ok(g) = postcard::from_bytes::<Gossip>(&b) else { continue };
-            if !matches!(g, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Harbour { .. }) {
+            if !matches!(g, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Harbour { .. } | Gossip::Crew { .. } | Gossip::Deck { .. }) {
                 continue;
             }
             match &g { Gossip::Station(_) => kinds.0 += 1, Gossip::Carried { node, .. } => { kinds.1 += 1; *kinds.4.entry(hex(&node[..5])).or_default() += 1 } Gossip::Harbour { node, relay, .. } => { kinds.2 += 1; say(&format!("  {} is reached through {relay}", hex(&node[..5]))) } _ => kinds.2 += 1 }
@@ -998,6 +1257,9 @@ impl Ship {
                     u64::from_le_bytes(coin),
                 );
                 drop(log);
+                if let Ok(id) = EndpointId::from_bytes(&node) {
+                    self.crew.lock().unwrap().first_seen.entry(id).or_insert(raw_now());
+                }
                 let ours = self.archives.lock().unwrap().get(&station).map(|x| x.len()).unwrap_or(0);
                 (head > ours).then_some(station)
             }
@@ -1014,7 +1276,51 @@ impl Ship {
                 let known = self.log.lock().unwrap().values().any(|l| l.carriers.contains_key(&node)) || self.harbour.iter().any(|h| *h.as_bytes() == node);
                 if let (true, Ok(id), Ok(url)) = (known, EndpointId::from_bytes(&node), relay.parse::<iroh::RelayUrl>()) {
                     self.book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+                    let mut c = self.crew.lock().unwrap();
+                    if c.relays.len() < 4_000 {
+                        c.relays.insert(id, relay);
+                    }
                 }
+                None
+            }
+            g @ Gossip::Crew { .. } => {
+                // A radio of the crew: a middle, or a deck's way in, reached through its relay.
+                let (node, relay) = g.crew_checked(self.base_now())?;
+                let id = EndpointId::from_bytes(&node).ok()?;
+                if id == self.ep.id() {
+                    return None;
+                }
+                if let Ok(url) = relay.parse::<iroh::RelayUrl>() {
+                    self.book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+                }
+                // Kept by when the radio said it, not when the word arrived: a note passed on in a
+                // Lantern's cards may be minutes old, and its radio gone since.
+                let now = raw_now();
+                let at_ms = match &g { Gossip::Crew { at_ms, .. } => *at_ms, _ => return None };
+                let said = now.saturating_sub(self.base_now().saturating_sub(at_ms));
+                let mut c = self.crew.lock().unwrap();
+                c.first_seen.entry(id).or_insert(now);
+                if c.radios.get(&id).is_none_or(|(_, t)| *t < said) {
+                    c.radios.insert(id, (relay, said));
+                }
+                if c.radios.len() > 2_000 {
+                    c.radios.retain(|_, (_, t)| now.saturating_sub(*t) < 15 * 60_000);
+                }
+                None
+            }
+            g @ Gossip::Deck { .. } => {
+                // Another listener's deck, for a station whose card this tab holds.
+                let (station, deck, d) = g.deck_checked(self.base_now())?;
+                let now = self.now();
+                let mut log = self.log.lock().unwrap();
+                let l = log.get_mut(&station)?;
+                if l.decks.len() >= net::MAX_DECKS && !l.decks.contains_key(&deck) {
+                    l.decks.retain(|_, x| now.saturating_sub(x.at_ms) < net::DECK_FRESH_MS);
+                    if l.decks.len() >= net::MAX_DECKS {
+                        return None;
+                    }
+                }
+                l.decks.insert(deck, d);
                 None
             }
         }
@@ -1103,18 +1409,41 @@ impl Ship {
     /// it can (they know its address already, and they answer at once), else from any it knows.
     fn first_hop_for(&self, nodes: &[EndpointId]) -> Option<EndpointId> {
         let mut g = self.first_hop.lock().unwrap();
-        if g.is_none_or(|f| !nodes.contains(&f)) {
+        if g.is_none_or(|f| !nodes.contains(&f) && !(self.crew_on() && self.crew.lock().unwrap().radios.contains_key(&f))) {
             // The quickest to answer of the radios this tab knows, drawn among those within half
             // as slow again: every request of the visit waits on the first hop, so a slow one
             // makes the whole radio slow. One not yet heard from counts as a second and a half.
             let near: HashSet<EndpointId> = self.neighbours.lock().unwrap().clone();
-            let pool: Vec<(f64, EndpointId)> = nodes.iter().map(|x| (self.answer_ms(x, near.contains(x)), *x)).collect();
+            // Only a seasoned radio (see `seasoned`): with the switch on, the crew's radios known
+            // for half an hour join the draw, so long-lived tabs carry first hops too.
+            let mut cands: Vec<EndpointId> = nodes.to_vec();
+            if self.crew_on() {
+                let now = raw_now();
+                let crew: Vec<EndpointId> = self.crew.lock().unwrap().radios.iter().filter(|(_, (_, t))| now.saturating_sub(*t) < CREW_FRESH_MS).map(|(n, _)| *n).collect();
+                cands.extend(crew.into_iter().filter(|n| !nodes.contains(n)));
+            }
+            let seasoned: Vec<EndpointId> = cands.into_iter().filter(|n| self.seasoned(n)).collect();
+            let pool: Vec<(f64, EndpointId)> = seasoned.iter().map(|x| (self.answer_ms(x, near.contains(x)), *x)).collect();
             let best = pool.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
             let quick: Vec<EndpointId> = pool.iter().filter(|p| p.0 <= best * 1.5 + 50.0).map(|p| p.1).collect();
+            // A guard kept from an earlier visit comes first, unless it has become slow: one not
+            // yet heard from this visit counts as a second and a half, and stays first.
+            let kept: Vec<EndpointId> = self.crew.lock().unwrap().kept.clone();
+            let sticky: Vec<EndpointId> = pool.iter().filter(|p| kept.contains(&p.1) && p.0 <= (best * 3.0 + 300.0).max(2_000.0)).map(|p| p.1).collect();
+            let quick = if sticky.is_empty() { quick } else { sticky };
             if quick.is_empty() {
                 return None;
             }
-            *g = Some(quick[pick(quick.len())]);
+            let f = quick[pick(quick.len())];
+            *g = Some(f);
+            // The guard set: this visit's first hops, never a middle.
+            let mut c = self.crew.lock().unwrap();
+            if !c.guards.contains(&f) {
+                c.guards.push(f);
+                if c.guards.len() > 3 {
+                    c.guards.remove(0);
+                }
+            }
         }
         *g
     }
@@ -1648,6 +1977,594 @@ impl Ship {
     }
 }
 
+#[wasm_bindgen]
+extern "C" {
+    /// The page's keeper of stock between visits (IndexedDB, computers only): a kept chunk by
+    /// its sealed name, or null. Missing on pages that keep none.
+    #[wasm_bindgen(catch, js_name = pyrateStockGet)]
+    fn stock_get(name: &str) -> Result<js_sys::Promise, JsValue>;
+    /// The direct link to the guard (app.js): an offer for `peer`, its answer taken, an offer
+    /// from `peer` answered, and one request over the link. Each fails at once where there is none.
+    #[wasm_bindgen(catch, js_name = pyrateRtcOffer)]
+    fn rtc_offer(peer: &str) -> Result<js_sys::Promise, JsValue>;
+    #[wasm_bindgen(catch, js_name = pyrateRtcAnswer)]
+    fn rtc_answer(peer: &str, sdp: &str) -> Result<js_sys::Promise, JsValue>;
+    #[wasm_bindgen(catch, js_name = pyrateRtcAccept)]
+    fn rtc_accept(peer: &str, sdp: &str) -> Result<js_sys::Promise, JsValue>;
+    #[wasm_bindgen(catch, js_name = pyrateRtcAsk)]
+    fn rtc_ask(peer: &str, bytes: &[u8]) -> Result<js_sys::Promise, JsValue>;
+}
+
+impl Ship {
+    fn crew_on(&self) -> bool {
+        self.crew_on.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Takes `n` bytes from this minute's budget for passing things on, if they fit. A phone
+    /// passes on as much as it listens to; a computer six times that.
+    fn spend(&self, n: usize) -> bool {
+        let now = raw_now();
+        let factor = if self.mobile.load(std::sync::atomic::Ordering::Relaxed) { 1 } else { 6 };
+        let mut c = self.crew.lock().unwrap();
+        if c.minute.0 != now / 60_000 {
+            c.minute = (now / 60_000, 0);
+        }
+        c.own.retain(|(t, _)| now.saturating_sub(*t) < 60_000);
+        let own: u64 = c.own.iter().map(|x| x.1 as u64).sum();
+        if c.minute.1 + n as u64 > factor * own.max(BUDGET_FLOOR) {
+            c.refused += 1;
+            return false;
+        }
+        c.minute.1 += n as u64;
+        let share = c.minute.1 as f64 / (factor * own.max(BUDGET_FLOOR)) as f64;
+        c.peak = c.peak.max(share);
+        let day = now / 86_400_000;
+        if c.today.0 != day {
+            c.today = (day, 0);
+        }
+        c.today.1 += n as u64;
+        true
+    }
+
+    /// A hop that reached this tab. With the switch on: a forward is passed on, a relay or a
+    /// way in is opened and passed on, and a deck's ask is answered if it came from the deck's
+    /// way in. Never to this tab itself, never back to the radio that asked, eight seconds at
+    /// most, and within the minute's budget. With the switch off, nothing.
+    async fn on_hop(self: &Arc<Self>, from: EndpointId, bytes: Vec<u8>) -> Vec<u8> {
+        if !self.crew_on() || !self.spend(bytes.len()) {
+            return vec![];
+        }
+        let Ok(hop) = postcard::from_bytes::<Hop>(&bytes) else { return vec![] };
+        let out = match hop {
+            Hop::Forward { next, blob } => match EndpointId::from_bytes(&next) {
+                Ok(next) if matches!(postcard::from_bytes::<Hop>(&blob), Ok(Hop::Sealed { .. })) => self.pass(from, next, blob).await,
+                _ => vec![],
+            },
+            Hop::Sealed { eph, ct } => self.on_sealed(from, eph, ct).await,
+            Hop::Stem { .. } => vec![],
+            // A requester that keeps this tab as its guard offers a direct link. Over it this
+            // tab will take forwards from that requester and nothing else (see `rtc_serve`).
+            Hop::Rtc { sdp } if sdp.len() <= 16 * 1024 => {
+                // A radio that may learn this tab's address is never a way in to its decks.
+                self.crew.lock().unwrap().rtc_clients.insert(from);
+                match rtc_accept(&from.to_string(), &sdp) {
+                    Ok(p) => match wasm_bindgen_futures::JsFuture::from(p).await {
+                        Ok(v) => v.as_string().unwrap_or_default().into_bytes(),
+                        Err(_) => vec![],
+                    },
+                    Err(_) => vec![],
+                }
+            }
+            Hop::Rtc { .. } => vec![],
+        };
+        if out.is_empty() || !self.spend(out.len()) {
+            return vec![];
+        }
+        out
+    }
+
+    async fn pass(&self, from: EndpointId, next: EndpointId, blob: Vec<u8>) -> Vec<u8> {
+        if next == self.ep.id() || next == from {
+            return vec![];
+        }
+        // A radio that could not be reached a moment ago is not tried again at once: tabs close
+        // without a word.
+        let now = raw_now();
+        if self.crew.lock().unwrap().unreached.get(&next).is_some_and(|t| now.saturating_sub(*t) < 60_000) {
+            return vec![];
+        }
+        match timeout(Duration::from_secs(8), self.ask(next, &Request::Hop(blob))).await {
+            Ok(Ok(Response::Hop(b))) => b,
+            Ok(Ok(_)) => vec![],
+            _ => {
+                let mut c = self.crew.lock().unwrap();
+                c.unreached.retain(|_, t| now.saturating_sub(*t) < 60_000);
+                c.unreached.insert(next, now);
+                vec![]
+            }
+        }
+    }
+
+    async fn on_sealed(self: &Arc<Self>, from: EndpointId, eph: [u8; 32], ct: Vec<u8>) -> Vec<u8> {
+        use pyrate_core::route::{open_lead, open_sealed, seal_answer};
+        let me = *self.ep.id().as_bytes();
+        if let Some((plain, c)) = open_sealed(&self.secret, &me, &eph, &ct) {
+            let (next, blob) = match postcard::from_bytes::<Ask>(&plain) {
+                Ok(Ask::Relay { next, blob }) => (next, blob),
+                Ok(Ask::Lead { lead, blob }) => {
+                    let Some(l) = open_lead(&self.secret, &me, &lead) else { return vec![] };
+                    let (Ok(id), Ok(url)) = (EndpointId::from_bytes(&l.to), l.relay.parse::<iroh::RelayUrl>()) else { return vec![] };
+                    if !net::relay_public(&l.relay) {
+                        return vec![];
+                    }
+                    self.book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+                    (l.to, blob)
+                }
+                // A tab is never an exit under its own key: what it holds is served only by its
+                // decks, whose keys tie nothing to this tab.
+                _ => return vec![],
+            };
+            let Ok(next) = EndpointId::from_bytes(&next) else { return vec![] };
+            if !matches!(postcard::from_bytes::<Hop>(&blob), Ok(Hop::Sealed { .. })) {
+                return vec![];
+            }
+            let raw = self.pass(from, next, blob).await;
+            return if raw.is_empty() { raw } else { seal_answer(&c, &raw) };
+        }
+        let decks: Vec<(StationId, [u8; 32], [u8; 32], Option<EndpointId>)> = self.crew.lock().unwrap().decks.iter().map(|d| (d.station, d.seed, d.id, d.intro)).collect();
+        for (station, seed, id, intro) in decks {
+            let Some((plain, c)) = open_sealed(&seed, &id, &eph, &ct) else { continue };
+            if !pyrate_core::route::deck_answers(self.crew_on(), &from, intro.as_ref()) {
+                return vec![];
+            }
+            let Ok(ask) = postcard::from_bytes::<Ask>(&plain) else { return vec![] };
+            let resp = self.deck_answer(station, ask).await;
+            return seal_answer(&c, &postcard::to_stdvec(&resp).unwrap_or_default());
+        }
+        vec![]
+    }
+
+    /// A deck's answer: pages of its station's log, and the chunks it has held for ten minutes
+    /// or kept from an earlier visit. A chunk of what is on now or next that it has not yet got,
+    /// it fetches as it would for itself (never through a deck) and passes on.
+    async fn deck_answer(self: &Arc<Self>, station: StationId, ask: Ask) -> Response {
+        match ask {
+            Ask::Log { station: st, from } if st == station => {
+                let mut list = self.archives.lock().unwrap().get(&st).map(|a| a.page(from)).unwrap_or_default();
+                let mut sum = 0;
+                let keep = list.iter().take_while(|b| {
+                    sum += b.len();
+                    sum <= 256 * 1024 || sum == b.len()
+                }).count();
+                list.truncate(keep);
+                if !list.is_empty() {
+                    self.crew.lock().unwrap().served += 1;
+                }
+                Response::Entries(list)
+            }
+            Ask::Sealed { station: st, name } if st == station => {
+                let now = raw_now();
+                let held = self.crew.lock().unwrap().decks.iter().find(|d| d.station == st).and_then(|d| d.names.get(&name).filter(|(_, t)| now.saturating_sub(*t) < 10 * 60_000).map(|x| x.0));
+                let found = match held.and_then(|h| self.hold.lock().unwrap().get(&h).map(|b| (h, b))) {
+                    Some(x) => Some(x),
+                    None => {
+                        let kept = self.crew.lock().unwrap().stock.get(&name).filter(|(s, _)| *s == st).map(|x| x.1);
+                        match kept {
+                            Some(h) => match self.stock_read(&name, &h).await {
+                                Some(b) => {
+                                    self.crew.lock().unwrap().served_stock += 1;
+                                    Some((h, b))
+                                }
+                                None => None,
+                            },
+                            None => {
+                                let soon = self.upcoming(&st).into_iter().find(|h| pyrate_core::seal::name(h) == name);
+                                match soon {
+                                    Some(h) => self.fetch_via(&st, &h, false).await.ok().map(|b| (h, b)),
+                                    None => None,
+                                }
+                            }
+                        }
+                    }
+                };
+                match found {
+                    Some((h, b)) => {
+                        self.crew.lock().unwrap().served += 1;
+                        Response::Sealed(Some(pyrate_core::seal::seal(&h, &b)))
+                    }
+                    None => Response::Sealed(None),
+                }
+            }
+            Ask::Log { .. } => Response::Entries(vec![]),
+            _ => Response::Sealed(None),
+        }
+    }
+
+    /// A kept chunk from the page's store, checked against its address.
+    async fn stock_read(&self, name: &Hash, h: &Hash) -> Option<Vec<u8>> {
+        let p = stock_get(&hex(name)).ok()?;
+        let v = wasm_bindgen_futures::JsFuture::from(p).await.ok()?;
+        let b = js_sys::Uint8Array::new(&v).to_vec();
+        pyrate_core::seal::unseal(h, &b)
+    }
+
+    /// The chunks of a station from six seconds ago to a minute and a half ahead, by its clock:
+    /// what its listeners are fetching now (a hidden tab fetches 75 seconds ahead).
+    fn upcoming(&self, st: &StationId) -> Vec<Hash> {
+        let now = self.now();
+        let mut out = Vec::new();
+        for k in 0..17u64 {
+            let p = self.plan(st, (now + k * 6_000).saturating_sub(6_000));
+            for key in ["chunk", "next"] {
+                if let Some(h) = p[key].as_str().and_then(|x| unhex32(x).ok()) {
+                    out.push(h);
+                }
+            }
+            if let Some(t) = p["tail"].as_array() {
+                out.extend(t.iter().filter_map(|e| e["chunk"].as_str().and_then(|x| unhex32(x).ok())));
+            }
+        }
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    /// Whether a radio may be this tab's first hop. A first hop and a middle that work together
+    /// learn who hears what, and radios are cheap to make, a tab cheapest of all: so a first hop
+    /// is a door, a radio remembered from an earlier visit, a node this tab has known for ten
+    /// minutes, or a radio known only as crew for half an hour. A crowd that arrives today holds
+    /// no one's first hop for its first ten minutes, and the middle is never a first hop.
+    fn seasoned(&self, n: &EndpointId) -> bool {
+        if self.harbour.contains(n) {
+            return true;
+        }
+        let now = raw_now();
+        let c = self.crew.lock().unwrap();
+        let wait = if c.relays.contains_key(n) || !c.radios.contains_key(n) { NEWCOMER_MS } else { NEWCOMER_TAB_MS };
+        c.first_seen.get(n).is_some_and(|t| now.saturating_sub(*t) >= wait)
+    }
+
+    /// A middle: a radio of the crew heard from lately, drawn at random, never this tab, never
+    /// one of `not`, never one of this visit's first hops.
+    fn middle(&self, not: &[EndpointId]) -> Option<EndpointId> {
+        let now = raw_now();
+        let me = self.ep.id();
+        let away: HashSet<EndpointId> = self.norelay.lock().unwrap().iter().filter(|(_, t)| now.saturating_sub(**t) < 30 * 60_000).map(|(n, _)| *n).collect();
+        let first = *self.first_hop.lock().unwrap();
+        let c = self.crew.lock().unwrap();
+        let pool: Vec<EndpointId> = c
+            .radios
+            .iter()
+            .filter(|(n, (_, at))| now.saturating_sub(*at) < CREW_FRESH_MS && **n != me && !not.contains(n) && !c.guards.contains(n) && Some(**n) != first && !away.contains(*n))
+            .filter(|(n, _)| !c.suspect.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < SUSPECT_MS))
+            .map(|(n, _)| *n)
+            .collect();
+        (!pool.is_empty()).then(|| pool[pick(pool.len())])
+    }
+
+    /// This station's decks that this tab may ask, and its own: the keeper of `key` among all of
+    /// them, and its note if it is another's.
+    fn keeper(&self, station: &StationId, key: &Hash, rank: usize) -> Option<([u8; 32], Option<net::DeckNote>)> {
+        let now = self.now();
+        let raw = raw_now();
+        let c = self.crew.lock().unwrap();
+        let mine: Vec<[u8; 32]> = c.decks.iter().filter(|d| d.station == *station).map(|d| d.id).collect();
+        let theirs: Vec<([u8; 32], net::DeckNote)> = self
+            .log
+            .lock()
+            .unwrap()
+            .get(station)
+            .map(|l| l.decks.iter().filter(|(d, n)| now.saturating_sub(n.at_ms) < net::DECK_FRESH_MS && !mine.contains(d) && !c.suspect.get(*d).is_some_and(|t| raw.saturating_sub(*t) < SUSPECT_MS)).map(|(d, n)| (*d, n.clone())).collect())
+            .unwrap_or_default();
+        let all: Vec<[u8; 32]> = theirs.iter().map(|x| x.0).chain(mine.iter().copied()).collect();
+        let k = *pyrate_core::route::keepers(&all, key, rank + 1).get(rank)?;
+        Some((k, theirs.into_iter().find(|x| x.0 == k).map(|x| x.1)))
+    }
+
+    /// A request to one of a station's decks in three hops: this tab, its first hop, a middle,
+    /// the deck's way in, the deck. Never when the first hop is the deck's way in.
+    async fn ask_deck(&self, ask: &Ask, deck: [u8; 32], note: &net::DeckNote) -> Result<Response> {
+        let nodes = self.route_nodes();
+        let first = self.first_hop_for(&nodes).ok_or_else(|| anyhow!("no first hop"))?;
+        let intro = EndpointId::from_bytes(&note.intro)?;
+        if first == intro {
+            return Err(anyhow!("the first hop leads to the deck"));
+        }
+        let middle = self.middle(&[first, intro]).ok_or_else(|| anyhow!("no middle"))?;
+        let (hop, ciphers) = three_hops(middle.as_bytes(), &deck, &postcard::to_stdvec(ask)?, Some((&note.intro, &note.lead))).ok_or_else(|| anyhow!("seal"))?;
+        let r = timeout(Duration::from_secs(8), self.ask(first, &Request::Hop(hop))).await;
+        let opened = match r {
+            Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => {
+                let mut b = Some(raw);
+                for c in &ciphers {
+                    b = b.filter(|x| !x.is_empty()).and_then(|x| pyrate_core::route::open_answer(c, &x));
+                }
+                b.and_then(|x| postcard::from_bytes::<Response>(&x).ok())
+            }
+            _ => None,
+        };
+        match opened {
+            Some(r) => Ok(r),
+            None => {
+                // The deck, or the middle on the way to it: both are passed over for a while.
+                let mut c = self.crew.lock().unwrap();
+                c.suspect.insert(deck, raw_now());
+                c.suspect.insert(*middle.as_bytes(), raw_now());
+                Err(anyhow!("the deck gave nothing"))
+            }
+        }
+    }
+
+    /// A chunk from the crew's deck that keeps it, when there is one and it is not this tab's.
+    async fn deck_fetch(&self, station: &StationId, hash: &Hash) -> Result<Vec<u8>> {
+        let name = pyrate_core::seal::name(hash);
+        // What became of each try, for the page's counts: no deck known, its own deck keeps
+        // it, no route, no answer, an answer without the chunk, the chunk.
+        let mark = |i: usize| self.crew.lock().unwrap().tries[i] += 1;
+        let (deck, note) = match self.keeper(station, &name, 0) {
+            None => {
+                mark(0);
+                return Err(anyhow!("no deck to ask"));
+            }
+            Some((_, None)) => {
+                mark(1);
+                return Err(anyhow!("this tab keeps it"));
+            }
+            Some((d, Some(n))) => (d, n),
+        };
+        let r = self.ask_deck(&Ask::Sealed { station: *station, name }, deck, &note).await;
+        match r {
+            Err(e) => {
+                mark(if e.to_string() == "the deck gave nothing" { 3 } else { 2 });
+                Err(e)
+            }
+            Ok(Response::Sealed(Some(s))) => {
+                mark(5);
+                pyrate_core::seal::unseal(hash, &s).ok_or_else(|| anyhow!("unopened"))
+            }
+            Ok(_) => {
+                mark(4);
+                Err(anyhow!("the deck has it not"))
+            }
+        }
+    }
+
+    /// The radio this deck is reached through: of the crew, heard from lately, not this tab,
+    /// not its first hop or any of its guards, a radio other than a door where it can.
+    fn choose_intro(&self, not: &[EndpointId]) -> Option<EndpointId> {
+        let now = raw_now();
+        let me = self.ep.id();
+        let first = *self.first_hop.lock().unwrap();
+        let away: HashSet<EndpointId> = self.norelay.lock().unwrap().iter().filter(|(_, t)| now.saturating_sub(**t) < 30 * 60_000).map(|(n, _)| *n).collect();
+        let c = self.crew.lock().unwrap();
+        let pool: Vec<EndpointId> = c
+            .radios
+            .iter()
+            .filter(|(n, (_, at))| now.saturating_sub(*at) < CREW_FRESH_MS && **n != me && Some(**n) != first && !c.guards.contains(n) && !not.contains(n) && !away.contains(*n) && !c.rtc_clients.contains(*n))
+            .map(|(n, _)| *n)
+            .collect();
+        let others: Vec<EndpointId> = pool.iter().filter(|n| !self.harbour.contains(n)).copied().collect();
+        let from = if others.is_empty() { pool } else { others };
+        (!from.is_empty()).then(|| from[pick(from.len())])
+    }
+
+    /// Ballast for a computer: one or two stations it does not play, drawn by lot each hour from
+    /// those on the air with the fewest carriers, stations kept from an earlier visit first. A
+    /// draw by lot, as a phone's ballast is, so what a tab keeps says nothing of what it hears.
+    fn pick_ballast(&self) -> Vec<StationId> {
+        if self.mobile.load(std::sync::atomic::Ordering::Relaxed) {
+            return vec![];
+        }
+        let hour = raw_now() / 3_600_000;
+        let tuned = *self.tuned.lock().unwrap();
+        let pockets: HashSet<StationId> = self.pockets.lock().unwrap().keys().copied().collect();
+        let struck = self.struck.lock().unwrap().clone();
+        let (kept, played): (HashSet<StationId>, HashSet<StationId>) = {
+            let c = self.crew.lock().unwrap();
+            (c.stock.values().map(|x| x.0).collect(), c.played.clone())
+        };
+        let now = self.now();
+        let mut cands: Vec<(bool, usize, [u8; 32], StationId)> = self
+            .log
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(id, l)| Some(**id) != tuned && !played.contains(id) && !pockets.contains(id) && !struck.contains(id) && l.announce.as_ref().is_some_and(|a| now.saturating_sub(a.at_ms) < 15 * 60_000))
+            .map(|(id, l)| {
+                let mut h = blake3::Hasher::new_keyed(&self.token_key);
+                h.update(b"pyrate/tab-ballast/v1");
+                h.update(&id.0);
+                h.update(&hour.to_le_bytes());
+                (!kept.contains(id), l.carriers.len(), *h.finalize().as_bytes(), *id)
+            })
+            .collect();
+        cands.sort();
+        cands.into_iter().take(2).map(|x| x.3).collect()
+    }
+
+    /// Every five seconds: the crew note, the decks and the ballast. With the switch off, every
+    /// deck closes at once and nothing is said.
+    async fn crew_tick(self: &Arc<Self>) {
+        if !self.crew_on() {
+            let mut c = self.crew.lock().unwrap();
+            c.decks.clear();
+            c.stock_out.clear();
+            return;
+        }
+        let now = raw_now();
+        // Half a minute of the visit before the tab offers to carry anything: its first Listen
+        // has the tab to itself, and nobody routes through a tab that may close at once.
+        let born = {
+            let mut c = self.crew.lock().unwrap();
+            if c.born == 0 {
+                c.born = now;
+            }
+            c.born
+        };
+        if now.saturating_sub(born) < 30_000 {
+            return;
+        }
+        let net_now = self.base_now();
+        let Some(relay) = self.ep.addr().relay_urls().next().map(|u| u.to_string()) else { return };
+        if now.saturating_sub(self.crew.lock().unwrap().said_crew) > 120_000 {
+            self.crew.lock().unwrap().said_crew = now;
+            self.broadcast(&Gossip::crew(&self.secret, &relay, net_now)).await;
+        }
+        // A direct link to the guard, tried once a visit beside the relay: only a guard this tab
+        // keeps from an earlier visit, a radio known long enough to be one (rule A).
+        let first = *self.first_hop.lock().unwrap();
+        if let Some(f) = first {
+            let go = {
+                let mut c = self.crew.lock().unwrap();
+                c.kept.contains(&f) && c.rtc_tried.insert(f)
+            };
+            if go {
+                let me = self.clone();
+                spawn(async move {
+                    let peer = f.to_string();
+                    let Ok(p) = rtc_offer(&peer) else { return };
+                    let Some(offer) = wasm_bindgen_futures::JsFuture::from(p).await.ok().and_then(|v| v.as_string()) else { return };
+                    let Ok(hop) = postcard::to_stdvec(&Hop::Rtc { sdp: offer }) else { return };
+                    let answer = match timeout(Duration::from_secs(10), me.ask_relay(f, &Request::Hop(hop))).await {
+                        Ok(Ok(Response::Hop(b))) => String::from_utf8(b).unwrap_or_default(),
+                        _ => String::new(),
+                    };
+                    if let Ok(p) = rtc_answer(&peer, &answer) {
+                        let _ = wasm_bindgen_futures::JsFuture::from(p).await;
+                    }
+                });
+            }
+        }
+        // The deck of what it plays, while it plays it: never a pocket's, never a station this
+        // tab keeps itself (its own sound goes out along the stem, never from its own tab).
+        let tuned = *self.tuned.lock().unwrap();
+        let listening = self.listening.load(std::sync::atomic::Ordering::Relaxed);
+        let play = tuned.filter(|st| {
+            listening && !self.pockets.lock().unwrap().contains_key(st) && !self.mine.lock().unwrap().contains_key(st) && self.archives.lock().unwrap().get(st).is_some_and(|a| a.len() > 0)
+        });
+        let hour = now / 3_600_000;
+        let ballast = {
+            let due = self.crew.lock().unwrap().ballast_hour != hour || !self.crew.lock().unwrap().decks.iter().any(|d| d.ballast);
+            if due {
+                let b = self.pick_ballast();
+                self.crew.lock().unwrap().ballast_hour = hour;
+                Some(b)
+            } else {
+                None
+            }
+        };
+        if let Some(b) = &ballast {
+            for st in b {
+                self.sync_soon(*st);
+            }
+        }
+        let want: Vec<(StationId, bool)> = {
+            let c = self.crew.lock().unwrap();
+            let mut w: Vec<(StationId, bool)> = play.iter().map(|s| (*s, false)).collect();
+            let b = ballast.clone().unwrap_or_else(|| c.decks.iter().filter(|d| d.ballast).map(|d| d.station).collect());
+            w.extend(b.into_iter().filter(|s| Some(*s) != play).map(|s| (s, true)));
+            w
+        };
+        {
+            let mut c = self.crew.lock().unwrap();
+            c.decks.retain(|d| want.contains(&(d.station, d.ballast)));
+            for (st, b) in &want {
+                if !c.decks.iter().any(|d| d.station == *st) {
+                    let mut seed = [0u8; 32];
+                    let _ = getrandom::fill(&mut seed);
+                    let id = pyrate_core::StationKey::from_seed(seed).id().0;
+                    c.decks.push(Deck { station: *st, seed, id, intro: None, lead: vec![], said: 0, ballast: *b, names: HashMap::new() });
+                }
+            }
+        }
+        // Each deck's way in, and its note every two minutes. A way in that has gone, or that has
+        // become this tab's first hop, is replaced.
+        let first = *self.first_hop.lock().unwrap();
+        let me = *self.ep.id().as_bytes();
+        let n = self.crew.lock().unwrap().decks.len();
+        for i in 0..n {
+            let (st, intro, said) = {
+                let c = self.crew.lock().unwrap();
+                let Some(d) = c.decks.get(i) else { break };
+                (d.station, d.intro, d.said)
+            };
+            let fresh = intro.is_some_and(|x| Some(x) != first && !self.crew.lock().unwrap().rtc_clients.contains(&x) && self.crew.lock().unwrap().radios.get(&x).is_some_and(|(_, t)| now.saturating_sub(*t) < CREW_FRESH_MS) && !self.norelay.lock().unwrap().get(&x).is_some_and(|t| now.saturating_sub(*t) < 30 * 60_000));
+            let intro = if fresh { intro } else { self.choose_intro(&[]) };
+            let Some(intro) = intro else { continue };
+            let new = !fresh;
+            if !new && now.saturating_sub(said) < 120_000 {
+                continue;
+            }
+            let lead = if new { pyrate_core::route::make_lead(intro.as_bytes(), &pyrate_core::route::Lead { to: me, relay: relay.clone() }) } else { self.crew.lock().unwrap().decks.get(i).map(|d| d.lead.clone()) };
+            let Some(lead) = lead else { continue };
+            let head = self.archives.lock().unwrap().get(&st).map(|a| a.len()).unwrap_or(0);
+            let seed = {
+                let mut c = self.crew.lock().unwrap();
+                let Some(d) = c.decks.get_mut(i) else { break };
+                d.intro = Some(intro);
+                d.lead = lead.clone();
+                d.said = now;
+                d.seed
+            };
+            self.broadcast(&Gossip::deck(&seed, st, head, *intro.as_bytes(), lead, net_now)).await;
+        }
+        // Ballast comes aboard as it plays, as if listened to in silence: from a minute into
+        // the visit, one chunk at a time, so it never stands in the way of what the visitor hears.
+        if self.crew.lock().unwrap().ballast_busy || now.saturating_sub(born) < 60_000 {
+            return;
+        }
+        let bal: Vec<StationId> = self.crew.lock().unwrap().decks.iter().filter(|d| d.ballast).map(|d| d.station).collect();
+        for st in bal {
+            let next = self.upcoming(&st).into_iter().find(|h| self.hold.lock().unwrap().get(h).is_none() && !self.crew.lock().unwrap().inflight.contains(h));
+            let Some(h) = next else { continue };
+            self.crew.lock().unwrap().ballast_busy = true;
+            let me = self.clone();
+            spawn(async move {
+                let got = me.fetch_via(&st, &h, true).await;
+                let mut c = me.crew.lock().unwrap();
+                c.ballast_busy = false;
+                if let Ok(b) = got {
+                    c.stock_out.push((st, h, pyrate_core::seal::seal(&h, &b)));
+                    if c.stock_out.len() > 64 {
+                        c.stock_out.remove(0);
+                    }
+                }
+            });
+            return;
+        }
+    }
+
+    /// Notes what this tab fetched: its own listening rate, the station's warmth, and the deck's
+    /// names for what it now holds.
+    fn got(&self, station: &StationId, hash: &Hash, len: usize, from_deck: bool) {
+        let now = raw_now();
+        // Only what the listener hears counts as its own listening, and in where it came from:
+        // ballast and fetches for others are the carrying, not the listening.
+        let heard = *self.tuned.lock().unwrap() == Some(*station);
+        let mut c = self.crew.lock().unwrap();
+        c.warm.insert(*station, now);
+        if heard {
+            c.played.insert(*station);
+            c.own.push_back((now, len));
+            if from_deck {
+                c.from_decks += 1;
+                c.bytes_decks += len as u64;
+            } else {
+                c.from_others += 1;
+                c.bytes_others += len as u64;
+            }
+            while c.own.front().is_some_and(|x| now.saturating_sub(x.0) >= 60_000) {
+                c.own.pop_front();
+            }
+        }
+        let name = pyrate_core::seal::name(hash);
+        for d in c.decks.iter_mut().filter(|d| d.station == *station) {
+            d.names.retain(|_, (_, t)| now.saturating_sub(*t) < 10 * 60_000);
+            d.names.insert(name, (*hash, now));
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct Proto(Arc<Mutex<Option<Arc<Ship>>>>);
 
@@ -1697,6 +2614,7 @@ impl ProtocolHandler for Proto {
     async fn accept(&self, conn: Connection) -> std::result::Result<(), AcceptError> {
         let Some(ship) = self.0.lock().unwrap().clone() else { return Ok(()) };
         let mine = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let from = conn.remote_id();
         while let Ok((mut send, mut recv)) = conn.accept_bi().await {
             let Some(slot) = Slot::take(&SERVING, 16, &mine, 4) else {
                 let _ = send.reset(0u32.into());
@@ -1708,7 +2626,12 @@ impl ProtocolHandler for Proto {
                 let _slot = slot;
                 let Ok(Ok(bytes)) = timeout(Duration::from_secs(10), recv.read_to_end(REQUEST_MAX)).await else { return };
                 let Ok(req) = postcard::from_bytes::<Request>(&bytes) else { return };
-                if let Ok(out) = postcard::to_stdvec(&ship.serve(req)) {
+                // A hop is the crew's: passed on, or answered by a deck, within the budget.
+                let resp = match req {
+                    Request::Hop(b) => Response::Hop(ship.on_hop(from, b).await),
+                    other => ship.serve(other),
+                };
+                if let Ok(out) = postcard::to_stdvec(&resp) {
                     match timeout(Duration::from_secs(10), send.write_all(&out)).await {
                         Ok(Ok(())) => {
                             let _ = send.finish();
@@ -1840,9 +2763,23 @@ impl Radio {
             answers: Mutex::new(HashMap::new()),
             norelay: Mutex::new(HashMap::new()),
             relayed: Mutex::new(HashSet::new()),
+            secret: seed,
+            crew_on: std::sync::atomic::AtomicBool::new(true),
+            mobile: std::sync::atomic::AtomicBool::new(false),
+            crew: Mutex::new(Crew::default()),
         });
         *proto.0.lock().unwrap() = Some(ship.clone());
 
+        // The crew's tick: its note, its decks and its ballast, every five seconds.
+        {
+            let s = ship.clone();
+            spawn(async move {
+                loop {
+                    sleep(Duration::from_secs(5)).await;
+                    s.crew_tick().await;
+                }
+            });
+        }
         // The harbours are asked for the cards they know at once, so the dial fills in one round
         // trip instead of waiting for gossip.
         for h in ship.harbour.iter().take(3) {
@@ -2085,6 +3022,125 @@ impl Radio {
     /// Whether carriers may be asked directly when two hops cannot be had.
     pub fn set_direct_ok(&self, on: bool) {
         self.ship.direct_ok.store(on, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// "Carry the radio while you listen", and whether this is a phone. Off closes every deck at
+    /// once and passes nothing on from then.
+    pub fn set_crew(&self, on: bool, mobile: bool) {
+        self.ship.crew_on.store(on, std::sync::atomic::Ordering::Relaxed);
+        self.ship.mobile.store(mobile, std::sync::atomic::Ordering::Relaxed);
+        if !on {
+            let mut c = self.ship.crew.lock().unwrap();
+            c.decks.clear();
+            c.stock_out.clear();
+        }
+    }
+
+    /// A request that came over a direct link from `peer`, a requester that keeps this tab as
+    /// its guard: a forward is passed on as one that came over the relay would be, within the
+    /// same budget; anything else is refused, so the link is only ever the guard's leg.
+    pub fn rtc_serve(&self, peer: &str, bytes: &[u8]) -> js_sys::Promise {
+        let s = self.ship.clone();
+        let (peer, bytes) = (peer.to_string(), bytes.to_vec());
+        wasm_bindgen_futures::future_to_promise(async move {
+            let from: EndpointId = peer.parse().map_err(|_| JsValue::from_str("peer"))?;
+            let out = match postcard::from_bytes::<Request>(&bytes) {
+                Ok(Request::Hop(b)) if s.crew_on() && matches!(postcard::from_bytes::<Hop>(&b), Ok(Hop::Forward { .. })) => {
+                    s.crew.lock().unwrap().rtc_served += 1;
+                    s.on_hop(from, b).await
+                }
+                _ => {
+                    s.crew.lock().unwrap().rtc_refused += 1;
+                    vec![]
+                }
+            };
+            let r = postcard::to_stdvec(&Response::Hop(out)).unwrap_or_default();
+            Ok(js_sys::Uint8Array::from(&r[..]).into())
+        })
+    }
+
+    /// What this tab has carried, as JSON: for the page's line and for the crowd test. Counts
+    /// only; never who.
+    pub fn crew_stats(&self) -> String {
+        let c = self.ship.crew.lock().unwrap();
+        let day = raw_now() / 86_400_000;
+        json!({
+            "on": self.ship.crew_on.load(std::sync::atomic::Ordering::Relaxed),
+            "passed_today": if c.today.0 == day { c.today.1 } else { 0 },
+            "from_decks": c.from_decks, "from_others": c.from_others,
+            "bytes_decks": c.bytes_decks, "bytes_others": c.bytes_others,
+            "served": c.served, "served_stock": c.served_stock, "refused": c.refused, "peak_share": c.peak, "tries": c.tries, "rtc_bytes": c.rtc_bytes, "relay_first_bytes": c.relay_first_bytes, "rtc_refused": c.rtc_refused, "rtc_served": c.rtc_served,
+            "first_hop": self.ship.first_hop.lock().unwrap().map(|f| f.to_string()), "kept": c.kept.iter().map(|k| k.to_string()).collect::<Vec<_>>(),
+            "decks": c.decks.iter().filter(|d| d.intro.is_some()).map(|d| json!({ "station": d.station.to_hex(), "ballast": d.ballast })).collect::<Vec<_>>(),
+            "crew": c.radios.len(),
+            "known_decks": self.ship.tuned.lock().unwrap().and_then(|st| self.ship.log.lock().unwrap().get(&st).map(|l| l.decks.len())).unwrap_or(0),
+        })
+        .to_string()
+    }
+
+    /// Ballast chunks fetched since the last call, for the page to keep (computers only): each
+    /// as the station's id, the chunk's sealed name and its sealed bytes, postcard-encoded.
+    pub fn stock_take(&self) -> Vec<u8> {
+        let mut out: Vec<(StationId, Hash, Vec<u8>)> = std::mem::take(&mut self.ship.crew.lock().unwrap().stock_out);
+        // Never what the listener plays, even a station that was ballast until a moment ago.
+        let tuned = *self.ship.tuned.lock().unwrap();
+        let played = self.ship.crew.lock().unwrap().played.clone();
+        out.retain(|x| Some(x.0) != tuned && !played.contains(&x.0));
+        let named: Vec<(StationId, Hash, Hash, Vec<u8>)> = out.into_iter().map(|(st, h, b)| (st, pyrate_core::seal::name(&h), h, b)).collect();
+        postcard::to_stdvec(&named).unwrap_or_default()
+    }
+
+    /// What the page kept from earlier visits, by station: sealed names and addresses, so a
+    /// returning tab serves its stock at once. The bytes stay with the page until asked for.
+    pub fn stock_index(&self, list: &[u8]) -> u32 {
+        let Ok(items) = postcard::from_bytes::<Vec<(StationId, Hash, Hash)>>(list) else { return 0 };
+        let mut c = self.ship.crew.lock().unwrap();
+        let n = items.len();
+        for (st, name, h) in items.into_iter().take(200_000) {
+            c.stock.insert(name, (st, h));
+        }
+        n as u32
+    }
+
+    /// The stations this tab keeps as ballast now, as JSON ids: the page keeps their logs.
+    pub fn ballast(&self) -> String {
+        let c = self.ship.crew.lock().unwrap();
+        json!(c.decks.iter().filter(|d| d.ballast).map(|d| d.station.to_hex()).collect::<Vec<_>>()).to_string()
+    }
+
+    /// Up to twenty nodes that answered quickly, as id@relay: the page keeps them and tries them
+    /// beside the doors next time. Nodes only (their relay from their own signed note): a tab's
+    /// id lasts one visit.
+    pub fn quick_peers(&self) -> String {
+        let answers = self.ship.answers.lock().unwrap().clone();
+        let c = self.ship.crew.lock().unwrap();
+        let mut v: Vec<(f64, String)> = c.relays.iter().filter_map(|(id, r)| answers.get(id).filter(|ms| **ms < 3_000.0).map(|ms| (*ms, format!("{id}@{r}")))).collect();
+        v.sort_by(|a, b| a.0.total_cmp(&b.0));
+        json!(v.into_iter().take(20).map(|x| x.1).collect::<Vec<_>>()).to_string()
+    }
+
+    /// This visit's guards (its first hops), at most three, as id@relay where the relay is known:
+    /// the page keeps them so the next visit draws its first hop from them again.
+    pub fn guards(&self) -> String {
+        let c = self.ship.crew.lock().unwrap();
+        let v: Vec<String> = c.guards.iter().rev().take(3).map(|g| c.relays.get(g).map_or(g.to_string(), |r| format!("{g}@{r}"))).collect();
+        json!(v).to_string()
+    }
+
+    /// The guards kept from earlier visits, as the page kept them.
+    pub fn set_guards(&self, list: &str) {
+        let v: Vec<String> = serde_json::from_str(list).unwrap_or_default();
+        let ids: Vec<EndpointId> = v.iter().filter_map(|s| s.split('@').next()?.parse().ok()).take(3).collect();
+        self.ship.crew.lock().unwrap().kept = ids;
+    }
+
+    /// How many radios have said in the last ten minutes that they carry a station, decks
+    /// included. From the public notes; nothing of who.
+    pub fn carried_by(&self, id: &str) -> Result<u32, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let now = self.ship.now();
+        let log = self.ship.log.lock().unwrap();
+        Ok(log.get(&st).map(|l| l.carriers.values().filter(|(_, seen)| now.saturating_sub(*seen) < 10 * 60_000).count() + l.decks.values().filter(|d| now.saturating_sub(d.at_ms) < net::DECK_FRESH_MS).count()).unwrap_or(0) as u32)
     }
 
     pub fn set_pow(&self, id: &str, n: f64) -> Result<bool, JsValue> {
@@ -2694,6 +3750,8 @@ impl Radio {
                         Gossip::Carrier { station, .. } | Gossip::Carried { station, .. } => *station == st,
                         Gossip::Aboard { station, .. } => *station == st,
                         Gossip::Harbour { .. } => true,
+                        // No decks and no crew inside a pocket: its sound stays among its members.
+                        Gossip::Crew { .. } | Gossip::Deck { .. } => false,
                     };
                     if ok {
                         s2.on_gossip(g);

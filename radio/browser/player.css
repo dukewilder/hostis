@@ -18,6 +18,8 @@ button{background:none;border:0;color:inherit;padding:0;margin:0;cursor:pointer;
 .signal{font:400 11.5px var(--mono);letter-spacing:.2em;color:var(--faint);text-transform:uppercase}
 .signal:not(:empty)::before{content:'';display:inline-block;width:5px;height:5px;background:var(--dim);transform:rotate(45deg);margin:0 .7rem .15rem 0;vertical-align:middle}
 .signalrow .btn{min-height:40px;padding:.3rem .9rem;font-size:.7rem}
+.mirrorbox:has(.mirrors:empty){display:none}
+.carrying{text-align:center;font-size:.7rem;color:var(--dim);margin:6px 0 0;letter-spacing:.02em}
 
 /* the set: one faceplate, with chart corners */
 .set{position:relative;max-width:980px;margin:0 auto;padding:1.25rem 2rem 1.7rem;border:1px solid var(--line);background:linear-gradient(180deg,var(--panel2) 0%,var(--panel) 38%,#070707 100%);overflow:hidden;isolation:isolate;outline:none}

@@ -59,10 +59,12 @@ fn main() -> anyhow::Result<()> {
         eprintln!("status: {}", l.call(&json!({ "cmd": "status" })));
     }
     check(ok, "with the switch on, it plays");
-    // A Lantern makes two hops possible: a new phone, switch off, plays through them.
+    // A Lantern makes two hops possible: a new phone, switch off, plays through them. The Lantern
+    // is the phone's door, as HOSTIS's are for every copy: a radio met minutes ago is never a
+    // first hop (the crew's rule against a crowd of new radios), and a door is one at once.
     let r = Node::start(Config { carry_all: true, lantern: true, ..cfg("relay", false) })?;
     r.call(&json!({ "cmd": "lan", "value": true }));
-    let l2 = Node::start(cfg("listener2", true))?;
+    let l2 = Node::start(Config { bootstrap: vec![r.addr().id], ..cfg("listener2", true) })?;
     l2.call(&json!({ "cmd": "lan", "value": true }));
     for _ in 0..60 {
         std::thread::sleep(Duration::from_secs(1));

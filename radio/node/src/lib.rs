@@ -14,6 +14,7 @@ pub mod hop;
 pub mod trust;
 pub mod clockfix;
 mod desk;
+mod deck;
 pub mod net;
 pub mod page;
 #[cfg(feature = "playback")]
@@ -260,6 +261,8 @@ struct Listing {
     heard: HashMap<u64, std::collections::HashSet<[u8; 32]>>,
     /// Tokens this node vouches for and has yet to gossip.
     outbox: Vec<([u8; 32], u64, u64)>,
+    /// Listeners' decks for this station, by deck key: reached in three hops, never directly.
+    decks: HashMap<[u8; 32], net::DeckNote>,
 }
 
 impl Listing {
@@ -401,6 +404,19 @@ pub struct Inner {
     last_harbour: std::sync::atomic::AtomicU64,
     /// On mobile data a phone listens and broadcasts, and carries nobody else's traffic.
     relay_ok: std::sync::atomic::AtomicBool,
+    /// "Carry the radio while you listen": this node passes on the middle of three-hop routes
+    /// and leads to decks, and fetches through the crew's decks. Off is the radio as it was.
+    pub(crate) crew: std::sync::atomic::AtomicBool,
+    /// Radios of the crew heard of, with the relay each named and when.
+    pub(crate) crew_radios: Mutex<HashMap<[u8; 32], (String, u64)>>,
+    /// When this node first heard of each radio: a newcomer is never a first hop.
+    pub(crate) first_seen: Mutex<HashMap<[u8; 32], u64>>,
+    /// Bytes this node has answered as an exit or straight to a peer, and bytes it has passed
+    /// on along routes for others. For the status, and for the crowd test.
+    pub served_bytes: std::sync::atomic::AtomicU64,
+    pub relayed_bytes: std::sync::atomic::AtomicU64,
+    /// The deck of what this node plays, while it plays it (see `deck`).
+    pub(crate) deck: Mutex<Option<deck::Deck>>,
 }
 
 pub struct Node {
@@ -485,6 +501,7 @@ impl ProtocolHandler for Proto {
                 } else {
                     None
                 };
+                let direct = matches!(req, Request::Log { .. } | Request::Chunk { .. } | Request::SealedChunk { .. });
                 let resp = match req {
                     Request::Hop(b) => {
                         // A hop costs this node a connection of its own: fewer of those at once.
@@ -502,6 +519,9 @@ impl ProtocolHandler for Proto {
                 // minute: a reader that stops reading frees its slot five seconds after it stops,
                 // while a slow one still gets its answer.
                 if let Ok(out) = postcard::to_stdvec(&resp) {
+                    if direct && out.len() > 16 {
+                        inner.served_bytes.fetch_add(out.len() as u64, std::sync::atomic::Ordering::Relaxed);
+                    }
                     let started = std::time::Instant::now();
                     let mut sent = true;
                     for piece in out.chunks(64 << 10) {
@@ -627,7 +647,7 @@ impl Inner {
             }
             // Taken as gossip from that node: checked against its own signature or dropped.
             let Ok(g) = postcard::from_bytes::<Gossip>(&b) else { continue };
-            if !matches!(g, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Harbour { .. }) {
+            if !matches!(g, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Harbour { .. } | Gossip::Crew { .. } | Gossip::Deck { .. }) {
                 continue;
             }
             self.notes.lock().unwrap().keep(&g, &b, now);
@@ -1170,6 +1190,7 @@ impl Inner {
                 let trusted = |n: &[u8; 32]| served.get(n).is_some_and(|t| now.saturating_sub(*t) < 24 * 3_600_000) || neighbours.contains(n) || self.doors.iter().any(|d| d.as_bytes() == n);
                 let failing = |n: &[u8; 32]| failed.get(n).is_some_and(|t| now.saturating_sub(*t) < net::FAILED_MS);
                 net::note_carrier(&mut l.carriers, node, head, card, now, trusted, failing, rand::random());
+                self.first_seen.lock().unwrap().entry(node).or_insert(now);
                 let ours = self.store.lock().unwrap().logs.get(&station).map(|x| x.len()).unwrap_or(0);
                 if head > ours {
                     return Some(station);
@@ -1201,6 +1222,43 @@ impl Inner {
                         }
                     }
                 }
+                return None;
+            }
+            g @ Gossip::Crew { .. } => {
+                // A radio of the crew: a middle for three-hop routes, reached through its relay.
+                let Some((node, relay)) = g.crew_checked(now) else { return None };
+                drop(log);
+                if node == *self.endpoint.id().as_bytes() {
+                    return None;
+                }
+                if let (Ok(id), Ok(url)) = (EndpointId::from_bytes(&node), relay.parse::<iroh::RelayUrl>()) {
+                    self.book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+                }
+                self.first_seen.lock().unwrap().entry(node).or_insert(now);
+                // Kept by when the radio said it, not when the word arrived: a note passed on in
+                // cards may be minutes old, and its radio gone since.
+                let at_ms = match &g { Gossip::Crew { at_ms, .. } => *at_ms, _ => return None };
+                let said = at_ms.min(now);
+                let mut c = self.crew_radios.lock().unwrap();
+                if c.get(&node).is_none_or(|(_, t)| *t < said) {
+                    c.insert(node, (relay, said));
+                }
+                if c.len() > 4_000 {
+                    c.retain(|_, (_, t)| now.saturating_sub(*t) < 15 * 60_000);
+                }
+                return None;
+            }
+            g @ Gossip::Deck { .. } => {
+                // A listener's deck, for a station whose card this node holds.
+                let Some((station, deck, d)) = g.deck_checked(now) else { return None };
+                let Some(l) = log.get_mut(&station) else { return None };
+                if l.decks.len() >= net::MAX_DECKS && !l.decks.contains_key(&deck) {
+                    l.decks.retain(|_, x| now.saturating_sub(x.at_ms) < net::DECK_FRESH_MS);
+                    if l.decks.len() >= net::MAX_DECKS {
+                        return None;
+                    }
+                }
+                l.decks.insert(deck, d);
                 return None;
             }
         }
@@ -1482,6 +1540,15 @@ impl Inner {
                     self.notes.lock().unwrap().keep(&note, &raw, now);
                 }
                 self.broadcast(&note).await;
+                // With the switch on, and on a connection that may carry others' traffic, it says
+                // too that it is of the crew: a middle for three-hop routes and a way in to decks.
+                if self.crew.load(std::sync::atomic::Ordering::Relaxed) && self.relay_ok.load(std::sync::atomic::Ordering::Relaxed) {
+                    let crew = Gossip::crew(&self.secret, &relay, now);
+                    if let Ok(raw) = postcard::to_stdvec(&crew) {
+                        self.notes.lock().unwrap().keep(&crew, &raw, now);
+                    }
+                    self.broadcast(&crew).await;
+                }
                 let pockets: Vec<StationId> = self.pockets.lock().unwrap().keys().copied().collect();
                 for st in pockets {
                     self.pocket_say(st, &note).await;
@@ -2057,6 +2124,45 @@ impl Node {
     pub fn chunks_named(&self, id: &StationId) -> Vec<pyrate_core::Hash> {
         self.inner.store.lock().unwrap().chunks_of(id)
     }
+    /// Bytes served as an exit or straight to a peer, and bytes passed on for others.
+    pub fn crew_bytes(&self) -> (u64, u64) {
+        (self.inner.served_bytes.load(std::sync::atomic::Ordering::Relaxed), self.inner.relayed_bytes.load(std::sync::atomic::Ordering::Relaxed))
+    }
+    /// For harnesses: `n` routes drawn as this node would draw them now, each as its first hop
+    /// and its middle (either missing when none can be drawn).
+    #[doc(hidden)]
+    pub fn crew_draw(&self, n: usize) -> Vec<(Option<[u8; 32]>, Option<[u8; 32]>)> {
+        let nodes = self.inner.known_nodes_pub();
+        (0..n)
+            .map(|_| {
+                let g = self.inner.fetch_guard(&nodes);
+                let m = self.inner.middle(&g.map(|g| vec![*g.as_bytes()]).unwrap_or_default());
+                (g.map(|g| *g.as_bytes()), m.map(|m| *m.as_bytes()))
+            })
+            .collect()
+    }
+    /// For the deck test: as the way in of a deck of `station`, its log's first page through the
+    /// lead, and the paths of the connection to the deck (true for a relay path).
+    #[doc(hidden)]
+    pub fn deck_probe(&self, station: StationId) -> Option<(usize, Vec<bool>)> {
+        let i = self.inner.clone();
+        self.rt.block_on(async move { i.deck_probe(station).await })
+    }
+    /// For the deck test: this node's deck now, as its key and its way in.
+    #[doc(hidden)]
+    pub fn deck_now(&self) -> Option<([u8; 32], Option<[u8; 32]>)> {
+        self.inner.deck.lock().unwrap().as_ref().map(|d| (d.id, d.intro))
+    }
+    /// For the deck test: names `intro` as the deck's way in.
+    #[doc(hidden)]
+    pub fn deck_set_way_in(&self, intro: [u8; 32]) -> bool {
+        self.inner.deck_set_way_in(intro)
+    }
+    /// For the deck test: the paths of this node's connection to `peer` (true for a relay path).
+    #[doc(hidden)]
+    pub fn paths_to(&self, peer: &EndpointId) -> Vec<bool> {
+        self.inner.paths_to(peer)
+    }
     /// For harnesses: logs and chunks this node has handed straight to a peer that asked.
     pub fn served_direct(&self) -> u64 {
         self.inner.served_direct.load(std::sync::atomic::Ordering::Relaxed)
@@ -2396,12 +2502,28 @@ impl Node {
             dark,
             last_harbour: std::sync::atomic::AtomicU64::new(0),
             relay_ok: std::sync::atomic::AtomicBool::new(!cfg.private),
+            crew: std::sync::atomic::AtomicBool::new(std::env::var("PYRATE_CREW").map_or(true, |v| v != "0")),
+            crew_radios: Mutex::new(HashMap::new()),
+            first_seen: Mutex::new(HashMap::new()),
+            served_bytes: Default::default(),
+            relayed_bytes: Default::default(),
+            deck: Mutex::new(None),
         });
         *proto.0.lock().unwrap() = Some(inner.clone());
         {
             let i2 = inner.clone();
             inner.load_log();
             rt.spawn(async move { i2.open_pockets().await });
+        }
+        // The deck of what this node plays, looked after every five seconds.
+        {
+            let i2 = inner.clone();
+            rt.spawn(async move {
+                loop {
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    i2.deck_tick().await;
+                }
+            });
         }
         // A Lantern runs for months: memory freed after a flood goes back to the system each
         // minute instead of staying with the process at its peak.
@@ -2807,7 +2929,8 @@ impl Node {
                 // The broadcast's station and time while on the air, with the desk's state while
                 // it is in use; null otherwise.
                 let live = inner.desk.state(inner, false, false);
-                Ok(json!({ "node": self.id().to_string(), "mine": mine, "jobs": jobs, "tuned": tuned, "now": np, "live": live, "heard_ms": heard_ms }))
+                Ok(json!({ "node": self.id().to_string(), "mine": mine, "jobs": jobs, "tuned": tuned, "now": np, "live": live, "heard_ms": heard_ms,
+                    "served_bytes": inner.served_bytes.load(std::sync::atomic::Ordering::Relaxed), "relayed_bytes": inner.relayed_bytes.load(std::sync::atomic::Ordering::Relaxed) }))
             }
             // Where links for stations other than HOSTIS's point (the app's open player).
             "open_player" => Ok(json!({ "ok": pyrate_core::set_open_player(req["url"].as_str().unwrap_or("")) })),
@@ -3321,6 +3444,16 @@ impl Node {
                 inner.ballast_bytes.store(gb * 1_000_000_000, std::sync::atomic::Ordering::Relaxed);
                 inner.store.lock().unwrap().quota = inner.cfg.quota + gb * 1_000_000_000;
                 Ok(json!({ "gb": gb }))
+            }
+            // "Carry the radio while you listen": on, this node is a middle and a way in for the
+            // crew (when its connection may carry others' traffic) and fetches through decks.
+            "crew" => {
+                if let Some(on) = req["on"].as_bool() {
+                    inner.crew.store(on, std::sync::atomic::Ordering::Relaxed);
+                }
+                Ok(json!({ "on": inner.crew.load(std::sync::atomic::Ordering::Relaxed),
+                    "served_bytes": inner.served_bytes.load(std::sync::atomic::Ordering::Relaxed),
+                    "relayed_bytes": inner.relayed_bytes.load(std::sync::atomic::Ordering::Relaxed) }))
             }
             "ballast_ok" => {
                 inner.ballast_ok.store(req["value"].as_bool().unwrap_or(false), std::sync::atomic::Ordering::Relaxed);

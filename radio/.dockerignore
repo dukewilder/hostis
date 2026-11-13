@@ -1,0 +1,12 @@
+# What a Lantern's image never needs: builds, caches and every past player.
+target/
+app/build/
+app/android/build/
+app/android/.kotlin/
+browser/www/cars/
+browser/www/.ipfs/
+browser/www/dist/
+browser/www/open.car
+landing/out/
+landing/desktop/
+**/__pycache__/

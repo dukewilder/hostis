@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'art.dart';
 import 'desk.dart';
 import 'glass.dart';
+import 'mirror.dart';
 import 'more.dart';
 import 'native.dart';
 import 'station.dart';
@@ -252,11 +253,15 @@ class Tuner extends ChangeNotifier {
 
   Tuner() {
     Native.call({'cmd': 'hiss', 'value': pref('hiss') != false});
+    // "Carry the radio while you listen": on unless its owner turned it off.
+    Native.call({'cmd': 'crew', 'on': pref('crew') != false});
     _poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _refresh());
     // Ballast fills only on Wi-Fi while charging, so the fleet never costs the owner.
     _ballast = Timer.periodic(const Duration(seconds: 60), (_) => _checkBallast());
     // A computer carries a modest share for the fleet, 2 GB, unless its owner offers more.
     if (isComputer) Native.call({'cmd': 'ballast_size', 'gb': carryGb()});
+    // The open player, shared on this network again if its owner left it on.
+    if (isComputer && pref('share_player') == true) OpenPlayer.share(true);
     // A drawer Lantern picks up where it was left.
     final gb = (pref('lantern_gb') as num?)?.toInt() ?? 4;
     if (pref('lantern') == true) {

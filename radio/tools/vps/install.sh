@@ -3,21 +3,37 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/dukewilder/hostis/radio/radio/tools/vps/install.sh -o pyrate.sh && bash pyrate.sh
 #
-# It asks one thing, the relay's name, and prints the relay's address and the Lantern's id at
-# the end. Run it again at any time: it changes only what is out of date, and that is also how
-# to update. DOMAIN=relay.example.org skips the question. PYRATE_DRY=1 shows every step and
-# changes nothing.
+# It asks one thing, the relay's name, and prints the relay's address, the Lantern's id and the
+# open player's address at the end. Run it again at any time: it changes only what is out of
+# date, and that is also how to update. DOMAIN=relay.example.org skips the question.
+# PLAYER_DOMAIN=listen.example.org serves the open player at a second name (none: not at all).
+# PYRATE_DRY=1 shows every step and changes nothing.
+#
+# Caddy holds 80 and 443 and the certificates: the relay behind it at the relay's name, and the
+# Lantern's copy of the open player at /listen/. The relay's QUIC port uses Caddy's certificate.
 set -euo pipefail
 
 IROH_VERSION=1.4.1 # the iroh in radio/Cargo.lock
 SHA_x86_64=75254641e3fad7fcbac6dee4d485556fbe06ef708340a9d8810469270ba626b8
 SHA_aarch64=3fc0c2d67c1cd66250bf82f3e2f17a985b7081a3d272186bad9d63e3f2347b38
+CADDY_VERSION=2.11.4
+CADDY_SHA_x86_64=8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9
+CADDY_SHA_aarch64=d5a7c423853c24a799765e0e8210d5c7c22a8f56ed37a3cae2fb9f58be138853c02b4efd6b59d576e6d8c7c0d30b9c1592deeaa6a536ff69bcca23b8c1ea709c
 REPO=https://github.com/dukewilder/hostis
 BRANCH=radio
 SRC=/opt/pyrate/hostis
 CONF=/etc/pyrate/relay.toml
 UNIT=/etc/systemd/system/pyrate-relay.service
 QUIC_PORT=7842
+STUN_PORT=3478 # STUN only, for a tab's direct link to its guard (browser/stun.txt)
+STUN_CONF=/etc/pyrate/stun.conf
+STUN_UNIT=/etc/systemd/system/pyrate-stun.service
+RELAY_HTTP=127.0.0.1:3340   # the relay, behind Caddy
+LANTERN_HTTP=127.0.0.1:8089 # the Lantern's gangway, behind Caddy
+CADDYFILE=/etc/pyrate/Caddyfile
+CADDY_UNIT=/etc/systemd/system/pyrate-caddy.service
+CADDY_DATA=/var/lib/pyrate-caddy
+TLS=/etc/pyrate/tls # Caddy's certificate, copied for the relay's QUIC port
 DRY=${PYRATE_DRY:-0}
 
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
@@ -42,7 +58,11 @@ fi
 . /etc/os-release 2>/dev/null || true
 case " ${ID:-} ${ID_LIKE:-} " in *" debian "* | *" ubuntu "*) ;; *) [ "$DRY" = 1 ] || die "This needs Debian or Ubuntu." ;; esac
 ARCH=$(uname -m)
-case $ARCH in x86_64) SHA=$SHA_x86_64 ;; aarch64) SHA=$SHA_aarch64 ;; *) die "No relay build for $ARCH." ;; esac
+case $ARCH in
+  x86_64) SHA=$SHA_x86_64 CADDY_SHA=$CADDY_SHA_x86_64 CADDY_ARCH=amd64 ;;
+  aarch64) SHA=$SHA_aarch64 CADDY_SHA=$CADDY_SHA_aarch64 CADDY_ARCH=arm64 ;;
+  *) die "No relay build for $ARCH." ;;
+esac
 
 public_ip() {
   local ip
@@ -87,9 +107,23 @@ if [ ${#FREE[@]} = 0 ] && [ "$DRY" != 1 ]; then
 fi
 say "Relay name: $DOMAIN"
 
+# The open player goes at the relay's name, or at a name of its own. A HOSTIS name never serves
+# it (hostis.black carries HOSTIS's stations alone), so there it takes a free name instead.
+hostis() { [[ $1 == hostis.black || $1 == *.hostis.black ]]; }
+PLAYER=$(printf '%s' "${PLAYER_DOMAIN:-}" | tr '[:upper:]' '[:lower:]' | sed -e 's#^[a-z]*://##' -e 's#/.*$##')
+if [ -z "$PLAYER" ]; then
+  PLAYER=$DOMAIN
+  if hostis "$PLAYER"; then PLAYER="${IP//./-}.sslip.io"; fi
+fi
+if [ "$PLAYER" != none ]; then
+  if hostis "$PLAYER"; then die "The open player is never served at a HOSTIS name. Set PLAYER_DOMAIN to another, or to none."; fi
+  [[ $PLAYER =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] || die "\"$PLAYER\" is not a name."
+  say "Open player: https://$PLAYER/listen/"
+fi
+
 # ---- Packages, swap, firewall --------------------------------------------------------------
 say "Packages"
-PKGS=(ca-certificates curl git ufw tar)
+PKGS=(ca-certificates curl git ufw tar coturn)
 command -v docker >/dev/null || PKGS+=(docker.io)
 missing=()
 for p in "${PKGS[@]}"; do dpkg -s "$p" >/dev/null 2>&1 || missing+=("$p"); done
@@ -115,15 +149,56 @@ if [ "$mem_kb" -lt 3800000 ] && [ ! -f /swapfile ]; then
   grep -q '^/swapfile ' /etc/fstab 2>/dev/null || run sh -c 'echo "/swapfile none swap sw 0 0" >> /etc/fstab'
 fi
 
-say "Firewall: SSH, 80 and 443, and $QUIC_PORT for QUIC. Nothing else comes in."
+say "Firewall: SSH, 80 and 443, $QUIC_PORT for QUIC and $STUN_PORT for STUN. Nothing else comes in."
 ssh_ports=$(sshd -T 2>/dev/null | awk '$1 == "port" {print $2}' | sort -u || true)
 for p in ${ssh_ports:-22}; do run ufw allow "$p/tcp" >/dev/null; done
 run ufw allow 80/tcp >/dev/null
 run ufw allow 443/tcp >/dev/null
 run ufw allow "$QUIC_PORT/udp" >/dev/null
+run ufw allow "$STUN_PORT/udp" >/dev/null
 run ufw default deny incoming >/dev/null
 run ufw default allow outgoing >/dev/null
 run ufw --force enable >/dev/null
+
+# ---- STUN ----------------------------------------------------------------------------------
+# A tab asks this what its own address looks like from outside, so that it and its guard can
+# link directly. STUN only: no TURN, no relaying, no accounts, and no log of who asked.
+say "STUN (port $STUN_PORT, STUN only)"
+write "$STUN_CONF" 644 <<EOF || true
+listening-port=$STUN_PORT
+stun-only
+no-tls
+no-dtls
+no-tcp
+no-cli
+no-software-attribute
+fingerprint
+no-stdout-log
+log-file=/dev/null
+EOF
+write "$STUN_UNIT" 644 <<EOF || true
+[Unit]
+Description=Pyrate Radio STUN (STUN only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/turnserver -c $STUN_CONF
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+# The package's own service (TURN, with its own config) stays off.
+run systemctl disable --now coturn >/dev/null 2>&1 || true
+run systemctl daemon-reload
+run systemctl enable -q pyrate-stun
+run systemctl restart pyrate-stun
 
 # ---- The relay -----------------------------------------------------------------------------
 say "Relay (iroh-relay $IROH_VERSION)"
@@ -143,21 +218,91 @@ fi
 ANY="[::]"
 [ -f /proc/net/if_inet6 ] || ANY="0.0.0.0"
 
+# ---- Caddy ---------------------------------------------------------------------------------
+say "Caddy $CADDY_VERSION (the certificates, and the front door on 80 and 443)"
+if ! /usr/local/bin/caddy version 2>/dev/null | grep -q "^v$CADDY_VERSION "; then
+  url="https://github.com/caddyserver/caddy/releases/download/v$CADDY_VERSION/caddy_${CADDY_VERSION}_linux_$CADDY_ARCH.tar.gz"
+  if [ "$DRY" = 1 ]; then
+    printf '  + fetch %s, check sha512 %s, install /usr/local/bin/caddy\n' "$url" "$CADDY_SHA"
+  else
+    tmp=$(mktemp -d)
+    curl -fsSL "$url" -o "$tmp/c.tgz"
+    echo "$CADDY_SHA  $tmp/c.tgz" | sha512sum -c --quiet || die "The Caddy download does not match its checksum. Nothing was installed."
+    tar -xzf "$tmp/c.tgz" -C "$tmp" caddy
+    install -m 755 "$tmp/caddy" /usr/local/bin/caddy
+    rm -rf "$tmp"
+  fi
+fi
+getent group pyrate-tls >/dev/null || run groupadd --system pyrate-tls
+
+# caddy_config RELAY_NAME: the relay at its name, and the open player at /listen/ there or at a
+# name of its own. Port 80 answers the relay's captive-portal check and sends the rest to 443.
+caddy_config() {
+  local relay=$1 front="" own=""
+  if [ "$PLAYER" = "$relay" ]; then
+    front="
+	redir / /listen/ 302
+	handle /listen* {
+		reverse_proxy $LANTERN_HTTP
+	}"
+  elif [ "$PLAYER" != none ]; then
+    own="
+$PLAYER {
+	handle /listen* {
+		reverse_proxy $LANTERN_HTTP
+	}
+	handle {
+		redir * /listen/ 302
+	}
+}"
+  fi
+  write "$CADDYFILE" 644 <<EOF
+# Pyrate Radio's front door. Written by tools/vps/install.sh: run it again rather than editing this.
+{
+	admin off
+	email relay@$relay
+	acme_ca https://acme-v02.api.letsencrypt.org/directory
+	storage file_system $CADDY_DATA
+	log {
+		level WARN
+	}
+}
+
+$relay {$front
+	handle {
+		reverse_proxy $RELAY_HTTP
+	}
+}
+
+http://$relay {
+	handle /generate_204 {
+		reverse_proxy $RELAY_HTTP
+	}
+	handle {
+		redir https://{host}{uri} 308
+	}
+}
+$own
+EOF
+}
+
 relay_config() {
   write "$CONF" 644 <<EOF
 # Pyrate Radio relay. Written by tools/vps/install.sh: run it again rather than editing this.
+# Caddy in front holds 80 and 443 and the certificate. The relay speaks plain HTTP to Caddy
+# alone, and QUIC on $QUIC_PORT with Caddy's certificate, read again each day.
 enable_relay = true
-http_bind_addr = "$ANY:80"
+http_bind_addr = "$RELAY_HTTP"
 enable_quic_addr_discovery = true
 enable_metrics = false
 
 [tls]
-cert_mode = "LetsEncrypt"
+cert_mode = "Reloading"
 hostname = "$1"
-contact = "relay@$1"
-cert_dir = "/var/lib/pyrate-relay/certs"
-https_bind_addr = "$ANY:443"
+manual_cert_path = "$TLS/relay.crt"
+manual_key_path = "$TLS/relay.key"
 quic_bind_addr = "$ANY:$QUIC_PORT"
+dangerous_http_only = true
 
 # No one client takes the relay for itself: a megabyte a second each, bursts of eight.
 [limits]
@@ -170,20 +315,49 @@ max_burst_bytes = 8000000
 EOF
 }
 
+# Where Caddy keeps a name's certificate. A copy goes where the relay can read it, each time
+# Caddy renews it. True when either unit changed.
+issued() { printf '%s/certificates/acme-v02.api.letsencrypt.org-directory/%s/%s' "$CADDY_DATA" "$1" "$1"; }
+tls_units() {
+  local c n=1
+  c=$(issued "$1")
+  write /etc/systemd/system/pyrate-tls.service 644 <<EOF && n=0
+[Unit]
+Description=Pyrate Radio: Caddy's certificate for the relay's QUIC port
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/install -m 640 -g pyrate-tls -D $c.crt $TLS/relay.crt
+ExecStart=/usr/bin/install -m 640 -g pyrate-tls -D $c.key $TLS/relay.key
+EOF
+  write /etc/systemd/system/pyrate-tls.path 644 <<EOF && n=0
+[Unit]
+Description=Pyrate Radio: copy Caddy's certificate when it is renewed
+
+[Path]
+PathChanged=$c.crt
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  return $n
+}
+
+# ---- The relay's service --------------------------------------------------------------------
+
 changed=0
 relay_config "$DOMAIN" && changed=1
 write "$UNIT" 644 <<EOF && changed=1
 [Unit]
 Description=Pyrate Radio relay
-After=network-online.target
+After=network-online.target pyrate-caddy.service
 Wants=network-online.target
 
 [Service]
 ExecStart=/usr/local/bin/iroh-relay --config-path $CONF
 DynamicUser=yes
+SupplementaryGroups=pyrate-tls
 StateDirectory=pyrate-relay
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
@@ -196,18 +370,61 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 EOF
-run systemctl daemon-reload
-run systemctl enable -q pyrate-relay
-if [ "$changed" = 1 ]; then run systemctl restart pyrate-relay; else run systemctl start pyrate-relay; fi
+caddy_changed=0
+caddy_config "$DOMAIN" && caddy_changed=1
+write "$CADDY_UNIT" 644 <<EOF && caddy_changed=1
+[Unit]
+Description=Pyrate Radio front door (Caddy)
+After=network-online.target
+Wants=network-online.target
 
-# Let's Encrypt answers within a minute or two. A free name whose allowance is spent moves to
-# the other free name.
+[Service]
+ExecStart=/usr/local/bin/caddy run --config $CADDYFILE --adapter caddyfile
+DynamicUser=yes
+StateDirectory=pyrate-caddy
+Environment=HOME=$CADDY_DATA XDG_DATA_HOME=$CADDY_DATA XDG_CONFIG_HOME=$CADDY_DATA
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+LimitNOFILE=65536
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+tls_units "$DOMAIN" && caddy_changed=1
+if [ "$DRY" != 1 ] && ! /usr/local/bin/caddy validate --config "$CADDYFILE" --adapter caddyfile >/dev/null 2>&1; then
+  die "Caddy will not take $CADDYFILE. What it says: caddy validate --config $CADDYFILE --adapter caddyfile"
+fi
+run systemctl daemon-reload
+run systemctl enable -q pyrate-relay pyrate-caddy pyrate-tls.path
+# An earlier run's relay held 80 and 443 itself: it lets go before Caddy takes them.
+if [ "$changed" = 1 ]; then run systemctl stop pyrate-relay; fi
+if [ "$caddy_changed" = 1 ]; then run systemctl restart pyrate-caddy; else run systemctl start pyrate-caddy; fi
+run systemctl restart pyrate-tls.path
+
+# Let's Encrypt answers Caddy within a minute or two; then the relay takes the certificate and
+# starts. A free name whose allowance is spent moves to the other free name.
 relay_up() {
   [ "$DRY" = 1 ] && return 0
-  local i
+  local i c
+  c=$(issued "$1")
   for i in $(seq 1 36); do
-    curl -fsS --max-time 5 "https://$1/ping" >/dev/null 2>&1 && return 0
+    if [ -s "$c.crt" ]; then
+      systemctl start pyrate-tls.service
+      if [ "$changed" = 1 ]; then systemctl restart pyrate-relay; else systemctl start pyrate-relay; fi
+      changed=0
+      break
+    fi
     [ "$i" = 1 ] && echo "Waiting for the certificate (up to three minutes)..."
+    sleep 5
+  done
+  for i in $(seq 1 12); do
+    curl -fsS --max-time 5 "https://$1/ping" >/dev/null 2>&1 && return 0
     sleep 5
   done
   return 1
@@ -216,10 +433,15 @@ RELAY_OK=0
 if relay_up "$DOMAIN"; then
   RELAY_OK=1
 elif [ ${#FREE[@]} = 2 ]; then
+  [ "$PLAYER" = "$DOMAIN" ] && PLAYER=${FREE[1]}
   DOMAIN=${FREE[1]}
   say "No certificate yet. Trying the other free name: $DOMAIN"
   relay_config "$DOMAIN" || true
-  run systemctl restart pyrate-relay
+  caddy_config "$DOMAIN" || true
+  tls_units "$DOMAIN" || true
+  run systemctl daemon-reload
+  run systemctl restart pyrate-caddy pyrate-tls.path
+  changed=1
   relay_up "$DOMAIN" && RELAY_OK=1
 fi
 RELAY_URL="https://$DOMAIN/"
@@ -237,24 +459,35 @@ run docker build -q -t pyrate-lantern -f "$SRC/radio/Dockerfile" "$SRC/radio" >/
 # The compiler stays behind in the build cache: gigabytes this server does not need.
 run docker builder prune -af >/dev/null || true
 run docker image prune -f >/dev/null
-run docker rmi rust:bookworm >/dev/null 2>&1 || true
+run docker rmi rust:bookworm python:3.12-slim-bookworm >/dev/null 2>&1 || true
 
-have=0 want_img=new have_img=none have_env="" have_net=""
+# The gangway on loopback, for Caddy alone, with the image's copy of the open player.
+LANTERN_ARGS=()
+[ "$PLAYER" = none ] || LANTERN_ARGS=(--http "$LANTERN_HTTP" --player /usr/share/pyrate/player)
+have=0 want_img=new have_img=none have_env="" have_net="" have_args=""
 if docker container inspect lantern >/dev/null 2>&1; then
   have=1
   want_img=$(docker image inspect -f '{{.Id}}' pyrate-lantern 2>/dev/null | tr -d '[:space:]' || true)
   have_img=$(docker container inspect -f '{{.Image}}' lantern | tr -d '[:space:]')
   have_env=$(docker container inspect -f '{{range .Config.Env}}{{println .}}{{end}}' lantern | grep '^PYRATE_RELAY_URL=' || true)
   have_net=$(docker container inspect -f '{{.HostConfig.NetworkMode}}' lantern | tr -d '[:space:]')
+  have_args=$(docker container inspect -f '{{join .Args " "}}' lantern)
 fi
-if [ "$have_img" = "$want_img" ] && [ "$have_env" = "PYRATE_RELAY_URL=$RELAY_URL" ] && [ "$have_net" = host ]; then
+# The container keeps its flags after the image's own: they must be the ones wanted now.
+args_ok=0
+if [ ${#LANTERN_ARGS[@]} = 0 ]; then
+  [[ $have_args == *--player* ]] || args_ok=1
+else
+  [[ $have_args == *" ${LANTERN_ARGS[*]}" ]] && args_ok=1
+fi
+if [ "$have_img" = "$want_img" ] && [ "$have_env" = "PYRATE_RELAY_URL=$RELAY_URL" ] && [ "$have_net" = host ] && [ "$args_ok" = 1 ]; then
   run docker start lantern >/dev/null
 else
   # Its keys and everything it carries live in the pyrate volume, which stays.
   [ "$have" = 0 ] || run docker rm -f lantern >/dev/null
   run docker run -d --name lantern --restart unless-stopped --network host \
     -v pyrate:/data -e "PYRATE_RELAY_URL=$RELAY_URL" \
-    --log-opt max-size=10m --log-opt max-file=3 pyrate-lantern >/dev/null
+    --log-opt max-size=10m --log-opt max-file=3 pyrate-lantern "${LANTERN_ARGS[@]}" >/dev/null
 fi
 
 NODE=""
@@ -271,12 +504,29 @@ say "Done."
 echo "Relay:    $RELAY_URL"
 echo "Lantern:  ${NODE:-(not started yet: see docker logs lantern)}"
 [ -n "$NODE" ] && echo "Harbour:  $NODE@$RELAY_URL"
+echo "STUN:     stun:$DOMAIN:$STUN_PORT   (a line for browser/stun.txt)"
+PLAYER_OK=0
+if [ "$PLAYER" != none ]; then
+  if [ "$DRY" = 1 ]; then PLAYER_OK=1; else
+    for _ in $(seq 1 24); do
+      if curl -fsS --max-time 5 "https://$PLAYER/listen/" 2>/dev/null | grep -q "Pyrate Radio"; then PLAYER_OK=1; break; fi
+      sleep 5
+    done
+  fi
+  echo "Player:   https://$PLAYER/listen/"
+fi
 if [ "$RELAY_OK" != 1 ] && [ "$DRY" != 1 ]; then
   echo
   echo "The relay has no certificate yet. Check that $DOMAIN points at $IP, that your provider's"
-  echo "own firewall lets in 80, 443 and $QUIC_PORT/udp, then run this again."
-  echo "What the relay says: journalctl -u pyrate-relay -n 30"
+  echo "own firewall lets in 80, 443, $QUIC_PORT/udp and $STUN_PORT/udp, then run this again."
+  echo "What they say: journalctl -u pyrate-caddy -u pyrate-relay -n 30"
+fi
+if [ "$PLAYER" != none ] && [ "$PLAYER_OK" != 1 ] && [ "$DRY" != 1 ]; then
+  echo
+  echo "The player does not answer yet. Check that $PLAYER points at $IP, then run this again."
+  echo "What the Lantern says: docker logs --tail 30 lantern"
 fi
 echo
-echo "Both lines are public: send them to whoever runs the radio. The Lantern's keys stay"
-echo "in its volume on this server and are never shown. Run this again to update."
+echo "Every line is public: send them to whoever runs the radio, and the player's address"
+echo "to anyone. The Lantern's keys stay in its volume on this server and are never shown."
+echo "Run this again to update."

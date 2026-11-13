@@ -423,7 +423,51 @@ pub enum Gossip {
     /// a station when it does not. Unsigned `Carrier` notes from the network are no longer
     /// believed.
     Carried { station: StationId, node: [u8; 32], head: u64, at_ms: u64, sig: Vec<u8> },
+    /// A radio of the crew: one that passes on the middle of a three-hop route (`Ask::Relay`)
+    /// and leads to decks (`Ask::Lead`), and the relay it is reached through. Signed with its
+    /// own node key. Older nodes do not know this message and pass over it.
+    Crew { node: [u8; 32], relay: String, at_ms: u64, sig: Vec<u8> },
+    /// A listener's deck: the one station it plays (or keeps as ballast), served under a key
+    /// made for the deck alone and reached only through the radio `intro`, whose `lead` (sealed
+    /// to it) names the listener. The note names neither the listener nor its node, and is
+    /// signed with the deck's own key. A deck is narrow, so requesters reach it in three hops.
+    Deck { deck: [u8; 32], station: StationId, head: u64, intro: [u8; 32], lead: Vec<u8>, at_ms: u64, sig: Vec<u8> },
 }
+
+fn crew_message(node: &[u8; 32], relay: &str, at_ms: u64) -> Vec<u8> {
+    let mut m = b"pyrate/crew/v1\0".to_vec();
+    m.extend_from_slice(node);
+    m.extend_from_slice(&at_ms.to_le_bytes());
+    m.extend_from_slice(relay.as_bytes());
+    m
+}
+
+fn deck_message(deck: &[u8; 32], station: &StationId, head: u64, intro: &[u8; 32], lead: &[u8], at_ms: u64) -> Vec<u8> {
+    let mut m = b"pyrate/deck/v1\0".to_vec();
+    m.extend_from_slice(deck);
+    m.extend_from_slice(&station.0);
+    m.extend_from_slice(&head.to_le_bytes());
+    m.extend_from_slice(intro);
+    m.extend_from_slice(&at_ms.to_le_bytes());
+    m.extend_from_slice(lead);
+    m
+}
+
+/// A deck as a requester keeps it: the radio that leads to it, the lead, how far its log
+/// reaches, and when it last said so.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeckNote {
+    pub intro: [u8; 32],
+    pub lead: Vec<u8>,
+    pub head: u64,
+    pub at_ms: u64,
+}
+
+/// How long a deck's note is believed: a deck says it again every two minutes, so one that
+/// has gone quiet for five has closed.
+pub const DECK_FRESH_MS: u64 = 5 * 60_000;
+/// Decks a station's listing keeps.
+pub const MAX_DECKS: usize = 64;
 
 fn carried_message(station: &StationId, node: &[u8; 32], head: u64, at_ms: u64) -> Vec<u8> {
     let mut m = b"pyrate/carried/v1\0".to_vec();
@@ -480,6 +524,44 @@ impl Gossip {
         }
     }
 
+    /// This radio saying it is of the crew, and where it is reached.
+    pub fn crew(secret: &[u8; 32], relay: &str, at_ms: u64) -> Self {
+        let key = StationKey::from_seed(*secret);
+        let node = key.id().0;
+        Gossip::Crew { node, relay: relay.into(), at_ms, sig: key.sign(&crew_message(&node, relay, at_ms)).to_vec() }
+    }
+
+    /// A deck's note, signed with the deck's own seed.
+    pub fn deck(deck_seed: &[u8; 32], station: StationId, head: u64, intro: [u8; 32], lead: Vec<u8>, at_ms: u64) -> Self {
+        let key = StationKey::from_seed(*deck_seed);
+        let deck = key.id().0;
+        let sig = key.sign(&deck_message(&deck, &station, head, &intro, &lead, at_ms)).to_vec();
+        Gossip::Deck { deck, station, head, intro, lead, at_ms, sig }
+    }
+
+    /// For a crew note: the radio and its relay, if the radio itself signed it near `now`.
+    pub fn crew_checked(&self, now: u64) -> Option<([u8; 32], String)> {
+        let Gossip::Crew { node, relay, at_ms, sig } = self else { return None };
+        let sig: [u8; 64] = sig.as_slice().try_into().ok()?;
+        if relay.len() > 256 || at_ms.abs_diff(now) > 15 * 60_000 {
+            return None;
+        }
+        StationId(*node).verify(&crew_message(node, relay, *at_ms), &sig).ok()?;
+        relay_public(relay).then(|| (*node, relay.clone()))
+    }
+
+    /// For a deck's note: the station, the deck and what a requester keeps of it, if the deck's
+    /// own key signed it within the last five minutes (and not more than five ahead).
+    pub fn deck_checked(&self, now: u64) -> Option<(StationId, [u8; 32], DeckNote)> {
+        let Gossip::Deck { deck, station, head, intro, lead, at_ms, sig } = self else { return None };
+        if lead.len() > 512 || now.saturating_sub(*at_ms) > DECK_FRESH_MS || at_ms.saturating_sub(now) > 5 * 60_000 || deck == intro {
+            return None;
+        }
+        let sig: [u8; 64] = sig.as_slice().try_into().ok()?;
+        StationId(*deck).verify(&deck_message(deck, station, *head, intro, lead, *at_ms), &sig).ok()?;
+        Some((*station, *deck, DeckNote { intro: *intro, lead: lead.clone(), head: *head, at_ms: *at_ms }))
+    }
+
     /// For a harbour note: the node and its relay, if the node itself signed it near `now`.
     pub fn harbour_checked(&self, now: u64) -> Option<([u8; 32], String)> {
         let Gossip::Harbour { node, relay, at_ms, sig } = self else { return None };
@@ -502,6 +584,8 @@ pub const CARDS_ITEMS: usize = 4_000;
 pub struct Notes {
     harbour: std::collections::HashMap<[u8; 32], (u64, Vec<u8>)>,
     carried: std::collections::HashMap<(StationId, [u8; 32]), (u64, Vec<u8>)>,
+    crew: std::collections::HashMap<[u8; 32], (u64, Vec<u8>)>,
+    decks: std::collections::HashMap<(StationId, [u8; 32]), (u64, Vec<u8>)>,
 }
 
 impl Notes {
@@ -530,6 +614,25 @@ impl Notes {
                 }
                 if self.carried.len() > Self::CARRIED {
                     Self::trim(&mut self.carried, now, Self::CARRIED);
+                }
+            }
+            Gossip::Crew { node, at_ms, .. } if g.crew_checked(now).is_some() => {
+                if self.crew.get(node).is_none_or(|(t, _)| t < at_ms) {
+                    self.crew.insert(*node, (*at_ms, raw.to_vec()));
+                }
+                if self.crew.len() > Self::HARBOURS {
+                    Self::trim(&mut self.crew, now, Self::HARBOURS);
+                }
+            }
+            Gossip::Deck { .. } => {
+                if let Some((st, deck, d)) = g.deck_checked(now) {
+                    let k = (st, deck);
+                    if self.decks.get(&k).is_none_or(|(t, _)| *t < d.at_ms) {
+                        self.decks.insert(k, (d.at_ms, raw.to_vec()));
+                    }
+                    if self.decks.len() > Self::CARRIED {
+                        Self::trim(&mut self.decks, now, Self::CARRIED);
+                    }
                 }
             }
             _ => {}
@@ -575,6 +678,16 @@ impl Notes {
                 let _ = t;
                 out.push(raw.clone());
             }
+        }
+        // The crew, so a newcomer has middles from its first answer: the freshest 64 crew notes,
+        // then the eight freshest decks of each station named, each still in its five minutes.
+        let mut crew: Vec<&(u64, Vec<u8>)> = self.crew.values().filter(|(t, _)| fresh(t)).collect();
+        crew.sort_by(|a, b| b.0.cmp(&a.0));
+        out.extend(crew.into_iter().take(64).map(|c| c.1.clone()));
+        for st in stations {
+            let mut d: Vec<&(u64, Vec<u8>)> = self.decks.iter().filter(|((s, _), (t, _))| s == st && now.saturating_sub(*t) < DECK_FRESH_MS).map(|(_, v)| v).collect();
+            d.sort_by(|a, b| b.0.cmp(&a.0));
+            out.extend(d.into_iter().take(8).map(|c| c.1.clone()));
         }
         out.truncate(CARDS_ITEMS);
         out

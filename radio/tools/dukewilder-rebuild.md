@@ -44,7 +44,7 @@ Rules that hold throughout:
    - optional, an IPFS pin of the APK too: `docker exec <kubo> ipfs add -Q --cid-version=1 <apk>` and report the cid.
 
 7. Check it:
-   - harbour: `docker logs --tail 60 <harbour>` shows `LANTERN LIT`, `neighbour up`, `dropped … held stations`, and only its own stations under `in the Log:`. From inside the namespace, `docker exec gluetun wget -qO- http://127.0.0.1:<port>/log.json | head -c 300` returns JSON, `/player/` is not found, and `/feed/<station id>.xml` returns a feed for each of its own stations.
+   - harbour: `docker logs --tail 60 <harbour>` shows `LANTERN LIT`, `neighbour up`, `dropped … held stations`, and only its own stations under `in the Log:`. From inside the namespace, `docker exec gluetun wget -qO- http://127.0.0.1:<port>/log.json | head -c 300` returns JSON, `/listen/` is not found, and `/feed/<station id>.xml` returns a feed for each of its own stations.
    - hold: `docker logs --tail 60 <hold>` shows `dark running: relays only, no address published`, `neighbour up`, and the full Log under `in the Log:`. It should list far more stations than the harbour.
    - confirm the hold has no published port of its own: `docker inspect <hold>` shows its network mode is gluetun's and its `Ports` are empty.
 

@@ -12,3 +12,4 @@ browser/www/open.car
 browser/www/open.json
 landing/desktop/
 browser/www/cars/
+app/assets/player/*.tar

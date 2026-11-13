@@ -3,7 +3,7 @@ Serve a test build first (serve_test.sh; hostis.black's copy is on 8097). A firs
 listens and leaves once the page has kept HOSTIS's logs. Returning visits, in the same browser,
 take them back before they ask the network. The times to sound are printed; on the test
 network a log is a few entries, so the saving shows on the real one, where logs run to thousands. Also checks
-that the open player keeps no logs at all, and that Forget clears them.
+that the open player keeps nothing of what it plays, and that Forget clears them.
 Prints PASS or FAIL for each check and exits non-zero on any failure."""
 import sys, time
 from playwright.sync_api import sync_playwright
@@ -58,11 +58,17 @@ with sync_playwright() as p:
     n = c.evaluate("new Promise(r => { const q = indexedDB.open('pyrate-logs'); q.onsuccess = () => { const db = q.result; if (!db.objectStoreNames.contains('logs')) return r(0); const t = db.transaction('logs').objectStore('logs').count(); t.onsuccess = () => r(t.result) }; q.onerror = () => r(-1) })")
     check(n == 0, f"Forget this browser clears them ({n} left)")
     ctx.close()
-    # The open player keeps none: there, which logs are kept would be a listening history.
+    # The open player keeps nothing of what it plays: there, which logs are kept would be a
+    # listening history. With "Carry the radio while you listen" on, a computer keeps ballast,
+    # stations drawn by lot that it does not play, and only those.
     o = b.new_context(viewport={"width": 390, "height": 844}).new_page()
     o.goto("http://127.0.0.1:8099/"); o.click("#go"); wait(o, "window.pyrate.state().heard", 90); time.sleep(35)
-    dbs = o.evaluate("indexedDB.databases ? indexedDB.databases().then(l => l.map(d => d.name)) : []")
-    check("pyrate-logs" not in dbs and o.evaluate("window.pyrate.logs().kept") is False, f"the open player keeps no logs ({dbs})")
+    played = o.evaluate("window.pyrate.state().station")
+    kept = o.evaluate("""new Promise(r => { const q = indexedDB.open('pyrate-logs'); q.onsuccess = () => { const db = q.result; const out = { logs: [], stock: [] };
+      if (!db.objectStoreNames.contains('logs')) return r(out);
+      const t = db.transaction(['logs', 'stockidx']); t.objectStore('logs').getAllKeys().onsuccess = e => out.logs = e.target.result;
+      t.objectStore('stockidx').getAll().onsuccess = e => out.stock = e.target.result.map(v => v.st); t.oncomplete = () => r(out) }; q.onerror = () => r(null) })""")
+    check(kept is not None and played not in (kept["logs"] + kept["stock"]) and o.evaluate("window.pyrate.logs().kept") is False, f"the open player keeps nothing of the station it plays ({len(kept['logs']) if kept else '?'} ballast logs, {len(kept['stock']) if kept else '?'} ballast chunks)")
     b.close()
 check(not errs, "no page errors: %s" % errs[:3])
 sys.exit(0 if ok else 1)
