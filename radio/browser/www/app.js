@@ -490,6 +490,9 @@ async function play(id, g) {
         if (!n) { await radio.sync(id).catch(() => { }); await sleep(1500); continue }
         // From a track to the live broadcast: nothing of the track stays queued ahead of it.
         if (liveSeq === null) { reset(); dec = await Decoder.make(n.channels) }
+        // A talk show that brings in music goes from mono to stereo at a chunk's edge, with an
+        // encoder of its own: a decoder of its own meets it, and nothing queued is dropped.
+        else if (dec?.ch !== n.channels) { dec?.close(); dec = await Decoder.make(n.channels) }
         ({ chunk, channels: ch, ms } = n); seq = n.seq;
       } else {
         if (liveSeq !== null) reset();
@@ -715,6 +718,9 @@ async function show(s) {
 // another station fades the last one out first. Pressed before the radio has joined the
 // network, it joins and then plays.
 async function listen(s) {
+  // A station broadcast from this tab is never played aloud in it: its own microphone would
+  // take it in again, fifteen seconds late, round and round.
+  if (onAir(s.id)) { if (playing) stop(); show(s); status(OWN); return }
   audio(); ctx.resume().catch(() => { });
   const g = ++gen;
   fadeOut();
@@ -1354,42 +1360,412 @@ async function airFiles(list) {
   for (const [i, f] of files.entries()) { airing++; try { await airFile(f, rows[i]) } finally { airing-- } }
   studioStatus();
 }
-// Live from the tab: the microphone, nothing else, only while the button is held on.
+// ---- The live desk: a show from the tab ----------------------------------------------------
+// The microphone, a deck of music, six pads and a second input, mixed in WebAudio, held three or
+// four decibels under full scale and handed to libopus in a worker as the sound is made. The mixing
+// and the limiter run on the audio thread (desk-worklet.js), so a busy page leaves no gap.
+// None of it reaches this tab's speakers unless the keeper asks to hear the mix, and the tab
+// never plays its own station aloud while it broadcasts it.
+// A show is talk (mono, 24 kbps, as the app's talk) while only a voice is on it. Music, a pad
+// or a second input makes it music (stereo, 64 kbps): from the start if any is loaded when it
+// goes live, or from the moment one is first used, by a fresh encoder at the edge of a chunk.
 let live = null;
-$('st-live').onmouseenter = () => { $('st-livenote').hidden = false };
+// Each profile has its limiter's ceiling, in decibels under full scale (desk-worklet.js says why).
+const TALK = { channels: 1, bitrate: 24000, talk: true, ceil: -4 }, MUSIC = { channels: 2, bitrate: 64000, talk: false, ceil: -3 };
+const OWN = 'This tab is broadcasting it. Use Hear the mix on the desk.';
+const dk = { ac: null, up: null, mic: null, two: null, list: [], at: -1, want: false, pads: Array(6).fill(null), padFor: 0, micOpen: true, twoOpen: true, checking: false, starting: false, hearing: false, monOn: false, lock: null, meters: [], el: new Audio() };
+dk.el.preload = 'auto';
+function onAir(id) { return !!live && live.id === id }
+const disguised = () => $('st-disguise').checked;
+// A fader is level at 80, ten decibels hotter at the top, and off at the bottom.
+const fdb = v => (v - 80) / 2, fgain = v => +v ? 10 ** (fdb(v) / 20) : 0;
+const fsay = v => !+v ? 'Off' : (fdb(v) > 0 ? '+' : fdb(v) < 0 ? '−' : '') + Math.abs(Math.round(fdb(v))) + ' dB';
+const LIVENOTE = 'Listeners hear you about fifteen seconds behind. Sounds in the background can give away where you are.';
+function deskSay(t) { $('st-livenote').textContent = t || (live ? '' : LIVENOTE) }
+
+// The desk's sound is made on the first press that needs it and kept for the page's life.
+function deskUp() {
+  return dk.up ??= (async () => {
+    if (!window.AudioWorkletNode) throw new Error('This browser cannot run the desk. Try another, or the app.');
+    const ac = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
+    ac.resume().catch(() => { });
+    try { await ac.audioWorklet.addModule('desk-worklet.js') } catch (e) { ac.close(); throw new Error('The desk would not start. Try reloading the page.') }
+    const gn = (v = 1) => { const n = ac.createGain(); n.gain.value = v; return n };
+    const an = () => { const a = ac.createAnalyser(); a.fftSize = 1024; return a };
+    // A strip: its fader, a meter after the fader, and a gate that opens and closes it.
+    const strip = (id, to, open = 1) => { const f = gn(fgain($(id).value)), m = an(), gate = gn(open); f.connect(m); f.connect(gate); if (to) gate.connect(to); return { f, m, gate } };
+    const master = gn(); master.channelCount = 2; master.channelCountMode = 'explicit';
+    const air = new AudioWorkletNode(ac, 'pyrate-air', { outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
+    master.connect(air);
+    const split = ac.createChannelSplitter(2), mL = an(), mR = an(); air.connect(split); split.connect(mL, 0); split.connect(mR, 1);
+    // A sink of its own keeps the air running while none of it reaches the speakers.
+    air.connect(ac.createMediaStreamDestination());
+    dk.mon = gn(); air.connect(dk.mon);
+    dk.duck = gn(); dk.duck.connect(master);
+    dk.voice = new AudioWorkletNode(ac, 'pyrate-voice', { outputChannelCount: [1], channelCount: 1, channelCountMode: 'explicit', processorOptions: { semis: disguised() ? -4 : 0 } });
+    dk.micS = strip('dk-mic-f', master, dk.micOpen ? 1 : 0); dk.voice.connect(dk.micS.f);
+    dk.deckS = strip('dk-deck-f', dk.duck); ac.createMediaElementSource(dk.el).connect(dk.deckS.f);
+    dk.padS = strip('dk-pads-f', master);
+    dk.twoS = strip('dk-two-f', null, dk.twoOpen ? 1 : 0);
+    dk.air = air; dk.master = master; dk.ac = ac;
+    dk.meters = [['dk-mic-m', dk.micS.m], ['dk-two-m', dk.twoS.m], ['dk-deck-m', dk.deckS.m], ['dk-pads-m', dk.padS.m], ['dk-ml', mL], ['dk-mr', mR]].map(([id, a]) => ({ cv: $(id), a, db: -99, hold: -99, at: 0, drawn: '' }));
+    if (dk.hearing) { dk.mon.connect(ac.destination); dk.monOn = true }
+    // A call or another app can take the sound away mid-show; when it gives it back, the desk picks up.
+    ac.onstatechange = () => { if ((live || dk.checking) && ac.state !== 'running' && ac.state !== 'closed') ac.resume().catch(() => { }) };
+    requestAnimationFrame(meters);
+    return ac;
+  })().catch(e => { dk.up = null; throw e });
+}
+async function deskWake() { const ac = await deskUp(); if (ac.state !== 'running') await ac.resume().catch(() => { }); return ac }
+// With nothing on and nobody hearing the mix, the desk's sound rests.
+function deskRest() { if (dk.ac && !live && !dk.checking && !dk.hearing && !dk.mic && !dk.two && dk.el.paused && !dk.pads.some(p => p?.src)) dk.ac.suspend().catch(() => { }) }
+
+// The keeper's microphone: echo and noise held down by the browser, then the hum out and the
+// voice shifted if asked (pyrate-voice), on a path no music takes.
+const micErr = e => !navigator.mediaDevices?.getUserMedia ? 'This copy cannot reach a microphone. Open one served over https.' : window !== parent ? 'A page holding the radio cannot lend it the microphone. Open the open player itself.' : e?.name === 'NotFoundError' ? 'This device has no microphone.' : 'The microphone was not allowed. Your browser’s site settings can allow it.';
+async function micUp() {
+  if (dk.mic) return;
+  const n = dk.micSeq = (dk.micSeq || 0) + 1, want = $('dk-micdev').value;
+  const ask = id => navigator.mediaDevices.getUserMedia({ audio: { ...(id ? { deviceId: { exact: id } } : {}), channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  let s;
+  try { s = await ask(want).catch(e => want && e.name === 'OverconstrainedError' ? ask('') : Promise.reject(e)) } catch (e) { throw new Error(micErr(e)) }
+  const ac = await deskWake();
+  // Closed again, or asked for again, while it was opening: this one lets go at once.
+  if (dk.mic || n !== dk.micSeq) { s.getTracks().forEach(t => t.stop()); return }
+  const src = ac.createMediaStreamSource(s); src.connect(dk.voice);
+  dk.mic = { s, src };
+  for (const t of s.getAudioTracks()) t.onended = () => { if (dk.mic?.s === s) { micDown(); deskSay('The microphone went away.'); deskPaint() } };
+  duck(); devices();
+}
+function micDown() { dk.micSeq = (dk.micSeq || 0) + 1; const m = dk.mic; if (!m) return; dk.mic = null; m.s.getTracks().forEach(t => t.stop()); try { m.src.disconnect() } catch (e) { } duck() }
+// The second input: a guest's microphone or an interface, which loses its hum and nothing
+// else, or where the browser can share one, a tab's sound, which goes under the mic with the
+// deck. The shared tab is kept quiet on this device, so the keeper's microphone never takes it in.
+const canTab = () => !!navigator.mediaDevices?.getDisplayMedia;
+let devs = [];
+async function twoUp(v) {
+  twoDown();
+  const n = dk.twoSeq;
+  if (!v) return;
+  const ac = await deskWake();
+  let s;
+  if (v === 'tab') {
+    s = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: { suppressLocalAudioPlayback: true }, selfBrowserSurface: 'exclude', systemAudio: 'include' });
+    s.getVideoTracks().forEach(t => t.stop());
+    if (!s.getAudioTracks().length) { s.getTracks().forEach(t => t.stop()); throw new Error('That share carried no sound. Choose a tab and allow its audio.') }
+  } else s = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: v }, echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } } });
+  // Another choice made while this one was opening wins, and this one lets go.
+  if (n !== dk.twoSeq) { s.getTracks().forEach(t => t.stop()); return }
+  const src = ac.createMediaStreamSource(new MediaStream(s.getAudioTracks()));
+  let hum = null;
+  if (v === 'tab') src.connect(dk.twoS.f); else { hum = new AudioWorkletNode(ac, 'pyrate-voice'); src.connect(hum); hum.connect(dk.twoS.f) }
+  dk.twoS.gate.connect(v === 'tab' ? dk.duck : dk.master);
+  dk.two = { s, src, hum, name: v === 'tab' ? 'A tab’s sound' : devs.find(d => d.deviceId === v)?.label || 'Second input' };
+  for (const t of s.getAudioTracks()) t.onended = () => { if (dk.two?.s === s) { twoDown(); $('dk-twosrc').value = ''; deskSay(v === 'tab' ? 'The tab stopped sharing.' : 'The second input went away.'); deskPaint() } };
+  musicJoins();
+}
+function twoDown() { dk.twoSeq = (dk.twoSeq || 0) + 1; const t = dk.two; if (!t) return; dk.two = null; t.s.getTracks().forEach(x => x.stop()); for (const n of [t.src, t.hum, dk.twoS?.gate]) try { n?.disconnect() } catch (e) { } }
+function inputsDown() { micDown(); twoDown(); $('dk-twosrc').value = '' }
+async function devices() {
+  try { devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'communications') } catch (e) { devs = [] }
+  const opt = (v, t) => '<option value="' + esc(v) + '">' + esc(t) + '</option>', name = (d, i) => d.label || 'Input ' + (i + 1);
+  const m = $('dk-micdev'), was = dk.mic?.s.getAudioTracks()[0]?.getSettings().deviceId || m.value;
+  m.innerHTML = devs.map((d, i) => opt(d.deviceId, name(d, i))).join(''); m.value = devs.some(d => d.deviceId === was) ? was : devs[0]?.deviceId || ''; m.hidden = devs.length < 2;
+  const t = $('dk-twosrc'), had = t.value;
+  t.innerHTML = opt('', 'Off') + devs.map((d, i) => opt(d.deviceId, name(d, i))).join('') + (canTab() ? opt('tab', 'A tab’s sound') : '');
+  t.value = [...t.options].some(o => o.value === had) ? had : '';
+}
+
+// The mic open takes the music down to the depth chosen; closed, it comes back, more slowly.
+function duck() {
+  if (!dk.ac) return;
+  const d = +$('dk-duck').value, down = dk.micOpen && !!dk.mic && d < 1, g = dk.duck.gain, t = dk.ac.currentTime;
+  g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.setTargetAtTime(down ? d : 1, t, down ? 0.08 : 0.3);
+}
+function micSet(open) {
+  dk.micOpen = open;
+  if (dk.ac) { const g = dk.micS.gate.gain, t = dk.ac.currentTime; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.setTargetAtTime(open ? 1 : 0, t, 0.015) }
+  duck(); deskPaint();
+}
+
+// The deck plays files from this device through an audio element, so an hour-long set is read
+// as it plays and never held whole in memory. Its sound goes only into the desk.
+function deckAdd(files) {
+  for (const f of [...files]) {
+    if (!f.size) continue;
+    const t = titled(f), it = { url: URL.createObjectURL(f), title: t.title, by: t.by, dur: 0, bad: false };
+    dk.list.push(it);
+    const p = new Audio(); p.preload = 'metadata';
+    p.onloadedmetadata = () => { it.dur = p.duration; p.removeAttribute('src'); p.load(); deckList() };
+    p.onerror = () => { if (!it.dur) { it.bad = true; deckList() } };
+    p.src = it.url;
+  }
+  deckList(); deskPaint();
+}
+function deckCue(i) { dk.at = i; if (i < 0) { dk.el.removeAttribute('src'); dk.el.load() } else dk.el.src = dk.list[i].url; deckList() }
+async function deckPlay() {
+  if (dk.at < 0) { const f = dk.list.findIndex(x => !x.bad); if (f < 0) return; deckCue(f) }
+  dk.want = true;
+  try { await deskWake(); await dk.el.play(); musicJoins() } catch (e) { if (e.name !== 'AbortError') deskSay('That track would not play.') }
+  deskPaint();
+}
+function deckPause() { dk.want = false; dk.el.pause(); deskPaint(); deskRest() }
+function deckNext(go) {
+  let n = dk.at + 1; while (n < dk.list.length && dk.list[n].bad) n++;
+  if (n >= dk.list.length) { dk.el.pause(); deckCue(-1); dk.want = false; deskPaint(); deskRest(); return }
+  deckCue(n); if (go) deckPlay(); else { dk.want = false; deskPaint() }
+}
+function deckPrev() {
+  if (dk.at < 0) return;
+  if (dk.el.currentTime > 3 || dk.at === 0) { dk.el.currentTime = 0; return }
+  let n = dk.at - 1; while (n > 0 && dk.list[n].bad) n--;
+  const go = !dk.el.paused; deckCue(n); if (go) deckPlay();
+}
+function deckDrop(i) {
+  const [x] = dk.list.splice(i, 1);
+  if (i === dk.at) { dk.el.pause(); dk.at = i - 1; deckNext(false) } else if (i < dk.at) dk.at--;
+  URL.revokeObjectURL(x.url); deckList(); deskPaint();
+}
+function deckList() {
+  $('dk-list').innerHTML = dk.list.map((x, i) => '<li' + (i === dk.at ? ' class="on"' : x.bad ? ' class="bad"' : '') + ' data-i="' + i + '"><span class="n">' + (i + 1) + '</span><span class="t">' + esc(x.title) + (x.by ? '<em>' + esc(x.by) + '</em>' : '') + '</span><span class="d">' + (x.bad ? 'Will not play' : x.dur ? mmss(x.dur * 1000) : '') + '</span><button class="x" data-x="' + i + '" aria-label="Remove">×</button></li>').join('');
+  $('dk-empty').hidden = dk.list.length > 0;
+}
+dk.el.onended = () => deckNext(!$('dk-each').checked);
+dk.el.onerror = () => { if (dk.at < 0 || !dk.el.getAttribute('src')) return; dk.list[dk.at].bad = true; deskSay('That track would not play.'); deckNext(dk.want) };
+dk.el.onplay = dk.el.onpause = () => deskPaint();
+$('dk-list').onclick = e => { const x = e.target.closest('.x'), li = e.target.closest('li'); if (x) deckDrop(+x.dataset.x); else if (li && !dk.list[+li.dataset.i]?.bad) { deckCue(+li.dataset.i); deckPlay() } };
+$('dk-play').onclick = () => dk.el.paused ? deckPlay() : deckPause();
+$('dk-next').onclick = () => deckNext(!dk.el.paused);
+$('dk-prev').onclick = deckPrev;
+$('dk-prog').onclick = e => { const r = e.currentTarget.getBoundingClientRect(), d = dk.el.duration; if (dk.at >= 0 && isFinite(d) && d > 0) dk.el.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * d };
+$('dk-files').onchange = e => { deckAdd(e.target.files); e.target.value = '' };
+const deckZone = $('dk-deck');
+deckZone.addEventListener('dragover', e => { e.preventDefault(); deckZone.classList.add('over') });
+deckZone.addEventListener('dragleave', e => { if (!deckZone.contains(e.relatedTarget)) deckZone.classList.remove('over') });
+deckZone.addEventListener('drop', e => { e.preventDefault(); deckZone.classList.remove('over'); deckAdd(e.dataTransfer.files) });
+
+// Six pads for jingles, stings and idents, up to thirty seconds each, decoded once and held
+// ready. A tap fires one and a tap while it plays stops it; keys 1 to 6 do the same.
+function padsPaint() {
+  $('dk-pads').innerHTML = dk.pads.map((p, i) => '<div class="dk-pad' + (p ? ' full' : '') + (p?.src ? ' on' : '') + '"><button class="go" data-i="' + i + '"' + (p ? '' : ' aria-label="Load pad ' + (i + 1) + '"') + '><span class="k">' + (i + 1) + '</span><span class="nm">' + (p ? esc(p.name) : 'Load') + '</span><i></i></button>' + (p ? '<button class="x" data-x="' + i + '" aria-label="Clear pad ' + (i + 1) + '">×</button>' : '') + '</div>').join('');
+}
+async function padLoad(i, f) {
+  try {
+    const ab = await new OfflineAudioContext(2, 1, 48000).decodeAudioData(await f.arrayBuffer());
+    if (ab.duration > 30.5) { deskSay('Pads take up to thirty seconds.'); return }
+    padStop(i); dk.pads[i] = { name: titled(f).title, buf: ab, src: null, g: null, t0: 0 }; deskSay('');
+  } catch (e) { deskSay('That sound would not load.') }
+  padsPaint();
+}
+async function padFire(i) {
+  const p = dk.pads[i];
+  if (!p) { dk.padFor = i; $('dk-padfile').click(); return }
+  if (p.src) return padStop(i);
+  const ac = await deskWake(), s = ac.createBufferSource(), g = ac.createGain();
+  s.buffer = p.buf; s.connect(g); g.connect(dk.padS.f); s.start(); p.src = s; p.g = g; p.t0 = ac.currentTime;
+  s.onended = () => { g.disconnect(); if (p.src === s) { p.src = null; padsPaint(); deskRest() } };
+  musicJoins(); padsPaint();
+}
+function padStop(i) { const p = dk.pads[i]; if (!p?.src) return; const t = dk.ac.currentTime; p.g.gain.setTargetAtTime(0, t, 0.02); p.src.stop(t + 0.12); p.src = null; padsPaint() }
+$('dk-pads').onclick = e => { const x = e.target.closest('.x'), g = e.target.closest('.go'); if (x) { padStop(+x.dataset.x); dk.pads[+x.dataset.x] = null; padsPaint() } else if (g) padFire(+g.dataset.i) };
+$('dk-padfile').onchange = e => { const f = e.target.files[0]; if (f) padLoad(dk.padFor, f); e.target.value = '' };
+$('dk-pads').addEventListener('dragover', e => { const p = e.target.closest('.dk-pad'); if (p) { e.preventDefault(); p.classList.add('over') } });
+$('dk-pads').addEventListener('dragleave', e => e.target.closest('.dk-pad')?.classList.remove('over'));
+$('dk-pads').addEventListener('drop', e => { const p = e.target.closest('.dk-pad'); if (!p) return; e.preventDefault(); p.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) padLoad([...$('dk-pads').children].indexOf(p), f) });
+
+// The first music, pad or second input in a talk show turns it to music at a chunk's edge.
+function musicJoins() {
+  if (!live || live.music) return;
+  live.music = true;
+  dk.air.port.postMessage({ ceil: MUSIC.ceil });
+  live.ask('switch', MUSIC).catch(e => { console.warn(e); deskSay('The music could not join the broadcast. End it and go live again.') });
+}
+
+// Going live. Each chunk is signed into the station's log and sails the moment it is made.
 $('st-live').onclick = async () => {
   if (live) return endLive();
-  if (!mineCur || !adopted.has(mineCur)) return;
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }) }
-  catch (e) { $('st-livenote').hidden = false; $('st-livenote').textContent = window !== parent ? 'A page holding the radio cannot lend it the microphone. Open the open player itself.' : 'The microphone was not allowed. Your browser’s site settings can allow it.'; return }
-  const w = new Worker('encode-worker.js'), id = mineCur;
-  const ac = new AudioContext({ sampleRate: 48000 }), src = ac.createMediaStreamSource(stream), proc = ac.createScriptProcessor(4096, 1, 1), mute = ac.createGain();
-  mute.gain.value = 0; src.connect(proc); proc.connect(mute); mute.connect(ac.destination);
-  w.onmessage = e => { if (e.data.live || (e.data.out && e.data.frames !== undefined)) { try { if (e.data.out?.length) radio.live_chunk(id, e.data.out, 1, 24000) } catch (err) { console.warn(err) } } if (e.data.out && !e.data.live) w.terminate() };
-  w.postMessage({ id: 0, kind: 'begin', channels: 1, bitrate: 24000, talk: true, live: true, disguise: $('st-disguise').checked ? -4 : 0 });
-  proc.onaudioprocess = ev => { const f = ev.inputBuffer.getChannelData(0), pcm = new Int16Array(f.length); for (let i = 0; i < f.length; i++) pcm[i] = Math.max(-1, Math.min(1, f[i])) * 32767; w.postMessage({ id: 0, kind: 'feed', pcm }, [pcm.buffer]) };
-  const t0 = Date.now();
-  live = { stream, ac, proc, w, timer: setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); $('st-livetime').textContent = 'ON AIR ' + String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0') }, 500) };
-  $('st-live').classList.add('on'); $('st-live').querySelector('.lbl').textContent = 'End the broadcast';
+  if (!mineCur || !adopted.has(mineCur) || dk.starting) return;
+  const id = mineCur;
+  dk.starting = true; deskSay(''); deskPaint();
+  const fail = t => { dk.starting = false; if (!dk.checking) inputsDown(); deskSay(t); deskPaint(); deskRest() };
+  // The desk's sound starts in the same press as the microphone, as a phone's browser wants.
+  const up = deskWake(), mic = micUp().then(() => null, e => e);
+  try { await up } catch (e) { return fail(e.message) }
+  const music = dk.list.length > 0 || dk.pads.some(Boolean) || !!dk.two, noMic = await mic;
+  // A show of music alone can go out without a microphone; a show of nothing cannot.
+  if (noMic && !music) return fail(noMic.message);
+  // Its own station playing here would come back in through the microphone.
+  const said = [playing && cur?.id === id ? (stop(), 'Your station stopped playing here while you broadcast.') : '', noMic ? noMic.message + ' On the air without it.' : ''].filter(Boolean).join(' ');
+  const w = new Worker('encode-worker.js'), L = { id, w, music, t0: 0, seq: 0, sent: 0, wait: new Map(), done: null, timer: 0 };
+  L.ask = (kind, data = {}) => new Promise((res, rej) => { const i = ++L.seq; L.wait.set(i, { res, rej }); w.postMessage({ id: i, kind, ...data }) });
+  w.onmessage = e => {
+    const d = e.data, p = d.id ? L.wait.get(d.id) : null;
+    if (d.out?.length && (d.live || d.last)) try { radio.live_chunk(id, d.out, d.channels, d.bitrate); L.sent++ } catch (err) { console.warn(err); deskSay('Part of the broadcast was lost (' + (err.message || err) + ').') }
+    if (d.last) L.done?.();
+    if (p) { L.wait.delete(d.id); d.error ? p.rej(new Error(d.error)) : p.res(d) } else if (d.error) console.warn(d.error);
+  };
+  w.onerror = () => { for (const p of L.wait.values()) p.rej(new Error('the encoder would not start')); L.wait.clear() };
+  try { await L.ask('begin', { ...(music ? MUSIC : TALK), live: true, desk: true }) } catch (e) { console.warn(e); w.terminate(); return fail('The encoder would not start. Try reloading the page.') }
+  // The worklet hands the air straight to the worker: nothing on the way waits for the page.
+  const mc = new MessageChannel();
+  w.postMessage({ kind: 'port', port: mc.port2 }, [mc.port2]);
+  dk.air.port.postMessage({ port: mc.port1, ceil: (music ? MUSIC : TALK).ceil }, [mc.port1]);
+  L.t0 = Date.now(); live = L; dk.starting = false; dk.checking = false;
+  L.timer = setInterval(deskTick, 500);
+  wake(true); duck(); deskTick(); deskSay(said); deskPaint();
 };
 function endLive() {
-  const l = live; live = null; if (!l) return;
-  l.stream.getTracks().forEach(t => t.stop()); l.proc.disconnect(); l.ac.close();
-  // What is left of the last six seconds goes out too.
-  l.w.postMessage({ id: 1, kind: 'end' });
-  clearInterval(l.timer); $('st-livetime').textContent = '';
-  $('st-live').classList.remove('on'); $('st-live').querySelector('.lbl').textContent = 'Go live';
+  const L = live; if (!L) return;
+  live = null; clearInterval(L.timer);
+  // Every input stops and lets go of its device at once: the microphone's light goes out.
+  inputsDown(); dk.want = false; dk.el.pause(); dk.pads.forEach((_, i) => padStop(i));
+  // What is left of the last chunk goes out, then the end of the broadcast is signed into the
+  // log after it, so listeners go back to the schedule at once, and the encoder closes.
+  let shut = false;
+  L.done = () => { if (shut) return; shut = true; try { radio.live_end(L.id) } catch (e) { console.warn(e) } L.w.terminate(); deskRest() };
+  try { dk.air.port.postMessage({ stop: true, ceil: MUSIC.ceil }) } catch (e) { }
+  setTimeout(() => { if (!shut) L.ask('end', { desk: true }).catch(() => { }) }, 1500);
+  setTimeout(L.done, 5000);
+  if (!playing && note === OWN) status(null);
+  wake(false); deskTick(); deskSay(''); deskPaint();
 }
+// A phone left alone would sleep mid-show and take the broadcast down with it.
+async function wake(on) {
+  if (!on) { const l = dk.lock; dk.lock = null; l?.release().catch(() => { }); return }
+  if (dk.lock || !navigator.wakeLock || document.hidden) return;
+  try { const l = await navigator.wakeLock.request('screen'); if (!live) { l.release().catch(() => { }); return } dk.lock = l; l.onrelease = () => { if (dk.lock === l) dk.lock = null } } catch (e) { }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && live) wake(true) });
+const clock = s => (s >= 3600 ? Math.floor(s / 3600) + ':' + String(Math.floor(s / 60) % 60).padStart(2, '0') : String(Math.floor(s / 60)).padStart(2, '0')) + ':' + String(s % 60).padStart(2, '0');
+function deskTick() {
+  $('st-livetime').textContent = live ? 'ON AIR ' + clock(Math.floor((Date.now() - live.t0) / 1000)) : '';
+  const st = live && stations.find(x => x.id === live.id);
+  $('dk-aboard').textContent = st && typeof st.aboard === 'number' && !st.cached ? st.aboard + ' listening' : '';
+}
+let nowWas = '';
+function deckClock() {
+  const x = dk.list[dk.at], d = dk.el.duration, t = dk.el.currentTime, timed = !!x && isFinite(d) && d > 0;
+  $('dk-title').textContent = x ? x.title : '';
+  $('dk-times').textContent = timed ? mmss(t * 1000) + '  −' + mmss((d - t) * 1000) : '';
+  $('dk-prog').firstElementChild.style.width = timed ? Math.min(100, t / d * 100) + '%' : '0'; $('dk-prog').classList.toggle('idle', !timed);
+  const now = !x ? '<b>Deck</b>' + (dk.list.length ? 'Nothing playing' : 'Empty') : '<b>' + (dk.el.paused ? 'Deck paused' : 'Deck') + '</b>' + esc(x.title + (x.by ? ' · ' + x.by : '')) + (timed && !dk.el.paused ? '<span>' + mmss((d - t) * 1000) + ' left</span>' : '');
+  if (now !== nowWas) { nowWas = now; $('dk-now').innerHTML = now }
+}
+function padsClock() {
+  const cells = $('dk-pads').children;
+  dk.pads.forEach((p, i) => { const bar = cells[i]?.querySelector('i'); if (bar) bar.style.width = p?.src && dk.ac ? Math.min(100, (dk.ac.currentTime - p.t0) / p.buf.duration * 100) + '%' : '0' });
+}
+
+// The meters: peaks, falling back slowly, with the highest held a moment. They are drawn only
+// while the desk is in view.
+const mbuf = new Float32Array(1024);
+let mLast = 0, mText = 0;
+function meters(now) {
+  if (!dk.ac || dk.ac.state === 'closed') return;
+  requestAnimationFrame(meters);
+  if (viewOn !== 'studio' || $('st-mine').hidden) return;
+  const dt = Math.min(0.1, Math.max(0, (now - mLast) / 1000)), run = dk.ac.state === 'running'; mLast = now;
+  for (const m of dk.meters) {
+    let pk = 0;
+    if (run) { m.a.getFloatTimeDomainData(mbuf); for (let i = 0; i < mbuf.length; i++) { const v = mbuf[i] < 0 ? -mbuf[i] : mbuf[i]; if (v > pk) pk = v } }
+    const db = pk > 1e-4 ? 20 * Math.log10(pk) : -99;
+    m.db = Math.max(db, m.db - 24 * dt);
+    if (db >= m.hold) { m.hold = db; m.at = now } else if (now - m.at > 1500) m.hold = Math.max(m.db, m.hold - 24 * dt);
+    meterDraw(m);
+  }
+  if (now - mText > 250) { mText = now; deckClock(); padsClock() }
+}
+function meterDraw(m) {
+  const cv = m.cv, r = devicePixelRatio || 1, cw = cv.clientWidth, w = Math.round(cw * r), h = Math.round(cv.clientHeight * r);
+  if (!w || !h) return;
+  const n = Math.max(12, Math.min(40, Math.floor(cw / 7))), lit = Math.max(0, Math.min(n, Math.round((m.db + 48) / 48 * n))), hold = m.hold > -48 ? Math.min(n - 1, Math.floor((m.hold + 48) / 48 * n)) : -1, key = w + ':' + h + ':' + lit + ':' + hold;
+  if (key === m.drawn) return; m.drawn = key;
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h }
+  const g = cv.getContext('2d'), gap = Math.max(1, Math.round(r)), sw = (w - gap * (n - 1)) / n;
+  g.clearRect(0, 0, w, h);
+  for (let i = 0; i < n; i++) {
+    g.fillStyle = i < lit || i === hold ? (i >= n * 0.9 ? '#ed5555' : i >= n * 0.7 ? '#ede4ce' : 'rgba(237,228,206,.55)') : 'rgba(237,228,206,.09)';
+    g.fillRect(Math.round(i * (sw + gap)), 0, Math.max(1, Math.round(sw)), h);
+  }
+}
+// Before the desk first sounds, its meters stand dark at their full length.
+if ('ResizeObserver' in window) {
+  const dark = new Map(), ro = new ResizeObserver(es => { for (const e of es) { const m = dk.meters.find(x => x.cv === e.target) || dark.get(e.target) || dark.set(e.target, { cv: e.target, db: -99, hold: -99 }).get(e.target); m.drawn = ''; meterDraw(m) } });
+  document.querySelectorAll('.desk .mtr').forEach(c => ro.observe(c));
+}
+
+// Hearing the mix is the one way any of the desk reaches this tab's speakers, and only when
+// asked: on open speakers the microphone would take it in again.
+function hear(on) {
+  dk.hearing = on; $('dk-hear').checked = on;
+  if (!on) { if (dk.monOn) { dk.monOn = false; try { dk.mon.disconnect(dk.ac.destination) } catch (e) { } } deskRest(); return }
+  deskWake().then(ac => { if (dk.hearing && !dk.monOn) { dk.mon.connect(ac.destination); dk.monOn = true } }, e => { dk.hearing = $('dk-hear').checked = false; deskSay(e.message) });
+}
+$('dk-hear').onchange = () => hear($('dk-hear').checked);
+// Checking levels opens the inputs and the meters, with nothing sent.
+$('dk-check').onclick = async () => {
+  if (live || dk.starting) return;
+  if (dk.checking) { dk.checking = false; inputsDown(); deskPaint(); deskRest(); return }
+  dk.checking = true; deskSay(''); deskPaint();
+  try { await Promise.all([deskWake(), micUp()]) } catch (e) { dk.checking = false; inputsDown(); deskSay(e.message) }
+  deskPaint();
+};
+$('dk-mic').onclick = () => micSet(!dk.micOpen);
+const disguiseSay = () => { $('dk-disguise').setAttribute('aria-pressed', disguised()); dk.voice?.port.postMessage({ semis: disguised() ? -4 : 0 }) };
+$('st-disguise').addEventListener('change', disguiseSay);
+$('dk-disguise').onclick = () => { $('st-disguise').checked = !disguised(); disguiseSay() };
+for (const [k, s] of [['mic', 'micS'], ['deck', 'deckS'], ['pads', 'padS'], ['two', 'twoS']]) {
+  const f = $('dk-' + k + '-f');
+  f.oninput = () => { $('dk-' + k + '-db').textContent = fsay(f.value); if (dk[s]) dk[s].f.gain.setTargetAtTime(fgain(f.value), dk.ac.currentTime, 0.02) };
+}
+$('dk-duck').onchange = duck;
+$('dk-micdev').onchange = async () => { if (!dk.mic) return; micDown(); try { await micUp() } catch (e) { deskSay(e.message) } deskPaint() };
+$('dk-twoopen').onclick = () => { dk.twoOpen = !dk.twoOpen; if (dk.ac) dk.twoS.gate.gain.setTargetAtTime(dk.twoOpen ? 1 : 0, dk.ac.currentTime, 0.015); deskPaint() };
+$('dk-twooff').onclick = () => { twoDown(); $('dk-twosrc').value = ''; deskPaint(); deskRest() };
+$('dk-twosrc').onchange = async () => {
+  const v = $('dk-twosrc').value, up = twoUp(v);
+  // A second input opens the desk's ears as Check levels does.
+  if (v && !live && !dk.checking) { dk.checking = true; micUp().catch(e => deskSay(e.message)).finally(deskPaint) }
+  try { await up } catch (e) { $('dk-twosrc').value = ''; if (!(v === 'tab' && e.name === 'NotAllowedError')) deskSay(e.name === 'Error' ? e.message : 'That input would not open.') }
+  deskPaint();
+};
+// Space opens and closes the microphone and 1 to 6 fire the pads, while the desk is live or
+// checking levels and nothing is being typed.
+let spaced = false;
+addEventListener('keydown', e => {
+  if (!(live || dk.checking) || viewOn !== 'studio' || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.closest?.('textarea,select,[contenteditable],input:not([type=checkbox]):not([type=range])')) return;
+  if (e.code === 'Space') { e.preventDefault(); spaced = true; if (!e.repeat) micSet(!dk.micOpen) }
+  else if (/^(Digit|Numpad)[1-6]$/.test(e.code) && !e.repeat) { e.preventDefault(); padFire(+e.code.slice(-1) - 1) }
+});
+addEventListener('keyup', e => { if (e.code === 'Space' && spaced) { spaced = false; e.preventDefault() } });
+function deskPaint() {
+  const b = $('st-live');
+  b.classList.toggle('on', !!live); b.classList.toggle('busy', dk.starting); b.querySelector('.lbl').textContent = live ? 'End the broadcast' : 'Go live';
+  $('dk-check').hidden = !!live; $('dk-check').textContent = dk.checking ? 'Stop checking' : 'Check levels';
+  $('dk-lamp').classList.toggle('on', !!live); $('dk-off').hidden = !!live; $('dk-off').textContent = dk.checking ? 'Off the air · checking levels' : 'Off the air';
+  $('desk').classList.toggle('onair', !!live);
+  $('dk-mic').setAttribute('aria-pressed', dk.micOpen); $('dk-mic').querySelector('.lbl').textContent = dk.micOpen ? 'Mic open' : 'Mic closed';
+  $('dk-micstrip').classList.toggle('hot', !!live && dk.micOpen && !!dk.mic);
+  $('dk-disguise').setAttribute('aria-pressed', disguised());
+  $('dk-two').hidden = !dk.two; $('desk').classList.toggle('has2', !!dk.two); if (dk.two) $('dk-twoname').textContent = dk.two.name;
+  $('dk-twoopen').setAttribute('aria-pressed', dk.twoOpen); $('dk-twoopen').querySelector('.lbl').textContent = dk.twoOpen ? 'Open' : 'Closed';
+  $('dk-play').classList.toggle('playing', !dk.el.paused); $('dk-play').setAttribute('aria-label', dk.el.paused ? 'Play' : 'Pause');
+  $('st-another').disabled = !!live;
+  deckClock();
+}
+padsPaint(); deckList(); deskSay(''); deskPaint();
+if (SCOPE === 'open' && !EMBED && navigator.mediaDevices?.enumerateDevices) { devices(); navigator.mediaDevices.addEventListener?.('devicechange', devices) }
 $('st-files').onchange = e => { airFiles(e.target.files); e.target.value = '' };
 const drop = $('st-drop');
 drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over') });
 drop.addEventListener('dragleave', () => drop.classList.remove('over'));
 drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); airFiles(e.dataTransfer.files) });
-// Closing the tab while recordings are still sailing would leave them half aboard.
+// Closing the tab while recordings are still sailing would leave them half aboard, and closing
+// it on the air would end the show mid-word.
 addEventListener('beforeunload', e => {
   if (!radio || SCOPE !== 'open') return;
-  const busy = airing > 0 || JSON.parse(radio.mine()).some(m => m.unsent > 0);
+  const busy = !!live || airing > 0 || JSON.parse(radio.mine()).some(m => m.unsent > 0);
   if (busy) { e.preventDefault(); e.returnValue = '' }
 });
 
@@ -1463,6 +1839,8 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && pl
 // For anyone looking under the hood: what the player is doing.
 let tapped = null;
 window.pyrate = { node: () => radio?.id(), routes: (id, chunk) => radio?.route_check(id ?? cur?.id, chunk ?? ''), sizes: () => radio && JSON.parse(radio.log_sizes()), mine: () => kept().map(k => k.id), tap: () => { if (!ctx) return null; if (!tapped) { tapped = ctx.createMediaStreamDestination(); gain.connect(tapped) } return tapped.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, heard: heard(), stage, trouble, station: cur?.id, scheduled: sources.length, ahead_ms: playing ? aheadMs : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, view: viewOn, webcodecs }) };
+window.pyrate.desk = () => ({ live: !!live, music: !!live?.music, sent: live?.sent ?? 0, checking: dk.checking, mic: !!dk.mic, open: dk.micOpen, hearing: dk.monOn, two: dk.two?.name ?? null, deck: { tracks: dk.list.length, at: dk.at, playing: !dk.el.paused }, pads: dk.pads.map(p => p?.name ?? null), ctx: dk.ac?.state ?? null, duck: dk.duck ? +dk.duck.gain.value.toFixed(3) : null });
+window.pyrate.deskCtx = () => dk.ac;
 // ---- Finding the way: the sections under the set -------------------------------------------
 // Stations, the station page, starting a station and settings each have their own view. The
 // browser's Back button steps back through them, and nothing about them goes in the address.
