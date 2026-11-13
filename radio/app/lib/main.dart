@@ -1615,6 +1615,10 @@ class _ColoursPageState extends State<ColoursPage> {
         const SizedBox(height: 14),
         StartShapePicker(shape: shape),
         const SizedBox(height: 8),
+        // Every new station starts off the dial, heard by its link (Dylan). Shown here, fixed,
+        // so it is no surprise; the keeper puts it on the dial from Broadcast once it is made.
+        if (!pocket)
+          IgnorePointer(child: Opacity(opacity: 0.75, child: setting('Keep it off the dial', true, (_) {}, sub: 'Every new station starts heard only by its link. Put it on the dial once it is made.'))),
         fold('More options', sub: 'Invite-only, and an extra passphrase', [
           setting('Invite-only', pocket, (v) => setState(() => pocket = v), sub: 'Left out of Stations. Only people you send an invitation can find it or hear it, and they can see each other\'s devices.'),
           const SizedBox(height: 10),

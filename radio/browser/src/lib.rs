@@ -1987,6 +1987,9 @@ impl Radio {
         if explicit {
             w(&mut a, now + 3, Body::Rating { explicit: true })?;
         }
+        // Every new station starts off the dial, heard by its link (Dylan); its keeper lists it
+        // once it is made, and it joins the dial a day after it first went on the air.
+        w(&mut a, now + 4, Body::Listing { link_only: true })?;
         self.ship.archives.lock().unwrap().insert(id, a);
         let seed = hex(&deputy.seed());
         self.ship.mine.lock().unwrap().insert(id, Mine { key: deputy, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0, wrote: 0, sailed: 0 });

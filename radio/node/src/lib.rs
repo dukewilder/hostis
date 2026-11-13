@@ -3265,6 +3265,11 @@ impl Node {
                 // come back whatever happens here: they are shown once, and the station exists.
                 // (A pocket is marked private before its topic opens, so a failure here leaves it
                 // private, never public.)
+                // Every station raised here starts off the dial, heard by its link (Dylan); its
+                // keeper lists it once it is made. Lanterns raise theirs elsewhere, listed.
+                if req["link_only"].as_bool() != Some(false) {
+                    inner.store.lock().unwrap().write(id, now_ms(), Body::Listing { link_only: true })?;
+                }
                 let pocket_error = if req["pocket"].as_bool() == Some(true) { inner.pocket_new(id).err().map(|e| e.to_string()) } else { None };
                 Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "words": words, "pocket_error": pocket_error }))
             }

@@ -1364,7 +1364,7 @@ function dialNote(k) {
   $('st-dial').hidden = !k.pow;
   if (document.activeElement !== $('st-linkonly')) $('st-linkonly').checked = !!k.link_only;
   const work = !k.link_only && !k.listable && !!k.dial_at && Date.now() >= k.dial_at;
-  $('st-dialnote').textContent = k.link_only ? 'Off the dial. It plays by its link.'
+  $('st-dialnote').textContent = k.link_only ? 'Off the dial. It plays by its link. Untick below to put it on the dial; it joins ' + (k.dial_at && Date.now() < k.dial_at ? whenSay(k.dial_at) : 'soon after') + '.'
     : k.dial_at && Date.now() < k.dial_at ? 'Plays by its link now, and joins the dial ' + whenSay(k.dial_at) + '.'
     : !k.dial_at ? 'Plays by its link now, and joins the dial tomorrow.'
     : work ? 'Still finishing its work to join the dial. Keep this page open.'

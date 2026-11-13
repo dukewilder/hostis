@@ -11,32 +11,34 @@ from art import *
 LINE = ("Soon on the air.", "Never off it.")
 
 SIZES = {
-    (1600, 900): dict(word_top=64, word_w=820, hz=594, S=750, dx=118, refl=150,
+    (1600, 900): dict(lock=(90, 28, 198, 100), hz=594, dx=118, refl=150,
                       line_y=(785,), line_fs=50, url_y=840, url_fs=19),
-    (1080, 1350): dict(word_top=128, word_w=880, hz=842, S=1060, dx=78, refl=196,
+    (1080, 1350): dict(lock=(134, 32, 260, 108), hz=842, dx=78, refl=196,
                        line_y=(1112, 1180), line_fs=62, url_y=1264, url_fs=21),
-    (1080, 1080): dict(word_top=92, word_w=800, hz=668, S=880, dx=78, refl=150,
+    (1080, 1080): dict(lock=(98, 28, 204, 100), hz=668, dx=78, refl=150,
                        line_y=(894,), line_fs=50, url_y=972, url_fs=18),
 }
 # The share card (og:image) once the radio is on the air. HOSTIS.BLACK is set into the frame's
 # bottom edge, and everything is sized to read at 400 px wide, as a link preview shows it.
-CARD = dict(word_top=40, word_w=600, hz=422, S=552, dx=70, refl=100, frame=18, gap=8, num=16,
+CARD = dict(lock=(62, 22, 150, 76), hz=422, dx=70, refl=100, frame=18, gap=8, num=16,
             line=("Nobody can switch it off.",), line_y=(574,), line_fs=48, url_fs=22, url_frame=True, grain=.035)
-CUT = .505     # where the horizon crosses the skull, as a fraction of the mark's box: under the nose
+GAP = 58       # between the lockup's title and the tips of the rising skull's bones
 FRAME = 26     # inset of the ruled double edge
 
 def compose(W, H, L, water=RED):
-    hz, S, cx, depth = L["hz"], L["S"], W / 2, L["refl"]
-    top = hz - (CUT - SKULL["top"]) * S
-    x, y = cx - S * SKULL["cx"], top - S * SKULL["top"]
-    sk = f'<use href="#skull" x="{x:.1f}" y="{y:.1f}" width="{S}" height="{S}" color="{{c}}"/>'
+    hz, cx, depth = L["hz"], W / 2, L["refl"]
+    hb, hfs, tb, tfs = L["lock"]
+    # The HOSTIS skull, risen to just under its nose: the horizon crosses the glyph at y = nose.
+    s = (hz - tb - GAP) / (HSK["top"] - HSK["nose"])
+    base = hz + HSK["nose"] * s
+    sk = hskull(cx, base, s, "{c}")
     # The water: rules that open out and thin as they go down, so the reflection breaks up.
     rules, yy = [], hz + 5.0
     while yy < hz + depth:
         t = (yy - hz) / depth
         rules.append(f'<rect x="0" y="{yy:.1f}" width="{W}" height="{max(.5, 2.8 * (1 - t) ** 1.2):.2f}" fill="#fff"/>')
         yy += 5.6 + 9 * t ** 1.6
-    extra = (skull_symbol() +
+    extra = (
         f'<clipPath id="sky"><rect x="0" y="0" width="{W}" height="{hz}"/></clipPath>'
         f'<clipPath id="sea"><rect x="0" y="{hz+3}" width="{W}" height="{depth}"/></clipPath>'
         f'<mask id="water" maskUnits="userSpaceOnUse" x="0" y="0" width="{W}" height="{H}">{"".join(rules)}</mask>'
@@ -45,11 +47,11 @@ def compose(W, H, L, water=RED):
     fr, gap = L.get("frame", FRAME), L.get("gap", 9)
     o = [defs(extra), f'<rect width="{W}" height="{H}" fill="{BLACK}"/>',
          rite(fr, fr, W - 2 * fr, H - 2 * fr, gap=gap, op=.26, d=11)]
-    o.append(word(cx, L["word_top"], L["word_w"])[0])
+    o.append(lockup(cx, hb, hfs, tb, tfs))
     o.append(f'<g clip-path="url(#sky)">{sk.format(c=BONE)}</g>')
     o.append(f'<g clip-path="url(#sea)" mask="url(#water)" opacity="{1 if water == RED else .72}"><g filter="url(#wave)">'
              f'<g transform="translate(0 {2*hz}) scale(1 -1)">{sk.format(c=water)}</g></g></g>')
-    half = (SKULL["x1"] - SKULL["x0"]) * S * .5 + 30
+    half = 222 * s + 26   # the cranium, which is what the water shows at the numerals
     o.append(f'<g filter="url(#inklite)">{dial(L["dx"], W - L["dx"], hz, tick=(7, 13, 22), label=L.get("num", 14), lab_op=.7, stroke=1.6, skip=(cx - half, cx + half))}</g>')
     line = L.get("line", LINE)
     lines = line if len(L["line_y"]) > 1 else (" ".join(line),)
