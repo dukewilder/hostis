@@ -1273,7 +1273,14 @@ impl Ship {
         let Some(announce) = self.card(&id) else { return false };
         // The tab's own Log shows the station at once.
         self.on_gossip(Gossip::Station(announce.clone()));
-        let entries: Vec<Vec<u8>> = self.archives.lock().unwrap().get(&id).map(|a| a.entries().iter().filter_map(|e| e.to_bytes().ok()).collect()).unwrap_or_default();
+        // Only what the carriers lack goes, sixty-four entries at a time, as a phone sends it:
+        // the whole log with every stem grew with every six seconds of a live show, until a
+        // long broadcast no longer fitted in one.
+        let landed = {
+            let me = *self.ep.id().as_bytes();
+            self.log.lock().unwrap().get(&id).map(|l| l.carriers.iter().filter(|(n, _)| **n != me).map(|(_, (h, _))| *h).max().unwrap_or(0)).unwrap_or(0)
+        };
+        let entries: Vec<Vec<u8>> = self.archives.lock().unwrap().get(&id).map(|a| a.entries().iter().skip(landed as usize).take(64).filter_map(|e| e.to_bytes().ok()).collect()).unwrap_or_default();
         let (chunks, batch): (Vec<(Hash, Vec<u8>)>, Vec<Hash>) = {
             let mine = self.mine.lock().unwrap();
             let Some(m) = mine.get(&id) else { return false };
@@ -2095,6 +2102,25 @@ impl Radio {
             // The air comes first: a live chunk goes ahead of any recording still sailing.
             m.unsent.push_front(c.hash);
         }
+        self.ship.sail_on();
+        Ok(())
+    }
+
+    /// The end of a broadcast from this tab: listeners go back to the schedule at once.
+    pub fn live_end(&self, id: &str) -> Result<(), JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let key = self.ship.mine.lock().unwrap().get(&st).map(|m| pyrate_core::StationKey::from_seed(m.key.seed())).ok_or_else(|| js(anyhow!("not a station this browser keeps")))?;
+        {
+            let mut archives = self.ship.archives.lock().unwrap();
+            let a = archives.get_mut(&st).ok_or_else(|| js(anyhow!("the station's log is not aboard yet")))?;
+            if !matches!(a.entries().last().map(|e| e.entry.body()), Some(Body::Live { .. })) {
+                return Ok(());
+            }
+            let at = raw_now().max(a.entries().last().map(|e| e.entry.at_ms + 1).unwrap_or(0));
+            let body = if key.id() == st { Body::LiveEnd } else { Body::Deputed { by: key.id().0, body: Box::new(Body::LiveEnd) } };
+            a.write(&key, at, body).map_err(|e| js(anyhow!("{e}")))?;
+        }
+        self.ship.clocks.lock().unwrap().remove(&st);
         self.ship.sail_on();
         Ok(())
     }

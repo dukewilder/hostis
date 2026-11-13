@@ -1,4 +1,4 @@
-// Opus for recordings put on the air from this tab, off the page's thread: libopus itself,
+// Opus for recordings and live shows put on the air from this tab, off the page's thread: libopus itself,
 // in wasm (opus/), the same encoder the app uses. In: 48 kHz interleaved 16-bit blocks. Out:
 // 20 ms packets, each after its length as a big-endian u16, the way a station's chunks hold
 // them. No rights reserved.
@@ -42,7 +42,7 @@ function frame(pcm) {
   out.set(M.HEAPU8.subarray(job.outPtr, job.outPtr + n), 2);
   job.parts.push(out); job.bytes += out.length; job.frames++;
   // Live: every six seconds of packets leaves as a chunk of its own, at once.
-  if (job.live && job.frames === 300) postMessage({ live: true, out: take() });
+  if (job.live && job.frames === 300) postMessage({ live: true, out: take(), channels: job.ch, bitrate: job.bitrate });
 }
 function take() {
   const out = new Uint8Array(job.bytes); let at = 0;
@@ -50,18 +50,54 @@ function take() {
   job.parts = []; job.bytes = 0; job.frames = 0;
   return out;
 }
+function open(m) {
+  // VOIP for talk, AUDIO for music, as the app chooses.
+  const h = new M.OpusScriptHandler(48000, m.channels, m.talk ? 2048 : 2049);
+  h._encoder_ctl(4002, m.bitrate);
+  // Constant bitrate, as the app: every chunk the same size on the wire (OPUS_SET_VBR, 0).
+  h._encoder_ctl(4006, 0);
+  // The desk cleans the microphone itself, on its own path, so music never passes through voice().
+  job = { voice: m.talk && m.channels === 1 && !m.desk ? voice(true, m.disguise) : null, live: !!m.live, desk: !!m.desk, h, ch: m.channels, bitrate: m.bitrate, inPtr: M._malloc(FRAME * m.channels * 4), wide: new Uint16Array(FRAME * m.channels * 2), mono: new Int16Array(FRAME), outPtr: M._malloc(MAX_PACKET), pending: new Int16Array(0), parts: [], bytes: 0, frames: 0 };
+}
+function close() { M.OpusScriptHandler.destroy_handler(job.h); M._free(job.inPtr); M._free(job.outPtr); job = null }
+// The live desk: its worklet sends the air along a port of its own as it is made, 48 kHz stereo,
+// interleaved, so nothing waits on the page. Talk is folded to mono here. What is left over
+// between frames carries across a change of encoder, so a switch to music loses no sound.
+let pend = new Int16Array(0);
+function air(st) {
+  if (!job) return;
+  const all = new Int16Array(pend.length + st.length); all.set(pend); all.set(st, pend.length);
+  const step = FRAME * 2; let at = 0;
+  for (; at + step <= all.length; at += step) {
+    const s = all.subarray(at, at + step);
+    if (job.ch === 1) { const m = job.mono; for (let k = 0; k < FRAME; k++) m[k] = (s[2 * k] + s[2 * k + 1]) >> 1; frame(m) } else frame(s);
+  }
+  pend = all.slice(at);
+}
+// The last of a broadcast: the part-frame made up with quiet, and whatever part-chunk is left.
+function airEnd(id) {
+  if (!job) return;
+  if (pend.length) { const last = new Int16Array(FRAME * 2); last.set(pend); pend = new Int16Array(0); air(last) }
+  const frames = job.frames, channels = job.ch, bitrate = job.bitrate, out = take();
+  close();
+  postMessage({ id, ok: true, last: true, frames, out, channels, bitrate }, [out.buffer]);
+}
 onmessage = async e => {
   const m = e.data;
   try {
     await start();
     if (m.kind === 'begin') {
-      // VOIP for talk, AUDIO for music, as the app chooses.
-      const h = new M.OpusScriptHandler(48000, m.channels, m.talk ? 2048 : 2049);
-      h._encoder_ctl(4002, m.bitrate);
-      // Constant bitrate, as the app: every chunk the same size on the wire (OPUS_SET_VBR, 0).
-      h._encoder_ctl(4006, 0);
-      job = { voice: m.talk && m.channels === 1 ? voice(true, m.disguise) : null, live: !!m.live, h, ch: m.channels, inPtr: M._malloc(FRAME * m.channels * 4), wide: new Uint16Array(FRAME * m.channels * 2), outPtr: M._malloc(MAX_PACKET), pending: new Int16Array(0), parts: [], bytes: 0, frames: 0 };
+      open(m);
       postMessage({ id: m.id, ok: true });
+    } else if (m.kind === 'port') {
+      m.port.onmessage = ev => { try { if (ev.data instanceof Int16Array) air(ev.data); else if (ev.data && ev.data.end) airEnd(0) } catch (err) { postMessage({ error: String(err && err.message || err) }) } };
+    } else if (m.kind === 'switch') {
+      // Music joins a talk show: the chunk so far leaves as it is, and the next starts in stereo.
+      if (job) { const live = job.live; if (job.frames) postMessage({ live: true, out: take(), channels: job.ch, bitrate: job.bitrate }); close(); open({ ...m, live, desk: true }) }
+      postMessage({ id: m.id, ok: true });
+    } else if (m.kind === 'end' && m.desk) {
+      // Asked for when the worklet's own last word never came: the same ending, or word it is done.
+      if (job) airEnd(m.id); else postMessage({ id: m.id, ok: true, last: true, out: new Uint8Array(0) });
     } else if (m.kind === 'feed') {
       if (job.voice) job.voice(m.pcm);
       const all = new Int16Array(job.pending.length + m.pcm.length); all.set(job.pending); all.set(m.pcm, job.pending.length);
@@ -72,8 +108,7 @@ onmessage = async e => {
     } else if (m.kind === 'end') {
       if (job.pending.length) { const last = new Int16Array(FRAME * job.ch); last.set(job.pending); frame(last) }
       const frames = job.frames, out = take();
-      M.OpusScriptHandler.destroy_handler(job.h); M._free(job.inPtr); M._free(job.outPtr);
-      job = null;
+      close();
       postMessage({ id: m.id, ok: true, frames, out }, [out.buffer]);
     }
   } catch (err) { postMessage({ id: m.id, error: String(err && err.message || err) }) }

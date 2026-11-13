@@ -149,8 +149,57 @@
 <div class="st-opts"><label><input type="checkbox" id="st-talk"><span>Spoken word</span></label><label><input type="checkbox" id="st-disguise"><span>Disguise my voice</span></label></div>
 <div id="st-queue" class="st-queue"></div>
 <p class="fine">Keep this tab open until they finish sending.</p>
-<div class="st-live"><button id="st-live" class="power"><span class="glyph">&#9679;&#xFE0E;</span><span class="lbl">Go live</span></button><span id="st-livetime" class="st-livetime"></span></div>
-<p id="st-livenote" class="fine" hidden>Listeners hear you about fifteen seconds behind. Sounds in the background can give away where you are.</p>
+<div id="desk" class="desk" role="region" aria-label="Live desk">
+<div class="dk-plate"><span>Live desk</span><label class="dk-hear"><input type="checkbox" id="dk-hear"><span>Hear the mix</span><small>headphones</small></label></div>
+<div class="dk-air">
+<div class="dk-go"><button id="st-live" class="power"><span class="glyph" aria-hidden="true">&#9679;&#xFE0E;</span><span class="lbl">Go live</span></button><button id="dk-check" class="btn quiet">Check levels</button></div>
+<div class="dk-info">
+<p class="dk-l1"><span id="dk-lamp" class="lamp"></span><span id="st-livetime" class="st-livetime"></span><span id="dk-off" class="dk-off">Off the air</span><span id="dk-aboard" class="dk-aboard"></span></p>
+<p id="dk-now" class="dk-now"></p>
+<p id="st-livenote" class="dk-note" role="status"></p>
+</div>
+<div class="dk-master" aria-hidden="true"><span>L</span><canvas id="dk-ml" class="mtr"></canvas><span>R</span><canvas id="dk-mr" class="mtr"></canvas></div>
+</div>
+<div class="dk-grid">
+<section class="dk-strip dk-mic" id="dk-micstrip" aria-label="Microphone">
+<div class="dk-head"><span>Microphone</span><select id="dk-micdev" aria-label="Which microphone" hidden></select></div>
+<canvas id="dk-mic-m" class="mtr"></canvas>
+<div class="dk-fader"><input type="range" class="dk-f" id="dk-mic-f" min="0" max="100" value="80" aria-label="Microphone level"><output id="dk-mic-db">0 dB</output></div>
+<div class="dk-keys"><button id="dk-mic" class="dk-key" aria-pressed="true"><span class="dot" aria-hidden="true"></span><span class="lbl">Mic open</span><kbd>Space</kbd></button><button id="dk-disguise" class="btn dk-sq" aria-pressed="false">Disguise</button></div>
+</section>
+<section class="dk-strip dk-two" id="dk-two" aria-label="Second input" hidden>
+<div class="dk-head"><span id="dk-twoname">Second input</span><button id="dk-twooff" class="btn quiet dk-mini">Off</button></div>
+<canvas id="dk-two-m" class="mtr"></canvas>
+<div class="dk-fader"><input type="range" class="dk-f" id="dk-two-f" min="0" max="100" value="80" aria-label="Second input level"><output id="dk-two-db">0 dB</output></div>
+<div class="dk-keys"><button id="dk-twoopen" class="dk-key" aria-pressed="true"><span class="dot" aria-hidden="true"></span><span class="lbl">Open</span></button></div>
+</section>
+<section class="dk-strip dk-deck" id="dk-deck" aria-label="Deck">
+<div class="dk-head"><span>Deck</span><label class="btn quiet dk-mini dk-add">Add music<input type="file" id="dk-files" multiple accept="audio/*,video/mp4,video/webm,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.webm"></label></div>
+<div class="dk-np"><span id="dk-title" class="dk-title"></span><span id="dk-times" class="dk-times"></span></div>
+<div id="dk-prog" class="dk-prog"><div></div></div>
+<div class="dk-transport">
+<button id="dk-prev" class="dk-tb" aria-label="Back"><svg class="dk-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h2.2v14H5zM19 5v14L8.6 12z"/></svg></button>
+<button id="dk-play" class="dk-tb dk-pl" aria-label="Play"><svg class="dk-ic pl" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.5v15L19.5 12z"/></svg><svg class="dk-ic pa" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 5h3.8v14H6.5zM13.7 5h3.8v14h-3.8z"/></svg></button>
+<button id="dk-next" class="dk-tb" aria-label="Skip"><svg class="dk-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M16.8 5H19v14h-2.2zM5 5v14l10.4-7z"/></svg></button>
+<div class="dk-fader"><input type="range" class="dk-f" id="dk-deck-f" min="0" max="100" value="80" aria-label="Deck level"><output id="dk-deck-db">0 dB</output></div>
+</div>
+<canvas id="dk-deck-m" class="mtr"></canvas>
+<ol id="dk-list" class="dk-list"></ol>
+<label for="dk-files" id="dk-empty" class="dk-empty"><span class="drop-lead">Drop music here</span><span class="drop-sub">or click to choose it</span></label>
+</section>
+<section class="dk-strip dk-pads" aria-label="Pads">
+<div class="dk-head"><span>Pads</span></div>
+<div id="dk-pads" class="dk-padgrid"></div>
+<div class="dk-padfoot"><div class="dk-fader"><input type="range" class="dk-f" id="dk-pads-f" min="0" max="100" value="80" aria-label="Pads level"><output id="dk-pads-db">0 dB</output></div><canvas id="dk-pads-m" class="mtr"></canvas></div>
+</section>
+</div>
+<details class="fold dk-more"><summary>More</summary><div>
+<label class="field"><span>Second input</span><select id="dk-twosrc"><option value="">Off</option></select></label>
+<label class="field"><span>Music under the mic</span><select id="dk-duck"><option value="1">Stays up</option><option value="0.5">Drops to half</option><option value="0.25" selected>Drops to a quarter</option><option value="0.125">Drops to an eighth</option></select></label>
+<div class="switches"><label><input type="checkbox" id="dk-each"><span>Stop after each track</span></label></div>
+</div></details>
+<input type="file" id="dk-padfile" accept="audio/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus" hidden>
+</div>
 <details class="fold"><summary>More</summary><div>
 <label class="field"><span>Where your recordings came from</span><input id="st-source" maxlength="280" autocomplete="off" placeholder="And why you are free to play them"></label>
 </div></details>

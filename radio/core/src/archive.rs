@@ -99,6 +99,10 @@ pub enum Body {
     Notice { text: String, until_ms: u64 },
     /// A notice taken down.
     Unnotice { notice: Hash },
+    /// The end of a live broadcast. Listeners go back to the schedule at once, rather than
+    /// waiting out the silence after the last six seconds. Older nodes keep it unread, and it
+    /// ends the broadcast for them too, since only a live chunk at the end of a log is live.
+    LiveEnd,
     /// An entry from a later version of the app. Kept and passed on exactly as it came, so
     /// old and new nodes share one log; this version does nothing with it.
     ///
