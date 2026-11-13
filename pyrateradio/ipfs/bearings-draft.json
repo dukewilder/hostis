@@ -1,9 +1,8 @@
 {
  "pyrate": "bearings",
- "at": 1794572005158,
+ "at": 1794572394461,
  "doors": [
   "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442",
-  "1e048373355a2901497e8307a89f63f421ea1746b2a98419251236160e303ddb",
   "f6d5c5276a98baf5d4964683115e9f0f6095e713f46bec34c25c29a66e46d753"
  ],
  "players": [
@@ -52,8 +51,8 @@
    "cid": "bafybeihslsyq3lowomvudc5oxm3tncwlhbgeqdiob2up737p2g4uwrce54"
   },
   {
-   "name": "source/pyrate-radio-src-fd90aa6.tar.gz",
-   "cid": "bafybeiegslnezt2uc4mmmzvb255qmuw6tikz4ib7f6o2dt25b5q37lzwhq"
+   "name": "source/pyrate-radio-src-d79778e.tar.gz",
+   "cid": "bafybeigk3veaqr5mypcglweqlkj2dasv6zytyuj2ctizh2ofi2jevvkv34"
   }
  ]
 }
