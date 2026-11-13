@@ -56,7 +56,7 @@ def defs(extra=""):
 {extra}
 </defs>"""
 
-def head(css, w, h, bg=BLACK):
+def _head(css, w, h, bg=BLACK):
     return f"""<!DOCTYPE html><html lang="en-GB"><head><meta charset="utf-8">
 <style>{css}
 html,body{{margin:0;background:{bg}}}
@@ -68,7 +68,7 @@ svg{{display:block}}
 </style></head><body>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{w}" height="{h}" viewBox="0 0 {w} {h}">"""
 
-FOOT = "</svg></body></html>"
+FOOT = "</svg>" + "{CENTRE}" + "</body></html>"
 
 def grain(w, h, op=.07):
     return f'<rect width="{w}" height="{h}" filter="url(#grain)" opacity="{op}" style="mix-blend-mode:screen"/>'
@@ -137,3 +137,30 @@ def skull_symbol(sid="skull"):
     return f'<symbol id="{sid}" viewBox="{vb}">{g}{"".join(keep)}</g></symbol>'
 
 SKULL = dict(cx=613.5/1144, top=126/1144, bottom=743/1144, x0=372/1144, x1=855/1144)
+
+# The HOSTIS skull: the Noto Sans Symbols 2 glyph, as hostis.black and the radio draw it (font units,
+# y up, baseline at 0). Bounds of the ink: x 51 to 868, y -61 to 736; the nose ends at y 236.
+HSKULL_D = open(f"{HERE}/hostis-skull.d").read().strip()
+HSK = dict(x0=51, x1=868, cx=459.5, top=736, bottom=-61, nose=228)
+
+def hskull(cx, base_y, s, col=BONE, extra=""):
+    """The HOSTIS skull with its glyph baseline at base_y, centred on cx, s pixels per font unit."""
+    return (f'<g transform="translate({cx - HSK["cx"] * s:.2f} {base_y:.2f}) scale({s:.5f} {-s:.5f})" fill="{col}" {extra}>'
+            f'<path d="{HSKULL_D}"/></g>')
+
+def lockup(cx, base, fs, title_base, title_fs, col=BONE):
+    """The radio's lockup: the HOSTIS bar (skull and HOSTIS, as the flagbar sets them) and
+    "Pyrate Radio" set below it in the masthead's face. Centred on cx at render time."""
+    sk = fs * 30 / 14 / 1000            # the flagbar: a 30px skull beside 14px type, 12px apart
+    g = (f'<g class="centre" data-cx="{cx}">{hskull(919 * sk / 2, base, sk, col)}'
+         f'<text x="{919 * sk + fs * 12 / 14:.1f}" y="{base}" class="sc" font-size="{fs}" fill="{col}" letter-spacing=".3em">HOSTIS</text></g>')
+    t = (f'<text x="{cx}" y="{title_base}" class="sc" font-size="{title_fs}" fill="{col}" text-anchor="middle" '
+         f'letter-spacing=".09em" dx="{title_fs * .045:.1f}">Pyrate Radio</text>')
+    return g + t
+
+CENTRE_JS = """<script>for(const g of document.querySelectorAll('.centre')){const b=g.getBBox(),
+ls=parseFloat(getComputedStyle(g.querySelector('text')).letterSpacing)||0;
+g.setAttribute('transform','translate('+(+g.dataset.cx-(b.x+(b.width-ls)/2))+' 0)')}</script>"""
+
+FOOT = "</svg>" + CENTRE_JS + "</body></html>"
+head = _head

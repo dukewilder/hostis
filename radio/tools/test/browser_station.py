@@ -59,7 +59,9 @@ try:
         # The radio's own notes (shown with ?debug): any stem that did not take the station's cargo.
         stems = []; a.on("console", lambda m: stems.append(m.text.split(": ", 1)[-1]) if ": stem:" in m.text else None)
         a.goto(URL + "?debug"); wait(a, "document.getElementById('signal').textContent.includes('Connected')", 90)
-        a.click(".tab[data-v=studio]"); a.fill("#st-name", "Ship Shape"); a.fill("#st-about", "Before the edit"); a.click("#st-raise")
+        a.click(".tab[data-v=studio]"); a.fill("#st-name", "Ship Shape"); a.fill("#st-about", "Before the edit")
+        check(a.is_checked("#st-newoff") and a.is_disabled("#st-newoff"), "the raise form shows the station starting off the dial, fixed")
+        a.click("#st-raise")
         a.wait_for_selector("#st-show:not([hidden])"); a.check("#st-written"); a.click("#st-done")
         wait(a, "!document.getElementById('st-status').textContent.includes('ready') && document.getElementById('st-status').textContent.length > 0", 120)
         sid = a.evaluate("window.pyrate.mine()[0]")
@@ -67,7 +69,7 @@ try:
         wait(a, "document.querySelectorAll('#st-queue .qi.done').length === 2", 90)
         check(a.is_visible("#ys") and a.text_content("#ys-lib-v") == "2 recordings", "the keeper's panel shows the station and its two recordings")
         within(a, "!document.getElementById('st-dial').hidden", 30)
-        check("joins the dial" in (a.text_content("#st-dialnote") or "") and sid in (a.text_content("#st-link") or ""), "the keeper is told the station plays by its link and when it joins the dial: " + repr(a.text_content("#st-dialnote")))
+        check("plays by its link" in (a.text_content("#st-dialnote") or "") and "joins" in (a.text_content("#st-dialnote") or "") and sid in (a.text_content("#st-link") or ""), "the keeper is told the station plays by its link and when it joins the dial: " + repr(a.text_content("#st-dialnote")))
         # A stranger, with no link, who meets the station only in the list once it is listed.
         d = tab(1440, 900); d.on("pageerror", lambda e: errs.append("stranger: " + str(e)))
         d.goto(URL); wait(d, "document.getElementById('signal').textContent.includes('Connected')", 90)
@@ -149,6 +151,10 @@ try:
         # Listed: a day after it first went on the air (a minute in a test build, PYRATE_LIST_AGE_MS)
         # and once the keeper's browser has done its work, the station is in a stranger's list.
         inlist = f"!!document.querySelector('#rows .row[data-id=\"{sid}\"]')"
+        # Every new station starts off the dial; the keeper puts it on.
+        check(a.is_checked("#st-linkonly"), "a new station starts off the dial")
+        check(not d.evaluate(inlist), "and is in no stranger's list while it is")
+        a.uncheck("#st-linkonly")
         view(d, "list"); t_l = time.time()
         check(within(d, inlist, 300), f"a stranger's list shows the station once it is listed ({round(time.time() - t_l)} s more)")
         # Kept off the dial: out of strangers' lists, and its link still plays.
