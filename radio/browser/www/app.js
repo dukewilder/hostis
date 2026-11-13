@@ -185,17 +185,18 @@ function bits(id) { const b = []; for (const c of id) { const v = parseInt(c, 16
 function flag(el, id, live) { const b = bits(id); let h = ''; for (let r = 0; r < 6; r++) for (let c = 0; c < 9; c++) { const half = c < 5 ? c : 8 - c; h += b[(r * 5 + half) % b.length] ? '<b>1</b>' : '<span>0</span>' } el.innerHTML = h; el.classList.toggle('live', !!live) }
 
 // Pictures come over the network like chunks, checked against their fingerprints. One that
-// will not come is not asked for again for two minutes, none over 2 MB is shown, and the
-// tab keeps the last two hundred, letting the rest go.
-const picFailed = new Map();
+// will not come is asked for again after ten seconds, then twenty, thirty and so on up to two
+// minutes, as a new picture can reach the carriers a minute or so after the card that names it.
+// None over 2 MB is shown, and the tab keeps the last two hundred, letting the rest go.
+const picFailed = new Map(), PIC_WAIT = [10, 20, 30, 45, 60, 90, 120];
 async function pic(station, hash) {
   if (!hash || !sw.art() || !radio) return null;
   if (pics.has(hash)) { const p = pics.get(hash); pics.delete(hash); pics.set(hash, p); return p }
-  if (Date.now() - (picFailed.get(hash) || 0) < 120000) return null;
-  const p = radio.fetch(station, hash).then(b => { if (b.length > 2000000) throw 'too large'; return URL.createObjectURL(new Blob([b], { type: 'image/jpeg' })) })
+  const f = picFailed.get(hash); if (f && Date.now() - f.at < 1000 * PIC_WAIT[Math.min(f.n, PIC_WAIT.length) - 1]) return null;
+  const p = radio.fetch(station, hash).then(b => { if (b.length > 2000000) throw 'too large'; picFailed.delete(hash); return URL.createObjectURL(new Blob([b], { type: 'image/jpeg' })) })
     // In the first seconds the radio may not have its routes yet: a picture that does not come
-    // then is asked for again at the next look, not held back for two minutes.
-    .catch(() => { pics.delete(hash); if (Date.now() - bootAt > 15000) picFailed.set(hash, Date.now()); return null });
+    // then is asked for again at the next look, not held back.
+    .catch(() => { pics.delete(hash); if (Date.now() - bootAt > 15000) picFailed.set(hash, { at: Date.now(), n: (picFailed.get(hash)?.n || 0) + 1 }); return null });
   pics.set(hash, p);
   while (pics.size > 200) { const [k, old] = pics.entries().next().value; pics.delete(k); old.then(u => u && u !== $('cover').src && URL.revokeObjectURL(u)) }
   return p;
@@ -570,7 +571,7 @@ async function play(id, g) {
 // ---- What the set says ------------------------------------------------------------------
 // One reading of the state, put everywhere at once. While the set tunes in, it says how far it
 // has got, with a moving line, and never a title: the title shows once its sound is heard.
-let artWant = null, prefetched = '', showAt = 0, soundy = false, lastUse = Date.now();
+let artWant = null, banAsk = null, prefetched = '', showAt = 0, soundy = false, lastUse = Date.now();
 for (const ev of ['pointerdown', 'keydown', 'scroll', 'touchstart']) addEventListener(ev, () => { lastUse = Date.now() }, { passive: true, capture: true });
 
 // A station the listener is about to choose (a row pointed at or touched, the stations on the
@@ -630,6 +631,9 @@ function paint() {
   // The picture: the recording's own if it has one, the station's otherwise.
   const want = (track && p.art) || cur.cover || null, c = cur.id;
   if (want !== artWant) { artWant = want; if (!want) art(null); else pic(c, want).then(u => { if (cur?.id === c && artWant === want) { if (u) art(u); else artWant = undefined } }) }
+  // A banner that had not come when the station was shown is asked for again, as the cover is.
+  const ban = cur.banner;
+  if (ban && sw.art() && ban !== banAsk && !$('banner').style.backgroundImage) { banAsk = ban; pic(c, ban).then(u => { if (cur?.id === c && cur.banner === ban && u) { if (!$('banner').style.backgroundImage) $('banner').style.backgroundImage = 'url(' + u + ')' } else if (banAsk === ban) banAsk = null }) }
   // A station on the set and not yet playing: its sound comes aboard ahead, the piece on now and
   // the one after, for as long as someone is using the page, so Listen starts at once.
   if (!playing && track && p.chunk !== prefetched && !document.hidden && Date.now() - Math.max(showAt, lastUse) < 600000) { prefetched = p.chunk; radio.fetch(c, p.chunk).catch(() => { }); if (p.next) radio.fetch(c, p.next).catch(() => { }) }
@@ -722,7 +726,7 @@ async function show(s) {
   if (hailFor && hailFor !== s.id) dropHail();
   const seq = ++showSeq, moved = cur?.id !== s.id;
   cur = s;
-  if (moved) { showAt = Date.now(); flag($('flag'), s.id, s.live); artWant = undefined; art(null); $('banner').style.backgroundImage = ''; $('passbox').hidden = $('tipbox').hidden = $('clipbox').hidden = true }
+  if (moved) { showAt = Date.now(); flag($('flag'), s.id, s.live); artWant = undefined; banAsk = null; art(null); $('banner').style.backgroundImage = ''; $('passbox').hidden = $('tipbox').hidden = $('clipbox').hidden = true }
   // On hostis.black the chatter is in the open player: this station's room, one tap away.
   if (SCOPE === 'harbour') $('chatopen').href = OPEN_PLAYERS[0] + '#' + s.id;
   $('name').textContent = s.name || s.call_sign || 'A station';
@@ -919,7 +923,7 @@ function refresh() {
   $('signal').textContent = (flocking ? 'Playing in step with the host · ' : '') + (n ? 'Connected · ' + on + (on === 1 ? ' station' : ' stations') + ' on the air' : Date.now() - bootAt > 30000 ? 'Still connecting' : 'Connecting');
   $('flockleave').hidden = !flocking;
   rows(); warmUp();
-  if (cur) { const u = stations.find(x => x.id === cur.id); if (u && !u.cached) { const pic0 = cur.cover, ban0 = cur.banner, name0 = cur.name; cur = u; if (u.cover !== pic0 || u.banner !== ban0 || u.name !== name0) show(u); else { $('cs').textContent = u.call_sign + (u.aboard !== undefined ? '  ' + u.aboard + ' listening' : ''); pageHead() } } }
+  if (cur) { const u = stations.find(x => x.id === cur.id); if (u && !u.cached) { const pic0 = cur.cover, ban0 = cur.banner, name0 = cur.name; cur = u; if (u.cover !== pic0 || u.banner !== ban0 || u.name !== name0) show(u); else { $('cs').textContent = u.call_sign + (u.aboard !== undefined ? '  ' + u.aboard + ' listening' : ''); $('tip').hidden = !u.tip; pageHead() } } }
   else opening();
   moveOn();
 }
@@ -934,7 +938,8 @@ function moveOn() {
   if (++hops > 6) return;
   hopping = true; try { again() } finally { hopping = false }
 }
-function opening() { const s = firstStation(); if (s && s.id !== cur?.id) { show(s); if (!(wanted || passedId())) landed(s, opening) } }
+// A station opened by its link stays on the set: the link is read before show() clears it.
+function opening() { const s = firstStation(); if (s && s.id !== cur?.id) { const linked = wanted || passedId(); show(s); if (!linked) landed(s, opening) } }
 // The station the set opens on: one passed in a link, the last one this tab played, the first
 // station this browser keeps, or the most heard. Only a link opens on a station with nothing to
 // play. Which stations this browser keeps is all it goes on: no listening is written down.
@@ -1212,7 +1217,7 @@ for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-expl
   el.onchange = () => {
     store(key, (el.checked ? on : (on === '1' ? '0' : '1'))); forgetPics(); rowsKey = '';
     // Pictures off takes the set's cover and banner and the mini player's at once; on brings them back.
-    if (id === 'sw-art') { artWant = undefined; art(null); $('banner').style.backgroundImage = '' }
+    if (id === 'sw-art') { artWant = undefined; banAsk = null; art(null); $('banner').style.backgroundImage = '' }
     refresh(); if (cur) show(cur);
   };
 }
@@ -1267,6 +1272,7 @@ function studioShow() {
   const k = JSON.parse(radio.mine()).find(m => m.id === mineCur);
   $('st-mname').textContent = k?.name || 'Your station'; $('st-mcs').textContent = (k?.call_sign || '') + '  ' + fqs(mineCur);
   flag($('st-flag'), mineCur, false);
+  ysLoad();
 }
 function studioStatus() {
   if (!radio || !mineCur) return;
@@ -1370,6 +1376,140 @@ $('st-restore').onclick = async () => {
 // A new station starts with an empty form and none of the last one's recordings in its queue.
 $('st-another').onclick = () => { mineCur = null; $('st-name').value = $('st-about').value = $('st-kinds').value = ''; $('st-kindnote').hidden = true; $('st-queue').innerHTML = ''; studioShow() };
 $('st-kinds').oninput = () => { $('st-kindnote').hidden = $('st-kinds').value.split(',').filter(k => k.trim()).length <= 5 };
+
+// ---- Your station: what it says of itself, changed from the tab ---------------------------
+// Each fold writes one entry to the station's log, the same entry the app writes, and it sails
+// at once. Listeners see it once a carrier shows it, which takes up to two minutes.
+let ysInfo = null, ysFor = null, ysNoteT = 0;
+function ysSay(t) { $('ys-note').textContent = t || ''; clearTimeout(ysNoteT); if (t) ysNoteT = setTimeout(() => { $('ys-note').textContent = '' }, 9000) }
+const errText = e => { const t = String(e?.message || e || ''); return t.charAt(0).toUpperCase() + t.slice(1) + (/[.!?]$/.test(t) ? '' : '.') };
+const hhmm = m => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+const mins = v => { const [h, m] = String(v || '0:0').split(':').map(Number); return ((h || 0) * 60 + (m || 0)) % 1440 };
+const MODES = { shuffle: 'Shuffle', in_order: 'In order', newest_first: 'Newest first', daily: 'Same time daily', weekly: 'Same time weekly' };
+const MODENOTE = { shuffle: 'Everything you add, shuffled, day and night.', in_order: 'Your recordings in the order you add them, over and over.', newest_first: 'The newest recording first, then the rest.', daily: 'Your recordings start from the top at the same time every day.', weekly: 'Your recordings start from the top at the same time every week.' };
+// The slot the app keeps for going live is the one this panel looks after; others it leaves be.
+const liveSlot = p => (p?.slots || []).find(s => s.live && s.title === 'Live');
+const ysMode = () => document.querySelector('input[name=ys-mode]:checked')?.value || 'shuffle';
+// The time-zone table a schedule carries, made as the app makes it: the offset now, and every
+// change from four hundred days back to forty years on.
+function zoneTable() {
+  const day = 86400000, off = ms => -new Date(ms).getTimezoneOffset();
+  let t = Date.now() - 400 * day, cur = off(t); const end = Date.now() + 40 * 365 * day, out = [[0, cur]];
+  while (t < end) {
+    const n = t + day, o = off(n);
+    if (o !== cur) { let lo = t, hi = n; while (hi - lo > 60000) { const mid = lo + Math.floor((hi - lo) / 2); if (off(mid) === o) hi = mid; else lo = mid } out.push([Math.floor(hi / 60000) * 60000, o]); cur = o }
+    t = n;
+  }
+  return out;
+}
+const zoneName = () => { try { return new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(new Date()).find(p => p.type === 'timeZoneName')?.value || '' } catch (e) { return '' } };
+
+// The panel shows the station as its log has it. A fold the keeper has open keeps what they typed.
+function ysLoad(force) {
+  if (!radio || !mineCur || !adopted.has(mineCur)) return;
+  let v; try { v = JSON.parse(radio.station_info(mineCur)) } catch (e) { return }
+  const fresh = force || ysFor !== mineCur, keep = id => !fresh && $(id).closest('details').open;
+  ysFor = mineCur; ysInfo = v;
+  if (!keep('ys-name')) { $('ys-name').value = v.name; $('ys-about').value = v.about; $('ys-port').value = v.port || ''; $('ys-tip').value = v.tip || '' }
+  if (!keep('ys-kinds')) { $('ys-kinds').value = v.kinds.join(', '); $('ys-mature').checked = v.mature; $('ys-explicit').checked = v.explicit; $('ys-kindnote').hidden = true }
+  const p = v.programme, m = p?.mode || { kind: 'shuffle' }, ls = liveSlot(p);
+  if (!keep('ys-start')) {
+    for (const r of document.querySelectorAll('input[name=ys-mode]')) r.checked = r.value === (MODES[m.kind] ? m.kind : 'shuffle');
+    $('ys-start').value = hhmm(m.start_min ?? 18 * 60); $('ys-day').value = String(m.day || 0);
+    $('ys-live').checked = !!ls; $('ys-liveat').value = hhmm(ls?.span.start_min ?? 20 * 60); $('ys-livelen').value = String(ls?.span.len_min || 60);
+    ysWhen();
+  }
+  $('ys-colours-v').textContent = v.name + (v.port ? ' · ' + v.port : '');
+  $('ys-details-v').textContent = [v.kinds.join(', '), v.mature && 'mature', v.explicit && 'explicit'].filter(Boolean).join(' · ') || 'None given';
+  $('ys-art-v').textContent = v.cover && v.banner ? 'Cover and banner' : v.cover ? 'Cover' : v.banner ? 'Banner' : 'None';
+  $('ys-sched-v').textContent = (MODES[m.kind] || 'Shuffle') + (m.kind === 'daily' || m.kind === 'weekly' ? ' from ' + hhmm(m.start_min || 0) : '') + (ls ? ' · live at ' + hhmm(ls.span.start_min) : '');
+  $('ys-notices-v').textContent = v.notices.length ? v.notices.length + ' up' : 'None';
+  $('ys-lib-v').textContent = v.library.length + (v.library.length === 1 ? ' recording' : ' recordings');
+  const day = ms => new Date(ms).toLocaleDateString([], { day: 'numeric', month: 'short' });
+  $('ys-noticelist').innerHTML = v.notices.map(n => '<div class="ys-row"><span class="w">' + esc(n.text) + '<em>' + esc(day(n.at_ms) + ' ' + hm(n.at_ms)) + '</em></span><button class="btn quiet" data-down="' + n.id + '">Take down</button></div>').join('') || '<p class="fine">No notice is up.</p>';
+  $('ys-library').innerHTML = v.library.map(t => '<div class="ys-row"><span class="w">' + esc(t.title || 'Untitled') + '<em>' + esc([t.by, 'added ' + day(t.added_ms)].filter(Boolean).join(' · ')) + '</em></span><button class="btn quiet" data-out="' + t.track + '">Take out</button></div>').join('') || '<p class="fine">Nothing in the library yet.</p>';
+  ysPics(v);
+}
+// The station's own pictures, from this tab's hold, in the panel's frames.
+const ysPicU = {};
+function ysPics(v) {
+  for (const k of ['cover', 'banner']) {
+    const h = v[k] || null, f = $('ys-' + k), was = ysPicU[k];
+    if ((was?.h ?? null) === h) continue;
+    if (was?.u) URL.revokeObjectURL(was.u);
+    ysPicU[k] = { h }; f.classList.toggle('full', !!h); f.style.backgroundImage = '';
+    if (h) radio.fetch(mineCur, h).then(b => { if (ysPicU[k]?.h !== h) return; const u = URL.createObjectURL(new Blob([b], { type: 'image/jpeg' })); ysPicU[k].u = u; f.style.backgroundImage = 'url(' + u + ')' }).catch(() => { });
+  }
+}
+function ysWhen() {
+  const kind = ysMode(), clock = kind === 'daily' || kind === 'weekly';
+  $('ys-when').hidden = !clock; $('ys-dayf').hidden = kind !== 'weekly'; $('ys-livewhen').hidden = !$('ys-live').checked;
+  $('ys-modenote').textContent = MODENOTE[kind] + ($('ys-live').checked ? ' The same hour each day is kept for you to go live.' : '');
+  $('ys-zone').hidden = !(clock || $('ys-live').checked);
+  $('ys-zone').textContent = 'Times are in your time zone' + (zoneName() ? ' (' + zoneName() + ')' : '') + '. A schedule with clock times carries it, where anyone can read it.';
+}
+// The schedule as the app writes it. What the panel does not show (hours, other slots, an
+// ident) stays as it was.
+function ysProgramme() {
+  const p = JSON.parse(JSON.stringify(ysInfo?.programme || { zone_name: '', zone: [], mode: { kind: 'shuffle' }, hours: [], slots: [], ident: null, ident_every_min: 30 }));
+  const kind = ysMode(), start = mins($('ys-start').value);
+  p.mode = kind === 'daily' ? { kind, start_min: start } : kind === 'weekly' ? { kind, day: +$('ys-day').value, start_min: start } : { kind };
+  p.slots = (p.slots || []).filter(s => !(s.live && s.title === 'Live'));
+  if ($('ys-live').checked) p.slots.push({ title: 'Live', about: '', span: { days: 0x7f, start_min: mins($('ys-liveat').value), len_min: +$('ys-livelen').value }, live: true, fill: { kind: 'library' } });
+  // Clock times carry the keeper's time zone; a station that only shuffles says nothing of where its keeper lives.
+  const clock = kind === 'daily' || kind === 'weekly' || (p.hours || []).length > 0 || p.slots.length > 0;
+  p.zone = clock ? zoneTable() : []; p.zone_name = clock ? zoneName() : '';
+  return p;
+}
+function ysSave(what, b) {
+  const id = mineCur; if (!id || !radio) return;
+  b.disabled = true;
+  try {
+    if (what === 'colours') radio.colours_set(id, $('ys-name').value, $('ys-about').value, $('ys-port').value, $('ys-tip').value);
+    else if (what === 'details') radio.details_set(id, $('ys-kinds').value, $('ys-mature').checked, $('ys-explicit').checked);
+    else if (what === 'sched') radio.programme_set(id, JSON.stringify(ysProgramme()));
+    else if (what === 'notice') { radio.notice_post(id, $('ys-notice').value, 0); $('ys-notice').value = '' }
+    ysSay(what === 'notice' ? 'Posted. Listeners see it within two minutes.' : 'Saved. Listeners see it within two minutes.');
+    ysLoad(true); studioShow();
+  } catch (e) { ysSay(errText(e)) }
+  b.disabled = false;
+}
+// A picture of any shape and any kind the browser reads, turned the way the camera held it,
+// cropped to the cover's square or the banner's three to one, then drawn again by the app's own
+// code in the radio, so what sails is a plain JPEG with nothing hidden in it.
+async function ysArt(kind, f) {
+  const [w, h] = kind === 'banner' ? [1500, 500] : [640, 640];
+  ysSay('Preparing the picture');
+  let img = null, url = null;
+  try {
+    try { img = await createImageBitmap(f, { imageOrientation: 'from-image' }) } catch (e) { url = URL.createObjectURL(f); img = new Image(); img.src = url; await img.decode() }
+    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height, s = Math.max(w / iw, h / ih), sw = w / s, sh = h / s;
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(img, (iw - sw) / 2, (ih - sh) / 2, sw, sh, 0, 0, w, h);
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95));
+    radio.art_set(mineCur, kind, new Uint8Array(await blob.arrayBuffer()));
+    ysSay('Saved. Listeners see it within two minutes.'); ysLoad(true);
+  } catch (e) { console.warn(e); ysSay(e instanceof DOMException || e?.type === 'error' ? 'That picture would not open.' : errText(e)) }
+  finally { img?.close?.(); if (url) URL.revokeObjectURL(url) }
+}
+$('ys').addEventListener('click', e => {
+  const s = e.target.closest('[data-save]'), d = e.target.closest('[data-down]'), o = e.target.closest('[data-out]');
+  if (s) ysSave(s.dataset.save, s);
+  else if (d) { try { radio.notice_remove(mineCur, d.dataset.down); ysSay('Taken down. Listeners see it within two minutes.'); ysLoad(true) } catch (err) { ysSay(errText(err)) } }
+  else if (o) {
+    const t = ysInfo?.library.find(x => x.track === o.dataset.out);
+    if (!confirm('Take ‘' + (t?.title || 'this recording') + '’ out of the library? Listeners stop hearing it.')) return;
+    try { radio.withdraw(mineCur, o.dataset.out); ysSay('Taken out.'); ysLoad(true); studioStatus() } catch (err) { ysSay(errText(err)) }
+  }
+});
+for (const k of ['cover', 'banner']) {
+  $('ys-' + k + 'file').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) ysArt(k, f) };
+  $('ys-' + k + 'clear').onclick = () => { try { radio.art_clear(mineCur, k); ysSay('Taken down.'); ysLoad(true) } catch (e) { ysSay(errText(e)) } };
+}
+for (const r of document.querySelectorAll('input[name=ys-mode]')) r.onchange = ysWhen;
+$('ys-live').onchange = ysWhen;
+$('ys-kinds').oninput = () => { $('ys-kindnote').hidden = $('ys-kinds').value.split(',').filter(k => k.trim()).length <= 5 };
 $('st-tune').onclick = () => { const s = stations.find(x => x.id === mineCur) || { id: mineCur, name: $('st-mname').textContent, call_sign: '' }; listen(s); $('set').scrollIntoView({ behavior: 'smooth' }) };
 
 // libopus in a worker, one job at a time.
@@ -1439,7 +1579,7 @@ async function airFile(f, row) {
     st('Signing', 0.95);
     const t = titled(f);
     radio.add_track(mineCur, t.title, t.by, $('st-source').value, ch, bitrate, done.out);
-    st('On the clock', 1); row.classList.add('done');
+    st('On the clock', 1); row.classList.add('done'); ysLoad();
   } catch (e) { st('Not set: ' + (e.message || e)); row.classList.add('bad') }
 }
 async function airFiles(list) {
@@ -1930,7 +2070,10 @@ let tapped = null;
 window.pyrate = { node: () => radio?.id(), routes: (id, chunk) => radio?.route_check(id ?? cur?.id, chunk ?? ''), sizes: () => radio && JSON.parse(radio.log_sizes()), mine: () => kept().map(k => k.id), tap: () => { if (!ctx) return null; if (!tapped) { tapped = ctx.createMediaStreamDestination(); gain.connect(tapped) } return tapped.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, heard: heard(), stage, trouble, station: cur?.id, scheduled: sources.length, ahead_ms: playing ? aheadMs : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, view: viewOn, webcodecs }) };
 window.pyrate.desk = () => ({ live: !!live, music: !!live?.music, sent: live?.sent ?? 0, checking: dk.checking, mic: !!dk.mic, open: dk.micOpen, hearing: dk.monOn, two: dk.two?.name ?? null, deck: { tracks: dk.list.length, at: dk.at, playing: !dk.el.paused }, pads: dk.pads.map(p => p?.name ?? null), ctx: dk.ac?.state ?? null, duck: dk.duck ? +dk.duck.gain.value.toFixed(3) : null });
 window.pyrate.deskCtx = () => dk.ac;
-window.pyrate.card = id => { const s = stations.find(x => x.id === id); return s ? { ...s, playable: playable(s) } : null };// ---- Finding the way: the sections under the set -------------------------------------------
+window.pyrate.card = id => { const s = stations.find(x => x.id === id); return s ? { ...s, playable: playable(s) } : null };
+window.pyrate.station = id => radio ? JSON.parse(radio.station_info(id)) : null;
+
+// ---- Finding the way: the sections under the set -------------------------------------------
 // Stations, the station page, starting a station and settings each have their own view. The
 // browser's Back button steps back through them, and nothing about them goes in the address.
 const VIEWS = ['list', 'page', 'studio', 'settings'];
@@ -1995,7 +2138,8 @@ else {
   // A reload keeps the section it was on.
   scale(); const v0 = history.state?.v; history.replaceState({ v: v0 || 'list' }, ''); if (v0 && v0 !== 'list') goView(v0, false);
   stations = cachedCards().filter(inSet); rows();
-  if (!foreign(location.hash)) { const s = firstStation() || (passedId() && !HOSTIS_ONLY ? { id: passedId(), call_sign: passedId().slice(0, 8).toUpperCase(), name: 'A passed-on station' } : null); if (s) { show(s); if (!(wanted || passedId())) landed(s, opening) } }
+  // The link is read before show() clears it from the address: a station opened by its link stays.
+  if (!foreign(location.hash)) { const linked = wanted || passedId(), s = firstStation() || (passedId() && !HOSTIS_ONLY ? { id: passedId(), call_sign: passedId().slice(0, 8).toUpperCase(), name: 'A passed-on station' } : null); if (s) { show(s); if (!linked) landed(s, opening) } }
   booting = boot();
 }
 // In the page, the radio's engine loads from this site while the page is read, so Listen

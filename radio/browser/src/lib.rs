@@ -140,6 +140,10 @@ struct Mine {
     unsent: VecDeque<Hash>,
     /// When the last full pass of the chunks sailed, so they go round again now and then.
     passed: u64,
+    /// Entries the keeper has written here, and how many of them a stem has taken: an edit with
+    /// no sound to carry sails at once, rather than with the next card minutes later.
+    wrote: u64,
+    sailed: u64,
 }
 
 /// Chunks to a stem's cargo, and bytes at most: well inside a node's frame.
@@ -1286,7 +1290,8 @@ impl Ship {
             self.log.lock().unwrap().get(&id).map(|l| l.carriers.iter().filter(|(n, _)| **n != me).map(|(_, (h, _))| *h).max().unwrap_or(0)).unwrap_or(0)
         };
         let entries: Vec<Vec<u8>> = self.archives.lock().unwrap().get(&id).map(|a| a.entries().iter().skip(landed as usize).take(64).filter_map(|e| e.to_bytes().ok()).collect()).unwrap_or_default();
-        let (chunks, batch): (Vec<(Hash, Vec<u8>)>, Vec<Hash>) = {
+        // The keeper's writes this cargo carries: every one so far, since its entries were just read.
+        let (chunks, batch, wrote): (Vec<(Hash, Vec<u8>)>, Vec<Hash>, u64) = {
             let mine = self.mine.lock().unwrap();
             let Some(m) = mine.get(&id) else { return false };
             let (mut out, mut hs, mut bytes) = (Vec::new(), Vec::new(), 0usize);
@@ -1299,7 +1304,7 @@ impl Ship {
                 out.push((*h, b.clone()));
                 hs.push(*h);
             }
-            (out, hs)
+            (out, hs, m.wrote)
         };
         // Two hops out first: the first hop forwards a sealed blob it cannot read to a second
         // node, which starts the stem. Neither learns both this tab and its station.
@@ -1316,6 +1321,7 @@ impl Ship {
                         if matches!(took, Some(Response::Sealed(Some(_)))) {
                             let mut mine = self.mine.lock().unwrap();
                             if let Some(m) = mine.get_mut(&id) {
+                                m.sailed = m.sailed.max(wrote);
                                 m.unsent.retain(|h| !batch.contains(h));
                                 if m.unsent.is_empty() && !batch.is_empty() {
                                     m.passed = raw_now();
@@ -1349,6 +1355,7 @@ impl Ship {
                 if !b.is_empty() {
                     let mut mine = self.mine.lock().unwrap();
                     if let Some(m) = mine.get_mut(&id) {
+                        m.sailed = m.sailed.max(wrote);
                         m.unsent.retain(|h| !batch.contains(h));
                         if m.unsent.is_empty() && !batch.is_empty() {
                             m.passed = raw_now();
@@ -1381,7 +1388,7 @@ impl Ship {
                 let ids: Vec<StationId> = me.mine.lock().unwrap().keys().copied().collect();
                 let mut busy = false;
                 for id in ids {
-                    let (pending, passed) = me.mine.lock().unwrap().get(&id).map(|m| (!m.unsent.is_empty(), m.passed)).unwrap_or((false, 0));
+                    let (pending, passed) = me.mine.lock().unwrap().get(&id).map(|m| (!m.unsent.is_empty() || m.wrote > m.sailed, m.passed)).unwrap_or((false, 0));
                     let now = raw_now();
                     if !pending && passed > 0 && now.saturating_sub(passed) > 15 * 60_000 {
                         if let Some(m) = me.mine.lock().unwrap().get_mut(&id) {
@@ -1412,6 +1419,26 @@ impl Ship {
             let _ = me.sync(station).await;
             me.syncing.lock().unwrap().remove(&station);
         });
+    }
+
+    /// Writes one entry for a station this tab keeps, as its keeper does from the studio: signed
+    /// by the deputy here (wrapped, so carriers can check it) or the station's own key, then sent
+    /// along the stem at once. Returns the entry's hash.
+    fn write_own(self: &Arc<Self>, st: StationId, body: Body) -> Result<Hash, JsValue> {
+        let key = self.mine.lock().unwrap().get(&st).map(|m| pyrate_core::StationKey::from_seed(m.key.seed())).ok_or_else(|| js(anyhow!("not a station this browser keeps")))?;
+        let h = {
+            let mut archives = self.archives.lock().unwrap();
+            let a = archives.get_mut(&st).ok_or_else(|| js(anyhow!("the station's log is not aboard yet")))?;
+            let at = raw_now().max(a.entries().last().map(|e| e.entry.at_ms + 1).unwrap_or(0));
+            let body = if key.id() == st { body } else { Body::Deputed { by: key.id().0, body: Box::new(body) } };
+            a.write(&key, at, body).map_err(|e| js(anyhow!("{e}")))?.hash().map_err(|e| js(anyhow!("{e}")))?
+        };
+        self.clocks.lock().unwrap().remove(&st);
+        if let Some(m) = self.mine.lock().unwrap().get_mut(&st) {
+            m.wrote += 1;
+        }
+        self.sail_on();
+        Ok(h)
     }
 
     fn describe(a: &Archive, track: &Hash) -> Option<(String, String, Vec<pyrate_core::Chunk>, u8)> {
@@ -1889,7 +1916,7 @@ impl Radio {
         }
         self.ship.archives.lock().unwrap().insert(id, a);
         let seed = hex(&deputy.seed());
-        self.ship.mine.lock().unwrap().insert(id, Mine { key: deputy, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0 });
+        self.ship.mine.lock().unwrap().insert(id, Mine { key: deputy, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0, wrote: 0, sailed: 0 });
         Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "words": phrase, "deputy": seed }).to_string())
     }
 
@@ -1903,7 +1930,7 @@ impl Radio {
             let _ = timeout(Duration::from_secs(40), s.sync(st)).await;
             let ok = s.archives.lock().unwrap().get(&st).is_some_and(|a| a.deputies().contains(&key.id().0) && !a.is_struck());
             if ok {
-                s.mine.lock().unwrap().entry(st).or_insert(Mine { key, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0 });
+                s.mine.lock().unwrap().entry(st).or_insert(Mine { key, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0, wrote: 0, sailed: 0 });
             }
             Ok(JsValue::from_bool(ok))
         }))
@@ -1936,7 +1963,7 @@ impl Radio {
                 a.write(&master, at, Body::Deputy { key: deputy.id().0, label: "deputy".into() }).map_err(|e| js(anyhow!("{e}")))?;
             }
             let seed = hex(&deputy.seed());
-            s.mine.lock().unwrap().insert(id, Mine { key: deputy, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0 });
+            s.mine.lock().unwrap().insert(id, Mine { key: deputy, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0, wrote: 1, sailed: 0 });
             Ok(JsValue::from_str(&json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "deputy": seed }).to_string()))
         }))
     }
@@ -2129,6 +2156,141 @@ impl Radio {
         }
         self.ship.clocks.lock().unwrap().remove(&st);
         self.ship.sail_on();
+        Ok(())
+    }
+
+    // ---- The keeper's studio: what a station says of itself, its art, its schedule, its
+    // notices and its library, changed from the tab as the app changes them, entry for entry.
+
+    /// One of this tab's stations as its keeper edits it: colours, details, art, programme,
+    /// notices and library, as JSON.
+    pub fn station_info(&self, id: &str) -> Result<String, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let archives = self.ship.archives.lock().unwrap();
+        let a = archives.get(&st).ok_or_else(|| js(anyhow!("the station's log is not aboard yet")))?;
+        let (name, about, port, tip) = match a.colours() {
+            Some(Body::Colours { name, about, port, tip }) => (name.clone(), about.clone(), port.clone(), tip.clone()),
+            _ => Default::default(),
+        };
+        let (kinds, mature) = a.details().unwrap_or_default();
+        let art = a.art();
+        let library: Vec<Value> = a.library().map_err(|e| js(anyhow!("{e}")))?.into_iter().map(|(h, e)| {
+            let (title, by) = pyrate_core::page::describe_track(a, &h);
+            json!({ "track": hex(&h), "title": shown(&title), "by": shown(&by), "added_ms": e.entry.at_ms })
+        }).collect();
+        let notices: Vec<Value> = a.notices(self.ship.now()).into_iter().map(|(h, at, text)| json!({ "id": hex(&h), "at_ms": at, "text": shown(&text) })).collect();
+        Ok(json!({
+            "name": shown(&name), "about": shown(&about), "port": port.as_deref().map(shown), "tip": tip,
+            "kinds": kinds, "mature": mature, "explicit": a.explicit(),
+            "cover": art.and_then(|x| x.0).map(|r| hex(&r.hash)), "banner": art.and_then(|x| x.1).map(|r| hex(&r.hash)),
+            "programme": a.programme().as_ref().map(pyrate_core::page::programme_json),
+            "library": library, "notices": notices,
+        }).to_string())
+    }
+
+    /// The station's name, a line about it, its home port and its tip address. An empty port or
+    /// tip takes it down.
+    pub fn colours_set(&self, id: &str, name: &str, about: &str, port: &str, tip: &str) -> Result<(), JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let name = name.trim();
+        if name.is_empty() || name.chars().count() > 40 {
+            return Err(js(anyhow!("a station needs a name of forty letters or fewer")));
+        }
+        let opt = |s: &str, n: usize| Some(s.trim().chars().take(n).collect::<String>()).filter(|s| !s.is_empty());
+        let tip = opt(tip, 200);
+        if tip.as_deref().is_some_and(|t| t.len() > 200) {
+            return Err(js(anyhow!("that address is too long to be a tip address")));
+        }
+        self.ship.write_own(st, Body::Colours { name: name.into(), about: about.trim().chars().take(140).collect(), port: opt(port, 120), tip })?;
+        Ok(())
+    }
+
+    /// The station's kinds, up to five, whether it calls itself mature, and whether explicit.
+    /// The rating is written only when it changes, as the app does.
+    pub fn details_set(&self, id: &str, kinds: &str, mature: bool, explicit: bool) -> Result<(), JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let kinds: Vec<String> = kinds.split(',').map(|k| k.trim().to_lowercase().chars().take(32).collect::<String>()).filter(|k| !k.is_empty()).take(5).collect();
+        self.ship.write_own(st, Body::Details { kinds, mature })?;
+        if self.ship.archives.lock().unwrap().get(&st).map(|a| a.explicit()) != Some(explicit) {
+            self.ship.write_own(st, Body::Rating { explicit })?;
+        }
+        Ok(())
+    }
+
+    /// New art for the station: `kind` is "cover" or "banner", `raw` any picture the page has
+    /// already turned upright and cropped. It is drawn again here by the app's own code, so what
+    /// travels is the same plain JPEG of the same size the app makes, with nothing else in it;
+    /// a cover sets the colour the station's pages are drawn in. Returns the picture's hash.
+    pub fn art_set(&self, id: &str, kind: &str, raw: &[u8]) -> Result<String, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let banner = kind == "banner";
+        let p = pyrate_core::art::prepare(raw, if banner { pyrate_core::art::Kind::Banner } else { pyrate_core::art::Kind::Cover }).map_err(|e| js(anyhow!("{e}")))?;
+        let hash = *blake3::hash(&p.jpeg).as_bytes();
+        let (mut cover, mut ban, mut accent) = self.ship.archives.lock().unwrap().get(&st).and_then(|a| a.art()).unwrap_or((None, None, [0xED, 0xE4, 0xCE]));
+        let r = Some(pyrate_core::ArtRef { hash, w: p.w, h: p.h });
+        if banner {
+            ban = r;
+        } else {
+            cover = r;
+            accent = p.accent;
+        }
+        {
+            let mut mine = self.ship.mine.lock().unwrap();
+            let m = mine.get_mut(&st).ok_or_else(|| js(anyhow!("not a station this browser keeps")))?;
+            // The picture sails like a chunk, and the tab shows it at once from its hold.
+            self.ship.hold.lock().unwrap().put(hash, p.jpeg.clone());
+            m.chunks.insert(hash, p.jpeg);
+            m.unsent.push_back(hash);
+        }
+        self.ship.write_own(st, Body::Art { cover, banner: ban, accent })?;
+        Ok(hex(&hash))
+    }
+
+    /// Takes the cover or the banner down. With the cover goes the station's colour, back to bone.
+    pub fn art_clear(&self, id: &str, kind: &str) -> Result<(), JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let Some((mut cover, mut banner, mut accent)) = self.ship.archives.lock().unwrap().get(&st).and_then(|a| a.art()) else { return Ok(()) };
+        if kind == "banner" {
+            banner = None;
+        } else {
+            cover = None;
+            accent = [0xED, 0xE4, 0xCE];
+        }
+        self.ship.write_own(st, Body::Art { cover, banner, accent })?;
+        Ok(())
+    }
+
+    /// The station's schedule, as the JSON the app writes and `page` reads back: its mode, its
+    /// hours, its slots and its time-zone table.
+    pub fn programme_set(&self, id: &str, programme: &str) -> Result<(), JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let v: Value = serde_json::from_str(programme).map_err(|e| js(anyhow!("{e}")))?;
+        let p = pyrate_core::page::programme_from(&v).map_err(|e| js(anyhow!("{e}")))?;
+        self.ship.write_own(st, Body::Programme(p))?;
+        Ok(())
+    }
+
+    /// A word to listeners on the station's page, until `until_ms`, or until taken down if zero.
+    /// Returns the notice's id.
+    pub fn notice_post(&self, id: &str, text: &str, until_ms: f64) -> Result<String, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let text: String = text.trim().chars().take(600).collect();
+        if text.is_empty() {
+            return Err(js(anyhow!("a notice needs words")));
+        }
+        Ok(hex(&self.ship.write_own(st, Body::Notice { text, until_ms: until_ms.max(0.0) as u64 })?))
+    }
+
+    pub fn notice_remove(&self, id: &str, notice: &str) -> Result<(), JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        self.ship.write_own(st, Body::Unnotice { notice: unhex32(notice).map_err(js)? })?;
+        Ok(())
+    }
+
+    /// Takes a recording out of the library. Carriers may keep its chunks until they drop them.
+    pub fn withdraw(&self, id: &str, track: &str) -> Result<(), JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        self.ship.write_own(st, Body::Withdraw { track: unhex32(track).map_err(js)? })?;
         Ok(())
     }
 
