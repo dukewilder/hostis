@@ -2,7 +2,9 @@
 Serve a test build first (serve_test.sh). Times the first row, the first station on the set,
 Listen to sound and a switch to sound; checks that no title shows before its sound, that the
 name changes at once on a switch, that Stop stops (also pressed while still connecting), that
-every section opens and Back returns, and that the mini player comes when the set scrolls away.
+the four places open as screens of their own (tabs along the foot on a phone, down the side on a
+computer), the station page opens over the radio and Back returns, and that the mini player
+comes away from the radio.
 Writes screenshots to <out dir> and prints one line per check."""
 import sys, time, json
 from playwright.sync_api import sync_playwright
@@ -46,7 +48,9 @@ with sync_playwright() as p:
     check(not early, "no title before its sound" + (f" (saw {early[0]!r})" if early else ""))
     time.sleep(1.5); pg.screenshot(path=f"{out}/{W}-3-playing.png")
     check((pg.text_content("#go .lbl") or "") == "Stop", "the button says Stop while playing")
-    # Switch to another station from the list.
+    # Switch to another station from the list: on a phone it is a screen of its own, and a station
+    # chosen there brings the radio forward, as in the app.
+    if not pg.locator(".row:not(.skel)").first.is_visible(): pg.click(".tab[data-v=list]"); time.sleep(0.4)
     rows = pg.locator(".row:not(.skel)")
     first = st()["station"]; other = None
     for i in range(rows.count()):
@@ -56,6 +60,7 @@ with sync_playwright() as p:
         t2 = time.time(); other.click()
         time.sleep(0.12)
         check((pg.text_content("#name") or "") == name, f"the name changes at once on a switch ({name})")
+        check(st()["view"] == "radio" and pg.is_visible("#set"), "a station chosen in the list brings the radio forward")
         t_sw = None
         for i in range(900):
             s = st()
@@ -63,6 +68,8 @@ with sync_playwright() as p:
             time.sleep(0.1)
         print(f"time  switch to sound {t_sw and round(t_sw, 2)} s")
         check(t_sw is not None, "a switch reaches sound")
+    else: print("note  only one station is listed on this network: no switch to time")
+    if st()["view"] != "radio": pg.click(".tab[data-v=radio]"); time.sleep(0.3)
     # Stop stops.
     pg.click("#go"); time.sleep(0.4); s = st()
     check(not s["playing"] and s["scheduled"] == 0, "Stop stops at once")
@@ -93,24 +100,39 @@ with sync_playwright() as p:
     check((pg.text_content("#more span") or "") == "Sleep" and pg.is_visible("#sleepoff"), "a sleep timer is set and shown")
     pg.click("#sleepoff"); pg.keyboard.press("Escape"); time.sleep(0.3)
     check(not pg.is_visible("#morebox") and (pg.text_content("#more span") or "") == "More", "the timer cancels and Escape closes More")
-    # The sections, and Back.
-    for v, label in [("page", "Station page"), ("settings", "Settings"), ("list", "Stations")]:
+    # The app's shape: the page itself never scrolls; the tabs sit along the foot on a phone and
+    # down the side on a computer; one place at a time on a phone.
+    check(pg.evaluate("document.scrollingElement.scrollHeight <= innerHeight + 1"), "the page itself does not scroll, each screen scrolls within itself")
+    tb = pg.evaluate("(() => { const r = document.getElementById('tabs').getBoundingClientRect(); return [r.left, r.top, r.width, r.height] })()")
+    if W < 768: check(tb[1] + tb[3] >= H - 2 and tb[2] >= W - 2, f"the tabs sit along the foot ({tb})")
+    else: check(tb[0] <= 1 and tb[3] >= H * 0.8, f"the tabs sit down the side ({tb})")
+    labels = pg.eval_on_selector_all(".tab", "ts => ts.filter(t => t.offsetParent).map(t => t.textContent.trim())")
+    check(labels == ["Radio", "Stations", "Broadcast", "Settings"] or labels == ["Radio", "Stations", "Settings"], f"the places are the app's: {labels}")
+    # Each place, and Back from it to the radio.
+    for v, label in [("list", "Stations"), ("settings", "Settings"), ("studio", "Broadcast"), ("radio", "Radio")]:
+        if not pg.locator(f".tab[data-v={v}]").is_visible(): continue
         pg.click(f".tab[data-v={v}]"); time.sleep(0.5)
-        check(st()["view"] == v and pg.is_visible(f"#v-{v}"), f"the {label} tab opens its section")
+        alone = W >= 768 or pg.evaluate("[...document.querySelectorAll('.view')].filter(v => !v.hidden).length") == 1
+        check(st()["view"] == v and pg.is_visible(f"#v-{v}") and alone, f"the {label} tab opens its own screen")
         pg.screenshot(path=f"{out}/{W}-4-{v}.png", full_page=False)
-    pg.click(".tab[data-v=page]"); time.sleep(0.3); pg.go_back(); time.sleep(0.5)
-    check(st()["view"] == "list", "Back returns to the stations")
-    # The mini player, once the set scrolls away.
-    pg.evaluate("window.scrollTo(0, document.body.scrollHeight)"); time.sleep(0.8)
-    # On a tall screen a short page may never scroll the set away: then there is nothing to show.
-    if pg.evaluate("(() => { const r = document.getElementById('set').getBoundingClientRect(); return Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0)) / r.height > 0.1 })()"):
-        pg.evaluate("document.body.style.minHeight = '4000px'; window.scrollTo(0, 3000)"); time.sleep(0.8)
-    check(pg.is_visible("#mini"), "the mini player shows once the set is out of view")
+    pg.click(".tab[data-v=settings]"); time.sleep(0.3); pg.go_back(); time.sleep(0.5)
+    check(st()["view"] == "radio", "Back from Settings comes to the radio")
+    pg.click("#pagego"); time.sleep(0.5)
+    check(st()["view"] == "page" and pg.is_visible("#v-page") and pg.is_visible("#pageback"), "the station page opens over the radio, with Back")
+    pg.screenshot(path=f"{out}/{W}-4-page.png", full_page=False)
+    pg.click("#pageback"); time.sleep(0.5)
+    check(st()["view"] == "radio" and pg.is_visible("#set"), "Back returns from the station page to the radio")
+    # The mini player, away from the radio.
+    check(pg.is_hidden("#mini"), "no mini player on the radio itself")
+    pg.click(".tab[data-v=settings]"); time.sleep(0.5)
+    check(pg.is_visible("#mini"), "the mini player shows away from the radio")
     pg.screenshot(path=f"{out}/{W}-5-mini.png")
     pg.click("#mini-go"); time.sleep(0.5)
     check(st()["playing"], "the mini player's button plays")
     pg.click("#mini-go"); time.sleep(0.5)
     check(not st()["playing"], "and stops")
+    pg.click("#mini-up"); time.sleep(0.5)
+    check(st()["view"] == "radio" and pg.is_hidden("#mini"), "the mini player brings the radio back")
     pg.screenshot(path=f"{out}/{W}-6-full.png", full_page=True)
     check(not E, "no errors in the console" + (f": {E[:2]}" if E else ""))
     b.close()

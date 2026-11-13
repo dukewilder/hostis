@@ -10,8 +10,8 @@ button{background:none;border:0;color:inherit;padding:0;margin:0;cursor:pointer;
 .centre{text-align:center}
 
 /* the masthead, cut down: the radio comes first */
-.top{padding:38px 18px 22px}
-.top .mh-title{font-size:clamp(30px,6vw,60px)}
+.top{padding:26px 18px 18px}
+.top .mh-title{font-size:clamp(28px,3.4vw,44px)}
 .top .mh-title a{color:var(--ink)}.top .mh-title a:hover{color:var(--ink)}
 .top .mh-sub{font-size:clamp(14px,2.4vw,17px);margin-top:8px}
 .signalrow{display:flex;gap:.9rem;justify-content:center;align-items:center;flex-wrap:wrap;margin:16px 0 0;min-height:30px}
@@ -72,22 +72,33 @@ button{background:none;border:0;color:inherit;padding:0;margin:0;cursor:pointer;
 .hint{font-style:italic;color:var(--dim);font-size:1rem;line-height:1.5;margin:.8rem 0 0;max-width:30rem}
 .time{font:400 .72rem var(--mono);letter-spacing:.08em;color:var(--faint);margin-top:.6rem;min-height:1em;font-variant-numeric:tabular-nums}
 
-/* the dial: every station printed where its frequency falls, behind glass */
+/* the dial: a mark for every station where its frequency falls, behind glass, and names only
+   around the needle, each on a hairline down to its mark */
 .glass{position:relative;margin-top:2.1rem;height:128px;border:1px solid var(--line);background:radial-gradient(120% 140% at 50% 0%,#141310 0%,var(--black) 70%);
-  box-shadow:inset 0 0 26px rgba(0,0,0,.9),inset 0 1px 0 rgba(237,228,206,.05);overflow-x:auto;overflow-y:hidden;cursor:pointer;
-  scrollbar-width:thin;scrollbar-color:rgba(237,228,206,.22) transparent;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+  box-shadow:inset 0 0 26px rgba(0,0,0,.9),inset 0 1px 0 rgba(237,228,206,.05);overflow:hidden;cursor:pointer;touch-action:pan-y;user-select:none;-webkit-user-select:none}
 .glass:focus-visible{outline:1px solid var(--red);outline-offset:-1px}
 .track{position:relative;height:100%;margin:0 36px}
-.scale{position:absolute;left:0;right:0;bottom:0;height:40px}
+.scale{position:absolute;left:0;right:0;bottom:0;height:40px;pointer-events:none}
 .scale i{position:absolute;bottom:0;width:1px;height:6px;background:var(--ghost)}
 .scale i.major{height:13px;background:var(--dim)}
 .scale b{position:absolute;bottom:17px;transform:translateX(-50%);font:400 .68rem var(--mono);letter-spacing:.06em;color:var(--dim)}
-.names{position:absolute;left:0;right:0;top:8px;height:72px}
-.names button{position:absolute;transform:translateX(-50%);padding:0 .45rem;min-height:24px;font:400 .68rem var(--mono);letter-spacing:.14em;text-transform:uppercase;
-  color:var(--dim);white-space:nowrap;max-width:11rem;overflow:hidden;text-overflow:ellipsis;line-height:1.4;transition:color .15s}
+.names{position:absolute;left:0;right:0;top:9px;height:26px}
+.names button{position:absolute;top:0;padding:0;min-height:26px;font:400 .68rem var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--faint);white-space:nowrap;max-width:9.5rem;overflow:hidden;text-overflow:ellipsis;line-height:26px;transition:color .15s}
 .names button:hover{color:var(--ink)}
 .names button.on{color:var(--ink)}
 .names button.live::before{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--redup);margin-right:.45rem;vertical-align:middle}
+.leads{position:absolute;left:0;top:37px;width:100%;height:calc(100% - 37px - 52px);overflow:visible;pointer-events:none}
+.leads line{stroke:rgba(237,228,206,.2);stroke-width:1}
+.leads line.on{stroke:none}
+.marks{position:absolute;left:0;right:0;bottom:40px;height:12px;pointer-events:none}
+.marks i{position:absolute;bottom:0;width:1px;height:9px;background:rgba(237,228,206,.32)}
+.marks i.named{background:var(--bonedim)}
+.marks i.live{background:var(--redup)}
+.marks i.hi{background:var(--ink);height:12px}
+.peek{position:absolute;bottom:56px;padding:.1rem .5rem;font:400 .66rem var(--mono);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap;color:var(--ink);
+  background:var(--black);border:1px solid var(--ghost);pointer-events:none;z-index:3}
+.peek[hidden]{display:none}
 .needle{position:absolute;top:0;bottom:0;width:1px;background:var(--red);left:50%;transition:left .7s cubic-bezier(.2,.75,.2,1);pointer-events:none}
 .needle::before{content:'';position:absolute;top:-5px;left:-4px;width:9px;height:9px;background:var(--red);transform:rotate(45deg)}
 
@@ -132,18 +143,44 @@ button.power.on .glyph{color:var(--ink)}
 #tipbox input{width:100%;margin:0 0 .6rem}
 #clipbox video{flex:0 0 auto;width:min(200px,46vw);aspect-ratio:9/16;background:var(--black);border:1px solid var(--line)}
 
-/* the sections: tabs that stay in reach, and one section at a time under them */
-.tabs{position:sticky;top:0;z-index:20;display:flex;justify-content:center;gap:0;max-width:980px;margin:1.8rem auto 0;background:rgba(3,3,3,.94);
-  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
-.tab{flex:1 1 0;display:flex;align-items:center;justify-content:center;gap:.55rem;min-height:54px;padding:.4rem .6rem;font:400 .74rem var(--mono);letter-spacing:.14em;text-transform:uppercase;
-  color:var(--dim);border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s}
-.tab:hover{color:var(--ink)}
-.tab[aria-current="true"]{color:var(--ink);border-bottom-color:var(--red)}
-.set button:focus-visible,.tab:focus-visible,.mp-main:focus-visible,.mp-go:focus-visible,.below button:focus-visible{outline:1px solid var(--redup);outline-offset:2px}
-.tab .ic{width:19px;height:19px}
-.below{max-width:760px;margin:0 auto;padding:2.2rem 1.4rem 0}
+/* the app: the HOSTIS bar, one screen at a time, and the tabs. The page itself never scrolls
+   or bounces: each screen scrolls within itself, as an installed app's does. */
+html:not(.embed),html:not(.embed) body{height:100%;overflow:hidden;overscroll-behavior:none}
+html:not(.embed) body{display:flex;flex-direction:column;padding-bottom:0}
+html:not(.embed) .flagbar{flex:0 0 auto;padding-top:calc(11px + env(safe-area-inset-top))}
+.shell{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+.below{order:1;flex:1 1 auto;min-height:0;position:relative;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
 .below section{padding:0;max-width:none;margin:0}
-.view[hidden]{display:none}
+.below>section.view{min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+  padding:1.8rem max(1rem,calc((100% - 760px)/2)) 2.6rem;scrollbar-width:thin;scrollbar-color:rgba(237,228,206,.18) transparent}
+.below>section#v-radio{padding:0 max(.6rem,calc((100% - 980px)/2)) 2rem}
+.below section.set{padding:1.25rem 2rem 1.7rem;max-width:980px;margin:0 auto}
+.view[hidden]{display:none!important}
+.tabs{order:3;flex:0 0 auto;display:flex;background:var(--black);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+.tab{flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.32rem;min-height:64px;padding:.3rem .2rem;font:400 .66rem var(--mono);
+  letter-spacing:.12em;text-transform:uppercase;color:var(--faint);border-top:2px solid transparent;margin-top:-1px;transition:color .15s,border-color .15s,background .15s}
+.tab:hover{color:var(--ink)}
+.tab[aria-current="true"]{color:var(--ink);border-top-color:var(--red)}
+.set button:focus-visible,.tab:focus-visible,.mp-main:focus-visible,.mp-go:focus-visible,.below button:focus-visible{outline:1px solid var(--redup);outline-offset:2px}
+.tab .ic{width:22px;height:22px}
+/* the station page, over the radio: Back at its head */
+.backbar{display:flex;align-items:center;margin:-.6rem 0 1rem}
+.back{display:inline-flex;align-items:center;gap:.5rem;min-height:44px;padding:0 .9rem 0 .4rem;margin-left:-.4rem;font:400 .72rem var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.back:hover{color:var(--ink)}.back .ic{width:20px;height:20px}
+/* on a computer: the tabs down the side, and the list beside the set where there is room */
+@media (min-width:768px){
+  html:not(.embed) .shell{display:grid;grid-template-columns:212px minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
+  .tabs{grid-column:1;grid-row:1/3;flex-direction:column;border-top:0;border-right:1px solid var(--line);padding:1.4rem 0 env(safe-area-inset-bottom)}
+  .tab{flex:0 0 auto;flex-direction:row;justify-content:flex-start;gap:1rem;min-height:56px;padding:0 1.6rem;font-size:.74rem;letter-spacing:.16em;border-top:0;margin-top:0;border-left:2px solid transparent}
+  .tab[aria-current="true"]{border-left-color:var(--red);background:rgba(237,228,206,.035)}
+  .tab .ic{width:20px;height:20px}
+  .below{grid-column:2;grid-row:1}
+  .miniplayer{grid-column:2;grid-row:2}
+  .below.pair{grid-template-columns:minmax(0,1fr) minmax(380px,34%)}
+  .below.pair>.view+.view{border-left:1px solid var(--line)}
+  .below.pair>section.view:not(#v-radio){padding:1.8rem 1.4rem 2.6rem}
+  .below.pair .listbar,.below.pair .views{flex-wrap:wrap}
+}
 .below .sechead{margin-bottom:1.1rem}
 .below .sechead h2{font-size:clamp(17px,2.4vw,21px)}
 .below .gap{margin-top:3rem}
@@ -249,16 +286,14 @@ textarea{display:block;width:100%;min-height:9rem;padding:.7rem;margin:1rem 0 .6
 .sayrow input{flex:1 1 10rem}
 
 @media (max-width:720px){
-  .tab{flex-direction:column;gap:.2rem;font-size:.62rem;letter-spacing:.08em;min-height:58px;padding:.35rem .2rem}
   .kinds{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;flex-basis:100%;padding-bottom:2px}.kinds::-webkit-scrollbar{display:none}
   .kinds .btn{flex:0 0 auto}
-  .tabs{margin-top:1.2rem}
-  .below{padding:1.6rem 1rem 0}
   .hint{font-size:.95rem}
   .top{padding:16px 14px 8px}
-  .top .mh-title{font-size:30px}.top .mh-sub{font-size:13px;margin-top:4px}
+  .top{padding:14px 14px 4px}
+  .top .mh-title{font-size:26px}.top .mh-sub{display:none}
   .signalrow{margin-top:10px}
-  .set{padding:1rem 1rem 1.3rem;margin:0 .6rem}
+  .below section.set{padding:1rem 1rem 1.3rem;margin:0}
   .plate{font-size:9px;letter-spacing:.2em}.plate span:last-child{display:none}
   .plate{margin-bottom:1.1rem}
   .face{grid-template-columns:104px minmax(0,1fr);gap:1rem;align-items:start}
@@ -271,7 +306,7 @@ textarea{display:block;width:100%;min-height:9rem;padding:.7rem;margin:1rem 0 .6
   .slot{margin-top:.8rem;font-size:9.5px}
   .set .np{font-size:1.15rem}
   .glass{margin-top:1.2rem;height:112px}
-  .names{top:6px}
+  .names{top:6px}.track{margin:0 16px}
   .controls{justify-content:center}
   button.power{flex:1 1 100%;justify-content:center}
   .buttons{justify-content:center}
@@ -284,8 +319,8 @@ textarea{display:block;width:100%;min-height:9rem;padding:.7rem;margin:1rem 0 .6
 /* inside another page, the set alone */
 html.embed,html.embed body{background:transparent;min-height:0}
 html.embed body::before,html.embed body::after{display:none}
-html.embed .flagbar,html.embed .top,html.embed .divider,html.embed .below,html.embed footer,html.embed #maroon,html.embed .skip-link,html.embed .tabs,html.embed .miniplayer,html.embed .takeset,html.embed #pagego{display:none!important}
-html.embed .set{margin:0}
+html.embed .flagbar,html.embed .top,html.embed .divider,html.embed .view:not(#v-radio),html.embed footer,html.embed #maroon,html.embed .skip-link,html.embed .tabs,html.embed .miniplayer,html.embed .takeset,html.embed #pagego{display:none!important}
+html.embed .set{margin:0}html.embed .below{display:block}html.embed .below>section#v-radio{padding:0;overflow:visible}html.embed .takeset,html.embed .appnote{display:none!important}
 #listings>p{color:var(--dim);font-style:italic;text-align:center;font-size:1rem}
 
 /* the two copies: hostis.black's holds HOSTIS's own stations, the open player every station */
@@ -293,15 +328,14 @@ html.embed .set{margin:0}
 .openlink:not(.lead-btn){border-bottom:1px solid var(--faint)}.openlink:not(.lead-btn):hover{border-color:var(--red)}
 .everyone{margin-top:1.6rem}
 .leavingnote{display:none;max-width:560px;margin:0 auto 1.6rem;padding:1rem 1.25rem;border:1px solid var(--ghost);background:#0b0a08;font-style:italic;text-align:center;color:var(--bonedim)}
-html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,html.leaving .below,html.leaving .tabs,html.leaving .takeset{display:none}
+html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,html.leaving .view:not(#v-radio),html.leaving .tabs,html.leaving .takeset{display:none}
 .appnote{max-width:980px;margin:1rem auto 0;text-align:center;font-style:italic;color:var(--dim)}.appnote a{border-bottom:1px solid var(--faint);font-style:normal;font:400 .72rem var(--mono);letter-spacing:.13em;text-transform:uppercase}
 .takeset{max-width:980px;margin:1.1rem auto 0;text-align:center}
 .takeset a{display:inline-flex;flex-wrap:wrap;justify-content:center;gap:.3rem 1rem;align-items:baseline;padding:.75rem 1.2rem;border:1px solid var(--line);color:var(--ink);transition:border-color .18s,background .18s}
 .takeset a:hover{border-color:var(--faint);color:var(--ink)}
 .ts-lead{font:400 1.05rem var(--sc);letter-spacing:.05em}.ts-sub{font:400 .68rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
 /* the mini player: the station and Listen, at the foot of the screen once the set scrolls away */
-.miniplayer{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;align-items:stretch;max-width:760px;margin:0 auto;background:rgba(10,10,10,.97);
-  border:1px solid var(--line);border-bottom:0;box-shadow:0 -10px 30px rgba(0,0,0,.6);padding-bottom:env(safe-area-inset-bottom)}
+.miniplayer{order:2;position:relative;z-index:30;display:flex;align-items:stretch;min-height:64px;background:var(--panel);border-top:1px solid var(--line)}
 .miniplayer[hidden]{display:none}
 .mp-main{flex:1;min-width:0;display:flex;align-items:center;gap:.8rem;padding:.55rem .8rem;text-align:left}
 .mp-art{flex:0 0 auto;width:48px;height:48px;display:grid;grid-template-columns:repeat(9,1fr);align-content:center;font-family:var(--mono);font-size:.3rem;line-height:1.1;padding:.2rem;border:1px solid var(--line);background:var(--black);overflow:hidden}
@@ -314,7 +348,6 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 .mp-go{flex:0 0 auto;width:64px;display:grid;place-items:center;border-left:1px solid var(--line)}
 .mp-go .glyph{font:400 1rem var(--mono);color:var(--redup);display:inline-grid;place-items:center;width:2.4rem;height:2.4rem;border:1px solid var(--red);border-radius:50%;position:relative}
 .mp-go.on .glyph{color:var(--ink);border-color:var(--ink)}
-body:has(.miniplayer:not([hidden])) footer{padding-bottom:84px}
 
 /* raising colours from the tab */
 .field{display:block;margin:0 0 1rem}
@@ -556,3 +589,25 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 .played li.none{display:block;color:var(--dim)}
 .controls .buttons #more[aria-expanded="true"]{background:rgba(237,228,206,.06);color:var(--ink)}
 .sl{display:flex;flex-direction:column;gap:.15rem}.sl small{font-size:.62rem;letter-spacing:.08em;text-transform:none;color:var(--dim)}.sl small:empty{display:none}
+
+/* the end of raising: the station, its place, and its first recording */
+.st-born{text-align:center;padding:1.6rem 1rem 1.4rem;margin:0 0 1rem;border:1px solid var(--line);background:linear-gradient(180deg,var(--panel2),var(--panel))}
+.st-born[hidden]{display:none}
+.born-lead{font:400 clamp(1.5rem,5vw,2rem) var(--sc);letter-spacing:.04em;color:var(--ink);margin:0 0 .4rem}
+.born-lead::before{content:'';display:inline-block;width:7px;height:7px;background:var(--red);transform:rotate(45deg);margin:0 .8rem .3rem 0;vertical-align:middle}
+.born-sub{font-style:italic;color:var(--bonedim);margin:0 0 1.1rem}
+.born-sub span{font:400 .95em var(--mono);font-style:normal;color:var(--ink)}
+.st-status.on::before{content:'\2713';margin-right:.55rem;color:var(--bonedim)}
+/* the dial and the link: one calm line, the link, and the switch to keep it off the dial */
+.st-dial{text-align:center;margin:0 0 1.4rem}
+.st-dial[hidden]{display:none}
+.st-dialnote{font-style:italic;color:var(--dim);margin:0 0 .5rem}
+.st-link{font:400 .74rem var(--mono);letter-spacing:.04em;color:var(--bonedim);overflow-wrap:anywhere;margin:0 0 .6rem}
+.st-dial .row-btns{justify-content:center;margin:0 0 .4rem}
+.st-dial .switches{margin-top:.6rem}.st-dial .switches label>span{display:flex;flex-direction:column;text-align:left;line-height:1.35}
+.st-dial .switches small{font-style:italic;font-size:.88rem;color:var(--dim)}
+.st-work{display:block;width:120px;height:1px;margin:0 auto .7rem;background:var(--ghost);position:relative;overflow:hidden}
+.st-work[hidden]{display:none}
+.st-work::after{content:'';position:absolute;top:0;left:-40%;width:40%;height:1px;background:var(--bonedim);animation:working 1.8s ease-in-out infinite}
+@keyframes working{to{left:100%}}
+@media (prefers-reduced-motion:reduce){.st-work::after{animation:none;left:30%}}
