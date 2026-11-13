@@ -1245,6 +1245,24 @@ impl Inner {
     /// With the Log near full, our own stations' work climbs a little each tick, off the async
     /// threads, so they outwork any flood of cheap cards. Nothing is spent when there is room.
     fn pow_climb(self: &Arc<Self>, own: &[StationId]) {
+        // A station of ours that has not yet done the work to be listed climbs a little faster,
+        // a second or two of work a tick, until it has: a few minutes after it is raised.
+        for id in own.iter().copied() {
+            if net::pow_bits(&id, self.pow_for(&id)) >= net::LIST_BITS {
+                continue;
+            }
+            let inner = self.clone();
+            tokio::task::spawn_blocking(move || {
+                let have = inner.pow_for(&id);
+                let start = inner.pow_cursor.lock().unwrap().get(&id).copied().unwrap_or(have.saturating_add(1));
+                const SPAN: u64 = 1 << 24;
+                inner.pow_cursor.lock().unwrap().insert(id, start.saturating_add(SPAN));
+                if let Some(n) = (start..start.saturating_add(SPAN)).find(|n| net::pow_bits(&id, *n) > net::pow_bits(&id, have)) {
+                    let _ = inner.hold.write_note(&inner.cfg.dir, &format!("pow/{}", id.to_hex()), n.to_string().as_bytes());
+                    inner.pow.lock().unwrap().insert(id, n);
+                }
+            });
+        }
         if self.log.lock().unwrap().len() < LOG_CARDS * 9 / 10 {
             return;
         }
@@ -1740,7 +1758,7 @@ impl Inner {
                     "id": hex, "call_sign": id.call_sign(), "name": shown(&a.name), "about": pyrate_core::chat::shown(&a.about), "mixed": pyrate_core::chat::mixed_script(&a.name),
                     // Live only while the card is fresh: one left behind by a keeper who vanished
                     // mid-show says live for good.
-                    "port": a.port.as_deref().map(shown), "live": a.live && now_ms().saturating_sub(a.at_ms) < 2 * 60_000, "aboard": aboard, "kept": is_kept, "marooned": is_marooned, "since": a.since,
+                    "port": a.port.as_deref().map(shown), "live": a.live && now_ms().saturating_sub(a.at_ms) < 2 * 60_000, "aboard": aboard, "kept": is_kept, "marooned": is_marooned, "since": a.since, "listed": net::listed(a, now_ms()),
                     "tracks": a.tracks, "signed_ms": a.at_ms, "named": a.named, "freq": a.freq,
                     "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),
                     "pocket": self.is_pocket(id),
@@ -2694,6 +2712,8 @@ impl Node {
                     let tracks = a.map(|a| a.library().map(|l| l.len()).unwrap_or(0)).unwrap_or(0);
                     let art = a.and_then(|a| a.art());
                     json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": name.as_deref().map(shown), "tracks": tracks,
+                        // Whether this device has done the work for the station to be listed.
+                        "listable": inner.pow.lock().unwrap().get(&id).is_some_and(|p| net::pow_bits(&id, *p) >= net::LIST_BITS),
                         "direct": inner.direct.lock().unwrap().contains(&id),
                         // Three stems with no taker and no leave to go direct: the station waits.
                         "waiting": !inner.direct.lock().unwrap().contains(&id) && inner.stem_misses.lock().unwrap().get(&id).is_some_and(|m| *m >= 3),

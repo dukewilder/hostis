@@ -10,6 +10,15 @@ pub const ALPN: &[u8] = b"pyrate/1";
 pub const MAX_FRAME: usize = 16 * 1024 * 1024;
 /// Leading zero bits a station's proof of work must show. About a second on a phone, once.
 pub const POW_BITS: u32 = 24;
+/// Leading zero bits a station's work must show for it to be listed in the Log: sixteen times
+/// the work it takes to exist. A station is playable by its link as soon as it exists; to be
+/// listed, its keeper's device works on for a few minutes in the background, so a joke station
+/// raised in a second does not land in everyone's list.
+pub const LIST_BITS: u32 = 28;
+/// A station's card must have been signed by its keeper within this long to be listed: a
+/// station left alone drops out of the list (still playable by its link, still carried) until
+/// its keeper is back.
+pub const LIST_KEEPER_MS: u64 = 30 * 86_400_000;
 /// Work behind each listener token: a second or two on a phone, once an hour.
 pub const TOKEN_BITS: u32 = 20;
 
@@ -332,6 +341,12 @@ pub fn pow_improve(station: &StationId, from: u64, start: u64, span: u64) -> Opt
 
 pub fn pow_ok(station: &StationId, nonce: u64) -> bool {
     pow_hash(station, nonce) >= POW_BITS
+}
+
+/// Whether a station's card earns it a place in the Log's list: the work for listing, a keeper
+/// seen within a month, and something to hear (recordings, or live now).
+pub fn listed(a: &Announce, now: u64) -> bool {
+    pow_hash(&a.station, a.pow) >= LIST_BITS && now.saturating_sub(a.at_ms) < LIST_KEEPER_MS && (a.tracks.unwrap_or(1) > 0 || a.live)
 }
 
 /// The work a station does once, so raising ten thousand junk stations costs ten thousand times as much.
