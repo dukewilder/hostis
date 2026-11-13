@@ -1,6 +1,6 @@
 {
  "pyrate": "bearings",
- "at": 1794580495850,
+ "at": 1794581584206,
  "doors": [
   "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442",
   "f6d5c5276a98baf5d4964683115e9f0f6095e713f46bec34c25c29a66e46d753"
@@ -35,20 +35,24 @@
    "cid": "bafybeieou574ks7zdsrat5njuuagr3bi36eqrmb3wxwclyoy4bq523b4qi"
   },
   {
+   "name": "pyrate-radio-0.9.15.apk",
+   "cid": "bafybeibaryqurcounxvqgggtixs44noablv7gmmdnantsm7z6eunoaxejy"
+  },
+  {
    "name": "pyrate-radio-0.9.5.apk",
    "cid": "bafybeif736juxf2nquix2g7xpvp3keyqb6owbvkrl7dmnryw5mihpnpjra"
   },
   {
    "name": "pyrate-radio-0.9.15-macos.zip",
-   "cid": "bafybeihyewrtun64y6t23qo6dihmo4mfagam7qz65pnp6f2xgrmwwhgjcu"
+   "cid": "bafybeic2ta476qzcxfxp5erq43eu436af6gqgwgzxoubj5zq2v3ffory3m"
   },
   {
    "name": "pyrate-radio-0.9.15-windows.zip",
-   "cid": "bafybeihmjdx4cgatsckivs46du7lxh2k75yldzq6utjaq53jdhpd6r7rca"
+   "cid": "bafybeiepuqbtqmv3j6f7i4u2kr5cb4gohsbmttwexxlwf2q2p45br3ksrm"
   },
   {
    "name": "pyrate-radio-0.9.15-linux-x64.tar.gz",
-   "cid": "bafybeihslsyq3lowomvudc5oxm3tncwlhbgeqdiob2up737p2g4uwrce54"
+   "cid": "bafybeidbt4d5fppy6zor4yof2zinppg4vc265ax33iusj34kijr6vi4uh4"
   },
   {
    "name": "source/pyrate-radio-src-470fbab.tar.gz",
