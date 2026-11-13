@@ -175,11 +175,16 @@ fn seed_all(node: &Node, seeds: &[String]) -> anyhow::Result<()> {
             [n, a, f, k] => (n, a, f, k, None),
             [n, a, f, k, p] => (n, a, f, k, Some(p.trim()).filter(|p| !p.is_empty())),
             _ => {
-                eprintln!("seed must be Name|About|folder|music or talk, with |Home port after it if you like");
+                eprintln!("seed must be Name|About|folder|music, mono or talk, with |Home port after it if you like");
                 continue;
             }
         };
-        let profile = if kind == "talk" { Profile::Talk } else { Profile::Music };
+        // "mono" is music recorded in one channel (old records): half the bytes, same sound.
+        let profile = match kind {
+            "talk" => Profile::Talk,
+            "mono" => Profile::Mono,
+            _ => Profile::Music,
+        };
         let existing = {
             let s = node.inner_store_find(name);
             s

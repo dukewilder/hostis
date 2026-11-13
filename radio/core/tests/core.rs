@@ -181,6 +181,13 @@ fn ingest_resamples_and_downmixes() {
 
     let music = ingest(&wav, Profile::Music).unwrap();
     assert_eq!(music.channels, 2);
+    // Mono music: one channel, half the bytes of stereo, the tone intact.
+    let mono = ingest(&wav, Profile::Mono).unwrap();
+    assert_eq!(mono.channels, 1);
+    let (m, s) = (mono.chunks[0].1.len(), music.chunks[0].1.len());
+    assert!(m * 10 < s * 6, "mono {m} bytes against stereo {s}");
+    let r = rms(&decode_chunk(&mono.chunks[0].1, 1).unwrap()[9600..]);
+    assert!(r > 4000.0, "mono tone survives at the house level, rms {r}");
     std::fs::remove_dir_all(&dir).ok();
 }
 

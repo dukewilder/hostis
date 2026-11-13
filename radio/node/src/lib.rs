@@ -2728,6 +2728,17 @@ impl Node {
                 });
                 mine_v
                 };
+                // How many other radios have said lately that they carry our station: a new one
+                // reaches the first about a minute after it is raised, the stem's privacy wait.
+                // Read once the store's lock is let go.
+                let mut mine = mine;
+                if let Some(m) = mine.as_mut() {
+                    if let Some(id) = m["id"].as_str().and_then(|h| StationId::from_hex(h).ok()) {
+                        let (me, now) = (*inner.endpoint.id().as_bytes(), now_ms());
+                        let n = inner.log.lock().unwrap().get(&id).map(|l| l.carriers.iter().filter(|(k, (_, seen))| **k != me && now.saturating_sub(*seen) < 10 * 60_000).count()).unwrap_or(0);
+                        m["carriers"] = json!(n);
+                    }
+                }
                 let jobs: Vec<Value> = inner.jobs.lock().unwrap().iter().map(|(k, v)| json!({ "id": k, "state": v })).collect();
                 let tuned = inner.tuned.lock().unwrap().as_ref().map(|t| t.station.to_hex());
                 #[cfg(feature = "playback")]
@@ -3219,7 +3230,13 @@ impl Node {
                 let title = pyrate_core::chat::plain_title(&title).0;
                 let by = req["by"].as_str().unwrap_or("").to_string();
                 let source = req["source"].as_str().unwrap_or("").to_string();
-                let profile = if req["talk"].as_bool().unwrap_or(false) { Profile::Talk } else { Profile::Music };
+                let profile = if req["talk"].as_bool().unwrap_or(false) {
+                    Profile::Talk
+                } else if req["mono"].as_bool().unwrap_or(false) {
+                    Profile::Mono
+                } else {
+                    Profile::Music
+                };
                 let job = now_ms();
                 inner.jobs.lock().unwrap().insert(job, format!("Setting {title}"));
                 let i2 = inner.clone();
