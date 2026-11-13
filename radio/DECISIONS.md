@@ -566,3 +566,26 @@ At Dylan's word.
 ## XLVIII. An iPhone has its own button (12 November 2026)
 
 At Dylan's word, since at a glance the landing page offered phones only Android. Under the Android button sits **Pyrate Radio for iPhone**, which opens three steps that put the full player on the home screen as a web app (Safari's Share, Add to Home Screen, Open as Web App). On an iPhone or iPad it comes first and opens by itself. The player already carries a manifest and home-screen icons. Shanties joins HOSTIS's stations in the page, the player and the app (its cover ships with the next app build).
+
+## XLIX. Quick answers, honest live, and a desk to run a show (13 November 2026)
+
+At Dylan's word, after he found the radio slow everywhere and live mode a screech.
+
+- **The screech was the encoder.** opusscript's `_encode` takes its input one byte to each 16-bit slot and packs the pairs itself. Handed plain samples it packed two into one, so everything the open player encoded, live and every recording put on the air from a tab, aired as noise an octave up. encode-worker.js now feeds it bytes. A tone goes in and the same tone comes out, and the tests check that by ear (numpy on what the listener's speaker gets), not by state.
+- **An exit answers from what it holds.** Asked for a log through two hops, a node used to ask every carrier it knew first, and the listener's eight seconds ran out. It now answers at once, a quarter of a megabyte at a time, and catches up behind. A chunk it lacks comes from three carriers at once, and a Lantern logs a hop it cannot make.
+- **The tab draws its route from the quick.** Every radio's answers are timed. The first hop and the exits are drawn from those close to the quickest, and a station's own carriers come first as exits. A second route goes after three seconds without an answer, the first hop is redrawn after two silent routes, and there is one connection per radio. Nothing else is fetched while the station on the set tunes in, and a sync gives up after three silent rounds and asks again. Phones draw exits from carriers first as well.
+- **A broadcast that ends, ends.** A new log entry, LiveEnd, ends a show at once. Listeners play the chunks written before it and what is queued, the sign-off included, then the schedule. Older nodes keep the entry unread, and it ends the show for them too, since only a live chunk at the end of a log is live. A card says live only while it is under two minutes old.
+- **No feedback.** A keeper on the air is never played their own station, on a phone, a computer or a tab. The desk's own mix reaches the speakers only with Hear the mix on.
+- **Stems carry what is missing.** A tab sends what its carriers lack, sixty-four entries at a time, as phones do, rather than its whole log every six seconds of a show. A keeper's stem tries three second nodes a tick, and lets go of a guard that does not answer or relays for nobody.
+- **The live desk.** In the browser studio:
+  - a microphone with a device picker, fader, meter, open and closed (Space) and the disguise;
+  - a deck of files from disk with a playlist and times;
+  - six pads;
+  - a second input (another device, or a tab's sound);
+  - talk-over ducking to a quarter;
+  - a limiter on the air;
+  - meters, the on-air timer and the listener count.
+
+  The mic alone goes out as talk; music, pads or a second input make it a stereo music show, switching at a chunk's edge. The same desk is being built into the app.
+- **The sweep's fixes.** The player skips stations with nothing to play, Hide moves the set off the hidden station, a quiet station's new recording is heard within seconds, a returning keeper finds their station at once, and a dead link says so in twelve seconds. Pictures off clears the set at once. Five kinds are allowed, chat names are big enough to tap, the harbours are no longer counted as people in a room, the direct-connect setting is written in plain words, and a returning visitor opens on their first kept station.
+- **The page paints first.** The fonts are files of their own, so the player's page is 94 KB rather than 501 KB, and the module, its glue and the wasm are preloaded with the page.
