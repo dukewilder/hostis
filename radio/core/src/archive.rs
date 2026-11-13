@@ -103,6 +103,9 @@ pub enum Body {
     /// waiting out the silence after the last six seconds. Older nodes keep it unread, and it
     /// ends the broadcast for them too, since only a live chunk at the end of a log is live.
     LiveEnd,
+    /// Whether the station keeps itself off the public dial: heard by its link and by those
+    /// who keep it, never listed for strangers. The station's own word; the latest one rules.
+    Listing { link_only: bool },
     /// An entry from a later version of the app. Kept and passed on exactly as it came, so
     /// old and new nodes share one log; this version does nothing with it.
     ///
@@ -325,6 +328,7 @@ struct Latest {
     rating: Option<usize>,
     details: Option<usize>,
     art: Option<usize>,
+    listing: Option<usize>,
 }
 
 /// The most 20 ms frames a chunk may hold: six seconds, as every encoder here makes them.
@@ -491,6 +495,7 @@ impl Archive {
             Body::Rating { .. } => self.latest.rating = at,
             Body::Details { .. } => self.latest.details = at,
             Body::Art { .. } => self.latest.art = at,
+            Body::Listing { .. } => self.latest.listing = at,
             _ => {}
         }
         self.head = hash;
@@ -580,6 +585,11 @@ impl Archive {
     /// Whether the station calls itself explicit. The latest word rules.
     pub fn explicit(&self) -> bool {
         matches!(self.latest.rating.map(|i| self.entries[i].entry.body()), Some(Body::Rating { explicit: true }))
+    }
+
+    /// Whether the station keeps itself off the public dial (see `Body::Listing`).
+    pub fn link_only(&self) -> bool {
+        matches!(self.latest.listing.map(|i| self.entries[i].entry.body()), Some(Body::Listing { link_only: true }))
     }
 
     /// The station's own word on what it is, if it has said.
