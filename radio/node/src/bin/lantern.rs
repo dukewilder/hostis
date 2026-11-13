@@ -196,6 +196,14 @@ fn seed_all(node: &Node, seeds: &[String]) -> anyhow::Result<()> {
             }
         }
 
+        // A station seeded with no kinds of its own takes the seed's, music or talk, so the
+        // Log's filters find it. Kinds set since by other means are left alone.
+        if node.archive(&id).is_some_and(|a| a.details().is_none()) {
+            let k = if kind == "talk" { "talk" } else { "music" };
+            let r = node.call(&serde_json::json!({ "cmd": "details_set", "station": id.to_hex(), "kinds": [k], "mature": false }));
+            println!("  kinds set {r}");
+        }
+
         // station.jpg and banner.jpg in the folder are the station's art.
         let current = node.archive(&id).and_then(|a| a.art());
         for (file, kind) in [("station", "cover"), ("banner", "banner")] {

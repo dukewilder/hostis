@@ -61,6 +61,10 @@ impl iroh::address_lookup::AddressLookupBuilder for DoorsOnly {
         Ok(DoorsLookup(iroh::address_lookup::AddressLookupBuilder::into_address_lookup(iroh::address_lookup::PkarrResolver::n0_dns(), ep)?, self.0))
     }
 }
+/// How long a card that says live is believed: a keeper on the air sends a fresh one every few
+/// chunks, so a card older than this is from a show that has ended.
+const LIVE_CARD_MS: u64 = 2 * 60_000;
+
 /// Chunks kept in memory: about forty minutes of music.
 const HOLD_BYTES: usize = 24 * 1024 * 1024;
 
@@ -395,12 +399,13 @@ impl Ship {
                             me.hear(st, l);
                         }
                     }
-                    Ok(Event::NeighborUp(_)) => {
+                    // The harbours sit in every room to carry it: they are not people listening.
+                    Ok(Event::NeighborUp(n)) if !me.harbour.contains(&n) => {
                         if let Some(r) = me.rooms.lock().unwrap().get_mut(&st) {
                             r.neighbours += 1;
                         }
                     }
-                    Ok(Event::NeighborDown(_)) => {
+                    Ok(Event::NeighborDown(n)) if !me.harbour.contains(&n) => {
                         if let Some(r) = me.rooms.lock().unwrap().get_mut(&st) {
                             r.neighbours = r.neighbours.saturating_sub(1);
                         }
@@ -1496,7 +1501,9 @@ impl Ship {
                 let accent = a.accent.map(|c| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]));
                 Some((aboard, json!({
                     "id": id.to_hex(), "call_sign": id.call_sign(), "name": shown(&a.name), "about": pyrate_core::chat::shown(&a.about), "mixed": pyrate_core::chat::mixed_script(&a.name),
-                    "port": a.port.as_deref().map(shown), "live": a.live, "aboard": aboard, "since": a.since,
+                    // A card says live only while it is fresh: a keeper on the air sends one with every
+                    // few chunks, and one that vanished mid-show leaves its last card behind.
+                    "port": a.port.as_deref().map(shown), "live": a.live && now.saturating_sub(a.at_ms) < LIVE_CARD_MS, "aboard": aboard, "since": a.since,
                     "tracks": a.tracks, "signed_ms": a.at_ms, "named": a.named, "freq": a.freq,
                     "kinds": a.kinds, "mature": a.mature, "explicit": a.explicit, "tip": a.tip,
                     "cover": a.cover.map(|h| hex(&h)), "banner": banners.get(id), "accent": accent,
@@ -1868,7 +1875,7 @@ impl Radio {
         let id = master.id();
         let now = raw_now();
         let mut a = Archive::new(id);
-        let kinds: Vec<String> = kinds.split(',').map(|k| k.trim().to_lowercase()).filter(|k| !k.is_empty()).take(3).collect();
+        let kinds: Vec<String> = kinds.split(',').map(|k| k.trim().to_lowercase()).filter(|k| !k.is_empty()).take(5).collect();
         let w = |a: &mut Archive, at: u64, b: Body| a.write(&master, at, b).map(|_| ()).map_err(|e| js(anyhow!("{e}")));
         w(&mut a, now, Body::Colours { name: name.into(), about: about.trim().chars().take(140).collect(), port: None, tip: None })?;
         // A plain label: what the deputy is written into a public log, so it says nothing of
@@ -2188,6 +2195,24 @@ impl Radio {
             }
             Ok(JsValue::from_str(&json!(out).to_string()))
         }))
+    }
+
+    /// The live chunks after `seq`, up to the end of the broadcast: the last words of a show
+    /// that has ended, for a listener still playing it.
+    pub fn live_after(&self, id: &str, seq: f64) -> Result<String, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let archives = self.ship.archives.lock().unwrap();
+        let Some(a) = archives.get(&st) else { return Ok("[]".into()) };
+        let es = a.entries();
+        let out: Vec<Value> = es[es.len().saturating_sub(256)..]
+            .iter()
+            .filter(|e| e.entry.seq as f64 > seq)
+            .filter_map(|e| match e.entry.body() {
+                Body::Live { chunk, channels, .. } => Some(json!({ "seq": e.entry.seq, "chunk": hex(&chunk.hash), "channels": channels, "ms": chunk.duration_ms() })),
+                _ => None,
+            })
+            .collect();
+        Ok(json!(out).to_string())
     }
 
     /// Whether this tab holds a station's log yet.

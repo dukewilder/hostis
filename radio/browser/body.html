@@ -112,6 +112,7 @@
 <section class="view open-only studio" id="v-studio" aria-label="Start a station" hidden>
 <div id="studio">
 <div class="sechead"><h2>Start a Station</h2><span class="cap">from this browser</span></div>
+<p id="st-finding" class="st-status" role="status" hidden>Finding your station</p>
 <div id="st-lock" hidden>
 <p class="fine">Your stations in this browser are locked with a passphrase.</p>
 <label class="field"><span>Passphrase</span><input id="st-pass" type="password" autocomplete="current-password"></label>
@@ -124,7 +125,8 @@
 <label class="field"><span>Station name</span><input id="st-name" maxlength="40" autocomplete="off" placeholder="The name on the dial"></label>
 <label class="field"><span>What it plays</span><input id="st-about" maxlength="140" autocomplete="off" placeholder="One line about it"></label>
 <details class="fold"><summary>More options</summary><div>
-<label class="field"><span>Kinds</span><input id="st-kinds" maxlength="80" autocomplete="off" placeholder="Up to three, with commas: jazz, talk, shanties"></label>
+<label class="field"><span>Kinds</span><input id="st-kinds" maxlength="100" autocomplete="off" placeholder="Up to five, with commas: jazz, talk, shanties"></label>
+<p id="st-kindnote" class="fine" role="status" hidden>Five at most. The rest are left off.</p>
 <div class="switches"><label><input type="checkbox" id="st-mature"><span>Mature: strong language or themes</span></label><label><input type="checkbox" id="st-explicit"><span>Explicit: sexual or graphic material</span></label></div>
 <p>A second lock on your 24 words. Forget it and the station is gone for good.</p>
 <label class="field"><span>Passphrase</span><input id="st-ppass" type="password" autocomplete="new-password" placeholder="Optional"></label>
@@ -221,10 +223,10 @@
 <div class="open-only">
 <p class="fine">Each station says for itself whether it is mature or explicit. Hide any station that gets it wrong.</p>
 <p class="centre"><button id="mlist" class="btn">Hidden stations</button></p>
-<div id="mbox" hidden><p class="fine">Copy this list to share it, or paste in a list someone shared with you.</p><textarea id="mtext" spellcheck="false" aria-label="Hidden stations"></textarea><div class="row-btns"><button id="mtake" class="btn">Hide these</button><button id="mclear" class="btn quiet">Show every station again</button></div><div id="mnote" class="fine"></div></div>
+<div id="mbox" hidden><div id="mrows" class="mrows"></div><p class="fine">Copy this list to share it, or paste in a list someone shared with you.</p><textarea id="mtext" spellcheck="false" aria-label="Hidden stations"></textarea><div class="row-btns"><button id="mtake" class="btn">Hide these</button><button id="mclear" class="btn quiet">Show every station again</button></div><div id="mnote" class="fine"></div></div>
 <details class="fold"><summary>Advanced</summary><div>
-<div class="switches"><label><input type="checkbox" id="sw-direct"><span>Connect directly when needed</span></label></div>
-<p>Plays sooner on a quiet network, but the radio it asks can see this browser's relay.</p>
+<div class="switches"><label><input type="checkbox" id="sw-direct"><span>Connect straight to quiet stations</span></label></div>
+<p>A station few people carry starts sooner. The radios carrying it can then see this connection, which the usual two steps keep from them.</p>
 </div></details>
 </div>
 <details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your settings, kept and hidden stations, the list of stations last on the air, your name and mutes in the chat, any invitations you opened, and the key of any station you started here (never its 24 words). The key and invitations are locked under a key the browser keeps to itself. None of it is sent anywhere.</p></div></details>
