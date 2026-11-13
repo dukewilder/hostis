@@ -2016,8 +2016,9 @@ impl Radio {
 
     /// For `?debug` only: the first page of a station's log along every route this tab knows,
     /// all at once, as JSON of [first, exit, ms or -1].
-    pub fn route_check(&self, id: &str) -> Result<js_sys::Promise, JsValue> {
+    pub fn route_check(&self, id: &str, chunk: &str) -> Result<js_sys::Promise, JsValue> {
         let station = StationId(unhex32(id).map_err(js)?);
+        let chunk: Option<Hash> = unhex32(chunk).ok();
         let s = self.ship.clone();
         Ok(wasm_bindgen_futures::future_to_promise(async move {
             let nodes = s.route_nodes();
@@ -2027,7 +2028,10 @@ impl Radio {
                 let (a, b) = (*a, *b);
                 async move {
                     let t = raw_now();
-                    let ok = matches!(s.via(a, b, &Ask::Log { station, from: 0 }, 0).await, Ok(Response::Entries(l)) if !l.is_empty());
+                    let ok = match chunk {
+                        Some(h) => matches!(s.via(a, b, &Ask::Sealed { station, name: pyrate_core::seal::name(&h) }, 0).await, Ok(Response::Sealed(Some(_)))),
+                        None => matches!(s.via(a, b, &Ask::Log { station, from: 0 }, 0).await, Ok(Response::Entries(l)) if !l.is_empty()),
+                    };
                     json!([a.fmt_short().to_string(), b.fmt_short().to_string(), if ok { (raw_now() - t) as i64 } else { -1 }])
                 }
             });
