@@ -258,6 +258,8 @@ struct Ship {
     hop_misses: std::sync::atomic::AtomicU32,
     /// Radios a connection is being made to now: a second request waits for it.
     connecting: Mutex<HashSet<EndpointId>>,
+    /// How long each radio has lately taken to answer, in milliseconds, smoothed.
+    answers: Mutex<HashMap<EndpointId, f64>>,
 }
 
 /// A relay named in a link someone passed on: HTTPS only, so a link cannot send the tab's
@@ -497,13 +499,18 @@ impl Ship {
             let bytes = recv.read_to_end(MAX_FRAME).await?;
             anyhow::Ok(postcard::from_bytes(&bytes)?)
         };
+        let t = raw_now();
         match timeout(Duration::from_secs(20), fut).await {
-            Ok(Ok(r)) => Ok(r),
+            Ok(Ok(r)) => {
+                self.answered(node, (raw_now() - t) as f64);
+                Ok(r)
+            }
             Ok(Err(e)) => {
                 self.conns.lock().unwrap().remove(&node);
                 Err(e)
             }
             Err(_) => {
+                self.answered(node, 20_000.0);
                 self.conns.lock().unwrap().remove(&node);
                 self.failed.lock().unwrap().insert(*node.as_bytes(), self.now());
                 Err(anyhow!("request timed out"))
@@ -1073,17 +1080,31 @@ impl Ship {
     fn first_hop_for(&self, nodes: &[EndpointId]) -> Option<EndpointId> {
         let mut g = self.first_hop.lock().unwrap();
         if g.is_none_or(|f| !nodes.contains(&f)) {
-            let near: Vec<EndpointId> = {
-                let n = self.neighbours.lock().unwrap();
-                nodes.iter().filter(|x| n.contains(*x)).copied().collect()
-            };
-            let pool = if near.is_empty() { nodes.to_vec() } else { near };
-            if pool.is_empty() {
+            // The quickest to answer of the radios this tab knows, drawn among those within half
+            // as slow again: every request of the visit waits on the first hop, so a slow one
+            // makes the whole radio slow. One not yet heard from counts as a second and a half.
+            let near: HashSet<EndpointId> = self.neighbours.lock().unwrap().clone();
+            let pool: Vec<(f64, EndpointId)> = nodes.iter().map(|x| (self.answer_ms(x, near.contains(x)), *x)).collect();
+            let best = pool.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
+            let quick: Vec<EndpointId> = pool.iter().filter(|p| p.0 <= best * 1.5 + 50.0).map(|p| p.1).collect();
+            if quick.is_empty() {
                 return None;
             }
-            *g = Some(pool[pick(pool.len())]);
+            *g = Some(quick[pick(quick.len())]);
         }
         *g
+    }
+
+    /// A radio's recent answer time; one not heard from yet counts as a second and a half, or
+    /// a second if it is a neighbour already.
+    fn answer_ms(&self, n: &EndpointId, near: bool) -> f64 {
+        self.answers.lock().unwrap().get(n).copied().unwrap_or(if near { 1000.0 } else { 1500.0 })
+    }
+
+    fn answered(&self, n: EndpointId, ms: f64) {
+        let mut a = self.answers.lock().unwrap();
+        let v = a.entry(n).or_insert(ms);
+        *v = *v * 0.6 + ms * 0.4;
     }
 
     /// Exits for a request, as many as asked for and all different: radios that have not
@@ -1104,10 +1125,15 @@ impl Ship {
             nodes.iter().filter(|x| !not.contains(x) && !bad(x) && !carrying.contains(x.as_bytes())).copied().collect(),
             nodes.iter().filter(|x| !not.contains(x) && bad(x)).copied().collect(),
         ];
+        // Within a tier the quicker radios come first, drawn at random among those close to the
+        // quickest, so no one exit sees every request.
         let mut out = Vec::new();
         while out.len() < n {
             let Some(from) = tiers.iter_mut().find(|t| !t.is_empty()) else { break };
-            out.push(from.swap_remove(pick(from.len())));
+            let ms: Vec<f64> = from.iter().map(|x| self.answer_ms(x, false)).collect();
+            let best = ms.iter().copied().fold(f64::INFINITY, f64::min);
+            let quick: Vec<usize> = (0..from.len()).filter(|i| ms[*i] <= best * 1.5 + 50.0).collect();
+            out.push(from.swap_remove(quick[pick(quick.len())]));
         }
         out
     }
@@ -1159,6 +1185,8 @@ impl Ship {
         let t = raw_now();
         let what = match ask { Ask::Log { from, .. } => format!("log from {from}"), Ask::Sealed { .. } => "chunk".into(), Ask::Token { .. } => "token".into(), _ => "ask".into() };
         let r = timeout(Duration::from_secs(8), self.ask(first, &Request::Hop(hop))).await;
+        // The route's time is the exit's too: an exit that is slow to fetch shows here.
+        self.answered(exit, match &r { Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => (raw_now() - t) as f64, _ => 8_000.0 });
         say(&format!("route {} via {} to {} ({} known): {} in {} ms", what, first.fmt_short(), exit.fmt_short(), known,
             match &r { Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => "answered".to_string(), Ok(Ok(_)) => "empty".into(), Ok(Err(e)) => format!("first hop failed: {e}"), Err(_) => "timed out".into() }, raw_now() - t));
         let raw = match r {
@@ -1697,6 +1725,7 @@ impl Radio {
             cards_asked: Mutex::new(HashSet::new()),
             hop_misses: std::sync::atomic::AtomicU32::new(0),
             connecting: Mutex::new(HashSet::new()),
+            answers: Mutex::new(HashMap::new()),
         });
         *proto.0.lock().unwrap() = Some(ship.clone());
 
