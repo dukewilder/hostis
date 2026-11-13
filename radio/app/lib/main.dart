@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'art.dart';
+import 'desk.dart';
 import 'more.dart';
 import 'native.dart';
 import 'station.dart';
@@ -1423,42 +1424,14 @@ class _ColoursPageState extends State<ColoursPage> {
     ]);
   }
 
-  List<Widget> _onAir(String id) {
-    final live = widget.radio.status['live'] as Map<String, dynamic>?;
-    final on = live != null && live['station'] == id;
-    return [
-      heading('GO LIVE', color: bloodBright),
-      note('Talk to your listeners from this phone. They hear you about fifteen seconds behind, and your recordings carry on when you stop. Sirens, bells or voices in the background can give away where you are. Settings can disguise your voice.'),
-      const SizedBox(height: 12),
-      if (on)
-        Row(children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(border: Border.all(color: bloodBright, width: 0.8)),
-            child: Text('ON AIR  ${fmtTime((live['since_ms'] as num).toInt())}', style: mono(13, color: bloodBright, weight: FontWeight.w700)),
-          ),
-          const SizedBox(width: 12),
-          button('STOP', () async {
-            await Native.callAway({'cmd': 'end_live'});
-            _service.invokeMethod('live', {'on': false}).catchError((_) {});
-          }),
-        ])
-      else
-        Row(children: [
-          button('GO LIVE', () async {
-            if (!await askMic(context)) return;
-            final r = await Native.callAway({'cmd': 'go_live', 'station': id});
-            if (!mounted) return;
-            if (r is Map && r['error'] != null) {
-              setState(() => error = r['error']);
-            } else {
-              _service.invokeMethod('live', {'on': true}).catchError((_) {});
-            }
-          }, color: bloodBright),
-        ]),
-      if (error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(error!, style: serif(14, color: bone, italic: true))),
-    ];
-  }
+  // The live desk (desk.dart) runs the show: going live and ending, the inputs, the deck, the
+  // pads, and the phone's foreground service that keeps it on the air with the screen off.
+  List<Widget> _onAir(String id) => [
+        heading('GO LIVE', color: bloodBright),
+        note('Talk to your listeners, play music under your voice and fire jingles from the pads. Your recordings carry on when you stop.'),
+        const SizedBox(height: 14),
+        LiveDesk(station: id),
+      ];
 
   List<Widget> _programme(String id, Map<String, dynamic> mine) {
     if (programmeFor != id) {

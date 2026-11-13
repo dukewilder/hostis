@@ -33,6 +33,12 @@ mp3lame-encoder = "0.3"
 iroh-relay = { version = "1.4", features = ["server"] }
 qrcode = { version = "0.14", default-features = false }
 argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
+# The live desk reads its deck and pads as they play: the same reader and resampler the core
+# ingests with.
+symphonia = "0.6"
+rubato = "5"
+# The desk's encoder hears each frame back as listeners will, which takes libopus itself.
+opusic-sys = "0.7"
 
 p256 = { version = "0.14", features = ["ecdsa", "pkcs8"], optional = true }
 rcgen = { version = "0.14", default-features = false, features = ["ring"], optional = true }
@@ -42,6 +48,11 @@ default = []
 playback = ["dep:cpal"]
 # The offline key tool's Android signing, kept out of the app and the Lantern.
 keytool = ["dep:p256", "dep:rcgen"]
+
+[[bin]]
+name = "desk_test"
+path = "src/bin/desk_test.rs"
+required-features = ["playback"]
 
 [[bin]]
 name = "release"
