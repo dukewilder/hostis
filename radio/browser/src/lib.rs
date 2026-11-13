@@ -71,7 +71,9 @@ fn say(msg: &str) {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     let on = *ON.get_or_init(|| web_sys::window().and_then(|w| w.location().search().ok()).is_some_and(|q| q.contains("debug")));
     if on {
-        web_sys::console::log_1(&format!("pyrate: {msg}").into());
+        static T0: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+        let t = js_sys::Date::now() - *T0.get_or_init(js_sys::Date::now);
+        web_sys::console::log_1(&format!("pyrate {:>7.2}: {msg}", t / 1000.0).into());
     }
 }
 
@@ -149,6 +151,14 @@ enum Ask {
     Token { station: StationId, hour: u64, token: [u8; 32], nonce: u64 },
     Sealed { station: StationId, name: Hash },
     Stem { station: StationId, entries: Vec<Vec<u8>>, chunks: Vec<(Hash, Vec<u8>)>, announce: Option<Announce> },
+}
+
+/// Why a route failed: its first hop could not be reached, or the hop gave no answer.
+#[derive(Debug)]
+enum RouteFail {
+    FirstHop,
+    NoAnswer,
+    Other,
 }
 
 /// Chunks and pictures this tab has fetched, oldest out first.
@@ -425,10 +435,19 @@ impl Ship {
                 return Ok(c.clone());
             }
         }
-        let c = timeout(Duration::from_secs(15), self.ep.connect(node, ALPN))
-            .await
-            .map_err(|_| anyhow!("connect timed out"))?
-            .map_err(|e| anyhow!("connect: {e}"))?;
+        let t = raw_now();
+        let c = match timeout(Duration::from_secs(15), self.ep.connect(node, ALPN)).await {
+            Ok(Ok(c)) => c,
+            Ok(Err(e)) => {
+                say(&format!("connect {} failed after {} ms: {e}", node.fmt_short(), raw_now() - t));
+                return Err(anyhow!("connect: {e}"));
+            }
+            Err(_) => {
+                say(&format!("connect {} timed out", node.fmt_short()));
+                return Err(anyhow!("connect timed out"));
+            }
+        };
+        say(&format!("connected to {} in {} ms", node.fmt_short(), raw_now() - t));
         self.conns.lock().unwrap().insert(node, c.clone());
         Ok(c)
     }
@@ -802,7 +821,13 @@ impl Ship {
         if !self.cards_asked.lock().unwrap().insert(node) {
             return;
         }
-        let Ok(Response::Cards(list)) = self.ask(node, &Request::Cards).await else { return };
+        let t = raw_now();
+        let list = match self.ask(node, &Request::Cards).await {
+            Ok(Response::Cards(list)) => list,
+            other => return say(&format!("cards from {}: none after {} ms ({})", node.fmt_short(), raw_now() - t, other.err().map(|e| e.to_string()).unwrap_or_default())),
+        };
+        say(&format!("cards from {}: {} items in {} ms", node.fmt_short(), list.len(), raw_now() - t));
+        let mut kinds = (0, 0, 0, 0, std::collections::BTreeMap::<String, usize>::new());
         let now = self.now();
         for b in list.into_iter().take(net::CARDS_ITEMS) {
             if b.len() > net::CARD_WIRE {
@@ -815,13 +840,15 @@ impl Ship {
             if !matches!(g, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Harbour { .. }) {
                 continue;
             }
-            let Some(g) = g.from_network(now, node.as_bytes()) else { continue };
+            match &g { Gossip::Station(_) => kinds.0 += 1, Gossip::Carried { node, .. } => { kinds.1 += 1; *kinds.4.entry(hex(&node[..5])).or_default() += 1 } _ => kinds.2 += 1 }
+            let Some(g) = g.from_network(now, node.as_bytes()) else { kinds.3 += 1; continue };
             if let Some(st) = self.on_gossip(g) {
                 if *self.tuned.lock().unwrap() == Some(st) {
                     self.sync_soon(st);
                 }
             }
         }
+        say(&format!("  {} cards, {} carrier notes ({} refused), {} relay notes; carriers {:?}; route radios now {:?}", kinds.0, kinds.1, kinds.3, kinds.2, kinds.4, self.route_nodes().iter().map(|n| n.fmt_short().to_string()).collect::<Vec<_>>()));
     }
 
     /// Takes in a gossip message. Returns a station whose log has grown past ours.
@@ -1015,6 +1042,7 @@ impl Ship {
     async fn ask_route(&self, ask: &Ask, exit: Option<EndpointId>) -> Result<Response> {
         let nodes = self.route_nodes();
         if nodes.len() < 2 {
+            say("route: fewer than two radios known");
             return Err(anyhow!("one node only"));
         }
         let first = self.first_hop_for(&nodes).ok_or_else(|| anyhow!("no first hop"))?;
@@ -1022,27 +1050,41 @@ impl Ship {
             Some(e) => e,
             None => *self.exits(&nodes, &[first], 1).first().ok_or_else(|| anyhow!("no exit"))?,
         };
-        let plain = postcard::to_stdvec(ask)?;
-        let (eph, ct, c) = pyrate_core::route::seal_to(exit.as_bytes(), &plain).ok_or_else(|| anyhow!("seal"))?;
-        let blob = postcard::to_stdvec(&Hop::Sealed { eph, ct })?;
-        let hop = postcard::to_stdvec(&Hop::Forward { next: *exit.as_bytes(), blob })?;
-        let raw = match timeout(Duration::from_secs(8), self.ask(first, &Request::Hop(hop))).await {
-            Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => raw,
-            Ok(Err(_)) => {
+        let r = self.via(first, exit, ask, nodes.len()).await;
+        match &r {
+            Err(RouteFail::FirstHop) => {
                 // The first hop is gone: the next request draws another.
                 *self.first_hop.lock().unwrap() = None;
-                return Err(anyhow!("first hop gone"));
             }
-            _ => {
+            Err(RouteFail::NoAnswer) => {
                 self.suspect.lock().unwrap().insert(exit, self.now());
                 if !self.neighbours.lock().unwrap().contains(&first) {
                     *self.first_hop.lock().unwrap() = None;
                 }
-                return Err(anyhow!("no answer"));
             }
+            _ => {}
+        }
+        r.map_err(|e| anyhow!("{e:?}"))
+    }
+
+    /// One request along one route: `first` sees this tab, `exit` sees what is asked.
+    async fn via(&self, first: EndpointId, exit: EndpointId, ask: &Ask, known: usize) -> std::result::Result<Response, RouteFail> {
+        let plain = postcard::to_stdvec(ask).map_err(|_| RouteFail::Other)?;
+        let (eph, ct, c) = pyrate_core::route::seal_to(exit.as_bytes(), &plain).ok_or(RouteFail::Other)?;
+        let blob = postcard::to_stdvec(&Hop::Sealed { eph, ct }).map_err(|_| RouteFail::Other)?;
+        let hop = postcard::to_stdvec(&Hop::Forward { next: *exit.as_bytes(), blob }).map_err(|_| RouteFail::Other)?;
+        let t = raw_now();
+        let what = match ask { Ask::Log { from, .. } => format!("log from {from}"), Ask::Sealed { .. } => "chunk".into(), Ask::Token { .. } => "token".into(), _ => "ask".into() };
+        let r = timeout(Duration::from_secs(8), self.ask(first, &Request::Hop(hop))).await;
+        say(&format!("route {} via {} to {} ({} known): {} in {} ms", what, first.fmt_short(), exit.fmt_short(), known,
+            match &r { Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => "answered".to_string(), Ok(Ok(_)) => "empty".into(), Ok(Err(e)) => format!("first hop failed: {e}"), Err(_) => "timed out".into() }, raw_now() - t));
+        let raw = match r {
+            Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => raw,
+            Ok(Err(_)) => return Err(RouteFail::FirstHop),
+            _ => return Err(RouteFail::NoAnswer),
         };
-        let open = pyrate_core::route::open_answer(&c, &raw).ok_or_else(|| anyhow!("unopened"))?;
-        Ok(postcard::from_bytes::<Response>(&open)?)
+        let open = pyrate_core::route::open_answer(&c, &raw).ok_or(RouteFail::Other)?;
+        postcard::from_bytes::<Response>(&open).map_err(|_| RouteFail::Other)
     }
 
     /// Sends the hourly token to an exit through a first hop.
@@ -1969,6 +2011,32 @@ impl Radio {
         let s = self.ship.clone();
         Ok(wasm_bindgen_futures::future_to_promise(async move {
             s.sync(st).await.map(|n| JsValue::from(n as u32)).map_err(js)
+        }))
+    }
+
+    /// For `?debug` only: the first page of a station's log along every route this tab knows,
+    /// all at once, as JSON of [first, exit, ms or -1].
+    pub fn route_check(&self, id: &str) -> Result<js_sys::Promise, JsValue> {
+        let station = StationId(unhex32(id).map_err(js)?);
+        let s = self.ship.clone();
+        Ok(wasm_bindgen_futures::future_to_promise(async move {
+            let nodes = s.route_nodes();
+            let pairs: Vec<(EndpointId, EndpointId)> = nodes.iter().flat_map(|a| nodes.iter().filter(move |b| *b != a).map(move |b| (*a, *b))).collect();
+            let runs = pairs.iter().map(|(a, b)| {
+                let s = s.clone();
+                let (a, b) = (*a, *b);
+                async move {
+                    let t = raw_now();
+                    let ok = matches!(s.via(a, b, &Ask::Log { station, from: 0 }, 0).await, Ok(Response::Entries(l)) if !l.is_empty());
+                    json!([a.fmt_short().to_string(), b.fmt_short().to_string(), if ok { (raw_now() - t) as i64 } else { -1 }])
+                }
+            });
+            let mut all: n0_future::FuturesUnordered<_> = runs.map(Box::pin).collect();
+            let mut out = Vec::new();
+            while let Some(r) = n0_future::StreamExt::next(&mut all).await {
+                out.push(r);
+            }
+            Ok(JsValue::from_str(&json!(out).to_string()))
         }))
     }
 
