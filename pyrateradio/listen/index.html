@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-6MBa8wXKLGTYFDz3rGwbGGk4F/lu0RO4nT6soMe1ZC4='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https: wss:; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<link rel="modulepreload" href="app.js?v=178b82f7bc">
-<link rel="modulepreload" href="pkg/pyrate_browser.js?v=178b82f7bc">
-<link rel="preload" href="pkg/pyrate_browser_bg.178b82f7bc.wasm" as="fetch" type="application/wasm" crossorigin>
+<link rel="modulepreload" href="app.js?v=9f972deb92">
+<link rel="modulepreload" href="pkg/pyrate_browser.js?v=9f972deb92">
+<link rel="preload" href="pkg/pyrate_browser_bg.9f972deb92.wasm" as="fetch" type="application/wasm" crossorigin>
 <link rel="preload" href="fonts/im-fell-dw-pica-sc-400-860d6a62.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/jetbrains-mono-400-cfd8dabe.woff2" as="font" type="font/woff2" crossorigin>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -262,6 +262,8 @@ button{background:none;border:0;color:inherit;padding:0;margin:0;cursor:pointer;
 .signal{font:400 11.5px var(--mono);letter-spacing:.2em;color:var(--faint);text-transform:uppercase}
 .signal:not(:empty)::before{content:'';display:inline-block;width:5px;height:5px;background:var(--dim);transform:rotate(45deg);margin:0 .7rem .15rem 0;vertical-align:middle}
 .signalrow .btn{min-height:40px;padding:.3rem .9rem;font-size:.7rem}
+.mirrorbox:has(.mirrors:empty){display:none}
+.carrying{text-align:center;font-size:.7rem;color:var(--dim);margin:6px 0 0;letter-spacing:.02em}
 
 /* the set: one faceplate, with chart corners */
 .set{position:relative;max-width:980px;margin:0 auto;padding:1.25rem 2rem 1.7rem;border:1px solid var(--line);background:linear-gradient(180deg,var(--panel2) 0%,var(--panel) 38%,#070707 100%);overflow:hidden;isolation:isolate;outline:none}
@@ -875,6 +877,7 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 <p class="mh-sub harbour-only">HOSTIS&#8217;s own stations &#183; every other plays in the <a class="openlink" href="#">open player</a></p>
 <p class="mh-sub open-only">the open player &#183; every station on the air, in any browser</p>
 <p class="signalrow"><span id="signal" class="signal" role="status"></span><button id="flockleave" class="btn quiet" hidden>Stop playing in step</button></p>
+<p id="carrying" class="carrying" hidden></p>
 </header>
 <p class="leavingnote" role="status">This station is not one of HOSTIS&#8217;s. Taking you to the open player.</p>
 <section class="set" id="set" aria-label="Now playing" tabindex="-1">
@@ -1129,7 +1132,10 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 <label class="open-only"><input type="checkbox" id="sw-explicit"><span>Show explicit stations</span></label>
 <label class="open-only"><input type="checkbox" id="sw-empty"><span>Show stations with nothing to play yet</span></label>
 <label><input type="checkbox" id="sw-art"><span>Show station pictures</span></label>
+<label><input type="checkbox" id="sw-crew"><span>Carry the radio while you listen</span></label>
 </div>
+<p id="crewnote" class="fine">Your browser passes on what it plays and other listeners&#8217; requests, through three hops, so no one can tell who hears what. What you play is held only while you listen. A computer also carries a few quiet stations drawn by lot, and keeps them between visits, up to 500 MB, until you forget this browser. It never keeps what you played. Your first hop may connect to you directly and see your address, as with Tor; it never sees what you hear. In turn, a listener whose first hop this browser is may see its address.</p>
+<p id="stockuse" class="fine" hidden></p>
 <div class="open-only">
 <p class="fine">Each station says for itself whether it is mature or explicit. Hide any station that gets it wrong.</p>
 <p class="centre"><button id="mlist" class="btn">Hidden stations</button></p>
@@ -1139,7 +1145,8 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 <p>A station few people carry starts sooner. The radios carrying it can then see this connection, which the usual two steps keep from them.</p>
 </div></details>
 </div>
-<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your settings, kept and hidden stations, the list of stations last on the air, your name and mutes in the chat, any invitations you opened, and the key of any station you started here (never its 24 words). The key and invitations are locked under a key the browser keeps to itself.<span class="harbour-only"> On this page it also keeps the schedules of all of HOSTIS&#8217;s stations alike, so the next visit starts sooner.</span> None of it is sent anywhere.</p></div></details>
+<details class="fold mirrorbox"><summary>Other copies of the player</summary><div><p class="fine">The same player, served from elsewhere, for when this address is out of reach.</p><ul class="mirrors"></ul></div></details>
+<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your settings, kept and hidden stations, the list of stations last on the air, your name and mutes in the chat, any invitations you opened, and the key of any station you started here (never its 24 words). The key and invitations are locked under a key the browser keeps to itself.<span class="harbour-only"> On this page it also keeps the schedules of all of HOSTIS&#8217;s stations alike, so the next visit starts sooner.</span> While it carries the radio, a computer also keeps up to 500 MB of stations it does not play, and the radios that answered it quickly. The kept stations are passed on to other listeners who ask. Nothing else is sent anywhere.</p></div></details>
 <p class="centre"><button id="forget" class="btn quiet">Forget this browser</button></p>
 <footer>
 <p class="f-contact">Email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>
@@ -1152,6 +1159,6 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 <button id="mini-up" class="mp-main" aria-label="Back to the radio"><span id="mini-art" class="mp-art" aria-hidden="true"></span><span class="mp-text"><span id="mini-name" class="mp-name"></span><span id="mini-np" class="mp-np"></span></span></button>
 <button id="mini-go" class="mp-go" aria-label="Listen"><span class="glyph" aria-hidden="true"></span></button>
 </div>
-<script type="module" src="app.js?v=178b82f7bc"></script>
+<script type="module" src="app.js?v=9f972deb92"></script>
 </body>
 </html>
