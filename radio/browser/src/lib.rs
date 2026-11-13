@@ -161,6 +161,14 @@ enum RouteFail {
     Other,
 }
 
+impl Ask {
+    fn station(&self) -> Option<StationId> {
+        match self {
+            Ask::Log { station, .. } | Ask::Chunk { station, .. } | Ask::Token { station, .. } | Ask::Sealed { station, .. } | Ask::Stem { station, .. } => Some(*station),
+        }
+    }
+}
+
 /// Chunks and pictures this tab has fetched, oldest out first.
 #[derive(Default)]
 struct Hold {
@@ -246,6 +254,10 @@ struct Ship {
     sailing: std::sync::atomic::AtomicBool,
     /// Peers already asked for the cards they know.
     cards_asked: Mutex<HashSet<EndpointId>>,
+    /// Routes in a row through the visit's first hop that brought nothing back.
+    hop_misses: std::sync::atomic::AtomicU32,
+    /// Radios a connection is being made to now: a second request waits for it.
+    connecting: Mutex<HashSet<EndpointId>>,
 }
 
 /// A relay named in a link someone passed on: HTTPS only, so a link cannot send the tab's
@@ -430,11 +442,26 @@ impl Ship {
     }
 
     async fn conn(&self, node: EndpointId) -> Result<Connection> {
-        if let Some(c) = self.conns.lock().unwrap().get(&node) {
-            if c.close_reason().is_none() {
-                return Ok(c.clone());
+        // One connection per radio: a request made while another is connecting waits for it
+        // rather than opening a second through the same relay.
+        for _ in 0..300 {
+            if let Some(c) = self.conns.lock().unwrap().get(&node) {
+                if c.close_reason().is_none() {
+                    return Ok(c.clone());
+                }
+            }
+            if self.connecting.lock().unwrap().insert(node) {
+                break;
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+        struct Done<'a>(&'a Mutex<HashSet<EndpointId>>, EndpointId);
+        impl Drop for Done<'_> {
+            fn drop(&mut self) {
+                self.0.lock().unwrap().remove(&self.1);
             }
         }
+        let _done = Done(&self.connecting, node);
         let t = raw_now();
         let c = match timeout(Duration::from_secs(15), self.ep.connect(node, ALPN)).await {
             Ok(Ok(c)) => c,
@@ -555,7 +582,7 @@ impl Ship {
             let from = self.archives.lock().unwrap().get(&station).map(|a| a.len()).unwrap_or(0);
             // A log this tab has never seen goes out along two routes at once; the first to
             // bring entries wins.
-            let asked = if from == 0 { self.first_page(station).await } else { self.ask_privately(&Ask::Log { station, from }).await };
+            let asked = if from == 0 { self.first_page(station).await } else { self.ask_hedged(&Ask::Log { station, from }).await };
             let Ok(Response::Entries(raw)) = asked else { continue };
             let got = raw.len();
             // An exit that found no carrier answers with nothing. For a log this tab has never
@@ -631,6 +658,26 @@ impl Ship {
         Ok(added)
     }
 
+    /// One request two hops away, and a second along another route if the first has not
+    /// answered in three seconds: whichever answers first is taken.
+    async fn ask_hedged(&self, ask: &Ask) -> Result<Response> {
+        let go = |wait: u64| async move {
+            if wait > 0 {
+                sleep(Duration::from_millis(wait)).await;
+            }
+            self.ask_privately(ask).await
+        };
+        let mut tries: n0_future::FuturesUnordered<_> = [0u64, 3000].into_iter().map(|w| Box::pin(go(w))).collect();
+        let mut last = Err(anyhow!("no route"));
+        while let Some(r) = n0_future::StreamExt::next(&mut tries).await {
+            if r.is_ok() {
+                return r;
+            }
+            last = r;
+        }
+        last
+    }
+
     /// The first page of a log along two routes at once: the first answer with entries in it.
     async fn first_page(&self, station: StationId) -> Result<Response> {
         let one = |exit: Option<EndpointId>| async move {
@@ -643,7 +690,7 @@ impl Ship {
         // tab has never seen waits on the fastest of them, not on the first one drawn.
         let nodes = self.route_nodes();
         let first = if nodes.len() >= 2 { self.first_hop_for(&nodes) } else { None };
-        let exits = first.map(|f| self.exits(&nodes, &[f], 4)).unwrap_or_default();
+        let exits = first.map(|f| self.exits_for(&nodes, &[f], 4, Some(station))).unwrap_or_default();
         let mut tries: n0_future::FuturesUnordered<_> = if exits.is_empty() {
             (0..2).map(|_| Box::pin(one(None))).collect()
         } else {
@@ -705,15 +752,23 @@ impl Ship {
                 _ => Err(anyhow!("no answer")),
             }
         };
-        let mut tries: n0_future::FuturesUnordered<_> = (0..if pocket { 0 } else { 2 }).map(|_| Box::pin(one())).collect();
-        let mut started = if pocket { 3 } else { 2 };
+        // Two routes at once, and a third if one fails or neither has answered in 2.5 s.
+        let one = &one;
+        let go = move |wait: u64| async move {
+            if wait > 0 {
+                sleep(Duration::from_millis(wait)).await;
+            }
+            one().await
+        };
+        let mut tries: n0_future::FuturesUnordered<_> = if pocket { Default::default() } else { [0u64, 0, 2500].into_iter().map(|w| Box::pin(go(w))).collect() };
+        let mut started = if pocket { 4 } else { 3 };
         while let Some(r) = n0_future::StreamExt::next(&mut tries).await {
             if let Ok(b) = r {
                 self.hold.lock().unwrap().put(*hash, b.clone());
                 return Ok(b);
             }
-            if started < 3 {
-                tries.push(Box::pin(one()));
+            if started < 4 {
+                tries.push(Box::pin(go(0)));
                 started += 1;
             }
         }
@@ -1021,14 +1076,24 @@ impl Ship {
     /// Exits for a request, as many as asked for and all different: radios that have not
     /// failed a route in the last three minutes first, then the rest, never `not`.
     fn exits(&self, nodes: &[EndpointId], not: &[EndpointId], n: usize) -> Vec<EndpointId> {
+        self.exits_for(nodes, not, n, None)
+    }
+
+    /// Exits as above, with the radios that carry `station` drawn first: an exit that holds
+    /// what is asked answers at once, where any other has to fetch it first.
+    fn exits_for(&self, nodes: &[EndpointId], not: &[EndpointId], n: usize, station: Option<StationId>) -> Vec<EndpointId> {
         let now = self.now();
         let suspect = self.suspect.lock().unwrap().clone();
+        let carrying: HashSet<[u8; 32]> = station.and_then(|st| self.log.lock().unwrap().get(&st).map(|l| l.carriers.keys().copied().collect())).unwrap_or_default();
         let bad = |x: &EndpointId| suspect.get(x).is_some_and(|t| now.saturating_sub(*t) < 3 * 60_000);
-        let mut good: Vec<EndpointId> = nodes.iter().filter(|x| !not.contains(x) && !bad(x)).copied().collect();
-        let mut rest: Vec<EndpointId> = nodes.iter().filter(|x| !not.contains(x) && bad(x)).copied().collect();
+        let mut tiers: [Vec<EndpointId>; 3] = [
+            nodes.iter().filter(|x| !not.contains(x) && !bad(x) && carrying.contains(x.as_bytes())).copied().collect(),
+            nodes.iter().filter(|x| !not.contains(x) && !bad(x) && !carrying.contains(x.as_bytes())).copied().collect(),
+            nodes.iter().filter(|x| !not.contains(x) && bad(x)).copied().collect(),
+        ];
         let mut out = Vec::new();
-        while out.len() < n && (!good.is_empty() || !rest.is_empty()) {
-            let from = if !good.is_empty() { &mut good } else { &mut rest };
+        while out.len() < n {
+            let Some(from) = tiers.iter_mut().find(|t| !t.is_empty()) else { break };
             out.push(from.swap_remove(pick(from.len())));
         }
         out
@@ -1048,18 +1113,23 @@ impl Ship {
         let first = self.first_hop_for(&nodes).ok_or_else(|| anyhow!("no first hop"))?;
         let exit = match exit.filter(|e| *e != first) {
             Some(e) => e,
-            None => *self.exits(&nodes, &[first], 1).first().ok_or_else(|| anyhow!("no exit"))?,
+            None => *self.exits_for(&nodes, &[first], 1, ask.station()).first().ok_or_else(|| anyhow!("no exit"))?,
         };
         let r = self.via(first, exit, ask, nodes.len()).await;
+        use std::sync::atomic::Ordering::Relaxed;
         match &r {
+            Ok(_) => self.hop_misses.store(0, Relaxed),
             Err(RouteFail::FirstHop) => {
                 // The first hop is gone: the next request draws another.
                 *self.first_hop.lock().unwrap() = None;
             }
             Err(RouteFail::NoAnswer) => {
                 self.suspect.lock().unwrap().insert(exit, self.now());
-                if !self.neighbours.lock().unwrap().contains(&first) {
+                // Two routes in a row with no answer, through different exits: the first hop is
+                // the likelier fault, and the next request draws another.
+                if !self.neighbours.lock().unwrap().contains(&first) || self.hop_misses.fetch_add(1, Relaxed) >= 1 {
                     *self.first_hop.lock().unwrap() = None;
+                    self.hop_misses.store(0, Relaxed);
                 }
             }
             _ => {}
@@ -1612,6 +1682,8 @@ impl Radio {
             stem_guard: Mutex::new(None),
             sailing: std::sync::atomic::AtomicBool::new(false),
             cards_asked: Mutex::new(HashSet::new()),
+            hop_misses: std::sync::atomic::AtomicU32::new(0),
+            connecting: Mutex::new(HashSet::new()),
         });
         *proto.0.lock().unwrap() = Some(ship.clone());
 

@@ -369,8 +369,16 @@ impl Inner {
                 let Ok(plain) = c.decrypt(Nonce::from_slice(&ASK_NONCE), ct.as_slice()) else { return vec![] };
                 let Ok(ask) = postcard::from_bytes::<Ask>(&plain) else { return vec![] };
                 let resp = match ask {
+                    // What is here goes back at once, and the exit catches up behind it: a listener
+                    // tuning in waits on one answer, not on every carrier this exit could ask first.
+                    // With nothing here past `from`, it asks its carriers for a few seconds first.
                     Ask::Log { station, from } => {
-                        let _ = self.sync_log_direct(station).await;
+                        let have = self.store.lock().unwrap().logs.get(&station).map(|a| a.len()).unwrap_or(0);
+                        if have > from {
+                            self.catch_up(station);
+                        } else {
+                            let _ = tokio::time::timeout(Duration::from_secs(4), self.sync_log_direct(station)).await;
+                        }
                         self.serve(Request::Log { station, from })
                     }
                     // An exit passes what it fetches straight through: nothing it relays for a stranger

@@ -547,6 +547,9 @@ for (const ev of ['pointerdown', 'keydown', 'scroll', 'touchstart']) addEventLis
 const prepared = new Map();
 async function prepare(id) {
   if (!radio || !id || id === cur?.id && playing || Date.now() - (prepared.get(id) || 0) < 30000) return;
+  // The station on the set comes first: nothing else is fetched while it is still tuning in, or
+  // before its log is here, so the others never slow the one about to play.
+  if (cur && id !== cur.id && (playing && !heard() || !radio.has_log(cur.id))) return;
   prepared.set(id, Date.now());
   try { radio.warm(id) } catch (e) { return }
   for (let i = 0; i < 20; i++) {
