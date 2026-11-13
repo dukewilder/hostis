@@ -28,6 +28,8 @@ else:
 import json
 op = json.load(open(f"{R}/browser/www/open.json"))
 page = page.replace("{{OPEN_ORIGIN}}", op["players"][0].rstrip("/")).replace("{{OPEN_PLAYERS}}", json.dumps(op["players"])).replace("{{HARBOUR_IDS}}", json.dumps([h["id"] for h in json.load(open(f"{R}/browser/harbour.json", encoding="utf-8"))]))
+# Every other copy of the open player: its IPFS names and the Lanterns in browser/mirrors.txt.
+page = page.replace("{{MIRRORS}}", "<br>".join(f'<a href="{u}" target="_blank" rel="noopener noreferrer">{u.split("://", 1)[1].rstrip("/")}</a>' for u in op["players"]))
 page = page.replace("{{VERSION}}", version).replace("{{SHA}}", sha).replace("{{SIZE}}", size).replace("{{MAGNET}}", magnet.replace("&", "&amp;"))
 # The computers' builds, when tools/fetch_desktop.sh has brought them: each with its checksum
 # and a torrent that seeds from this site.

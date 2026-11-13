@@ -59,7 +59,7 @@ for f in pyrateradio/*.apk pyrateradio/pyrate-radio-*.zip pyrateradio/pyrate-rad
 done
 # An unsigned draft of the bearings, for the release keys to sign (release sign-paper).
 python3 "$R/tools/bearings.py" "$R" pyrateradio > pyrateradio/ipfs/bearings-draft.json
-# The newest open player as plain files, for any Lantern to serve at /player/ (LANTERN.md).
+# The newest open player as plain files, for any Lantern to serve at /listen/ (LANTERN.md).
 tar -C "$R/browser/www/dist-open" -czf pyrateradio/ipfs/open-player.tar.gz .
 git add -A pyrateradio
 git commit -q -m "pyrateradio: $1 (radio $H)

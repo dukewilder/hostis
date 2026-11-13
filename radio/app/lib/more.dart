@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 
 import 'art.dart';
 import 'main.dart';
+import 'mirror.dart';
 import 'native.dart';
 import 'station.dart';
 
@@ -1455,7 +1456,12 @@ class _SettingsPageState extends State<SettingsPage> {
   bool pinSet = false;
   bool duressSet = false;
   bool mineOnly = false;
+  bool crewOn = true;
   bool lan = false;
+  bool sharePlayer = false;
+  String? playerUrl;
+  Map? playerQr;
+  String? playerMsg;
   String tor = '';
   String? gridMsg;
   String? sig;
@@ -1472,7 +1478,10 @@ class _SettingsPageState extends State<SettingsPage> {
     pinSet = pc?['set'] == true;
     duressSet = pc?['duress_set'] == true;
     mineOnly = pref('carry_mine_only') == true;
+    crewOn = pref('crew') != false;
     lan = (Native.call({'cmd': 'lan'}) as Map?)?['value'] == true;
+    sharePlayer = OpenPlayer.sharing;
+    if (sharePlayer) OpenPlayer.lanUrl().then(showPlayerUrl);
     tor = ((Native.call({'cmd': 'tor'}) as Map?)?['url'] ?? '').toString();
     ship.invokeMethod<bool>('plain_get').then((v) => setState(() => plain = v == true)).catchError((_) {});
     ship.invokeMethod<bool>('plain_lock_get').then((v) => setState(() => plainLock = v == true)).catchError((_) {});
@@ -1561,6 +1570,39 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() => msg = r is Map && r['added'] != null ? '${r['added']} stations hidden.' : 'That list would not read.');
   }
 
+  void showPlayerUrl(String? u) {
+    if (!mounted) return;
+    setState(() {
+      playerUrl = u;
+      playerQr = u == null ? null : Native.call({'cmd': 'qr', 'text': u}) as Map?;
+    });
+  }
+
+  Future<void> setSharePlayer(bool v) async {
+    final why = await OpenPlayer.share(v);
+    pref('share_player', v && why == null);
+    if (!mounted) return;
+    setState(() {
+      sharePlayer = OpenPlayer.sharing;
+      playerMsg = why == null ? null : 'Not shared: $why.';
+      if (!sharePlayer) playerUrl = playerQr = null;
+    });
+    if (sharePlayer) showPlayerUrl(await OpenPlayer.lanUrl());
+  }
+
+  Future<void> savePlayer() async {
+    final dir = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Save the player to');
+    if (dir == null) return;
+    String said;
+    try {
+      final n = await OpenPlayer.save(dir);
+      said = n == null ? 'This build carries no player.' : 'Saved to the folder "Pyrate Radio player".';
+    } catch (e) {
+      said = 'Not saved: that folder cannot be written to.';
+    }
+    if (mounted) toast(context, said);
+  }
+
   Future<void> scuttle() async {
     final ok = await showDialog<bool>(
       context: context,
@@ -1636,6 +1678,11 @@ class _SettingsPageState extends State<SettingsPage> {
           if (!v) Native.call({'cmd': 'ballast_ok', 'value': false, 'unmetered': false});
           setState(() => mineOnly = !v);
         }, sub: Platform.isAndroid ? 'Only on Wi-Fi while the phone charges, so it costs no data or battery.' : 'Up to ${carryGb()} GB of this computer\'s disk, less on a fuller one.'),
+        setting('Carry the radio while you listen', crewOn, (v) {
+          pref('crew', v);
+          Native.call({'cmd': 'crew', 'on': v});
+          setState(() => crewOn = v);
+        }, sub: 'While you listen, this $thisDevice passes on what it plays and other listeners\' requests, through three hops, so no one can tell who hears what. It stops passing on what it plays when you stop playing.${Platform.isAndroid ? ' A phone does this only on Wi-Fi.' : ''}'),
         // A computer gives a modest share unless its owner offers more.
         if (isComputer && !mineOnly)
           Wrap(children: [
@@ -1691,6 +1738,30 @@ class _SettingsPageState extends State<SettingsPage> {
       section('SHARING', [
         // Handing the app over is a phone's: the computer copy comes from the site.
         if (!isComputer) action('Send the app to someone nearby', () => pyrateSheet(context, const PassItOn()), sub: 'Phone to phone, no internet needed.'),
+        // The open player rides in the computers' app: one more copy wherever it runs.
+        if (isComputer) ...[
+          setting('Share the player on this network', sharePlayer, setSharePlayer,
+              sub: 'Anyone on the same Wi-Fi opens the full player from this computer, even with hostis.black blocked. They see its local address.'),
+          if (sharePlayer) ...[
+            if (playerQr != null && playerQr!['bits'] != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Center(
+                  child: Container(
+                    color: bone,
+                    padding: const EdgeInsets.all(12),
+                    child: SizedBox(width: 180, height: 180, child: CustomPaint(painter: QrPainter((playerQr!['size'] as num).toInt(), playerQr!['bits'] as String))),
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 6),
+              child: Center(child: playerUrl == null ? note('Join a Wi-Fi network to share.') : SelectableText(playerUrl!, style: mono(12, color: boneDim))),
+            ),
+          ],
+          if (playerMsg != null) Padding(padding: const EdgeInsets.only(bottom: 6), child: note(playerMsg!)),
+          action('Save the player', savePlayer, sub: 'The full player as a folder, to pass on by USB.'),
+        ],
         action('Open a station file', () async {
           final picked = await FilePicker.platform.pickFiles();
           final path = picked?.files.single.path;

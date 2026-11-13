@@ -23,6 +23,9 @@ flutter:
     - assets/chart.json
     - assets/brand/
     - assets/stations/
+    # The open player, for the computers to share and save (tools/open_player.py --tar).
+    - path: assets/player/
+      platforms: [windows, macos, linux]
   fonts:
     - family: Cinzel
       fonts:

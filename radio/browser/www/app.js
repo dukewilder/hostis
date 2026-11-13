@@ -7,6 +7,8 @@ const HARBOUR = '{{HARBOUR}}';
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
 // and nothing else, and it joins the network only when the visitor presses Listen.
 const HARBOUR_STATIONS = '{{HARBOUR_STATIONS}}';
+// HOSTIS's own STUN servers (browser/stun.txt), for a direct link to the tab's guard. Nobody else's.
+const STUN = '{{STUN}}';
 const EMBED = document.documentElement.classList.contains('embed');
 // Where this copy plays. 'harbour' is hostis.black's own copy: HOSTIS's stations and nothing
 // else, so nothing on that domain belongs to anyone else. Every other station, invitation and
@@ -138,8 +140,167 @@ function rememberHarbours() {
   const door = h => typeof h === 'string' && /^[0-9a-f]{64}(@https?:\/\/[^\s,@]+)?$/.test(h);
   const union = [...new Set(HARBOUR.split(/[,\s]+/).filter(door).concat(Array.isArray(saved) ? saved.filter(door) : []))].slice(0, 24);
   try { store('pyrate.harbours', JSON.stringify(union)) } catch (e) {}
-  return union.join(',');
+  // With the switch on, the radios that answered quickly last time are tried beside the doors.
+  // The guards kept from last time come too, so the first hop is drawn from them again.
+  let peers = []; if (crewOn()) try { peers = JSON.parse(store('pyrate.guards') || '[]').filter(door).slice(0, 3).concat(JSON.parse(store('pyrate.peers') || '[]').filter(door).slice(0, 20)) } catch (e) {}
+  return [...new Set(union.concat(peers))].join(',');
 }
+
+// ---- The crew: "Carry the radio while you listen" ----
+// On unless the visitor turns it off. A phone passes on no more than it listens to and keeps
+// nothing; a computer passes on up to six times that and keeps up to 500 MB of ballast (never
+// what it plays) for its next visit. Forget clears it.
+const PHONE = (() => { try { return matchMedia('(pointer: coarse)').matches || /Mobi|Android|iPhone|iPad/.test(navigator.userAgent) } catch (e) { return false } })();
+const STOCK_MAX = 500e6;
+function crewOn() { return store('pyrate.crew') !== '0' }
+function cellular() { try { return navigator.connection?.type === 'cellular' } catch (e) { return false } }
+function crewSet() { radio?.set_crew(crewOn(), PHONE || cellular()) }
+function keepsStock() { return crewOn() && !PHONE && !cellular() }
+function carriedLine(s) {
+  let n = s.carriers || 0;
+  try { if (radio) n = radio.carried_by(s.id) } catch (e) { }
+  return n ? 'Carried by ' + n + (n === 1 ? ' radio now' : ' radios now') : '';
+}
+function mb(n) { return n >= 1e6 ? Math.round(n / 1e6) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' KB' }
+function carryingLine() {
+  const el = $('carrying'); if (!el) return;
+  let st = null; try { st = radio && JSON.parse(radio.crew_stats()) } catch (e) { }
+  el.hidden = !st || !st.on;
+  if (st && st.on) el.textContent = 'This tab is carrying the radio' + (st.passed_today > 0 ? ' · passed on ' + mb(st.passed_today) + ' today for others' : '');
+}
+const hexb = h => Uint8Array.from(h.match(/../g), x => parseInt(x, 16));
+const bhex = b => [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+function varint(n) { const o = []; do { let b = n & 127; n = Math.floor(n / 128); if (n) b |= 128; o.push(b) } while (n); return o }
+function unvarint(b, i) { let n = 0, m = 1, x; do { x = b[i++]; n += (x & 127) * m; m *= 128 } while (x & 128); return [n, i] }
+let stockBytes = 0;
+function stockDb() { return logDb() }
+// Kept ballast is sealed under the device key (never extractable from the browser), so the disk
+// shows neither which stations this computer carried nor their sound. With no device key
+// nothing is kept.
+async function bseal(u8) {
+  const k = await deviceKey(); if (!k) return null;
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, u8));
+  const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12); return out;
+}
+async function bopen(u8) {
+  const k = await deviceKey(); if (!k || !u8 || u8.length < 13) return null;
+  try { return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: u8.subarray(0, 12) }, k, u8.subarray(12))) } catch (e) { return null }
+}
+const jenc = o => new TextEncoder().encode(JSON.stringify(o)), jdec = u => JSON.parse(new TextDecoder().decode(u));
+async function ballastList() { try { return JSON.parse(await dopen(store('pyrate.ballast') || '[]') || '[]') } catch (e) { return [] } }
+// Kept chunks are served by name from here: the radio asks for one only when a requester does.
+globalThis.pyrateStockGet = async name => {
+  if (!keepsStock()) return null;
+  try {
+    const db = await stockDb();
+    const v = await new Promise((ok, no) => { const r = db.transaction('stock').objectStore('stock').get(name); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error) });
+    db.close();
+    return v ? await bopen(new Uint8Array(v)) : null;
+  } catch (e) { return null }
+};
+async function stockIn() {
+  if (!radio || !keepsStock()) return;
+  try {
+    const db = await stockDb();
+    const idx = await new Promise((ok, no) => { const out = [], c = db.transaction('stockidx').objectStore('stockidx').openCursor(); c.onsuccess = () => { const x = c.result; if (!x) return ok(out); out.push([x.key, x.value]); x.continue() }; c.onerror = () => no(c.error) });
+    db.close();
+    stockBytes = idx.reduce((a, x) => a + (x[1].n || 0), 0);
+    const open = [];
+    for (const [name, v] of idx) { const o = v.s && await bopen(new Uint8Array(v.s)); if (o) { const w = jdec(o); open.push([name, w.st, w.h]) } }
+    const parts = [varint(open.length)];
+    for (const [name, st, h] of open) parts.push([...hexb(st), ...hexb(name), ...hexb(h)]);
+    radio.stock_index(Uint8Array.from(parts.flat()));
+  } catch (e) { }
+}
+// Ballast that came aboard goes into the store, oldest out first past 500 MB, with its logs.
+async function stockOut() {
+  if (!radio || !keepsStock()) return;
+  const b = radio.stock_take(); if (!b.length) return;
+  const items = []; let [n, i] = unvarint(b, 0);
+  for (; n > 0; n--) { const st = bhex(b.subarray(i, i + 32)), name = bhex(b.subarray(i + 32, i + 64)), h = bhex(b.subarray(i + 64, i + 96)); let len; [len, i] = unvarint(b, i + 96); items.push([st, name, h, b.slice(i, i + len)]); i += len }
+  try {
+    if (!(await deviceKey())) return;
+    const bal = JSON.parse(radio.ballast()); await keepSealed('pyrate.ballast', JSON.stringify(bal));
+    const logs = [];
+    for (const [i, id] of bal.filter(id => radio.has_log(id)).entries()) { const l = radio.log_export(id), u = new Uint8Array(32 + l.length); u.set(hexb(id)); u.set(l, 32); logs.push(['b' + i, await bseal(u)]) }
+    const sealed = [];
+    for (const [st, name, h, c] of items) sealed.push([name, await bseal(c), await bseal(jenc({ st, h })), c.length]);
+    const db = await stockDb();
+    await new Promise((ok, no) => { const t = db.transaction(['stock', 'stockidx', 'logs'], 'readwrite'); for (const [name, c, w, n] of sealed) { if (!c || !w) continue; t.objectStore('stock').put(c.buffer, name); t.objectStore('stockidx').put({ s: w.buffer, n, at: Date.now() }, name); stockBytes += n } for (const [k, u] of logs) if (u) t.objectStore('logs').put(u.buffer, k); t.oncomplete = ok; t.onerror = () => no(t.error) });
+    if (stockBytes > STOCK_MAX) {
+      const idx = await new Promise((ok, no) => { const out = [], c = db.transaction('stockidx').objectStore('stockidx').openCursor(); c.onsuccess = () => { const x = c.result; if (!x) return ok(out); out.push([x.key, x.value]); x.continue() }; c.onerror = () => no(c.error) });
+      idx.sort((a, b) => a[1].at - b[1].at);
+      await new Promise((ok, no) => { const t = db.transaction(['stock', 'stockidx'], 'readwrite'); for (const [name, v] of idx) { if (stockBytes <= STOCK_MAX * 0.9) break; t.objectStore('stock').delete(name); t.objectStore('stockidx').delete(name); stockBytes -= v.n || 0 } t.oncomplete = ok; t.onerror = () => no(t.error) });
+    }
+    db.close();
+  } catch (e) { }
+  stockLine();
+}
+// ---- A direct link to the guard ----
+// Only the leg from this tab to its own kept guard, a radio known long enough to be one, may
+// run over a WebRTC data channel; the radio asks for one beside the relay and uses it once it
+// opens, and drops back to the relay at once if it fails. The guard then sees this tab's
+// address, as a Tor guard does; never what it hears. Every other leg stays on the relays, and
+// a guard answers over the channel nothing but forwards. STUN from HOSTIS's servers only, and
+// no TURN: where no direct path exists, the relay carries on as before.
+const rtcPeers = new Map();
+const RTC_PART = 16 * 1024, RTC_MAX = 4 << 20;
+function rtcClose(peer) { const p = rtcPeers.get(peer); if (!p) return; rtcPeers.delete(peer); for (const w of p.pend.values()) w.no?.('closed'); try { p.ch?.close() } catch (e) { } try { p.pc.close() } catch (e) { } }
+function rtcPc() { return new RTCPeerConnection({ iceServers: Array.isArray(STUN) && STUN.length ? [{ urls: STUN }] : [], iceTransportPolicy: 'all' }) }
+function rtcGathered(pc) { return new Promise(ok => { if (pc.iceGatheringState === 'complete') return ok(); const t = setTimeout(ok, 2500); pc.addEventListener('icegatheringstatechange', () => { if (pc.iceGatheringState === 'complete') { clearTimeout(t); ok() } }) }) }
+function rtcSend(p, id, bytes) {
+  for (let at = 0; at === 0 || at < bytes.length; at += RTC_PART) {
+    const part = bytes.subarray(at, at + RTC_PART), f = new Uint8Array(5 + part.length), last = at + RTC_PART >= bytes.length;
+    new DataView(f.buffer).setUint32(0, id); f[4] = last ? 1 : 0; f.set(part, 5); p.ch.send(f);
+  }
+}
+function rtcWire(peer, p, ch) {
+  p.ch = ch; ch.binaryType = 'arraybuffer';
+  ch.onopen = () => { p.ready = true };
+  ch.onclose = ch.onerror = () => rtcClose(peer);
+  p.pc.onconnectionstatechange = () => { if (['failed', 'closed', 'disconnected'].includes(p.pc.connectionState)) rtcClose(peer) };
+  ch.onmessage = e => {
+    const f = new Uint8Array(e.data); if (f.length < 5) return;
+    const id = new DataView(f.buffer).getUint32(0), last = f[4] === 1;
+    let w = p.pend.get(id);
+    if (!w) { if (p.role !== 'serve') return; if (p.pend.size >= 16) return rtcClose(peer); w = { parts: [], n: 0 }; p.pend.set(id, w) }
+    w.parts.push(f.subarray(5)); w.n += f.length - 5;
+    if (w.n > RTC_MAX) return rtcClose(peer);
+    if (!last) return;
+    const all = new Uint8Array(w.n); let i = 0; for (const x of w.parts) { all.set(x, i); i += x.length }
+    if (p.role === 'ask') { p.pend.delete(id); w.ok(all); return }
+    // The guard's side: the radio answers it as a hop from this peer, forwards only.
+    radio.rtc_serve(peer, all).then(r => { p.pend.delete(id); if (rtcPeers.get(peer) === p && p.ready) rtcSend(p, id, r) }).catch(() => rtcClose(peer));
+  };
+}
+globalThis.pyrateRtcOffer = async peer => {
+  if (typeof RTCPeerConnection === 'undefined') throw 'no WebRTC';
+  rtcClose(peer);
+  const pc = rtcPc(), p = { pc, ch: null, ready: false, pend: new Map(), next: 1, role: 'ask' };
+  rtcPeers.set(peer, p); rtcWire(peer, p, pc.createDataChannel('pyrate', { ordered: true }));
+  await pc.setLocalDescription(await pc.createOffer()); await rtcGathered(pc);
+  return pc.localDescription.sdp;
+};
+globalThis.pyrateRtcAnswer = async (peer, sdp) => { const p = rtcPeers.get(peer); if (!p || !sdp) return rtcClose(peer); try { await p.pc.setRemoteDescription({ type: 'answer', sdp }) } catch (e) { rtcClose(peer) } };
+globalThis.pyrateRtcAccept = async (peer, sdp) => {
+  if (typeof RTCPeerConnection === 'undefined' || !crewOn()) return '';
+  // A guard keeps a few such links at a time, the oldest let go first.
+  const serving = [...rtcPeers].filter(([, p]) => p.role === 'serve'); if (serving.length >= 8) rtcClose(serving[0][0]);
+  rtcClose(peer);
+  const pc = rtcPc(), p = { pc, ch: null, ready: false, pend: new Map(), next: 1, role: 'serve' };
+  rtcPeers.set(peer, p); pc.ondatachannel = e => rtcWire(peer, p, e.channel);
+  try { await pc.setRemoteDescription({ type: 'offer', sdp }); await pc.setLocalDescription(await pc.createAnswer()); await rtcGathered(pc) } catch (e) { rtcClose(peer); return '' }
+  return pc.localDescription.sdp;
+};
+globalThis.pyrateRtcAsk = (peer, bytes) => {
+  const p = rtcPeers.get(peer); if (!p || !p.ready || p.role !== 'ask') return Promise.reject('no link');
+  const id = p.next++;
+  return new Promise((ok, no) => { p.pend.set(id, { parts: [], n: 0, ok, no }); try { rtcSend(p, id, bytes) } catch (e) { p.pend.delete(id); no('send') } setTimeout(() => { if (p.pend.delete(id)) no('slow') }, 10000) });
+};
+globalThis.pyrateRtcOpen = () => [...rtcPeers].filter(([, p]) => p.ready).map(([peer, p]) => ({ peer, role: p.role }));
+function rtcCloseAll() { for (const peer of [...rtcPeers.keys()]) rtcClose(peer) }
+function stockLine() { const el = $('stockuse'); if (el) { el.hidden = !keepsStock(); el.textContent = 'Kept for the crew: ' + mb(stockBytes) + ' of 500 MB' } }
 function marooned() { try { return new Set(JSON.parse(store('pyrate.maroon') || '[]')) } catch (e) { return new Set() } }
 function setMarooned(s) { store('pyrate.maroon', JSON.stringify([...s])) }
 // The listener's own switches. Explicit stays off and art stays on until they say otherwise.
@@ -728,7 +889,7 @@ function pageHead() {
   if (!cur) return;
   $('pname').textContent = cur.name || cur.call_sign || 'A station';
   $('pabout').textContent = cur.about || '';
-  $('pmeta').textContent = [cur.call_sign, fqs(cur.id) + ' on the dial', (cur.kinds || []).join(', '), cur.port, cur.aboard !== undefined && !cur.cached ? cur.aboard + ' listening' : '', cur.carriers ? cur.carriers + (cur.carriers === 1 ? ' radio carries it' : ' radios carry it') : ''].filter(Boolean).join('  ·  ');
+  $('pmeta').textContent = [cur.call_sign, fqs(cur.id) + ' on the dial', (cur.kinds || []).join(', '), cur.port, cur.aboard !== undefined && !cur.cached ? cur.aboard + ' listening' : '', carriedLine(cur)].filter(Boolean).join('  ·  ');
   $('key').textContent = 'Key  ' + cur.id.match(/.{1,4}/g).join(' ');
   // What a listener may want to know before staying: a newer station with an older one's name,
   // nothing to play yet, or a keeper long gone (the station plays on from those who carry it).
@@ -1268,6 +1429,9 @@ $('mtake').onclick = () => {
   for (const line of $('mtext').value.split('\n')) { const t = (line.trim().split(/\s+/)[0] || '').toLowerCase(); if (/^[0-9a-f]{64}$/.test(t) && !m.has(t)) { m.add(t); n++ } }
   setMarooned(m); hiddenBox(); $('mnote').textContent = n + ' hidden.'; refresh();
 };
+$('sw-crew').checked = crewOn();
+$('sw-crew').onchange = () => { store('pyrate.crew', $('sw-crew').checked ? '1' : '0'); crewSet(); carryingLine(); stockLine(); if (!crewOn()) rtcCloseAll() };
+if (PHONE) $('crewnote').textContent = 'Your phone passes on what it plays and other listeners\u2019 requests, through three hops, so no one can tell who hears what. It holds nothing once you stop. Your first hop may connect to you directly and see your address, as with Tor; it never sees what you hear.';
 $('sw-direct').checked = store('pyrate.direct') === '1';
 $('sw-direct').onchange = () => { store('pyrate.direct', $('sw-direct').checked ? '1' : '0'); radio?.set_direct_ok($('sw-direct').checked) };
 for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-explicit', 'pyrate.show_explicit', '1'], ['sw-art', 'pyrate.hide_art', '0'], ['sw-empty', 'pyrate.show_empty', '1']]) {
@@ -1279,6 +1443,8 @@ for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-expl
     refresh(); if (cur) show(cur);
   };
 }
+// Other copies of the player: hidden when there are none (for browsers without :has).
+for (const u of document.querySelectorAll('.mirrors')) if (!u.children.length) u.closest('.mirrorbox').hidden = true;
 $('forget').onclick = () => {
   if (!confirm('Forget everything this browser keeps for the radio? Pockets go too, unless you still have their invitations. A station raised here stays on the air, but this browser can speak for it again only from its 24 words.')) return;
   try { for (const k of Object.keys(localStorage)) if (k.startsWith('pyrate.')) localStorage.removeItem(k) } catch (e) { }
@@ -2102,14 +2268,21 @@ if (!/\/pyrateradio\/listen\/$/.test(location.pathname)) document.querySelectorA
 // Each entry is checked against its station's key again when it comes back.
 const LOGDB = 'pyrate-logs';
 let logsTaken = 0, logsMark = '';
-function logDb() { return new Promise((ok, no) => { const r = indexedDB.open(LOGDB, 1); r.onupgradeneeded = () => r.result.createObjectStore('logs'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error) }) }
+function logDb() { return new Promise((ok, no) => { const r = indexedDB.open(LOGDB, 2); r.onupgradeneeded = () => { for (const n of ['logs', 'stock', 'stockidx']) if (!r.result.objectStoreNames.contains(n)) r.result.createObjectStore(n) }; r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error) }) }
 async function logsIn() {
   let n = 0;
   try {
     const db = await logDb();
     const all = await new Promise((ok, no) => { const out = [], c = db.transaction('logs').objectStore('logs').openCursor(); c.onsuccess = () => { const x = c.result; if (!x) return ok(out); out.push([x.key, x.value]); x.continue() }; c.onerror = () => no(c.error) });
     db.close();
-    for (const [id, b] of all) if (isHarbour(id)) try { n += radio.log_import(id, new Uint8Array(b)) } catch (e) { }
+    const bal = keepsStock() ? await ballastList() : [];
+    for (const [key, b] of all) {
+      if (/^b\d+$/.test(key)) {
+        // A carried station's log, sealed with its id inside.
+        const u = await bopen(new Uint8Array(b)); if (!u || u.length < 32) continue;
+        const id = bhex(u.subarray(0, 32)); if (bal.includes(id)) try { n += radio.log_import(id, u.slice(32)) } catch (e) { }
+      } else if (isHarbour(key)) try { n += radio.log_import(key, new Uint8Array(b)) } catch (e) { }
+    }
   } catch (e) { }
   return n;
 }
@@ -2150,9 +2323,17 @@ async function boot() {
     }
   }
   radio.set_direct_ok(store('pyrate.direct') === '1');
+  crewSet();
   // hostis.black's copy keeps HOSTIS's logs between visits: they come back before anything is
   // asked of the network, so a returning Listen needs only the newest entries and a chunk.
   if (HOSTIS_ONLY) { logsTaken = await logsIn(); setInterval(logsOut, 30000) }
+  // A computer's kept ballast comes back at once, so it carries real stock from its first minute.
+  else if (keepsStock()) await logsIn();
+  await stockIn(); stockLine();
+  setInterval(stockOut, 20000);
+  if (crewOn()) try { radio.set_guards(store('pyrate.guards') || '[]') } catch (e) { }
+  setInterval(() => { carryingLine(); if (crewOn()) try { store('pyrate.peers', radio.quick_peers()); const g = radio.guards(); if (g !== '[]') store('pyrate.guards', g) } catch (e) { } }, 5000);
+  try { navigator.connection?.addEventListener('change', crewSet) } catch (e) { }
   bootAt = Date.now();
   // The set's own station comes aboard first: its log and the piece on now.
   if (cur) { try { radio.tune(cur.id) } catch (e) { } prepare(cur.id) }
@@ -2199,6 +2380,8 @@ window.pyrate.desk = () => ({ live: !!live, music: !!live?.music, sent: live?.se
 window.pyrate.deskCtx = () => dk.ac;
 window.pyrate.card = id => { const s = stations.find(x => x.id === id); return s ? { ...s, playable: playable(s) } : null };
 window.pyrate.logs = () => ({ taken: logsTaken, kept: !!logsMark });
+window.pyrate.crew = () => radio ? JSON.parse(radio.crew_stats()) : null;
+window.pyrate.rtc = () => globalThis.pyrateRtcOpen();
 window.pyrate.keeper = () => radio ? JSON.parse(radio.mine()) : [];
 window.pyrate.station = id => radio ? JSON.parse(radio.station_info(id)) : null;
 

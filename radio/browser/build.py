@@ -51,9 +51,45 @@ import json
 # A test build can name its own: PYRATE_HARBOUR_STATIONS=<a json file like harbour.json>.
 harbour_stations = json.dumps(json.load(open(os.environ.get("PYRATE_HARBOUR_STATIONS") or f"{R}/browser/harbour.json", encoding="utf-8")), ensure_ascii=False)
 # Each value goes in as a JSON string, so nothing in it can close the quote it sits in.
-for k in ["'{{HARBOUR}}'", "'{{RELAYS}}'", "'{{HARBOUR_STATIONS}}'", "'{{SCOPE}}'", "'{{OPEN_PLAYERS}}'"]:
+for k in ["'{{HARBOUR}}'", "'{{RELAYS}}'", "'{{HARBOUR_STATIONS}}'", "'{{SCOPE}}'", "'{{OPEN_PLAYERS}}'", "'{{STUN}}'"]:
     assert js.count(k) == 1, k
-base_js = js.replace("'{{HARBOUR}}'", json.dumps(harbour)).replace("'{{RELAYS}}'", json.dumps(os.environ.get("PYRATE_RELAYS", ""))).replace("'{{HARBOUR_STATIONS}}'", harbour_stations)
+# Lanterns that serve the open player at /listen/ on names of their own (tools/vps/install.sh
+# prints each one's address), one per line in browser/mirrors.txt. Every copy names them all,
+# so the player can still be had from any one of them when the rest are gone.
+def mirror_list():
+    path, out = f"{R}/browser/mirrors.txt", []
+    for line in (open(path, encoding="utf-8") if os.path.exists(path) else []):
+        u = line.split("#", 1)[0].strip()
+        if not u: continue
+        u = u if u.endswith("/") else u + "/"
+        assert re.fullmatch(r"https://[a-z0-9.-]+(:[0-9]+)?/[A-Za-z0-9._~/-]*", u), f"mirrors.txt: not a plain https address: {u}"
+        assert not re.match(r"https://([a-z0-9.-]*\.)?hostis\.black[:/]", u), f"mirrors.txt: a HOSTIS name never serves the open player: {u}"
+        if u not in out: out.append(u)
+    return out
+MIRRORS = mirror_list()
+# The STUN servers a tab may ask its own address of, for a direct link to its guard: HOSTIS's
+# own, one per line in browser/stun.txt (tools/vps/install.sh prints each), and nobody else's.
+# STUN only, never TURN: when no direct link can be made the radio stays on its relay. A test
+# build names its own with PYRATE_STUN (comma separated), or none, which leaves only the
+# addresses the machine itself knows.
+def stun_list():
+    raw = os.environ.get("PYRATE_STUN")
+    if raw is not None:
+        lines = raw.split(",")
+    else:
+        path = f"{R}/browser/stun.txt"
+        lines = open(path, encoding="utf-8").read().splitlines() if os.path.exists(path) else []
+    out = []
+    for line in lines:
+        u = line.split("#", 1)[0].strip()
+        if not u: continue
+        assert re.fullmatch(r"stuns?:[a-z0-9.-]+(:[0-9]+)?", u), f"stun.txt: not a plain stun: address: {u}"
+        assert not re.search(r"(google|l\.google|cloudflare|twilio|stunprotocol|mozilla|ekiga|voip|xten)", u), f"stun.txt: only HOSTIS's own STUN servers: {u}"
+        if u not in out: out.append(u)
+    return out
+STUN = stun_list()
+mirrors_html = "".join(f'<li><a href="{u}" target="_blank" rel="noopener noreferrer">{u[8:].rstrip("/")}</a></li>' for u in MIRRORS)
+base_js = js.replace("'{{HARBOUR}}'", json.dumps(harbour)).replace("'{{RELAYS}}'", json.dumps(os.environ.get("PYRATE_RELAYS", ""))).replace("'{{HARBOUR_STATIONS}}'", harbour_stations).replace("'{{STUN}}'", json.dumps(STUN))
 
 def build(scope, dist, open_players):
     out_js = base_js.replace("'{{SCOPE}}'", json.dumps(scope)).replace("'{{OPEN_PLAYERS}}'", json.dumps(open_players))
@@ -101,7 +137,7 @@ def build(scope, dist, open_players):
              f'<meta property="og:locale" content="en_GB">\n<script type="application/ld+json">{trail}</script>\n')]:
             assert h.count(old) == 1, old
             h = h.replace(old, new)
-    open(f"{dist}/index.html", "w", encoding="utf-8").write(h + extra + "</style>\n" + embed + "</head>\n<body>\n" + body.replace("{{V}}", v) + "</body>\n</html>\n")
+    open(f"{dist}/index.html", "w", encoding="utf-8").write(h + extra + "</style>\n" + embed + "</head>\n<body>\n" + body.replace("{{V}}", v).replace("{{MIRRORS}}", mirrors_html) + "</body>\n</html>\n")
     open(f"{dist}/app.js", "w", encoding="utf-8").write(out_js.replace("./pkg/pyrate_browser.js", f"./pkg/pyrate_browser.js?v={v}"))
     # The wasm takes the build's version in its name and the glue is pointed at it, so a cached
     # old wasm can never meet new glue: every deploy is a new file.
@@ -120,6 +156,7 @@ def build(scope, dist, open_players):
         shutil.copy(f"{W}/desk-worklet.js", dist)
         shutil.copytree(f"{W}/opus", f"{dist}/opus")
     shutil.copy(f"{W}/chart.json", dist)
+    json.dump(MIRRORS, open(f"{dist}/mirrors.json", "w"), indent=1)
     for f in ["favicon.png", "apple-touch-icon.png"]:
         shutil.copy(f"{R}/../{f}", dist)
     # Added to a home screen it opens as an app of its own, on HOSTIS black.
@@ -157,8 +194,9 @@ os.makedirs(f"{W}/cars", exist_ok=True)
 shutil.copy(f"{W}/open.car", f"{W}/cars/{cid}.car")
 # Gateways that serve each IPFS name at an address of its own (inbrowser.link fetches and checks
 # the files in the visitor's own browser), then one that serves by path,
-# then any public Lanterns listed by hand in open_players.json. The first that answers wins.
+# then any public Lanterns listed by hand in open_players.json and mirrors.txt. The first that answers wins.
 extra_players = json.load(open(f"{R}/browser/open_players.json", encoding="utf-8")) if os.path.exists(f"{R}/browser/open_players.json") else []
+extra_players += [m for m in MIRRORS if m not in extra_players]
 # The player's fixed name (IPNS, published by dukewilder's pin_player.sh) comes first: one
 # address for every release, so a browser keeps what it keeps from one to the next.
 ipns = open(f"{R}/browser/ipns.txt").read().strip() if os.path.exists(f"{R}/browser/ipns.txt") else ""

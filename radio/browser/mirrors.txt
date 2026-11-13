@@ -1,0 +1,3 @@
+# Lanterns that serve the open player, one address per line, each ending /listen/.
+# tools/vps/install.sh prints a rented server's as "Player:". Never a HOSTIS name.
+# Every build lists them in the player, on the landing and in the app.

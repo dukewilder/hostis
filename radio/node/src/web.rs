@@ -1,7 +1,8 @@
 //! The gangway: any browser, any phone, no app. A Lantern serves the Log as JSON,
 //! each station as an endless MP3 stream like any internet radio, and a page to
 //! play them. One encoder per station, however many tabs are listening. Each station's
-//! recordings also go out as a podcast feed, so any podcast app can follow it.
+//! recordings also go out as a podcast feed, so any podcast app can follow it. Given a copy of
+//! the open player (`--player`), it serves that too, at /listen/.
 //!
 //! No rights reserved.
 
@@ -211,13 +212,18 @@ pub async fn serve(inner: Arc<Inner>, addr: SocketAddr, every_station: bool) -> 
         .route("/listen.js", get(|| async { ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8"), (header::X_CONTENT_TYPE_OPTIONS, "nosniff"), (header::CACHE_CONTROL, "max-age=600")], PAGE_JS) }))
         .route("/log.json", get(log))
         .route("/now/{id}", get(now))
-        .route("/listen/{id}", get(listen))
+        .route("/listen", get(|| async { axum::response::Redirect::permanent("/listen/") }))
+        .route("/listen/", get(|| async { player(String::new()).await }))
+        // One path for both: a station's id is its endless MP3, any other name a file of the
+        // open player. None of the player's files is named like a station.
+        .route("/listen/{*path}", get(listen_or_player))
         .route("/art/{hash}", get(art))
         .route("/brand/{name}", get(brand))
         .route("/feed/{id}", get(feed))
-        .route("/player", get(|| async { axum::response::Redirect::permanent("/player/") }))
-        .route("/player/", get(|| async { player(String::from("index.html")).await }))
-        .route("/player/{*path}", get(|Path(p): Path<String>| async move { player(p).await }))
+        // The player's old address, for links made before it moved to /listen/.
+        .route("/player", get(|| async { axum::response::Redirect::permanent("/listen/") }))
+        .route("/player/", get(|| async { axum::response::Redirect::permanent("/listen/") }))
+        .route("/player/{*path}", get(|Path(p): Path<String>| async move { player_moved(&p) }))
         .route("/episode/{id}/{track}", get(episode))
         .with_state(web);
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -492,30 +498,54 @@ async fn serve_file(path: &std::path::Path, h: &HeaderMap) -> Response {
     r.body(Body::from_stream(body)).unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
 }
 
-/// The browser player, served from PYRATE_PLAYER (a folder holding a copy of
-/// hostis.black/pyrateradio/listen/). Any Lantern that serves it is one more door to the
-/// network that no one can close by closing a domain.
+/// The folder the open player is served from: `--player` on the Lantern, or PYRATE_PLAYER.
+static PLAYER: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+
+/// Serve the open player from this folder (browser/www/dist-open, or the image's copy).
+pub fn set_player(dir: std::path::PathBuf) {
+    let _ = PLAYER.set(dir);
+}
+
+fn player_dir() -> Option<std::path::PathBuf> {
+    PLAYER.get().cloned().or_else(|| std::env::var_os("PYRATE_PLAYER").map(Into::into)).filter(|d| d.join("index.html").is_file())
+}
+
+/// Whether this gangway has the open player to serve.
+pub fn has_player() -> bool {
+    player_dir().is_some()
+}
+
+async fn listen_or_player(w: State<Web>, Path(path): Path<String>) -> Response {
+    let id = path.trim_end_matches(".mp3");
+    if id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return listen(w, Path(path)).await;
+    }
+    player(path).await
+}
+
+fn player_moved(path: &str) -> Response {
+    // Only plain names go into the new address: nothing that could point it anywhere else.
+    let plain = path.split('/').all(|seg| !seg.is_empty() && !seg.starts_with('.') && seg.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-')));
+    if !plain {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    axum::response::Redirect::permanent(&format!("/listen/{path}")).into_response()
+}
+
+/// The open player, the browser radio that plays every station and raises new ones. Any
+/// Lantern that serves it is one more copy no one can close by closing a domain. It finds the
+/// network by the doors and relays built into it, so it plays the same from any address.
 async fn player(path: String) -> Response {
-    let Some(dir) = std::env::var_os("PYRATE_PLAYER") else { return StatusCode::NOT_FOUND.into_response() };
-    let Some(file) = player_path(std::path::Path::new(&dir), &path) else { return StatusCode::NOT_FOUND.into_response() };
+    let Some(dir) = player_dir() else { return StatusCode::NOT_FOUND.into_response() };
+    let Some(file) = player_path(&dir, &path) else { return StatusCode::NOT_FOUND.into_response() };
     let Ok(bytes) = tokio::fs::read(&file).await else { return StatusCode::NOT_FOUND.into_response() };
-    let kind = match file.extension().and_then(|e| e.to_str()).unwrap_or("") {
-        "html" => "text/html; charset=utf-8",
-        "js" => "text/javascript; charset=utf-8",
-        "wasm" => "application/wasm",
-        "json" => "application/json",
-        "png" => "image/png",
-        "css" => "text/css",
-        "svg" => "image/svg+xml",
-        "ico" => "image/x-icon",
-        "woff2" => "font/woff2",
-        "txt" => "text/plain; charset=utf-8",
-        _ => "application/octet-stream",
-    };
+    let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let kind = player_type(ext);
     (
         [
             (header::CONTENT_TYPE, kind),
-            (header::CACHE_CONTROL, "max-age=600"),
+            // The page is looked at afresh each visit; everything it loads is named by version.
+            (header::CACHE_CONTROL, if ext == "html" || ext == "webmanifest" { "no-cache" } else { "max-age=600" }),
             (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
             (header::REFERRER_POLICY, "no-referrer"),
             (header::CONTENT_SECURITY_POLICY, "frame-ancestors 'self'"),
@@ -523,6 +553,26 @@ async fn player(path: String) -> Response {
         bytes,
     )
         .into_response()
+}
+
+fn player_type(ext: &str) -> &'static str {
+    match ext {
+        "html" => "text/html; charset=utf-8",
+        "js" | "mjs" => "text/javascript; charset=utf-8",
+        "wasm" => "application/wasm",
+        "json" => "application/json",
+        "webmanifest" => "application/manifest+json",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "css" => "text/css; charset=utf-8",
+        "svg" => "image/svg+xml",
+        "ico" => "image/x-icon",
+        "woff2" => "font/woff2",
+        "woff" => "font/woff",
+        "txt" => "text/plain; charset=utf-8",
+        _ => "application/octet-stream",
+    }
 }
 
 /// The file a player path names, inside the player folder and nowhere else. Every segment must

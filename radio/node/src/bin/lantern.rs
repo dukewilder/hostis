@@ -12,6 +12,8 @@
 //!         A seed folder's programme.json is the station's programme, in the JSON the app writes,
 //!         with "utc_offset_min" for the folder's own time and recordings named by title.
 //!         A seed folder's notices.txt holds the station's notices, one per paragraph.
+//!         [--http 127.0.0.1:8080] the web listener; [--player <folder>] serves the open player
+//!         (browser/www/dist-open) on it at /listen/. Never at a HOSTIS name.
 
 use std::{collections::HashSet, path::PathBuf, time::Duration};
 
@@ -22,7 +24,7 @@ fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     // An unknown flag stops the Lantern before it starts: a mistyped or test flag must never
     // bring up a stray node on whatever network the shell happens to be on.
-    const VALUED: &[&str] = &["--dir", "--quota-gb", "--bootstrap", "--seed", "--http", "--open-hails", "--relay", "--release-keys", "--words", "--withdraw", "--reseed"];
+    const VALUED: &[&str] = &["--dir", "--quota-gb", "--bootstrap", "--seed", "--http", "--open-hails", "--relay", "--release-keys", "--words", "--withdraw", "--reseed", "--player"];
     const BARE: &[&str] = &["--carry-own", "--public-dns", "--scuttle", "--web-all"];
     let mut i = 1;
     while i < args.len() {
@@ -73,6 +75,14 @@ fn main() -> anyhow::Result<()> {
     if let Some(addr) = get("--http").and_then(|a| a.parse().ok()) {
         let inner = node.inner.clone();
         let web_all = args.iter().any(|a| a == "--web-all");
+        if let Some(dir) = get("--player") {
+            pyrate_node::web::set_player(PathBuf::from(dir));
+        }
+        if pyrate_node::web::has_player() {
+            println!("open player on http://{addr}/listen/");
+        } else if get("--player").is_some() {
+            println!("open player: no index.html in that folder, so /listen/ serves nothing");
+        }
         node.rt.spawn(async move {
             if let Err(e) = pyrate_node::web::serve(inner, addr, web_all).await {
                 println!("web listener: {e}");
@@ -151,6 +161,15 @@ fn main() -> anyhow::Result<()> {
     }
     for line in node.call(&serde_json::json!({ "cmd": "status" }))["mine"].as_object().into_iter() {
         let _ = line;
+    }
+    // For the crowd test: what this Lantern serves and passes on, every few seconds.
+    if let Some(every) = std::env::var("PYRATE_STATS_S").ok().and_then(|v| v.parse::<u64>().ok()).filter(|s| *s > 0) {
+        let n2 = node.inner.clone();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(Duration::from_secs(every));
+            let (s, r) = (n2.served_bytes.load(std::sync::atomic::Ordering::Relaxed), n2.relayed_bytes.load(std::sync::atomic::Ordering::Relaxed));
+            println!("stats {} served {s} relayed {r}", now_ms());
+        });
     }
     let mut n = 0u64;
     loop {

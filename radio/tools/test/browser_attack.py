@@ -1,4 +1,5 @@
 """F4: a browser tab under attack keeps playing. browser_attack.py <port> <relay url> <pentest> <attack> [secs]
+Attacks: slow, flood, big, forwards (the crew's budget: a flood of forwards to pass on).
 Serve a test build of browser/www/dist (PYRATE_HARBOUR and PYRATE_RELAYS set) on that port first,
 with a relay and a Lantern carrying a station. The tab tunes to the first station it finds; then
 `pentest --hit` attacks the tab through the relay while this watches the tab play. Prints PASS or FAIL."""
@@ -31,6 +32,7 @@ with sync_playwright() as p:
     if not st["playing"] or not st["station"]:
         print("FAIL the tab never started playing"); sys.exit(1)
     before = chrome_mb()
+    crew0 = pg.evaluate("window.pyrate.crew()") or {}
     proc = subprocess.Popen([pentest, "--hit", node, relay, st["station"], attack, str(secs)], stdout=subprocess.PIPE, text=True)
     stalls, peak, lows = 0, before, []
     while proc.poll() is None:
@@ -48,5 +50,12 @@ with sync_playwright() as p:
     print(("PASS" if ok_play else "FAIL"), f"{attack}: the tab kept playing ({stalls} seconds without sound ahead; least ahead {min(lows) if lows else 0} ms)")
     print(("PASS" if ok_mem else "FAIL"), f"{attack}: browser memory {before} -> peak {peak} MB")
     print("INFO", f"{attack}: the tab's chatter answers to others (worst {hit.get('probe_worst_ms')} ms, {hit.get('probe_misses')} missed; {hit.get('streams_opened')} attack streams opened, {hit.get('streams_cut')} cut)")
+    if attack == "forwards":
+        # Crew: a tab flooded with forwards passes on no more than its budget, and turns the rest away.
+        crew1 = pg.evaluate("window.pyrate.crew()") or {}
+        passed = crew1.get("passed_today", 0) - crew0.get("passed_today", 0)
+        refused = crew1.get("refused", 0) - crew0.get("refused", 0)
+        ok_budget = crew1.get("peak_share", 9) <= 1.0 and refused > 0
+        print(("PASS" if ok_budget else "FAIL"), f"forwards: the tab stayed within its budget (at most {crew1.get('peak_share', 0):.2f} of a minute's budget used; passed on {passed // 1024} KB in {secs} s, turned {refused} away)")
     print(("PASS" if not errors else "FAIL"), f"{attack}: no page errors {errors[:2]}")
     b.close()
