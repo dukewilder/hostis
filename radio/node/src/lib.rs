@@ -871,6 +871,25 @@ impl Inner {
         Ok(redone)
     }
 
+    /// Brings a station's log up to date in the background, at most once in half a minute.
+    pub(crate) fn catch_up(self: &Arc<Self>, station: StationId) {
+        static LAST: std::sync::Mutex<Option<HashMap<StationId, u64>>> = std::sync::Mutex::new(None);
+        {
+            let mut g = LAST.lock().unwrap();
+            let m = g.get_or_insert_with(HashMap::new);
+            let now = now_ms();
+            if m.get(&station).is_some_and(|t| now.saturating_sub(*t) < 30_000) {
+                return;
+            }
+            m.retain(|_, t| now.saturating_sub(*t) < 30_000);
+            m.insert(station, now);
+        }
+        let me = self.clone();
+        tokio::spawn(async move {
+            let _ = me.sync_log_direct(station).await;
+        });
+    }
+
     pub async fn sync_log_direct(&self, station: StationId) -> Result<usize> {
         let mut added = 0;
         // At most twelve asked a round: a list full of claims that never answer costs a round
@@ -1017,9 +1036,21 @@ impl Inner {
         if let Some(b) = self.store.lock().unwrap().get_sealed(name) {
             return Ok(b);
         }
-        for node in self.carriers_for(station, name) {
-            if let Ok(Response::Sealed(Some(s))) = self.ask(node, &Request::SealedChunk { name: *name }).await {
-                return Ok(s);
+        // Three carriers at a time, each given six seconds: an exit relaying for a listener
+        // answers with the first that has it, not after every dead carrier in turn.
+        let nodes: Vec<EndpointId> = self.carriers_for(station, name).into_iter().take(9).collect();
+        for batch in nodes.chunks(3) {
+            let mut tries: n0_future::FuturesUnordered<_> = batch
+                .iter()
+                .map(|node| {
+                    let (node, req) = (*node, Request::SealedChunk { name: *name });
+                    Box::pin(async move { tokio::time::timeout(Duration::from_secs(6), self.ask(node, &req)).await })
+                })
+                .collect();
+            while let Some(r) = tries.next().await {
+                if let Ok(Ok(Response::Sealed(Some(s)))) = r {
+                    return Ok(s);
+                }
             }
         }
         Err(anyhow!("no carrier has that chunk"))
