@@ -3491,6 +3491,15 @@ mod playout {
             if st.station != Some(station) {
                 st = State { station: Some(station), playhead: None, track: None, decoder: None, live_seq: None };
             }
+            // A keeper on the air is never played their own station: the speaker would feed the
+            // microphone a few seconds late, round and round, into a howl. The set waits, silent,
+            // and picks the station up again when the broadcast ends.
+            if inner.live.lock().unwrap().is_some_and(|(s, _)| s == station) {
+                inner.queue.lock().unwrap().samples.clear();
+                hiss(&inner, false);
+                st = State { station: Some(station), playhead: None, track: None, decoder: None, live_seq: None };
+                continue;
+            }
             let now = inner.play_now();
             if now.saturating_sub(last_sync) > if st.live_seq.is_some() { 2_500 } else { 8_000 } {
                 last_sync = now;

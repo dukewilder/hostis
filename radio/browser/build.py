@@ -68,6 +68,9 @@ def build(scope, dist, open_players):
            "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https: wss:" + loopback + "; "
            "font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'")
     meta = f'<meta http-equiv="Content-Security-Policy" content="{csp}">\n<meta name="referrer" content="no-referrer">\n'
+    # The radio itself (the module, its glue and the wasm, a megabyte and a half) starts coming
+    # with the page, not after the script at the end of it asks.
+    meta += f'<link rel="modulepreload" href="app.js?v={v}">\n<link rel="modulepreload" href="pkg/pyrate_browser.js?v={v}">\n<link rel="preload" href="pkg/pyrate_browser_bg.{v}.wasm" as="fetch" type="application/wasm" crossorigin>\n'
     assert head.count('<meta charset="utf-8">\n') == 1
     h = head.replace('<meta charset="utf-8">\n', '<meta charset="utf-8">\n' + meta, 1).replace("{{SCOPE}}", scope)
     if scope == "open":
@@ -84,6 +87,8 @@ def build(scope, dist, open_players):
     if scope == "open":
         # Raising colours from the tab: libopus in wasm, run off the page's thread.
         shutil.copy(f"{W}/encode-worker.js", dist)
+        # The live desk's mixing and limiting, run on the audio thread.
+        shutil.copy(f"{W}/desk-worklet.js", dist)
         shutil.copytree(f"{W}/opus", f"{dist}/opus")
     shutil.copy(f"{W}/chart.json", dist)
     for f in ["favicon.png", "apple-touch-icon.png"]:
