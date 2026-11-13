@@ -29,9 +29,14 @@ function voice(dehum, semis) {
   };
 }
 function start() { return ready ??= Module({ locateFile: f => 'opus/' + f }).ready.then(m => (M = m)) }
+// opusscript's _encode takes its input one byte to each 16-bit slot, low byte first, and packs
+// the pairs back into samples itself (src/opusscript_encoder.cpp). Handed plain samples, it
+// packs two samples into one, and the air is noise an octave up.
 function frame(pcm) {
-  M.HEAP16.set(pcm, job.inPtr >> 1);
-  const n = job.h._encode(job.inPtr, pcm.length, job.outPtr, FRAME);
+  const n2 = pcm.length, wide = job.wide;
+  for (let k = 0; k < n2; k++) { const v = pcm[k] & 0xffff; wide[2 * k] = v & 255; wide[2 * k + 1] = v >> 8 }
+  M.HEAPU16.set(wide.subarray(0, 2 * n2), job.inPtr >> 1);
+  const n = job.h._encode(job.inPtr, n2, job.outPtr, FRAME);
   if (n < 0) throw new Error('the encoder refused a frame (' + n + ')');
   const out = new Uint8Array(n + 2); out[0] = n >> 8; out[1] = n & 255;
   out.set(M.HEAPU8.subarray(job.outPtr, job.outPtr + n), 2);
@@ -55,7 +60,7 @@ onmessage = async e => {
       h._encoder_ctl(4002, m.bitrate);
       // Constant bitrate, as the app: every chunk the same size on the wire (OPUS_SET_VBR, 0).
       h._encoder_ctl(4006, 0);
-      job = { voice: m.talk && m.channels === 1 ? voice(true, m.disguise) : null, live: !!m.live, h, ch: m.channels, inPtr: M._malloc(FRAME * m.channels * 2), outPtr: M._malloc(MAX_PACKET), pending: new Int16Array(0), parts: [], bytes: 0, frames: 0 };
+      job = { voice: m.talk && m.channels === 1 ? voice(true, m.disguise) : null, live: !!m.live, h, ch: m.channels, inPtr: M._malloc(FRAME * m.channels * 4), wide: new Uint16Array(FRAME * m.channels * 2), outPtr: M._malloc(MAX_PACKET), pending: new Int16Array(0), parts: [], bytes: 0, frames: 0 };
       postMessage({ id: m.id, ok: true });
     } else if (m.kind === 'feed') {
       if (job.voice) job.voice(m.pcm);

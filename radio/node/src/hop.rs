@@ -363,7 +363,19 @@ impl Inner {
                 if !matches!(inner, Hop::Sealed { .. }) {
                     return vec![];
                 }
-                self.hop(next, &inner).await.unwrap_or_default()
+                match self.hop(next, &inner).await {
+                    Ok(b) => b,
+                    Err(e) => {
+                        // Said at most once a minute, so a Lantern's log shows a hop it cannot make.
+                        static LAST: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                        let now = now_ms();
+                        if now.saturating_sub(LAST.swap(now, std::sync::atomic::Ordering::Relaxed)) > 60_000 {
+                            tracing::warn!("a hop to {} failed: {e}", next.fmt_short());
+                            say(&format!("a hop to {} failed: {e}", next.fmt_short()));
+                        }
+                        vec![]
+                    }
+                }
             }
             Hop::Sealed { eph, ct } => {
                 let me = *self.endpoint.id().as_bytes();
