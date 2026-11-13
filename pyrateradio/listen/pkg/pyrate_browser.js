@@ -734,12 +734,22 @@ export class Radio {
      * For `?debug` only: the first page of a station's log along every route this tab knows,
      * all at once, as JSON of [first, exit, ms or -1].
      * @param {string} id
+     * @param {string} chunk
      * @returns {Promise<any>}
      */
-    route_check(id) {
-        const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.radio_route_check(this.__wbg_ptr, ptr0, len0);
+    route_check(id, chunk) {
+        let ptr0, len0, ptr1, len1;
+        try {
+            ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len0 = WASM_VECTOR_LEN;
+            ptr1 = passStringToWasm0(chunk, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len1 = WASM_VECTOR_LEN;
+        } catch (e) {
+            if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+            if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+            throw e;
+        }
+        const ret = wasm.radio_route_check(this.__wbg_ptr, ptr0, len0, ptr1, len1);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -1884,7 +1894,7 @@ async function __wbg_init_once(module_or_path) {
     }
 
     if (module_or_path === undefined) {
-        module_or_path = new URL('pyrate_browser_bg.5c73b64272.wasm', import.meta.url);
+        module_or_path = new URL('pyrate_browser_bg.c13317eabd.wasm', import.meta.url);
     }
     const imports = __wbg_get_imports();
 
