@@ -254,10 +254,22 @@ addEventListener('DOMContentLoaded',function(){document.getElementById('air').sc
 <div class="sechead"><h2>Join the Fleet</h2></div>
 <div class="two wide">
 <div class="card"><b>Raise colours</b><p>Name it, drop recordings in, and it plays round the clock. Go live from the microphone whenever you like.</p><p class="row-btns"><a class="btn openlink" href="listen/?start" data-go="start">Start a station</a><a class="btn quiet" href="handbook/">Keeper's handbook</a></p></div>
-<div class="card" id="lantern"><b>Light a Lantern</b><p>The radio on a machine that stays on, like a Raspberry Pi or an old laptop. It carries every station and opens no ports.</p><p class="row-btns"><a class="btn" href="https://github.com/dukewilder/hostis/blob/radio/radio/LANTERN.md" target="_blank" rel="noopener noreferrer">The Lantern guide</a></p>
+<div class="card"><b>Carry the radio further</b><p>Every radio aboard keeps the stations alive. Carry more from your phone, a spare machine or a rented server.</p><p class="row-btns"><a class="btn" href="#carry">Three ways to carry</a></p></div>
+</div>
+</section>
+
+<div class="divider"><span class="divider-glyph"></span></div>
+<section id="carry">
+<div class="sechead"><h2>Carry the radio further</h2></div>
+<div class="promises three wide">
+<div><b>Listen</b><p>Every listener carries. The stations you hear pass from your radio to the next, so each listener makes the network harder to sink. Soon a Carry the radio switch lets you give it more.</p></div>
+<div id="lantern"><b>Light a Lantern</b><p>The radio on any machine that stays on, like a Raspberry Pi or an old laptop. It carries every station and opens no ports.</p>
 <details class="fold"><summary>The three lines</summary><div><pre class="cmd">git clone --depth 1 --branch radio https://github.com/dukewilder/hostis
 docker build -t pyrate-lantern -f hostis/radio/Dockerfile hostis/radio
-docker run -d --name lantern --restart unless-stopped -v pyrate:/data pyrate-lantern</pre><p><code>docker logs lantern</code> shows it working.</p></div></details></div>
+docker run -d --name lantern --restart unless-stopped -v pyrate:/data pyrate-lantern</pre><p><code>docker logs lantern</code> shows it working.</p></div></details>
+<p class="row-btns"><a class="btn" href="https://github.com/dukewilder/hostis/blob/radio/radio/LANTERN.md" target="_blank" rel="noopener noreferrer">The Lantern guide</a></p></div>
+<div id="relay"><b>Run a relay on a server</b><p>A browser cannot open ports, so every browser listener, iPhones included, reaches the network through a relay. Each new relay is another door that stays open when others are shut. One paste on a small rented server runs a relay and a Lantern together.</p>
+<details class="fold"><summary>The one paste</summary><div><pre class="cmd">curl -fsSL https://raw.githubusercontent.com/dukewilder/hostis/radio/radio/tools/vps/install.sh -o pyrate.sh &amp;&amp; bash pyrate.sh</pre><p>As root, on fresh Debian or Ubuntu. It asks for a name pointed at the server or makes a free one, lets in only what a relay needs, and prints your relay and Lantern at the end.</p></div></details></div>
 </div>
 </section>
 
