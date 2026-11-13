@@ -1597,7 +1597,7 @@ impl Ship {
                     "id": id.to_hex(), "call_sign": id.call_sign(), "name": shown(&a.name), "about": pyrate_core::chat::shown(&a.about), "mixed": pyrate_core::chat::mixed_script(&a.name),
                     // A card says live only while it is fresh: a keeper on the air sends one with every
                     // few chunks, and one that vanished mid-show leaves its last card behind.
-                    "port": a.port.as_deref().map(shown), "live": a.live && now.saturating_sub(a.at_ms) < LIVE_CARD_MS, "aboard": aboard, "since": a.since,
+                    "port": a.port.as_deref().map(shown), "live": a.live && now.saturating_sub(a.at_ms) < LIVE_CARD_MS, "aboard": aboard, "since": a.since, "listed": net::listed(a, raw_now()),
                     "tracks": a.tracks, "signed_ms": a.at_ms, "named": a.named, "freq": a.freq,
                     "kinds": a.kinds, "mature": a.mature, "explicit": a.explicit, "tip": a.tip,
                     "cover": a.cover.map(|h| hex(&h)), "banner": banners.get(id), "accent": accent,
@@ -2042,13 +2042,33 @@ impl Radio {
     pub fn pow_step(&self, id: &str, start: f64, count: u32) -> Result<f64, JsValue> {
         let st = StationId(unhex32(id).map_err(js)?);
         let start = start as u64;
+        // The first nonce good enough to exist goes on the card at once, so the station plays by
+        // its link within a second; the search goes on, and each better one replaces it, until
+        // one earns the station its place in the list. Only then is the work done.
         for n in start..start + count as u64 {
-            if net::pow_ok(&st, n) {
-                if let Some(m) = self.ship.mine.lock().unwrap().get_mut(&st) {
-                    m.pow = Some(n);
+            let bits = net::pow_bits(&st, n);
+            if bits >= net::POW_BITS {
+                let better = {
+                    let mut mine = self.ship.mine.lock().unwrap();
+                    match mine.get_mut(&st) {
+                        Some(m) if m.pow.is_none_or(|p| net::pow_bits(&st, p) < bits) => {
+                            m.pow = Some(n);
+                            // The card that earns the listing sails at once, not with the next
+                            // card minutes later.
+                            if bits >= net::LIST_BITS {
+                                m.wrote += 1;
+                            }
+                            true
+                        }
+                        _ => false,
+                    }
+                };
+                if better {
+                    self.ship.sail_on();
                 }
-                self.ship.sail_on();
-                return Ok(n as f64);
+                if bits >= net::LIST_BITS {
+                    return Ok(n as f64);
+                }
             }
         }
         Ok(-1.0)
@@ -2062,7 +2082,8 @@ impl Radio {
 
     pub fn set_pow(&self, id: &str, n: f64) -> Result<bool, JsValue> {
         let st = StationId(unhex32(id).map_err(js)?);
-        if !net::pow_ok(&st, n as u64) {
+        // Kept work counts only once it earns a listing; less, and the search runs again.
+        if net::pow_bits(&st, n as u64) < net::LIST_BITS {
             return Ok(false);
         }
         if let Some(m) = self.ship.mine.lock().unwrap().get_mut(&st) {
@@ -2378,7 +2399,7 @@ impl Radio {
             let landed = log.get(id).map(|l| l.carriers.iter().filter(|(n, (_, seen))| **n != me && now.saturating_sub(*seen) < 10 * 60_000).map(|(_, (h, _))| *h).max().unwrap_or(0)).unwrap_or(0);
             let carriers = log.get(id).map(|l| l.carriers.iter().filter(|(n, (_, seen))| **n != me && now.saturating_sub(*seen) < 10 * 60_000).count()).unwrap_or(0);
             json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": shown(&name), "entries": len, "tracks": tracks, "landed": landed, "carriers": carriers,
-                    "unsent": m.unsent.len(), "chunks": m.chunks.len(), "pow": m.pow.is_some() })
+                    "unsent": m.unsent.len(), "chunks": m.chunks.len(), "pow": m.pow.is_some(), "listable": m.pow.is_some_and(|p| net::pow_bits(id, p) >= net::LIST_BITS) })
         }).collect();
         json!(v).to_string()
     }
@@ -2444,6 +2465,25 @@ impl Radio {
             })
             .collect();
         Ok(json!(out).to_string())
+    }
+
+    /// A station's log as it stands, for the page to keep between visits: every entry signed,
+    /// so a kept copy is checked again, entry by entry, when it comes back.
+    pub fn log_export(&self, id: &str) -> Result<Vec<u8>, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let raw: Vec<Vec<u8>> = self.ship.archives.lock().unwrap().get(&st).map(|a| a.entries().iter().filter_map(|e| e.to_bytes().ok()).collect()).unwrap_or_default();
+        postcard::to_stdvec(&raw).map_err(|e| js(anyhow!("{e}")))
+    }
+
+    /// A kept copy of a station's log back into the tab, before the network is asked: only the
+    /// entries past what the tab holds, each checked against the station's key. The network
+    /// then sends only what is newer. Returns how many entries were taken.
+    pub fn log_import(&self, id: &str, bytes: &[u8]) -> Result<u32, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let raw: Vec<Vec<u8>> = postcard::from_bytes(bytes).map_err(|e| js(anyhow!("{e}")))?;
+        let (n, _) = self.ship.take_entries(st, raw);
+        self.ship.clocks.lock().unwrap().remove(&st);
+        Ok(n as u32)
     }
 
     /// Whether this tab holds a station's log yet.
