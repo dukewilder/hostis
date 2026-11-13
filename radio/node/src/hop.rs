@@ -90,6 +90,14 @@ pub(crate) enum Ask {
     Stem { station: StationId, entries: Vec<Vec<u8>>, chunks: Vec<(Hash, Vec<u8>)>, announce: Option<Announce> },
 }
 
+impl Ask {
+    fn station(&self) -> Option<StationId> {
+        match self {
+            Ask::Log { station, .. } | Ask::Chunk { station, .. } | Ask::Token { station, .. } | Ask::Sealed { station, .. } | Ask::Stem { station, .. } => Some(*station),
+        }
+    }
+}
+
 fn x_secret(seed: &[u8; 32]) -> x25519_dalek::StaticSecret {
     let h = Sha512::digest(seed);
     let mut b = [0u8; 32];
@@ -174,14 +182,26 @@ impl Inner {
     /// Exits for a request, as many as asked for and all different: nodes that have not failed
     /// lately first, then the rest, never one of `not`.
     fn exits(&self, nodes: &[EndpointId], not: &[EndpointId], n: usize) -> Vec<EndpointId> {
+        self.exits_for(nodes, not, n, None)
+    }
+
+    /// As `exits`, with the nodes that carry `station` drawn first among those that have not
+    /// failed: an exit that holds what is asked answers at once, where another fetches it first.
+    fn exits_for(&self, nodes: &[EndpointId], not: &[EndpointId], n: usize, station: Option<StationId>) -> Vec<EndpointId> {
         let now = now_ms();
         let failed = self.failed.lock().unwrap().clone();
+        let carrying: std::collections::HashSet<[u8; 32]> =
+            station.and_then(|st| self.log.lock().unwrap().get(&st).map(|l| l.carriers.keys().copied().collect())).unwrap_or_default();
         let bad = |x: &EndpointId| failed.get(x.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS);
-        let mut good: Vec<EndpointId> = nodes.iter().filter(|x| !not.contains(x) && !bad(x)).copied().collect();
-        let mut rest: Vec<EndpointId> = nodes.iter().filter(|x| !not.contains(x) && bad(x)).copied().collect();
-        good.shuffle(&mut rand::thread_rng());
-        rest.shuffle(&mut rand::thread_rng());
-        good.into_iter().chain(rest).take(n).collect()
+        let mut tiers: [Vec<EndpointId>; 3] = [
+            nodes.iter().filter(|x| !not.contains(x) && !bad(x) && carrying.contains(x.as_bytes())).copied().collect(),
+            nodes.iter().filter(|x| !not.contains(x) && !bad(x) && !carrying.contains(x.as_bytes())).copied().collect(),
+            nodes.iter().filter(|x| !not.contains(x) && bad(x)).copied().collect(),
+        ];
+        for t in tiers.iter_mut() {
+            t.shuffle(&mut rand::thread_rng());
+        }
+        tiers.into_iter().flatten().take(n).collect()
     }
 
     /// Two hops by the guard and the given exit, or one drawn. An answer that does not open
@@ -210,7 +230,7 @@ impl Inner {
         }
         let exit = match exit.filter(|e| *e != guard) {
             Some(e) => e,
-            None => *self.exits(&nodes, &[guard], 1).first().ok_or_else(|| anyhow!("no route"))?,
+            None => *self.exits_for(&nodes, &[guard], 1, ask.station()).first().ok_or_else(|| anyhow!("no route"))?,
         };
         let (sealed, c) = seal(exit.as_bytes(), ask)?;
         let blob = postcard::to_stdvec(&sealed)?;
@@ -287,7 +307,7 @@ impl Inner {
         };
         let nodes = self.known_nodes();
         let guard = if nodes.len() >= 2 { self.fetch_guard(&nodes) } else { None };
-        let exits = guard.map(|g| self.exits(&nodes, &[g], 4)).unwrap_or_default();
+        let exits = guard.map(|g| self.exits_for(&nodes, &[g], 4, Some(station))).unwrap_or_default();
         let mut tries: n0_future::FuturesUnordered<_> = if exits.is_empty() {
             (0..2).map(|_| Box::pin(one(None))).collect()
         } else {
