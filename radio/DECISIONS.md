@@ -601,3 +601,13 @@ Dylan: "build something to keep people from spamming stations... a joke station 
 - **Raising never waits on the work.** The card goes out on the first tick after its work is found.
 - **Mono** (32 kbit/s, one channel, Opus's music mode) for stations of old records, chosen per station so its chunks stay one size. Half the bytes per listener of stereo, which is the headroom a launch needs: browser listeners take from carriers and give nothing back. `--reseed` moves a station to it without dead air, and withdraws recordings whose files have left the folder.
 - **Netlabel's licences.** Its 97 recordings were CC BY-NC or BY-ND. HOSTIS airs only what anyone may air (public domain, federal works, CC0, CC BY, CC BY-SA), so they were replaced. Contraband, a station of banned and seditious books read aloud, joins HOSTIS's own.
+
+## LI. The listeners are the network (13 November 2026)
+
+Dylan's brief, in his words: the fullest expression of the HOSTIS mythos, anti-enclosure brought to maturity, in the spirit of Radio Caroline. At launch he wants to claim, reasonably, the most anonymous, decentralised, secure, resilient and uncensorable audio service there is, free, with no barrier to entry, self-moderated, and a genuinely good radio.
+
+- **Listening is participation.** Every listener, in the app or a browser, carries more than it takes (Crew, efabb2f): it passes on sealed requests for any station and serves what it plays behind three hops; computers carry quiet stations too.
+- **No part is load-bearing.** Lanterns, relays and HOSTIS's own machines are extra strength, never required. Doors (in progress) makes app listeners the doors and relays browsers need. Every copy of the player, and every shared link, carries a way in.
+- **The Streisand effect is the design.** Attention brings listeners, and listeners are the network.
+- **No one is exposed by taking part,** whether listening, carrying, broadcasting or running a server. A first hop may see an address (Tor's guard model); no radio sees both who and what.
+- **Claims are earned before they are made:** /mnt/user-data/outputs/pyrate-claims-ledger.md maps each one to its evidence and its gaps, and tools/test/all.sh proves everything still works together.
