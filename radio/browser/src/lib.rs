@@ -578,17 +578,29 @@ impl Ship {
         // Two hops first, as the app does: the carrier that answers never sees this tab.
         let mut added = 0;
         let mut private = false;
-        // Exits answer a quarter of a megabyte at a time: enough rounds for the longest log a tab keeps.
+        // Exits answer a quarter of a megabyte at a time: enough rounds for the longest log a tab
+        // keeps. Three rounds with no answer end the try, and the set asks again shortly.
+        let mut misses = 0;
         for _ in 0..140 {
             let from = self.archives.lock().unwrap().get(&station).map(|a| a.len()).unwrap_or(0);
             // A log this tab has never seen goes out along two routes at once; the first to
             // bring entries wins.
             let asked = if from == 0 { self.first_page(station).await } else { self.ask_hedged(&Ask::Log { station, from }).await };
-            let Ok(Response::Entries(raw)) = asked else { continue };
+            let Ok(Response::Entries(raw)) = asked else {
+                misses += 1;
+                if misses >= 3 {
+                    break;
+                }
+                continue;
+            };
             let got = raw.len();
             // An exit that found no carrier answers with nothing. For a log this tab has never
             // seen, that is no answer at all, so another exit is asked.
             if got == 0 && from == 0 {
+                misses += 1;
+                if misses >= 3 {
+                    break;
+                }
                 continue;
             }
             private = true;
