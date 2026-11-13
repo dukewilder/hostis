@@ -10,6 +10,14 @@ A Lantern is a node that never sleeps. It carries every station it hears of, rel
 
 It opens no ports and needs none. Behind a VPN it works the same, through the relays.
 
+**A relay beside it, on a server.** A browser cannot open ports, so every browser listener reaches the network through a relay, and each new relay is one more door. On a fresh Debian or Ubuntu server, as root:
+
+    curl -fsSL https://raw.githubusercontent.com/dukewilder/hostis/radio/radio/tools/vps/install.sh -o pyrate.sh && bash pyrate.sh
+
+It asks for the relay's name (an A record pointing at the server, grey cloud if it is on Cloudflare), or makes a free one from the server's address. It installs iroh-relay at the iroh version the radio is built with, checked against its checksum, with its own Let's Encrypt certificate; runs the Lantern above with `PYRATE_RELAY_URL` set to the relay and restarts both on boot; and lets in only SSH, 80, 443 and 7842/udp. It prints the relay's address and the Lantern's id. Run it again to update.
+
+**How a new relay is found.** A Lantern homes on the relay it reaches fastest, and on the same server that is its own. Every couple of minutes it signs a harbour note naming that relay, and publishes the same to number0's lookup. Phones, computers and browser tabs that know the Lantern as a carrier take the note into their address book and reach it through that relay. Make the Lantern a first door (`id@https://relay/` in the app's harbour list) and the app takes its relay as one of its own for next time.
+
 **Its keys.** Everything a Lantern keeps is sealed under its hold key, which by default lies in `hold.key` beside the data, so a copy of the whole folder opens. Put the key on another disk, or a USB stick, with `-e PYRATE_HOLD_KEY=/keys/hold.key -v /path/on/that/disk:/keys`, and turn on the disk's own encryption. The first time it starts that way, the Lantern copies the old key there and checks the copy; remove the old `hold.key` yourself once it runs. The Lantern says so at every start until you do. Never print or share `hold.key`.
 
 **What it carries for others.** Logs carried for other stations share 1 GB, no station more than 256 MB; a station that outgrows its share is taken no further for a week, and when the whole is full the newest station nobody has listened to through this Lantern in a day goes first. Your own stations are never counted. Set the total with `-e PYRATE_LOG_MB=<megabytes>` (16 or more); one station may then take half of it. Once a minute the Lantern hands memory it has finished with back to the system.
