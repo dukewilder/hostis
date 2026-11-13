@@ -232,7 +232,7 @@ footer .f-contact a:hover,footer .f-source a:hover{color:#c52828;border-color:#c
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
 
 /* The radio's own page: the sibling sheet above, and what only this page needs. */
-.tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin:0 0 1.6rem}
+.tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:0;margin:0 0 1.6rem}
 .tile{display:block;padding:0 0 1rem;border:1px solid var(--line);background:var(--panel);color:var(--ink);transition:border-color .18s,background .18s;position:relative}
 .tile+.tile{margin-left:-1px}
 .tile:hover,.tile:focus-visible{border-color:var(--faint);z-index:1;outline:none}.tile.on{border-color:var(--red);z-index:2}
@@ -318,6 +318,10 @@ section{padding:40px 0 4px}
 .note{text-align:center;color:var(--dim);font-style:italic;font-size:1rem;margin:1.2rem auto 0;max-width:38em}
 .getset{text-align:center;margin:0 auto 1rem;max-width:560px}
 .getset .lead-btn{text-align:center}
+.iph{margin:1.6rem 0 0}.iph>summary{list-style:none;cursor:pointer;display:block}.iph>summary::-webkit-details-marker{display:none}
+.iph>summary:focus-visible{outline:none}.iph>summary:focus-visible .hbtn{outline:2px solid var(--red);outline-offset:3px}.iph[open]>summary .hbtn{background:#6e1414}
+.iphbody{text-align:left;margin:1rem auto 0;max-width:460px}.iphbody p{color:var(--bonedim);margin:0;line-height:1.5}.iphbody a{border-bottom:1px solid var(--faint)}.iphbody a:hover{border-color:var(--red)}
+.getset.ios{display:flex;flex-direction:column;align-items:center}.getset.ios .iph{order:-1;margin:0 0 1.6rem;align-self:stretch}
 .alt{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:center;margin:1rem 0 0}
 h3.small{font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);text-align:center;margin:2.2rem 0 1rem}
 .desk{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0 auto .4rem;max-width:620px}
