@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=8297f067a3';
+import init, { Radio } from './pkg/pyrate_browser.js?v=5c73b64272';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -13,7 +13,7 @@ const EMBED = document.documentElement.classList.contains('embed');
 // flock goes straight to an open player, the same set served where no one owns it (IPFS, a
 // Lantern). 'open' is that copy: the whole Log, the chatter and the colours.
 const SCOPE = "harbour";
-const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeiae5mtfp7zxa52hzaksscbxvuyuddiqkho74dlol5xxrqlzn4x5nu.ipfs.inbrowser.link/", "https://bafybeiae5mtfp7zxa52hzaksscbxvuyuddiqkho74dlol5xxrqlzn4x5nu.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeiae5mtfp7zxa52hzaksscbxvuyuddiqkho74dlol5xxrqlzn4x5nu/"];
+const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeie75eulmtqnzjiwxujjyx5jcc5gzjf3x2qrxmoxr6uvsbuxwxashi.ipfs.inbrowser.link/", "https://bafybeie75eulmtqnzjiwxujjyx5jcc5gzjf3x2qrxmoxr6uvsbuxwxashi.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeie75eulmtqnzjiwxujjyx5jcc5gzjf3x2qrxmoxr6uvsbuxwxashi/"];
 const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
 const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
 // HOSTIS's stations carry their pictures in the page, so they show before the network answers.
@@ -1459,7 +1459,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && pl
 
 // For anyone looking under the hood: what the player is doing.
 let tapped = null;
-window.pyrate = { node: () => radio?.id(), mine: () => kept().map(k => k.id), tap: () => { if (!ctx) return null; if (!tapped) { tapped = ctx.createMediaStreamDestination(); gain.connect(tapped) } return tapped.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, heard: heard(), stage, trouble, station: cur?.id, scheduled: sources.length, ahead_ms: playing ? aheadMs : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, view: viewOn, webcodecs }) };
+window.pyrate = { node: () => radio?.id(), routes: id => radio?.route_check(id ?? cur?.id), mine: () => kept().map(k => k.id), tap: () => { if (!ctx) return null; if (!tapped) { tapped = ctx.createMediaStreamDestination(); gain.connect(tapped) } return tapped.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, heard: heard(), stage, trouble, station: cur?.id, scheduled: sources.length, ahead_ms: playing ? aheadMs : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, view: viewOn, webcodecs }) };
 // ---- Finding the way: the sections under the set -------------------------------------------
 // Stations, the station page, starting a station and settings each have their own view. The
 // browser's Back button steps back through them, and nothing about them goes in the address.
