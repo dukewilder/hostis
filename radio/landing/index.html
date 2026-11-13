@@ -29,7 +29,7 @@
 /*FONTS*/
 /*HOSTIS*/
 /* The radio's own page: the sibling sheet above, and what only this page needs. */
-.tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin:0 0 1.6rem}
+.tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:0;margin:0 0 1.6rem}
 .tile{display:block;padding:0 0 1rem;border:1px solid var(--line);background:var(--panel);color:var(--ink);transition:border-color .18s,background .18s;position:relative}
 .tile+.tile{margin-left:-1px}
 .tile:hover,.tile:focus-visible{border-color:var(--faint);z-index:1;outline:none}.tile.on{border-color:var(--red);z-index:2}
@@ -115,6 +115,10 @@ section{padding:40px 0 4px}
 .note{text-align:center;color:var(--dim);font-style:italic;font-size:1rem;margin:1.2rem auto 0;max-width:38em}
 .getset{text-align:center;margin:0 auto 1rem;max-width:560px}
 .getset .lead-btn{text-align:center}
+.iph{margin:1.6rem 0 0}.iph>summary{list-style:none;cursor:pointer;display:block}.iph>summary::-webkit-details-marker{display:none}
+.iph>summary:focus-visible{outline:none}.iph>summary:focus-visible .hbtn{outline:2px solid var(--red);outline-offset:3px}.iph[open]>summary .hbtn{background:#6e1414}
+.iphbody{text-align:left;margin:1rem auto 0;max-width:460px}.iphbody p{color:var(--bonedim);margin:0;line-height:1.5}.iphbody a{border-bottom:1px solid var(--faint)}.iphbody a:hover{border-color:var(--red)}
+.getset.ios{display:flex;flex-direction:column;align-items:center}.getset.ios .iph{order:-1;margin:0 0 1.6rem;align-self:stretch}
 .alt{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:center;margin:1rem 0 0}
 h3.small{font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);text-align:center;margin:2.2rem 0 1rem}
 .desk{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0 auto .4rem;max-width:620px}
@@ -165,6 +169,7 @@ html.leaving .leavingnote{display:block}html.leaving .hero .ctas,html.leaving .h
 <a class="tile" role="listitem" href="listen/#1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069" data-id="1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069"><img src="listen/art/the-numbers.jpg" alt="" width="512" height="512" loading="lazy"><b>The Numbers</b><span class="fq"></span></a>
 <a class="tile" role="listitem" href="listen/#8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd" data-id="8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd"><img src="listen/art/netlabel.jpg" alt="" width="512" height="512" loading="lazy"><b>Netlabel</b><span class="fq"></span><i>Creative Commons electronic, ambient and experimental music from the netlabels that gave it away.</i></a>
 <a class="tile" role="listitem" href="listen/#23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a" data-id="23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a"><img src="listen/art/poets-corner.jpg" alt="" width="512" height="512" loading="lazy"><b>Poets&rsquo; Corner</b><span class="fq"></span><i>Short public domain poems read by LibriVox volunteers, one on the hour.</i></a>
+<a class="tile" role="listitem" href="listen/#dce68389447e6319303ddbc67bb874863559b8f93015bf810a3b18d0b1eab572" data-id="dce68389447e6319303ddbc67bb874863559b8f93015bf810a3b18d0b1eab572"><img src="listen/art/shanties.jpg" alt="" width="512" height="512" loading="lazy"><b>Shanties</b><span class="fq"></span><i>Sea shanties, sea songs and pirate songs on records from 1925 and before.</i></a>
 </div>
 <div class="setframe">
 <div class="framebar"><span>This page plays only HOSTIS's own stations.</span><a class="btn openlink" href="listen/">Every station</a></div>
@@ -208,9 +213,17 @@ addEventListener('DOMContentLoaded',function(){document.getElementById('air').sc
 
 <div class="divider"><span class="divider-glyph"></span></div>
 <section id="set">
-<div class="sechead"><h2>Take the Set</h2><span class="cap">android &#183; computers &#183; any browser</span></div>
+<div class="sechead"><h2>Take the Set</h2><span class="cap">android &#183; iphone &#183; computers &#183; any browser</span></div>
 <div class="getset">
 <a class="hbtn" href="pyrate-radio-{{VERSION}}.apk">Pyrate Radio for Android</a><p class="btnnote">version {{VERSION}} &#183; {{SIZE}} MB &#183; arm64</p>
+<details class="iph"><summary><span class="hbtn">Pyrate Radio for iPhone</span><p class="btnnote">the full player on your home screen &#183; no App Store</p></summary><div class="iphbody">
+<ol class="steps">
+<li>Open the <a class="openlink" href="listen/">full player</a> in Safari.</li>
+<li>Tap Share. On iOS 26 it is in the &#8943; menu beside the address.</li>
+<li>Tap Add to Home Screen, leave Open as Web App on, and tap Add.</li>
+</ol>
+<p>It opens from your home screen like any other app, with every station on the dial.</p>
+</div></details>
 </div>
 {{DESKTOP}}
 <div class="alt"><a class="btn openlink" href="listen/">Any browser</a><a class="btn" href="{{MAGNET}}">Magnet link</a><a class="btn" href="pyrate-radio-{{VERSION}}.apk.torrent">.torrent</a><a class="btn" href="https://github.com/dukewilder/hostis/tree/radio/radio" target="_blank" rel="noopener noreferrer">Source</a></div>
@@ -270,6 +283,7 @@ docker run -d --name lantern --restart unless-stopped -v pyrate:/data pyrate-lan
 <script>
 // Each station's flag is its key, drawn, and its place on the dial comes from the key as well.
 function fq(id){return ((875+parseInt(id.slice(0,6),16)%206)*100+parseInt(id.slice(6,10),16)%100)/1000}
+if(/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)){var gs=document.querySelector('.getset'),ip=document.querySelector('.iph');if(gs&&ip){gs.classList.add('ios');ip.open=true}}
 document.querySelectorAll('.tile[data-id]').forEach(function(a){a.querySelector('.fq').textContent=fq(a.dataset.id).toFixed(3)+' FM';
 // A tile turns the set in this page to its station, where the set can take it.
 a.addEventListener('click',function(e){var f=document.getElementById('radio');if(!f.contentWindow||document.documentElement.classList.contains('leaving'))return;e.preventDefault();

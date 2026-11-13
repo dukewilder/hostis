@@ -33,5 +33,12 @@
   "call_sign": "VOVUFE·F376",
   "art": "art/poets-corner.jpg",
   "banner_art": "art/poets-corner-banner.jpg"
+ },
+ {
+  "id": "dce68389447e6319303ddbc67bb874863559b8f93015bf810a3b18d0b1eab572",
+  "name": "Shanties",
+  "call_sign": "HUHIZI·554C",
+  "art": "art/shanties.jpg",
+  "banner_art": "art/shanties-banner.jpg"
  }
 ]
