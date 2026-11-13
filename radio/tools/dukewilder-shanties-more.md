@@ -1,4 +1,4 @@
-Shanties gets 59 more recordings, newer ones among them, and moves to the `mono` kind. Use a Lantern build that knows `mono` and `--reseed` (commit 70ae4ea or later).
+Shanties gets 59 more recordings, newer ones among them, and moves to the `mono` kind. Use a Lantern build that knows `mono` and `--reseed` (commit c524544 or later).
 
 1. Pull `radio` as usual. Find the harbour's seed parent with `docker inspect pyrate-lantern`, as in `radio/tools/dukewilder-0.9.10.md`, and its network mode with `docker inspect -f '{{.HostConfig.NetworkMode}}' pyrate-lantern`.
 
