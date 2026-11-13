@@ -1,10 +1,187 @@
 {
- "utc_offset_min": 0,
- "zone_name": "UTC",
+ "zone_name": "America/Chicago",
+ "zone": [
+  [
+   1767225600000,
+   -360
+  ],
+  [
+   1772956800000,
+   -300
+  ],
+  [
+   1793516400000,
+   -360
+  ],
+  [
+   1805011200000,
+   -300
+  ],
+  [
+   1825570800000,
+   -360
+  ],
+  [
+   1836460800000,
+   -300
+  ],
+  [
+   1857020400000,
+   -360
+  ],
+  [
+   1867910400000,
+   -300
+  ],
+  [
+   1888470000000,
+   -360
+  ],
+  [
+   1899360000000,
+   -300
+  ],
+  [
+   1919919600000,
+   -360
+  ],
+  [
+   1930809600000,
+   -300
+  ],
+  [
+   1951369200000,
+   -360
+  ],
+  [
+   1962864000000,
+   -300
+  ],
+  [
+   1983423600000,
+   -360
+  ],
+  [
+   1994313600000,
+   -300
+  ],
+  [
+   2014873200000,
+   -360
+  ],
+  [
+   2025763200000,
+   -300
+  ],
+  [
+   2046322800000,
+   -360
+  ],
+  [
+   2057212800000,
+   -300
+  ],
+  [
+   2077772400000,
+   -360
+  ],
+  [
+   2088662400000,
+   -300
+  ],
+  [
+   2109222000000,
+   -360
+  ],
+  [
+   2120112000000,
+   -300
+  ],
+  [
+   2140671600000,
+   -360
+  ],
+  [
+   2152166400000,
+   -300
+  ],
+  [
+   2172726000000,
+   -360
+  ],
+  [
+   2183616000000,
+   -300
+  ],
+  [
+   2204175600000,
+   -360
+  ]
+ ],
  "mode": {
   "kind": "shuffle"
  },
  "hours": [],
- "slots": [],
+ "slots": [
+  {
+   "title": "The Small Hours",
+   "about": "Ambient and drone, eleven at night to seven in the morning.",
+   "span": {
+    "days": 127,
+    "start_min": 1380,
+    "len_min": 480
+   },
+   "fill": {
+    "kind": "tracks",
+    "tracks": [
+     "Electroteque - Subtonal",
+     "Unknown Forces - But at the End of the Day",
+     "Doc - Airports for Music",
+     "Electroteque - Climate Changes",
+     "Frags - Nocturnal Nail Clipping",
+     "KraftiM - Norkhaberg",
+     "Doc - This Is It",
+     "KraftiM - IkoNO",
+     "Softspace - Gestalts",
+     "Softspace - Candle Flicker",
+     "Softspace - Loons",
+     "Softspace - Observatory One",
+     "Softspace - Contemplation",
+     "Softspace - Shadowed Forest",
+     "Electroteque - Collective Consciousness",
+     "Doc & Frags - Birds",
+     "Softspace - Moon's Halo",
+     "Frags - Eleventh of Eleventh",
+     "Softspace - Hollow Lands",
+     "Unknown Forces - Helsinki",
+     "Seetyca - die comoedia von der zeit",
+     "Seetyca - meyne seele theilt sich",
+     "Seetyca - der glaube alleyn versetzet nichts",
+     "Seetyca - warten in der ruhe",
+     "K.M. Krebs - Ashi",
+     "K.M. Krebs - Ttlicastic",
+     "K.M. Krebs - Unscal",
+     "K.M. Krebs - Ofilatinte",
+     "K.M. Krebs - Pulsam",
+     "K.M. Krebs - Younateles",
+     "K.M. Krebs - Riveal",
+     "K.M. Krebs - Chisan",
+     "Edward J. Powley - Rabbits (Methuselah)",
+     "Edward J. Powley - Dead In 658 Generations",
+     "Edward J. Powley - R-Pentomino",
+     "Edward J. Powley - The Gosper Gun (worth $50 of anyone's money!)",
+     "aNACRUSa - el rio oculto",
+     "aNACRUSa - el sue\u00f1o del verdugo",
+     "aNACRUSa - remora",
+     "XU - aurora",
+     "XU - light breaks",
+     "XU - movements",
+     "Scott Lawlor - Beauty is Found in Melancholy"
+    ],
+    "shuffle": true
+   },
+   "live": false
+  }
+ ],
  "ident_every_min": 60
 }

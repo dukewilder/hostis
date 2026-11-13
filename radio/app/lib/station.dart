@@ -9,9 +9,10 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show LogicalKeyboardKey, rootBundle;
 
 import 'art.dart';
 import 'main.dart';
@@ -168,7 +169,10 @@ class _StationPageState extends State<StationPage> {
     final own = p?['own'] == true;
     final now = DateTime.now().millisecondsSinceEpoch;
     String? lastDay;
-    return Scaffold(
+    // Esc closes the page on a computer, as Back does on a phone.
+    return CallbackShortcuts(
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): () => Navigator.maybePop(context)},
+      child: Focus(autofocus: true, child: Scaffold(
       backgroundColor: black,
       appBar: AppBar(backgroundColor: black, elevation: 0, title: Text((s['call_sign'] ?? '').toString(), style: mono(12, color: boneFaint))),
       body: RefreshIndicator(
@@ -212,10 +216,16 @@ class _StationPageState extends State<StationPage> {
           ),
           const SizedBox(height: 14),
           Wrap(spacing: 4, runSpacing: 4, children: [
-            pyrateButton('▶︎ LISTEN', () {
-              widget.radio.tune(id);
-              Navigator.pop(context);
-            }),
+            // While this station plays, its button stops it.
+            ListenableBuilder(
+              listenable: widget.radio,
+              builder: (context, _) => widget.radio.playing && widget.radio.tuned == id
+                  ? pyrateButton('■︎ STOP', widget.radio.stop)
+                  : pyrateButton('▶︎ LISTEN', () {
+                      widget.radio.tune(id);
+                      Navigator.pop(context);
+                    }),
+            ),
             // A pocket station's whereabouts go only by invitation, never by a public link or poster.
             if (s['pocket'] != true) pyrateButton('SHARE', () => shareStation(s)),
             if ((s['tip'] ?? '').toString().isNotEmpty) pyrateButton('TIP', () => tipStation(context, s['tip'], name: (s['name'] ?? 'the station').toString())),
@@ -355,11 +365,11 @@ class _StationPageState extends State<StationPage> {
             if (!week && shownListings(p).length < listingsOf(p).length)
               Padding(padding: const EdgeInsets.only(top: 8), child: Row(children: [pyrateButton('THE WHOLE WEEK', () => setState(() => week = true))])),
             const SizedBox(height: 18),
-            note('Worked out on this phone from the station\'s own log. Times are yours.'),
+            note('Worked out on this $thisDevice from the station\'s own log. Times are yours.'),
           ],
         ]),
       ),
-    );
+    )));
   }
 }
 
@@ -912,7 +922,7 @@ class _StartShapePickerState extends State<StartShapePicker> {
         'in_order' => 'Your recordings in the order you add them, over and over.',
         'daily' => 'Your recordings start from the top at the same time every day.',
         'weekly' => 'Your recordings start from the top at the same time every week.',
-        'feed' => 'Paste the feed link of your podcast, or one you have permission to play. New episodes are added by themselves. The podcast\'s host sees this phone\'s address, as with any podcast app.',
+        'feed' => 'Paste the feed link of your podcast, or one you have permission to play. New episodes are added by themselves. The podcast\'s host sees this $thisDevice\'s address, as with any podcast app.',
         'live' => 'Your recordings play all day, and the same hour each day is kept for you to go live.',
         _ => 'Everything you add, shuffled, day and night.',
       }),
@@ -1075,7 +1085,7 @@ class _FeedsPanelState extends State<FeedsPanel> {
     final mine = Feeds.load().where((f) => f['station'] == widget.station).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       heading('PODCAST FEEDS'),
-      note('New episodes are added by themselves every few hours on Wi-Fi while the app is open. The podcast\'s host sees this phone\'s address, as with any podcast app.'),
+      note('New episodes are added by themselves every few hours${isComputer ? '' : ' on Wi-Fi'} while the app is open. The podcast\'s host sees this $thisDevice\'s address, as with any podcast app.'),
       for (final f in mine)
         Row(children: [
           Expanded(child: Text(f['url'], maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(11, color: boneFaint))),
@@ -1187,6 +1197,14 @@ class _PosterSheetState extends State<PosterSheet> {
     final img = await ro.toImage(pixelRatio: 5);
     final png = await img.toByteData(format: ui.ImageByteFormat.png);
     if (png == null) return;
+    // A computer saves it where its owner chooses; a phone hands it to the share sheet.
+    if (isComputer) {
+      final to = await FilePicker.platform.saveFile(dialogTitle: 'Save the poster', fileName: '${safeName(widget.station['name'] ?? 'Pyrate Radio')} poster.png', type: FileType.custom, allowedExtensions: ['png']);
+      if (to == null) return;
+      await File(to).writeAsBytes(png.buffer.asUint8List());
+      if (mounted) setState(() => msg = 'Saved.');
+      return;
+    }
     final dir = Directory('${(await scratchDir()).path}/share');
     if (!dir.existsSync()) dir.createSync(recursive: true);
     final f = File('${dir.path}/${safeName(widget.station['name'] ?? 'Pyrate Radio')} poster.png');
@@ -1197,18 +1215,27 @@ class _PosterSheetState extends State<PosterSheet> {
   /// The whole station as one file, for an SD card, Bluetooth or the share sheet: it plays on
   /// any phone that opens it, with no network at all.
   Future<void> shareFile() async {
+    final name = '${safeName(widget.station['name'] ?? 'Pyrate Radio')}.pyrate';
+    String path;
+    if (isComputer) {
+      final to = await FilePicker.platform.saveFile(dialogTitle: 'Save the station as a file', fileName: name);
+      if (to == null) return;
+      path = to;
+    } else {
+      final dir = Directory('${(await scratchDir()).path}/share');
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+      path = '${dir.path}/$name';
+    }
+    if (!mounted) return;
     setState(() => msg = 'Packing the station: its log, its sound and its art.');
-    final dir = Directory('${(await scratchDir()).path}/share');
-    if (!dir.existsSync()) dir.createSync(recursive: true);
-    final path = '${dir.path}/${safeName(widget.station['name'] ?? 'Pyrate Radio')}.pyrate';
     final r = await Native.callAway({'cmd': 'pack_export', 'station': widget.station['id'], 'path': path});
     if (!mounted) return;
     if (r is! Map || r['error'] != null) {
       setState(() => msg = 'Not packed: ${r is Map ? r['error'] : 'try again'}');
       return;
     }
-    setState(() => msg = (r['missing'] as num? ?? 0) > 0 ? '${r['missing']} pieces could not be found yet, so the file plays with gaps. The rest is in it.' : null);
-    await ship.invokeMethod('share_file', {'path': path, 'mime': 'application/octet-stream'});
+    setState(() => msg = (r['missing'] as num? ?? 0) > 0 ? '${r['missing']} pieces could not be found yet, so the file plays with gaps. The rest is in it.' : isComputer ? 'Saved.' : null);
+    if (!isComputer) await ship.invokeMethod('share_file', {'path': path, 'mime': 'application/octet-stream'});
   }
 
   @override
@@ -1263,10 +1290,10 @@ class _PosterSheetState extends State<PosterSheet> {
             ),
           ),
           const SizedBox(height: 16),
-          Row(children: [
-            pyrateButton('SHARE THE POSTER', share),
+          Wrap(runSpacing: 8, children: [
+            pyrateButton(isComputer ? 'SAVE THE POSTER' : 'SHARE THE POSTER', share),
             const SizedBox(width: 8),
-            pyrateButton('THE LINK', () => ship.invokeMethod('share_text', {'text': 'Tune in to ${s['name']} on Pyrate Radio: ${stationLink(id)}'})),
+            pyrateButton(isComputer ? 'COPY THE LINK' : 'THE LINK', () => ship.invokeMethod('share_text', {'text': 'Tune in to ${s['name']} on Pyrate Radio: ${stationLink(id)}'})),
             const SizedBox(width: 8),
             pyrateButton('AS A FILE', shareFile),
           ]),
@@ -1417,7 +1444,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
     final r = room;
     if (r == null || r['joined'] != true) {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        note('Chat with whoever else is listening, cheer what is on, or ask for a song. Nothing is saved, though anyone in the chat can copy what they read. People in the chat can tell this phone is there, and see its address unless the radio goes through Tor. Just listening shows nobody anything.'),
+        note('Chat with whoever else is listening, cheer what is on, or ask for a song. Nothing is saved, though anyone in the chat can copy what they read. People in the chat can tell this $thisDevice is there, and see its address unless the radio goes through Tor. Just listening shows nobody anything.'),
         const SizedBox(height: 10),
         pyrateButton(joining ? 'JOINING' : 'JOIN THE CHAT', joining
             ? null
@@ -1450,7 +1477,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
                           builder: (c) => AlertDialog(
                             backgroundColor: panel,
                             title: Text('Mute ${l['name'] == '' ? l['voice'] : l['name']}?', style: serif(20)),
-                            content: Text('Only you stop hearing them, on this phone.', style: serif(14, color: boneFaint, italic: true)),
+                            content: Text('Only you stop hearing them, on this $thisDevice.', style: serif(14, color: boneFaint, italic: true)),
                             actions: [TextButton(onPressed: () => Navigator.pop(c, true), child: Text('MUTE', style: carved(11)))],
                           ),
                         );
@@ -1973,7 +2000,7 @@ class _FlockSheetState extends State<FlockSheet> {
           ],
           const SizedBox(height: 18),
           Text('THIS PHONE\'S SPEAKER', style: carved(11, color: boneFaint)),
-          note('If this phone sounds ahead of the others or behind them, as a Bluetooth speaker does, move it until they match.'),
+          note('If this $thisDevice sounds ahead of the others or behind them, as a Bluetooth speaker does, move it until they match.'),
           Slider(
             value: trim.clamp(-500, 500),
             min: -500, max: 500, divisions: 100, activeColor: bone, inactiveColor: boneGhost,

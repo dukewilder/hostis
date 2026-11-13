@@ -7,11 +7,13 @@ import 'dart:math' as math;
 import 'shell.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'art.dart';
 import 'desk.dart';
+import 'glass.dart';
 import 'more.dart';
 import 'native.dart';
 import 'station.dart';
@@ -199,6 +201,9 @@ class Tuner extends ChangeNotifier {
   Timer? _poll;
   Timer? _scan;
   int _ticks = 0;
+  final int _born = DateTime.now().millisecondsSinceEpoch;
+  /// Stations opened by a link this session: in reach whether or not they are listed.
+  final Set<String> linked = {};
   final pages = PageController();
 
   /// What has played this session, newest last. Memory only; gone when the app closes.
@@ -233,6 +238,7 @@ class Tuner extends ChangeNotifier {
           'live': r.nextInt(30) == 0,
           'port': ports[r.nextInt(ports.length)],
           'kinds': [stationKindsForPreview[r.nextInt(stationKindsForPreview.length)]],
+          'listed': true,
         }
     ];
   }();
@@ -249,6 +255,8 @@ class Tuner extends ChangeNotifier {
     _poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _refresh());
     // Ballast fills only on Wi-Fi while charging, so the fleet never costs the owner.
     _ballast = Timer.periodic(const Duration(seconds: 60), (_) => _checkBallast());
+    // A computer carries a modest share for the fleet, 2 GB, unless its owner offers more.
+    if (isComputer) Native.call({'cmd': 'ballast_size', 'gb': carryGb()});
     // A drawer Lantern picks up where it was left.
     final gb = (pref('lantern_gb') as num?)?.toInt() ?? 4;
     if (pref('lantern') == true) {
@@ -403,6 +411,7 @@ class Tuner extends ChangeNotifier {
         // Anything from outside waits for a yes: a station is not played, a pocket or
         // a flock is not joined, until the owner says so on the dial.
         invite = id;
+        if (!id.contains('=')) linked.add(id);
         if (!id.contains('=')) face(id);
         notifyListeners();
       }).catchError((_) {});
@@ -427,7 +436,12 @@ class Tuner extends ChangeNotifier {
         // something, unless it is kept, this phone's own, tuned, or the owner asks to see them.
         final mineId = mine?['id'];
         final showEmpty = pref('show_empty') == true;
-        final listed = [for (final s in [...fresh, ...keep, ..._preview]) if (showEmpty || !emptyStation(s) || s['kept'] == true || s['id'] == mineId || s['id'] == tuned) s];
+        // Only stations that have done the work to be listed, signed lately and with something
+        // to play, are listed, dialled and spun: one raised in a second and left is reached by its
+        // link alone. HOSTIS's own, kept ones, this device's own, pockets, the one playing and
+        // any opened by a link stay in reach regardless.
+        bool reach(Map s) => s['listed'] != false || harbour.contains(s['id']) || s['kept'] == true || s['id'] == mineId || s['pocket'] == true || s['id'] == tuned || linked.contains(s['id']);
+        final listed = [for (final s in [...fresh, ...keep, ..._preview]) if ((showEmpty || !emptyStation(s) || s['kept'] == true || s['id'] == mineId || s['id'] == tuned) && reach(s)) s];
         markTwins(listed);
         resolveFreqs(listed);
         stations = listed;
@@ -456,21 +470,15 @@ class Tuner extends ChangeNotifier {
         }
       }
     }
-    // First open plays sound: the station with the most aboard.
-    // A first open lands on the busiest station that has earned it: a week on the air and
-    // three independent carriers. A bought count alone cannot win a stranger's first minute.
-    if (!firstTuneDone && stations.any((s) => s['placeholder'] != true)) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final earned = stations.where((s) =>
-          s['kept'] == true ||
-          ((s['carriers'] as num? ?? 0) >= 3 && now - ((s['since'] as num?)?.toInt() ?? now) > 7 * 86400000)).toList();
-      final home = stations.where((s) => harbour.contains(s['id'])).toList();
-      final pick = earned.isNotEmpty ? earned.first : (home.isNotEmpty ? home.first : null);
-      if (pick != null || _ticks > 20) {
-        firstTuneDone = true;
-        pref('first_tune', true);
-        tune((pick ?? stations.first)['id'] as String);
-      }
+    // A first open plays sound at once: the first kept station, else HOSTIS's own the moment
+    // its card is in, else, after about three seconds, the first listed station.
+    if (!firstTuneDone) {
+      final real = stations.where((s) => s['placeholder'] != true);
+      final kept = real.where((s) => s['kept'] == true);
+      final home = real.where((s) => harbour.contains(s['id']));
+      final waited = DateTime.now().millisecondsSinceEpoch - _born >= 3000;
+      final pick = kept.isNotEmpty ? kept.first : home.isNotEmpty ? home.first : waited && real.isNotEmpty ? real.first : null;
+      if (pick != null) tune(pick['id'] as String);
     }
     // A window resized, or a phone turned, can leave the dial between two stations: it settles
     // back on the one tuned, or the nearest.
@@ -495,7 +503,10 @@ class Tuner extends ChangeNotifier {
         if (r is Map && r['station'] is String) pendingLink = r['station'] as String;
       });
     } else {
-      pendingLink = id;
+      // Tuned at once: the radio looks for the station, by its link, for as long as it stays
+      // tuned, and a new one turns up a minute or two after it is raised.
+      linked.add(id);
+      tune(id);
     }
     notifyListeners();
   }
@@ -603,6 +614,21 @@ class Tuner extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Keys, the wheel and the dial glass hand the radio's focus back here on the radio's tab.
+  final dialFocus = FocusNode(debugLabel: 'dial');
+  int _stepAt = 0;
+
+  /// The next station or the one before, as a swipe turns to it: arrow keys, Page Up and Page
+  /// Down, and the wheel. A wheel or trackpad sends a burst; a quarter second takes one step.
+  void step(int d, {bool wheel = false}) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (wheel && now - _stepAt < 250) return;
+    _stepAt = now;
+    if (!pages.hasClients || stations.length < 2) return;
+    final next = (((pages.page ?? 0).round() + d) % stations.length + stations.length) % stations.length;
+    pages.animateToPage(next, duration: const Duration(milliseconds: 260), curve: Curves.easeOut);
+  }
+
   @override
   void dispose() {
     _poll?.cancel();
@@ -628,6 +654,7 @@ class _PyrateAppState extends State<PyrateApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Pyrate Radio',
+      scaffoldMessengerKey: messenger,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -699,7 +726,10 @@ class _PyrateAppState extends State<PyrateApp> {
                         label: label,
                         excludeSemantics: true,
                         child: InkWell(
-                          onTap: () => setState(() => tab = i),
+                          onTap: () {
+                            setState(() => tab = i);
+                            if (i == 0) radio.dialFocus.requestFocus();
+                          },
                           child: Container(
                             // The tab in hand is marked as the site marks one: a red rule along its edge.
                             decoration: BoxDecoration(border: Border(top: BorderSide(color: tab == i ? red : Colors.transparent, width: 2))),
@@ -930,26 +960,61 @@ class Dial extends StatelessWidget {
                   ],
                 ]),
               )
-            : GestureDetector(
-                onLongPress: radio.startScan,
-                onTap: radio.scanning ? radio.stopScan : null,
-                child: PageView.builder(
-                  controller: radio.pages,
-                  itemCount: stations.length,
-                  onPageChanged: (i) {
-                    if (radio.quiet || i >= stations.length) return;
-                    final id = stations[i]['id'] as String;
-                    if (id != radio.tuned) radio.tune(id);
+            // A computer turns the dial as a phone does, with the mouse dragged, and also with
+            // the wheel, the arrow keys and Page Up and Page Down.
+            : Focus(
+                focusNode: radio.dialFocus,
+                autofocus: true,
+                onKeyEvent: (_, e) {
+                  if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
+                  final k = e.logicalKey;
+                  final d = k == LogicalKeyboardKey.arrowRight || k == LogicalKeyboardKey.arrowDown || k == LogicalKeyboardKey.pageDown
+                      ? 1
+                      : k == LogicalKeyboardKey.arrowLeft || k == LogicalKeyboardKey.arrowUp || k == LogicalKeyboardKey.pageUp
+                          ? -1
+                          : 0;
+                  if (d == 0) return KeyEventResult.ignored;
+                  radio.step(d);
+                  return KeyEventResult.handled;
+                },
+                child: Listener(
+                  onPointerSignal: (e) {
+                    if (e is PointerScrollEvent) {
+                      final v = e.scrollDelta.dy.abs() >= e.scrollDelta.dx.abs() ? e.scrollDelta.dy : e.scrollDelta.dx;
+                      if (v != 0) radio.step(v > 0 ? 1 : -1, wheel: true);
+                    }
                   },
-                  itemBuilder: (context, i) => _StationFace(radio: radio, s: stations[i]),
+                  child: GestureDetector(
+                    onLongPress: radio.startScan,
+                    onTap: radio.scanning ? radio.stopScan : null,
+                    child: ScrollConfiguration(
+                      behavior: ScrollConfiguration.of(context).copyWith(dragDevices: PointerDeviceKind.values.toSet()),
+                      child: PageView.builder(
+                        controller: radio.pages,
+                        itemCount: stations.length,
+                        onPageChanged: (i) {
+                          if (radio.quiet || i >= stations.length) return;
+                          final id = stations[i]['id'] as String;
+                          if (id != radio.tuned) radio.tune(id);
+                        },
+                        itemBuilder: (context, i) => _StationFace(radio: radio, s: stations[i]),
+                      ),
+                    ),
+                  ),
                 ),
               ),
       ),
+      if (stations.isNotEmpty) DialGlass(radio: radio),
+      const SizedBox(height: 12),
       const HostisDivider(width: 240),
       Padding(
-        padding: const EdgeInsets.only(bottom: 16, top: 14),
+        padding: const EdgeInsets.only(bottom: 12, top: 12),
         child: radio.scanning
-            ? Padding(padding: const EdgeInsets.symmetric(vertical: 15), child: Text('SCANNING · TAP TO HOLD', style: caps(12, color: bone)))
+            ? TextButton(
+                onPressed: radio.stopScan,
+                style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+                child: Text('SCANNING · TAP TO HOLD', style: caps(12, color: bone)),
+              )
             : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 // Listen plays the station in view; while the radio waits for sound the button
                 // says Stop, and stops it.
@@ -961,7 +1026,7 @@ class Dial extends StatelessWidget {
                 ),
               ]),
       ),
-      Text('swipe for the next station · hold to scan', style: serif(13, color: boneFaint, italic: true)),
+      Text(isComputer ? 'drag, scroll or press the arrow keys · hold to scan' : 'swipe for the next station · hold to scan', style: serif(13, color: boneFaint, italic: true)),
       const SizedBox(height: 10),
     ]);
   }
@@ -1000,6 +1065,15 @@ class _StationMore extends StatelessWidget {
         row('PLAY ON SEVERAL PHONES', null, () => pyrateSheet(context, const FlockSheet())),
         row('SLEEP TIMER', radio.sleepAt == null ? null : 'Until ${clockTime(radio.sleepAt!.millisecondsSinceEpoch)}', () => sleepSheet(context, radio)),
         row('RECENTLY PLAYED', null, () => historySheet(context, radio)),
+        row(s['kept'] == true ? 'STOP KEEPING' : 'KEEP', 'Kept stations sit at the top and are saved ahead.', () {
+          Native.callAway({'cmd': 'keep', 'station': s['id'], 'value': s['kept'] != true});
+          s['kept'] = s['kept'] != true;
+        }),
+        if (!harbour.contains(s['id']) && s['id'] != radio.mine?['id'])
+          row('HIDE THIS STATION', 'Gone from your Log and dial. Bring it back in Settings.', () {
+            Native.callAway({'cmd': 'maroon', 'station': s['id'], 'value': true});
+            if (radio.tuned == s['id']) radio.stop();
+          }),
       ]),
     );
   }
@@ -1012,7 +1086,7 @@ class _StationFace extends StatelessWidget {
 
   /// What the radio is doing with the station, said one way: how far tuning in has got, with a
   /// moving line, until the sound starts; then the title. A title never shows before its sound.
-  Widget _readout(bool isTuned, String? state, Map<String, dynamic>? now, String title, String by, int pos, int dur, Color accent) {
+  Widget _readout(bool isTuned, String? state, Map<String, dynamic>? now, String title, String by, int pos, int dur, Color accent, {bool byLink = false}) {
     if (!isTuned) return const SizedBox();
     final (String? line, bool busy) = switch (state) {
       'playing' || 'live' => (null, false),
@@ -1020,10 +1094,18 @@ class _StationFace extends StatelessWidget {
       'off air' => (offAirLabel((now?['back_at'] as num?)?.toInt()), false),
       'stalled' => ('Signal lost. Tuning in again', true),
       'tuning' => ('Tuning in', true),
-      _ => ('Finding the station', true),
+      _ => (byLink ? 'Looking for this station. A new one takes a minute or two to reach the network.' : 'Finding the station', true),
     };
     if (line != null) {
       final waited = radio.busySince == 0 ? 0 : DateTime.now().millisecondsSinceEpoch - radio.busySince;
+      // A station opened by its link may be minutes old: its own line stands for three minutes.
+      if (byLink && waited < 180000 && state != 'tuning' && state != 'stalled') {
+        return Column(children: [
+          Text(line, textAlign: TextAlign.center, style: serif(18, color: boneDim, italic: true)),
+          const SizedBox(height: 12),
+          const SizedBox(width: 160, child: LinearProgressIndicator(minHeight: 1, color: red, backgroundColor: boneGhost)),
+        ]);
+      }
       return Column(children: [
         Text(line, textAlign: TextAlign.center, style: serif(18, color: boneDim, italic: true)),
         if (busy) ...[
@@ -1074,16 +1156,20 @@ class _StationFace extends StatelessWidget {
             child: StationArt(station: id, hash: s['banner'], width: double.infinity, height: 220, fallback: const SizedBox()),
           ),
         ),
-      Positioned.fill(child: Padding(
+      // A short window or a small phone draws the picture smaller, and the face shrinks to fit
+      // whole rather than run off its foot.
+      Positioned.fill(child: LayoutBuilder(builder: (context, box) {
+      final art = (box.maxHeight - 400).clamp(110.0, 220.0);
+      return Center(child: FittedBox(fit: BoxFit.scaleDown, child: SizedBox(width: box.maxWidth, child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 28),
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
         pic == null
-            ? Flag(id: id, width: 200, live: live)
+            ? Flag(id: id, width: art * 0.9, live: live)
             : Container(
                 decoration: BoxDecoration(border: Border.all(color: accent == bone ? line : accent.withValues(alpha: 0.45), width: 1), boxShadow: const [BoxShadow(color: Color(0xB3000000), blurRadius: 40, offset: Offset(0, 18))]),
-                child: StationArt(station: id, hash: pic, width: 220, height: 220, fallback: Flag(id: id, width: 180, live: live)),
+                child: StationArt(station: id, hash: pic, width: art, height: art, fallback: Flag(id: id, width: art * 0.82, live: live)),
               ),
-        const SizedBox(height: 26),
+        SizedBox(height: art < 160 ? 14 : 26),
         if (live)
           Container(
             margin: const EdgeInsets.only(bottom: 12),
@@ -1098,7 +1184,7 @@ class _StationFace extends StatelessWidget {
         GestureDetector(
           onTap: () => openPage(context, s, radio),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Flexible(child: Text(s['name'] ?? '', textAlign: TextAlign.center, style: pica(32, spacing: 0.03))),
+            Flexible(child: Text((s['name'] ?? '').toString().isEmpty && s['placeholder'] == true ? 'By its link' : s['name'] ?? '', textAlign: TextAlign.center, style: pica(32, spacing: 0.03))),
             ...seals(s, size: 10),
           ]),
         ),
@@ -1138,10 +1224,11 @@ class _StationFace extends StatelessWidget {
           Text(s['about'], textAlign: TextAlign.center, maxLines: 3, overflow: TextOverflow.ellipsis,
               style: serif(16, color: boneFaint, italic: true)),
         const SizedBox(height: 22),
-        SizedBox(height: 118, child: _readout(isTuned, state, now, title, by, pos, dur, accent)),
+        SizedBox(height: 118, child: _readout(isTuned, state, now, title, by, pos, dur, accent, byLink: s['placeholder'] == true && radio.linked.contains(id))),
         if (s['placeholder'] != true) Text('${s['aboard'] ?? 0} LISTENING', style: caps(11, color: boneFaint, spacing: 0.2)),
       ]),
-      )),
+      ))));
+      })),
     ]);
   }
 }
@@ -1197,6 +1284,122 @@ class _ColoursPageState extends State<ColoursPage> {
         child: Text(label, style: caps(11, color: onTap == null ? boneGhost : color, spacing: 0.15)),
       );
 
+  DateTime? restoring;
+  String? restoreMsg;
+  /// The station just raised here, until its keeper has seen it on the air and moved on.
+  String? justRaised;
+  /// Keep it off the dial, as just asked, until the status says so too.
+  bool? linkOnlyWant;
+
+  String _when(int ms) {
+    final d = DateTime.fromMillisecondsSinceEpoch(ms), n = DateTime.now();
+    final days = DateTime(d.year, d.month, d.day).difference(DateTime(n.year, n.month, n.day)).inDays;
+    const names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    return days <= 0 ? 'today at ${clockTime(ms)}' : days == 1 ? 'tomorrow at ${clockTime(ms)}' : 'on ${names[d.weekday - 1]} at ${clockTime(ms)}';
+  }
+
+  Future<void> _linkOnly(String id, bool v) async {
+    setState(() => linkOnlyWant = v);
+    // Setting the details writes its kinds and its mature mark again, so they go back as they are.
+    final d = await Native.callAway({'cmd': 'details', 'station': id});
+    await Native.callAway({'cmd': 'details_set', 'station': id, 'kinds': d is Map ? d['kinds'] ?? [] : [], 'mature': d is Map && d['mature'] == true, 'link_only': v});
+  }
+
+  /// Where the station stands with the world: on the network yet or still reaching it, its
+  /// link and its place on the dial, and when it joins the dial for strangers. Just raised, it
+  /// says so plainly and offers the two things to do next.
+  Widget _reach(String id, Map<String, dynamic> mine) {
+    final pocket = widget.radio.stations.any((x) => x['id'] == id && x['pocket'] == true);
+    final carriers = (mine['carriers'] as num?)?.toInt() ?? 0;
+    final tracks = (mine['tracks'] as num?)?.toInt() ?? 0;
+    final fresh = justRaised == id;
+    if (linkOnlyWant != null && (mine['link_only'] == true) == linkOnlyWant) linkOnlyWant = null;
+    final linkOnly = linkOnlyWant ?? mine['link_only'] == true;
+    final dialAt = (mine['dial_at'] as num?)?.toInt();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final String? dial = pocket
+        ? null
+        : linkOnly
+            ? 'Off the dial. Heard by its link and by those who keep it.'
+            : dialAt != null && dialAt > now
+                ? 'Plays by its link now, and joins the dial ${_when(dialAt)}.'
+                : mine['listable'] == false
+                    ? 'Plays by its link. This $thisDevice is still finishing the work that puts it on the dial. Keep the app open.'
+                    : tracks == 0
+                        ? 'Plays by its link. It joins the dial once it has something to play.'
+                        : null;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+      decoration: BoxDecoration(border: Border.all(color: fresh ? red : line, width: 1)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (fresh) ...[
+          Row(children: [
+            Container(width: 7, height: 7, decoration: const BoxDecoration(color: bloodBright, shape: BoxShape.circle)),
+            const SizedBox(width: 10),
+            Text('ON THE AIR', style: carved(13, color: bloodBright, spacing: 0.3)),
+          ]),
+          const SizedBox(height: 6),
+          Text('${(mine['name'] ?? 'Your station').toString()} is live now. Anyone with its link can listen.', style: serif(17)),
+          const SizedBox(height: 8),
+        ],
+        // Another radio carries it about a minute after it is raised: the stem waits on purpose,
+        // so nobody watching can tell the station began here.
+        Row(children: [
+          if (carriers > 0)
+            const Icon(Icons.check, size: 14, color: boneDim)
+          else
+            const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 1, color: boneFaint)),
+          const SizedBox(width: 9),
+          Text(carriers > 0 ? 'On the network' : 'Reaching the network, about a minute', style: serif(14, color: carriers > 0 ? boneDim : boneFaint, italic: true)),
+        ]),
+        const SizedBox(height: 8),
+        Text('${freqLabel(id)} on the dial  ${(mine['call_sign'] ?? '').toString()}', style: mono(12, color: boneDim)),
+        if (!pocket) Padding(padding: const EdgeInsets.only(top: 4), child: SelectableText(stationLink(id), style: mono(11, color: boneFaint))),
+        if (dial != null) Padding(padding: const EdgeInsets.only(top: 8), child: note(dial)),
+        const SizedBox(height: 10),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          if (pocket)
+            button('INVITE LISTENERS', () => pyrateSheet(context, InviteSheet(station: id)))
+          else
+            button(isComputer ? 'COPY THE LINK' : 'SHARE THE LINK', () => shareStation({...mine, 'pocket': false})),
+          if (fresh && tracks == 0) button('ADD YOUR FIRST RECORDING', () => add(id)),
+          if (fresh) button('DONE', () => setState(() => justRaised = null), color: boneFaint),
+        ]),
+        if (!pocket) setting('Keep it off the dial', linkOnly, (v) => _linkOnly(id, v), sub: 'Heard only by its link and by those who keep it.'),
+      ]),
+    );
+  }
+
+  /// Brings a station back from its words. The node asks the network for the station's log,
+  /// which can take a minute or more; the wait is shown, and so is how it ends. The words stay
+  /// in the field until they have worked, so a second try needs no retyping.
+  Future<void> bringBack() async {
+    final phrase = restoreWords.text, pp = restorePass.text;
+    if (phrase.trim().isEmpty) return;
+    setState(() {
+      restoring = DateTime.now();
+      restoreMsg = null;
+    });
+    final tick = Timer.periodic(const Duration(seconds: 1), (_) => mounted ? setState(() {}) : null);
+    final r = await Native.callAway({'cmd': 'restore', 'phrase': phrase, 'passphrase': pp});
+    tick.cancel();
+    if (!mounted) return;
+    final err = r is Map ? r['error']?.toString() : 'no answer';
+    setState(() {
+      restoring = null;
+      if (err == null) {
+        restoreWords.clear();
+        restorePass.clear();
+        // The form gives way to the station's own page at once, so this is said at the foot.
+        toast(context, 'Your station is on this $thisDevice, and the old one is locked out.');
+      } else if (err.contains('could not be found')) {
+        restoreMsg = 'Not found on the network yet. It may not have reached any other radio. Keep the app open and try again shortly.';
+      } else {
+        restoreMsg = 'Those words did not open a station. Check each word and the passphrase, if you set one.';
+      }
+    });
+  }
+
   Future<void> raise() async {
     setState(() {
       raising = true;
@@ -1205,6 +1408,7 @@ class _ColoursPageState extends State<ColoursPage> {
     final withPass = pass.text.isNotEmpty;
     final r = await Native.callAway({'cmd': 'raise', 'name': name.text, 'about': about.text, 'pocket': pocket, 'passphrase': pass.text});
     pass.clear();
+    if (mounted) setState(() {});
     // The words first: they are shown once, so nothing that can fail comes before them, and
     // neither the back gesture nor a stray tap closes them before the keeper says so.
     if (r is Map && r['words'] is String && mounted) {
@@ -1223,13 +1427,34 @@ class _ColoursPageState extends State<ColoursPage> {
               title: Text('Write these down', style: serif(24)),
               content: SingleChildScrollView(
                 child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('These 24 words are your station. If this phone is lost or taken, they bring the station back on any phone and lock this one out. They are shown once and saved nowhere, so write them on paper. Nobody from Pyrate Radio or HOSTIS will ever ask for them.',
+                  Text('These 24 words are your station. If this $thisDevice is lost or taken, they bring the station back on any phone or computer and lock this one out. They are shown once and saved nowhere, so write them on paper. Nobody from Pyrate Radio or HOSTIS will ever ask for them.',
                       style: serif(15, color: boneFaint, italic: true)),
                   const SizedBox(height: 14),
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(color: black, border: Border.all(color: boneGhost, width: 0.5)),
-                    child: SelectableText(r['words'], style: mono(13, color: bone)),
+                    // Numbered, as they must be written and read back: in order, one to twenty-four.
+                    child: SelectionArea(
+                      child: LayoutBuilder(builder: (c, box) {
+                        final words = (r['words'] as String).split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+                        final cols = box.maxWidth >= 360 ? 4 : 3;
+                        final rows = (words.length / cols).ceil();
+                        return Wrap(runSpacing: 6, children: [
+                          // Down each column, as the browser sets them out.
+                          for (var row = 0; row < rows; row++)
+                            for (var col = 0; col < cols; col++)
+                              if (col * rows + row < words.length)
+                                SizedBox(
+                                  width: box.maxWidth / cols,
+                                  child: Row(children: [
+                                    SizedBox(width: 22, child: Text('${col * rows + row + 1}', textAlign: TextAlign.right, style: mono(10, color: boneFaint))),
+                                    const SizedBox(width: 7),
+                                    Flexible(child: Text(words[col * rows + row], style: mono(13, color: bone))),
+                                  ]),
+                                ),
+                        ]);
+                      }),
+                    ),
                   ),
                   if (withPass) Padding(
                     padding: const EdgeInsets.only(top: 10),
@@ -1252,6 +1477,7 @@ class _ColoursPageState extends State<ColoursPage> {
       await secure(false);
     }
     String? shaped;
+    if (r is Map && r['id'] is String) justRaised = r['id'] as String;
     if (r is Map && r['id'] is String) {
       try {
         await shape.apply(r['id']);
@@ -1294,7 +1520,7 @@ class _ColoursPageState extends State<ColoursPage> {
         shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
         title: Text(kind == 'banner' ? 'BANNER FROM A LINK' : 'COVER FROM A LINK', style: carved(13)),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Your phone fetches the picture once and redraws it. The site you link sees this phone\'s address; listeners never touch it.',
+          Text('Your $thisDevice fetches the picture once and redraws it. The site you link sees this $thisDevice\'s address; listeners never touch it.',
               style: serif(13, color: boneFaint, italic: true)),
           TextField(enableIMEPersonalizedLearning: false, controller: link, autofocus: true, style: mono(12, color: bone), decoration: field('https://')),
         ]),
@@ -1377,7 +1603,9 @@ class _ColoursPageState extends State<ColoursPage> {
   Widget build(BuildContext context) {
     final mine = widget.radio.mine;
     return ListView(padding: const EdgeInsets.fromLTRB(24, 26, 24, 40), children: [
-      if (mine == null) ...[
+      // The form stays, with its progress, until the words have been shown: the new station
+      // turns up in the node a moment before them.
+      if (mine == null || raising) ...[
         masthead('Start a station'),
         const SizedBox(height: 10),
         note('Give it a name, add some recordings, and it plays day and night. Nobody can take it down.'),
@@ -1395,30 +1623,40 @@ class _ColoursPageState extends State<ColoursPage> {
               enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
         ]),
         const SizedBox(height: 14),
-        Row(children: [LeadButton(label: raising ? 'Starting' : 'Raise colours', onPressed: raising ? null : raise)]),
+        Row(children: [LeadButton(label: raising ? 'Raising' : 'Raise colours', onPressed: raising ? null : raise)]),
+        // Raising takes a few seconds: a key is made, and the work done that lets a station
+        // on the air at all. It is said, so nobody wonders whether the press took.
+        if (raising) ...[
+          const SizedBox(height: 12),
+          const SizedBox(width: 200, child: LinearProgressIndicator(minHeight: 1, color: red, backgroundColor: boneGhost)),
+          const SizedBox(height: 8),
+          note(pass.text.isNotEmpty
+              ? 'Locking the words with your passphrase, then doing the work that lets a station on the air. A few seconds.'
+              : 'Making the station\'s key and doing the work that lets it on the air. A few seconds.'),
+        ],
         const SizedBox(height: 8),
         note('You can change all of this later.'),
         if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: serif(14, color: bone, italic: true))),
         const SizedBox(height: 30),
-        fold('Bring back a station', sub: 'Have your 24 words? Move your station to this phone.', [
-          note('This also locks out the old phone, if it was lost or taken.'),
+        fold('Bring back a station', sub: 'Have your 24 words? Move your station to this $thisDevice.', [
+          note('This also locks out the old phone or computer, if it was lost or taken.'),
           TextField(controller: restoreWords, style: mono(12, color: bone), maxLines: 3, decoration: field('The 24 words'),
               enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, keyboardType: TextInputType.visiblePassword),
           TextField(controller: restorePass, obscureText: true, style: mono(12, color: bone), decoration: field('Passphrase, if you set one'),
               enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
           const SizedBox(height: 12),
           Row(children: [
-            button('BRING IT BACK', () async {
-              final phrase = restoreWords.text, pp = restorePass.text;
-              restoreWords.clear();
-              restorePass.clear();
-              final r = await Native.callAway({'cmd': 'restore', 'phrase': phrase, 'passphrase': pp});
-              if (!context.mounted) return;
-              toast(context, r is Map && r['error'] != null ? 'That did not work: ${r['error']}' : 'Your station is on this phone, and the old phone is locked out.');
-            }),
+            button(restoring != null ? 'LOOKING' : 'BRING IT BACK', restoring != null ? null : () => bringBack()),
           ]),
+          if (restoring != null) ...[
+            const SizedBox(height: 12),
+            const SizedBox(width: 200, child: LinearProgressIndicator(minHeight: 1, color: red, backgroundColor: boneGhost)),
+            const SizedBox(height: 8),
+            note('Looking for your station on the network. ${DateTime.now().difference(restoring!).inSeconds} s. It can take a minute or two.'),
+          ],
+          if (restoreMsg != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(restoreMsg!, style: serif(14, color: bone, italic: true))),
         ]),
-        fold('Co-host someone else\'s station', sub: 'Broadcast for a friend\'s station from this phone.', [const HandsPanel()]),
+        fold('Co-host someone else\'s station', sub: 'Broadcast for a friend\'s station from this $thisDevice.', [const HandsPanel()]),
       ] else
         ..._station(mine),
     ]);
@@ -1478,18 +1716,20 @@ class _ColoursPageState extends State<ColoursPage> {
             if (mine['waiting'] == true)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text('Waiting for another radio to pass your station on, so nobody can trace it to this phone. It goes out as soon as one does.',
+                child: Text('Waiting for another radio to pass your station on, so nobody can trace it to this $thisDevice. It goes out as soon as one does.',
                     style: serif(13, color: boneDim, italic: true)),
               ),
             if (mine['direct'] == true)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text('Few radios are online, so your station is going out straight from this phone. Listeners can see this phone\'s address until more radios join.',
+                child: Text('Few radios are online, so your station is going out straight from this $thisDevice. Listeners can see its address until more radios join.',
                     style: serif(13, color: boneDim, italic: true)),
               ),
           ]),
         ),
       ]),
+      const SizedBox(height: 18),
+      _reach(id, mine),
       AboardChart(station: id),
       const SizedBox(height: 30),
       heading('ADD RECORDINGS'),
@@ -1542,18 +1782,21 @@ class _ColoursPageState extends State<ColoursPage> {
       const SizedBox(height: 30),
       DetailsPanel(station: id),
       const SizedBox(height: 30),
-      fold('More', sub: 'Podcast feeds, co-hosts, numbers, ending the station', [
+      fold('More', sub: isComputer ? 'Podcast feeds, co-hosts, ending the station' : 'Podcast feeds, co-hosts, numbers, ending the station', [
         FeedsPanel(station: id),
         const SizedBox(height: 26),
         HandsPanel(station: id),
         const SizedBox(height: 26),
-        heading('A NUMBERS STATION'),
-        note('Five-figure groups read out by the phone, like the shortwave numbers stations. They play like any other recording.'),
-        const SizedBox(height: 10),
-        Row(children: [button('SET ONE UP', () => pyrateSheet(context, NumbersKit(station: id)))]),
+        // The figures are read by the phone's own voice, which a computer build does not have.
+        if (!isComputer) ...[
+          heading('A NUMBERS STATION'),
+          note('Five-figure groups read out by the phone, like the shortwave numbers stations. They play like any other recording.'),
+          const SizedBox(height: 10),
+          Row(children: [button('SET ONE UP', () => pyrateSheet(context, NumbersKit(station: id)))]),
+        ],
         const SizedBox(height: 26),
         heading('YOUR 24 WORDS'),
-        note('The 24 words you wrote down are the station itself. With them, any phone can take the station back from this one, or end it. This phone can broadcast but cannot end the station.'),
+        note('The 24 words you wrote down are the station itself. With them, any phone or computer can take the station back from this one, or end it. This $thisDevice can broadcast but cannot end the station.'),
         const SizedBox(height: 26),
         heading('END THE STATION'),
         note('Takes it off the air for good. You need your 24 words.'),

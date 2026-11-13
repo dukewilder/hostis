@@ -1,858 +1,135 @@
 {
- "utc_offset_min": 0,
- "zone_name": "UTC",
+ "zone_name": "America/Chicago",
+ "zone": [
+  [
+   1767225600000,
+   -360
+  ],
+  [
+   1772956800000,
+   -300
+  ],
+  [
+   1793516400000,
+   -360
+  ],
+  [
+   1805011200000,
+   -300
+  ],
+  [
+   1825570800000,
+   -360
+  ],
+  [
+   1836460800000,
+   -300
+  ],
+  [
+   1857020400000,
+   -360
+  ],
+  [
+   1867910400000,
+   -300
+  ],
+  [
+   1888470000000,
+   -360
+  ],
+  [
+   1899360000000,
+   -300
+  ],
+  [
+   1919919600000,
+   -360
+  ],
+  [
+   1930809600000,
+   -300
+  ],
+  [
+   1951369200000,
+   -360
+  ],
+  [
+   1962864000000,
+   -300
+  ],
+  [
+   1983423600000,
+   -360
+  ],
+  [
+   1994313600000,
+   -300
+  ],
+  [
+   2014873200000,
+   -360
+  ],
+  [
+   2025763200000,
+   -300
+  ],
+  [
+   2046322800000,
+   -360
+  ],
+  [
+   2057212800000,
+   -300
+  ],
+  [
+   2077772400000,
+   -360
+  ],
+  [
+   2088662400000,
+   -300
+  ],
+  [
+   2109222000000,
+   -360
+  ],
+  [
+   2120112000000,
+   -300
+  ],
+  [
+   2140671600000,
+   -360
+  ],
+  [
+   2152166400000,
+   -300
+  ],
+  [
+   2172726000000,
+   -360
+  ],
+  [
+   2183616000000,
+   -300
+  ],
+  [
+   2204175600000,
+   -360
+  ]
+ ],
  "mode": {
   "kind": "shuffle"
  },
  "hours": [],
  "slots": [
   {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 0,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 60,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 120,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 180,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 240,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 300,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 360,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 420,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 480,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 540,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 600,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 660,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 720,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 780,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 840,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 900,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 960,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 1020,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 1080,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 1140,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 1200,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
+   "title": "Poems Everyone Should Hear Once",
+   "about": "Twenty-four of them, nine to ten every night.",
    "span": {
     "days": 127,
     "start_min": 1260,
-    "len_min": 10
+    "len_min": 60
    },
    "fill": {
     "kind": "tracks",
@@ -863,93 +140,13 @@
      "The Road Not Taken",
      "Invictus",
      "Daffodils",
-     "Kublai Khan",
+     "Kubla Khan",
      "Annabel Lee",
      "Jabberwocky",
      "The Lake Isle of Innisfree",
      "Because I Could Not Stop For Death",
      "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 1320,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
-     "When You See Millions Of The Mouthless Dead",
-     "To His Coy Mistress",
-     "My Last Duchess",
-     "Batter my heart, three-person'd God",
-     "O Captain! My Captain!",
-     "Fog",
-     "War is Kind",
-     "When We Two Parted",
-     "As Kingfishers Catch Fire",
-     "A Poison Tree",
-     "The Walrus and the Carpenter"
-    ],
-    "shuffle": true
-   },
-   "live": false
-  },
-  {
-   "title": "The Hour's Poem",
-   "about": "A poem everyone should hear once, at the top of the hour.",
-   "span": {
-    "days": 127,
-    "start_min": 1380,
-    "len_min": 10
-   },
-   "fill": {
-    "kind": "tracks",
-    "tracks": [
-     "Ozymandias",
-     "The Tyger",
-     "Dover Beach",
-     "The Road Not Taken",
-     "Invictus",
-     "Daffodils",
-     "Kublai Khan",
-     "Annabel Lee",
-     "Jabberwocky",
-     "The Lake Isle of Innisfree",
-     "Because I Could Not Stop For Death",
-     "Fire and Ice",
-     "Dulce et Decorum",
+     "Dulce et Decorum Est",
      "When You See Millions Of The Mouthless Dead",
      "To His Coy Mistress",
      "My Last Duchess",
