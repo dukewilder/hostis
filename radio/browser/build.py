@@ -82,6 +82,25 @@ def build(scope, dist, open_players):
     h = head.replace('<meta charset="utf-8">\n', '<meta charset="utf-8">\n' + meta, 1).replace("{{SCOPE}}", scope)
     if scope == "open":
         h = h.replace("<title>Pyrate Radio · Listen · HOSTIS</title>", "<title>Pyrate Radio · The Open Player · HOSTIS</title>")
+    else:
+        # hostis.black's copy: its address, its card, and where it sits under HOSTIS. The open
+        # player claims no hostis.black address as its own, so its bytes (and its IPFS name) stay.
+        listen = "https://hostis.black/pyrateradio/listen/"
+        trail = json.dumps({"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
+            {"@type": "ListItem", "position": i + 1, "name": n, "item": u} for i, (n, u) in
+            enumerate([("HOSTIS", "https://hostis.black/"), ("Pyrate Radio", "https://hostis.black/pyrateradio/"), ("Listen", listen)])]})
+        for old, new in [
+            ('<meta property="og:description" content="Every station on the Log, played in the browser from whoever carries it.">\n',
+             '<meta property="og:description" content="The HOSTIS stations, played in the browser from whoever carries them.">\n'),
+            ('<meta property="og:image" content="https://hostis.black/og-image.png">\n',
+             '<meta property="og:image" content="https://hostis.black/og-image.png">\n<meta property="og:image:width" content="1200">\n<meta property="og:image:height" content="630">\n'
+             '<meta property="og:image:alt" content="The HOSTIS skull and crossbones over columns of ones and zeros">\n'),
+            ('<meta name="color-scheme" content="dark">\n',
+             '<meta name="color-scheme" content="dark">\n<meta name="robots" content="index, follow, max-image-preview:large">\n'
+             f'<link rel="canonical" href="{listen}">\n<meta property="og:type" content="website">\n<meta property="og:url" content="{listen}">\n'
+             f'<meta property="og:locale" content="en_GB">\n<script type="application/ld+json">{trail}</script>\n')]:
+            assert h.count(old) == 1, old
+            h = h.replace(old, new)
     open(f"{dist}/index.html", "w", encoding="utf-8").write(h + extra + "</style>\n" + embed + "</head>\n<body>\n" + body.replace("{{V}}", v) + "</body>\n</html>\n")
     open(f"{dist}/app.js", "w", encoding="utf-8").write(out_js.replace("./pkg/pyrate_browser.js", f"./pkg/pyrate_browser.js?v={v}"))
     # The wasm takes the build's version in its name and the glue is pointed at it, so a cached

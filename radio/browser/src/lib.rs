@@ -2411,7 +2411,7 @@ impl Radio {
             let carriers = log.get(id).map(|l| l.carriers.iter().filter(|(n, (_, seen))| **n != me && now.saturating_sub(*seen) < 10 * 60_000).count()).unwrap_or(0);
             json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": shown(&name), "entries": len, "tracks": tracks, "landed": landed, "carriers": carriers,
                     "unsent": m.unsent.len(), "chunks": m.chunks.len(), "pow": m.pow.is_some(), "listable": m.pow.is_some_and(|p| net::pow_bits(id, p) >= net::LIST_BITS),
-                    "link_only": a.is_some_and(|a| a.link_only()), "dial_at": a.and_then(|a| a.entries().first()).map(|e| e.entry.at_ms + net::LIST_AGE_MS) })
+                    "link_only": a.is_some_and(|a| a.link_only()), "dial_at": a.and_then(|a| a.entries().first()).map(|e| e.entry.at_ms + net::list_age_ms()) })
         }).collect();
         json!(v).to_string()
     }

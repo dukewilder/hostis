@@ -8,10 +8,15 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'native.dart';
+
+/// A computer rather than a phone: the words the app uses, and what it offers, follow.
+final bool isComputer = !Platform.isAndroid && !Platform.isIOS;
+final String thisDevice = isComputer ? 'computer' : 'phone';
 
 /// The command line a computer started the app with: a station link opened from a browser
 /// or a file manager arrives here.
@@ -43,6 +48,15 @@ Future<void> deskTidy(String dir) async {
   } catch (_) {}
 }
 
+/// The app's messenger, so the shell can say a word on any screen.
+final messenger = GlobalKey<ScaffoldMessengerState>();
+
+/// A short word at the foot of the screen, as the app's toasts are.
+void say(String text) => messenger.currentState?.showSnackBar(SnackBar(
+      duration: const Duration(seconds: 3),
+      content: Text(text, style: const TextStyle(fontFamily: 'Fell', fontSize: 14, color: Color(0xFFEDE4CE))),
+    ));
+
 class ShellChannel {
   const ShellChannel();
   static const _android = MethodChannel('pyrate/service');
@@ -57,10 +71,15 @@ class Desktop {
   static String? _link;
   static bool _linkTaken = false;
 
-  /// A copy that leaves the clipboard after a while, if nothing has replaced it, so a link
-  /// does not sit in clipboard history or a synced clipboard for days.
-  static Future<void> _copy(String text) async {
+  /// A computer has no share sheet, so what would be shared is copied, and the app says so.
+  /// A secret (the 24 words, an invitation's key) leaves the clipboard after a minute and a half
+  /// if nothing has replaced it, so it does not sit in a clipboard's history or a synced
+  /// clipboard for days. A plain link stays.
+  static Future<void> _copy(String text, {bool secret = false}) async {
     await Clipboard.setData(ClipboardData(text: text));
+    final link = text.contains('http') || text.contains('pyrate://');
+    say(secret ? 'Copied. It leaves the clipboard in 90 seconds.' : link ? 'Link copied.' : 'Copied.');
+    if (!secret) return;
     Timer(const Duration(seconds: 90), () async {
       final now = await Clipboard.getData('text/plain').catchError((_) => null);
       if (now?.text == text) await Clipboard.setData(const ClipboardData(text: ''));
@@ -102,7 +121,7 @@ class Desktop {
         // A computer has no share sheet: the text goes to the clipboard, ready to paste.
         return _copy(a['text']?.toString() ?? '');
       case 'copy_secret':
-        return _copy(a['text']?.toString() ?? '');
+        return _copy(a['text']?.toString() ?? '', secret: true);
       case 'signer':
         return null;
       case 'share_file':

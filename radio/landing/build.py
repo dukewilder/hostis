@@ -48,7 +48,25 @@ if os.path.isdir(D) and all(os.path.exists(f"{D}/{k[1]}") for k in kinds):
             '<p class="note">Version ' + appver + '. On a Mac, open it the first time with a right-click and Open. Computers take new versions from this page.</p>')
     desk_sums = "".join(sums)
 page = page.replace("{{DESKTOP}}", desk).replace("{{DESKTOP_SUMS}}", desk_sums)
-open(f"{out}/index.html", "w", encoding="utf-8").write(page)
+# Structured data for search engines: the app on the landing (free, no ratings claimed), and
+# where each page sits under HOSTIS. Kept out of `head` below, so the pages beside it carry
+# their own trail and not the app.
+def ld(*objs):
+    return "".join('<script type="application/ld+json">' + json.dumps(o, ensure_ascii=False).replace("</", "<\\/") + "</script>\n" for o in objs)
+def crumbs(*trail):
+    return {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
+        {"@type": "ListItem", "position": i + 1, "name": n, "item": u} for i, (n, u) in enumerate(trail)]}
+HOME, PR = ("HOSTIS", "https://hostis.black/"), ("Pyrate Radio", "https://hostis.black/pyrateradio/")
+app_ld = {"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Pyrate Radio", "url": PR[1],
+          "description": __import__("html").unescape(re.search(r'<meta name="description" content="([^"]*)">', page).group(1)),
+          "applicationCategory": "MultimediaApplication",
+          "operatingSystem": ", ".join(["Android"] + (["Windows", "macOS", "Linux"] if desk else []) + ["Web"]),
+          "inLanguage": "en-GB", "isAccessibleForFree": True,
+          "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+          "publisher": {"@type": "Organization", "name": "HOSTIS", "url": HOME[1]}}
+if apk:
+    app_ld.update(softwareVersion=version, fileSize=f"{size} MB", downloadUrl=f"https://hostis.black/pyrateradio/pyrate-radio-{version}.apk")
+open(f"{out}/index.html", "w", encoding="utf-8").write(page.replace("</head>", ld(app_ld, crumbs(HOME, PR)) + "</head>", 1))
 # The pages beside it: the same head and footer, a body of their own.
 head = page[:page.index("<body>")]
 flag = page[page.index('<nav class="flagbar"'):page.index("</nav>", page.index('<nav class="flagbar"')) + 6]
@@ -56,12 +74,14 @@ foot = page[page.index("<footer>"):page.index("</footer>") + 9]
 desc = re.search(r'<meta name="description" content="([^"]*)">', head).group(1)
 for slug, body, title, about in [
     ("handbook", "handbook.body.html", "The Keeper's Handbook", "What Pyrate Radio does to keep a station keeper unknown, what only the keeper can do, and how the network stands."),
-    ("how-it-works", "how.body.html", "Nobody Can Switch It Off · How Pyrate Radio Works", "No server, no account and nobody in charge: how Pyrate Radio carries every station, keeps listeners and keepers unseen, and what it would take to stop it."),
+    ("how-it-works", "how.body.html", "Nobody Can Switch It Off · How Pyrate Radio Works", "No server and nobody in charge. How Pyrate Radio carries every station, keeps listeners and keepers unseen, and what it would take to stop it."),
 ]:
     h = head.replace('"https://hostis.black/pyrateradio/"', f'"https://hostis.black/pyrateradio/{slug}/"')
     h = re.sub(r"<title>.*?</title>", f"<title>{title} · Pyrate Radio · HOSTIS</title>", h)
     h = h.replace(f'content="{desc}"', f'content="{about}"').replace('content="Pyrate Radio"', f'content="{title}"')
-    h = h.replace('href="favicon.png"', 'href="../favicon.png"').replace('href="apple-touch-icon.png"', 'href="../apple-touch-icon.png"')
+    # The site's own skull at the root: deploy_site.sh ships no copy beside these pages.
+    h = h.replace('href="favicon.png"', 'href="/favicon.png"').replace('href="apple-touch-icon.png"', 'href="/apple-touch-icon.png"')
+    h = h.replace("</head>", ld(crumbs(HOME, PR, (title.split(" · ")[-1], f"https://hostis.black/pyrateradio/{slug}/"))) + "</head>", 1)
     text = open(f"{R}/landing/{body}", encoding="utf-8").read().replace('href="./', 'href="../').replace('href="../"', 'href="../"').replace("{{OPEN_PLAYER}}", op["players"][0])
     os.makedirs(f"{out}/{slug}", exist_ok=True)
     open(f"{out}/{slug}/index.html", "w", encoding="utf-8").write(h + '<body>\n<a class="skip-link" href="#main">Skip to content</a>\n' + flag + "\n" + text + foot + "\n</body>\n</html>\n")

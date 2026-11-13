@@ -52,7 +52,19 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "Pyrate Radio");
   }
 
-  gtk_window_set_default_size(window, 460, 900);
+  // A radio's width, and no taller than the screen it opens on: 440 by 760, or less on a
+  // laptop whose work area is smaller.
+  gint width = 440, height = 760;
+  GdkDisplay* display = gdk_display_get_default();
+  GdkMonitor* monitor = display ? gdk_display_get_primary_monitor(display) : nullptr;
+  if (monitor == nullptr && display != nullptr) monitor = gdk_display_get_monitor(display, 0);
+  if (monitor != nullptr) {
+    GdkRectangle area;
+    gdk_monitor_get_workarea(monitor, &area);
+    if (area.height > 0) height = MIN(height, area.height - 60);
+    if (area.width > 0) width = MIN(width, area.width - 40);
+  }
+  gtk_window_set_default_size(window, width, MAX(height, 480));
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(

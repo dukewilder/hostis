@@ -101,20 +101,20 @@ STATIONS = {
         "title": "Netlabel", "cap": "free music, freely carried",
         "cover": lambda: f'<div style="position:absolute;top:110px;left:50%;transform:translateX(-50%)">{rings(760)}</div>'
                          f'<div style="position:absolute;bottom:150px;left:0;right:0;text-align:center"><div class="title" style="font-size:132px">Netlabel</div>'
-                         f'<div class="cap" style="font-size:22px;margin-top:26px">Creative Commons &middot; electronic &middot; ambient</div></div>',
+                         f'<div class="cap" style="font-size:22px;margin-top:26px">Pyrate Radio &middot; a HOSTIS station</div></div>',
         "banner": lambda: f'<div style="position:absolute;left:70px;top:-130px">{rings(760)}</div>'
                           f'<div style="position:absolute;right:110px;top:150px;text-align:right"><div class="title" style="font-size:104px">Netlabel</div>'
                           f'<div class="cap" style="font-size:18px;margin-top:22px">Free music, freely carried</div></div>',
     },
     "poets-corner": {
         "title": "Poets' Corner", "cap": "poems read aloud",
-        "cover": lambda: f'<div style="position:absolute;top:70px;left:0;right:0;text-align:center"><div class="skull" style="font-size:420px;color:var(--red);line-height:.8">❧</div></div>'
-                         f'<div style="position:absolute;top:560px;left:150px;right:150px;text-align:center;font-style:italic;font-size:54px;line-height:1.35;color:rgba(237,228,206,.86)">'
-                         f'&ldquo;Look on my Works, ye Mighty, and despair!&rdquo;</div>'
-                         f'<div style="position:absolute;top:770px;left:0;right:0;text-align:center" class="cap"><span style="font-size:20px">Shelley &middot; 1818</span></div>'
+        "cover": lambda: f'<div style="position:absolute;top:150px;left:0;right:0;text-align:center;font-size:400px;line-height:1;color:var(--red)">&ldquo;</div>'
+                         f'<div style="position:absolute;top:480px;left:150px;right:150px;text-align:center;font-style:italic;font-size:60px;line-height:1.3;color:rgba(237,228,206,.88)">'
+                         f'Look on my Works, ye Mighty, and despair!</div>'
+                         f'<div style="position:absolute;top:680px;left:0;right:0;text-align:center" class="cap"><span style="font-size:20px">Shelley &middot; Ozymandias &middot; 1818</span></div>'
                          f'<div style="position:absolute;bottom:150px;left:0;right:0;text-align:center"><div class="title" style="font-size:102px">Poets&rsquo; Corner</div>'
-                         f'<div class="cap" style="font-size:22px;margin-top:26px">Public domain poems, read aloud</div></div>',
-        "banner": lambda: f'<div style="position:absolute;left:110px;top:56px" class="skull"><span style="font-size:340px;color:var(--red);line-height:1">❧</span></div>'
+                         f'<div class="cap" style="font-size:22px;margin-top:26px">Pyrate Radio &middot; a HOSTIS station</div></div>',
+        "banner": lambda: f'<div style="position:absolute;left:130px;top:40px;font-size:360px;line-height:1;color:var(--red)">&ldquo;</div>'
                           f'<div style="position:absolute;right:110px;top:120px;text-align:right"><div class="title" style="font-size:84px">Poets&rsquo; Corner</div>'
                           f'<div style="font-style:italic;font-size:34px;margin-top:22px;color:rgba(237,228,206,.8)">Look on my Works, ye Mighty, and despair!</div></div>',
     },
@@ -128,6 +128,26 @@ STATIONS = {
                           f'<div style="position:absolute;right:110px;top:150px;text-align:right"><div class="title" style="font-size:74px">The Public Domain</div>'
                           f'<div class="cap" style="font-size:18px;margin-top:22px">Everything nobody owns</div></div>',
     },
+    "contraband": {
+        "title": "Contraband", "cap": "books they tried to stop",
+        "cover": lambda: f'<div style="position:absolute;top:170px;left:120px;right:120px;text-align:center;font-family:IM Fell DW Pica SC;color:rgba(237,228,206,.82)">'
+                         f'<div style="font-size:118px;letter-spacing:.04em;line-height:1">Areopagitica</div>'
+                         f'<div style="font-family:IM Fell English;font-style:italic;font-size:36px;margin:24px 0 10px">A Speech of Mr. John Milton</div>'
+                         f'<div style="font-size:34px">for the Liberty of</div><div style="font-size:86px;line-height:1.1">Unlicenc&rsquo;d Printing</div>'
+                         f'<div style="height:1px;background:rgba(237,228,206,.3);margin:30px 160px"></div>'
+                         f'<div style="font-family:JetBrains Mono;font-size:22px;letter-spacing:.3em;color:var(--dim)">LONDON &middot; MDCXLIV</div></div>'
+                         f'<div style="position:absolute;top:640px;left:0;right:0;text-align:center"><div style="display:inline-block;margin-left:330px;transform:rotate(-12deg);border:6px solid var(--red);outline:2px solid var(--red);outline-offset:7px;'
+                         f'padding:6px 30px;font-family:JetBrains Mono;font-weight:700;font-size:78px;letter-spacing:.22em;color:var(--red)">SEIZED</div></div>'
+                         f'<div style="position:absolute;bottom:150px;left:0;right:0;text-align:center"><div class="title" style="font-size:112px">Contraband</div>'
+                         f'<div class="cap" style="font-size:22px;margin-top:26px">Pyrate Radio &middot; a HOSTIS station</div></div>',
+        "banner": lambda: f'<div style="position:absolute;left:84px;top:118px;width:360px;font-family:IM Fell DW Pica SC;color:rgba(237,228,206,.82);text-align:center"><div style="font-size:50px;line-height:1">Areopagitica</div>'
+                          f'<div style="font-size:19px;margin:10px 0 4px">for the Liberty of</div><div style="font-size:35px">Unlicenc&rsquo;d Printing</div>'
+                          f'<div style="font-family:JetBrains Mono;font-size:14px;letter-spacing:.3em;margin-top:14px;color:var(--dim)">LONDON &middot; MDCXLIV</div></div>'
+                          f'<div style="position:absolute;left:250px;top:262px;transform:rotate(-12deg);border:4px solid var(--red);outline:2px solid var(--red);outline-offset:5px;padding:2px 18px;'
+                          f'font-family:JetBrains Mono;font-weight:700;font-size:34px;letter-spacing:.22em;color:var(--red)">SEIZED</div>'
+                          f'<div style="position:absolute;right:110px;top:156px;text-align:right"><div class="title" style="font-size:86px">Contraband</div>'
+                          f'<div class="cap" style="font-size:18px;margin-top:22px">Books they tried to stop</div></div>',
+    },
     "readings": {
         "title": "Readings", "cap": "the pyrates, read aloud",
         "cover": lambda: f'<div style="position:absolute;top:190px;left:150px;right:150px;text-align:center;font-family:IM Fell DW Pica SC;color:rgba(237,228,206,.82)">'
@@ -137,7 +157,7 @@ STATIONS = {
                          f'<div style="font-family:IM Fell English;font-style:italic;font-size:34px">By Captain Charles Johnson</div>'
                          f'<div style="font-family:JetBrains Mono;font-size:20px;letter-spacing:.3em;margin-top:18px;color:var(--dim)">LONDON &middot; MDCCXXIV</div></div>'
                          f'<div style="position:absolute;bottom:150px;left:0;right:0;text-align:center"><div class="title" style="font-size:124px">Readings</div>'
-                         f'<div class="cap" style="font-size:22px;margin-top:26px">Read aloud, round the clock</div></div>',
+                         f'<div class="cap" style="font-size:22px;margin-top:26px">Pyrate Radio &middot; a HOSTIS station</div></div>',
         "banner": lambda: f'<div style="position:absolute;left:120px;top:110px;font-family:IM Fell DW Pica SC;color:rgba(237,228,206,.82)"><div style="font-size:54px">A General History</div>'
                           f'<div style="font-size:30px;margin:6px 0">of the</div><div style="font-size:96px;line-height:1;color:var(--red)">Pyrates</div></div>'
                           f'<div style="position:absolute;right:110px;top:150px;text-align:right"><div class="title" style="font-size:104px">Readings</div>'

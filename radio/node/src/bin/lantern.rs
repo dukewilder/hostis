@@ -22,7 +22,7 @@ fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     // An unknown flag stops the Lantern before it starts: a mistyped or test flag must never
     // bring up a stray node on whatever network the shell happens to be on.
-    const VALUED: &[&str] = &["--dir", "--quota-gb", "--bootstrap", "--seed", "--http", "--open-hails", "--relay", "--release-keys", "--words", "--withdraw"];
+    const VALUED: &[&str] = &["--dir", "--quota-gb", "--bootstrap", "--seed", "--http", "--open-hails", "--relay", "--release-keys", "--words", "--withdraw", "--reseed"];
     const BARE: &[&str] = &["--carry-own", "--public-dns", "--scuttle", "--web-all"];
     let mut i = 1;
     while i < args.len() {
@@ -138,7 +138,11 @@ fn main() -> anyhow::Result<()> {
         println!("the 24 words of {n} stations are in {out}: copy them onto paper, then delete the file");
         return Ok(());
     }
-    seed_all(&node, &seeds)?;
+    // --reseed "Station name": for this start only, every recording in that station's folder
+    // is set again with the seed's profile (as when a station moves to mono), and the old ones
+    // are withdrawn once the new are on the clock, so the station never falls silent.
+    let reseed: Vec<String> = args.windows(2).filter(|w| w[0] == "--reseed").map(|w| w[1].clone()).collect();
+    seed_all(&node, &seeds, &reseed)?;
     // The seeded stations by name and id, once at start: what the harbour list needs.
     for name in seeds.iter().filter_map(|s| s.split('|').next()) {
         if let Some(id) = node.inner_store_find(name) {
@@ -154,7 +158,7 @@ fn main() -> anyhow::Result<()> {
         n += 1;
         // New files in a seed folder go on the clock within ten minutes.
         if n % 10 == 0 {
-            if let Err(e) = seed_all(&node, &seeds) {
+            if let Err(e) = seed_all(&node, &seeds, &[]) {
                 println!("seeding: {e}");
             }
         }
@@ -168,7 +172,7 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
-fn seed_all(node: &Node, seeds: &[String]) -> anyhow::Result<()> {
+fn seed_all(node: &Node, seeds: &[String], reseed: &[String]) -> anyhow::Result<()> {
     for seed in seeds {
         let parts: Vec<&str> = seed.split('|').collect();
         let (name, about, folder, kind, port) = match parts[..] {
@@ -224,14 +228,31 @@ fn seed_all(node: &Node, seeds: &[String]) -> anyhow::Result<()> {
             }
         }
         ring_the_bell(node, id, folder, profile);
-        let have: HashSet<String> = node.titles(&id).into_iter().collect();
+        let again = reseed.iter().any(|r| r.trim() == name.trim());
+        let old: Vec<(serde_json::Value, String)> = if again {
+            node.call(&serde_json::json!({ "cmd": "library", "station": id.to_hex() })).as_array().cloned().unwrap_or_default().into_iter().map(|t| (t["hash"].clone(), t["title"].as_str().unwrap_or("").to_string())).collect()
+        } else {
+            Vec::new()
+        };
+        if again {
+            println!("  reseeding {name}: {} recordings set again, then the old ones withdrawn", old.len());
+        }
+        let have: HashSet<String> = if again { HashSet::new() } else { node.titles(&id).into_iter().collect() };
         let mut added = false;
+        let mut set: HashSet<String> = HashSet::new();
         let mut files: Vec<PathBuf> = std::fs::read_dir(folder)?
             .filter_map(|f| f.ok().map(|f| f.path()))
             .filter(|p| p.extension().is_some_and(|e| ["mp3", "ogg", "flac", "wav", "m4a", "opus", "oga"].contains(&e.to_string_lossy().to_lowercase().as_str())))
             .filter(|p| p.file_stem().is_none_or(|s| s != "bell"))
             .collect();
         files.sort();
+        let in_folder: HashSet<String> = files
+            .iter()
+            .map(|f| {
+                let stem = f.file_stem().unwrap().to_string_lossy().to_string();
+                stem.split_once(" - ").map(|(_, t)| t.trim().to_string()).unwrap_or(stem)
+            })
+            .collect();
         for f in files {
             let stem = f.file_stem().unwrap().to_string_lossy().to_string();
             let (by, title) = match stem.split_once(" - ") {
@@ -246,12 +267,22 @@ fn seed_all(node: &Node, seeds: &[String]) -> anyhow::Result<()> {
                 Ok(_) => {
                     println!("  set {title}");
                     added = true;
+                    set.insert(title.clone());
                 }
                 Err(e) => println!("  could not set {title}: {e}"),
             }
         }
+        // The old recordings go only once the new ones are on the clock.
+        // The folder becomes the station: an old recording goes if it was set again, or if its
+        // file has left the folder. One whose file is there but could not be set stays.
+        if again && added {
+            let gone: Vec<_> = old.iter().filter(|(_, t)| set.contains(t) || !in_folder.contains(t)).collect();
+            for (h, _) in &gone {
+                node.call(&serde_json::json!({ "cmd": "withdraw", "station": id.to_hex(), "track": h }));
+            }
+            println!("  reseeded {name}: {} old recordings withdrawn, {} kept", gone.len(), old.len() - gone.len());
+        }
         // Recordings first, so the programme can name the ones just set.
-        let _ = added;
         keep_programme(node, id, folder);
         keep_notices(node, id, folder);
     }

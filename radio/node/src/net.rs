@@ -23,6 +23,21 @@ pub const LIST_KEEPER_MS: u64 = 30 * 86_400_000;
 /// its keeper chooses, it is heard by its link: a station made as a joke and left is gone from
 /// the list before anyone sees it there.
 pub const LIST_AGE_MS: u64 = 86_400_000;
+
+/// The day a station waits for the dial, shortened only for the private test network, where
+/// every station is hours old: PYRATE_LIST_AGE_MS in a node's environment, or in the
+/// environment the browser radio is built in. Released builds never set it.
+pub fn list_age_ms() -> u64 {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        static AGE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+        *AGE.get_or_init(|| std::env::var("PYRATE_LIST_AGE_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(LIST_AGE_MS))
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        option_env!("PYRATE_LIST_AGE_MS").and_then(|v| v.parse().ok()).unwrap_or(LIST_AGE_MS)
+    }
+}
 /// Work behind each listener token: a second or two on a phone, once an hour.
 pub const TOKEN_BITS: u32 = 20;
 
@@ -364,7 +379,7 @@ pub fn pow_ok(station: &StationId, nonce: u64) -> bool {
 pub fn listed(a: &Announce, now: u64) -> bool {
     pow_hash(&a.station, a.pow) >= LIST_BITS
         && now.saturating_sub(a.at_ms) < LIST_KEEPER_MS
-        && now.saturating_sub(a.since) >= LIST_AGE_MS
+        && now.saturating_sub(a.since) >= list_age_ms()
         && !a.link_only
         && (a.tracks.unwrap_or(1) > 0 || a.live)
 }

@@ -91,6 +91,9 @@ String dayLabel(int ms) {
   return days[d.weekday - 1];
 }
 
+/// How much of a computer's disk goes to carrying stations, in GB: 2 unless its owner says.
+int carryGb() => (pref('carry_gb') as num?)?.toInt() ?? 2;
+
 dynamic pref(String key, [dynamic value]) => Native.call({'cmd': 'pref', 'key': key, if (value != null) 'value': value});
 
 /// HOSTIS's own stations, built into the app. Only these show the skull seal.
@@ -268,10 +271,10 @@ class _LogPageState extends State<LogPage> {
       SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Padding(padding: const EdgeInsets.fromLTRB(24, 20, 24, 4), child: Row(children: [Flexible(child: Text(s['name'] ?? '', style: pica(21, spacing: 0.02))), ...seals(s)])),
-          Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 8), child: Text('${s['call_sign']}  ·  Nothing here leaves this phone.', style: serif(13, color: boneFaint, italic: true))),
+          Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 8), child: Text('${s['call_sign']}  ·  Nothing here leaves this $thisDevice.', style: serif(13, color: boneFaint, italic: true))),
           ListTile(
             title: Text(s['kept'] == true ? 'STOP KEEPING' : 'KEEP', style: carved(12)),
-            subtitle: Text('Kept stations sit at the top and are saved ahead on Wi-Fi.', style: serif(13, color: boneFaint, italic: true)),
+            subtitle: Text(isComputer ? 'Kept stations sit at the top and are saved ahead.' : 'Kept stations sit at the top and are saved ahead on Wi-Fi.', style: serif(13, color: boneFaint, italic: true)),
             onTap: () {
               Native.callAway({'cmd': 'keep', 'station': id, 'value': s['kept'] != true});
               Navigator.pop(context);
@@ -304,7 +307,7 @@ class _LogPageState extends State<LogPage> {
           if (s['pocket'] == true && id != widget.radio.mine?['id'])
             ListTile(
               title: Text('LEAVE THIS STATION', style: carved(12)),
-              subtitle: Text('It goes from this phone. Only a new invitation brings it back.', style: serif(13, color: boneFaint, italic: true)),
+              subtitle: Text('It goes from this $thisDevice. Only a new invitation brings it back.', style: serif(13, color: boneFaint, italic: true)),
               onTap: () {
                 Native.callAway({'cmd': 'pocket_leave', 'station': id});
                 if (widget.radio.tuned == id) widget.radio.stop();
@@ -799,7 +802,7 @@ class _TipSheetState extends State<TipSheet> {
               if (!context.mounted) return;
               if (!ok) {
                 await copySecret(widget.addr);
-                if (context.mounted) toast(context, 'No wallet on this phone answered. The address is copied.');
+                if (context.mounted) toast(context, 'No wallet on this $thisDevice answered. The address is copied.');
               } else if (lightning && memo.text.trim().isNotEmpty) {
                 toast(context, 'Your note is copied. Paste it in the wallet\'s comment.');
               }
@@ -888,9 +891,10 @@ class QrPainter extends CustomPainter {
 // ---------------------------------------------------------------------------------------
 // Sleep and history
 
+// The sheet closes by its own context: the one it was opened from may be a sheet already gone.
 Future<void> sleepSheet(BuildContext context, Tuner radio) => pyrateSheet(
       context,
-      Padding(
+      Builder(builder: (context) => Padding(
         padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('SLEEP TIMER', style: carved(16)),
@@ -910,7 +914,7 @@ Future<void> sleepSheet(BuildContext context, Tuner radio) => pyrateSheet(
               }, color: boneFaint),
           ]),
         ]),
-      ),
+      )),
     );
 
 Future<void> historySheet(BuildContext context, Tuner radio) => pyrateSheet(
@@ -1004,7 +1008,7 @@ class _RecordPanelState extends State<RecordPanel> {
     final running = started == null ? 0 : DateTime.now().difference(started!).inMilliseconds;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       heading('RECORD SOMETHING'),
-      note('Talk into the phone. A show, a reading, or a few words between songs.'),
+      note(isComputer ? 'Talk into the microphone. A show, a reading, or a few words between songs.' : 'Talk into the phone. A show, a reading, or a few words between songs.'),
       const SizedBox(height: 12),
       Row(children: [
         pyrateButton(recording ? '■︎  STOP  ${fmtTime(running)}' : '●︎  RECORD', toggle, color: recording ? bloodBright : bone),
@@ -1509,10 +1513,10 @@ class _SettingsPageState extends State<SettingsPage> {
         title: Text(duress ? 'An emergency PIN' : 'Choose a PIN', style: serif(22)),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           note(duress
-              ? 'If someone forces you to unlock the radio, give them this one. It wipes the radio from this phone and closes. Your 24 words bring your station back later.'
+              ? 'If someone forces you to unlock the radio, give them this one. It wipes the radio from this $thisDevice and closes. Your 24 words bring your station back later.'
               : 'Asked for before your station and these settings open.'),
           const SizedBox(height: 10),
-          TextField(controller: pin, autofocus: true, keyboardType: TextInputType.number, obscureText: true, enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, style: mono(16, color: bone), decoration: pyrateField('Four or more digits, not your phone\'s PIN')),
+          TextField(controller: pin, autofocus: true, keyboardType: TextInputType.number, obscureText: true, enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, style: mono(16, color: bone), decoration: pyrateField(isComputer ? 'Four or more digits, not your computer\'s password' : 'Four or more digits, not your phone\'s PIN')),
         ]),
         actions: [TextButton(onPressed: () => Navigator.pop(c, true), child: Text('SET IT', style: carved(11)))],
       ),
@@ -1561,8 +1565,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text('Wipe the radio from this phone?', style: serif(22)),
-        content: Text('Everything it keeps here becomes unreadable at once and cannot be brought back. Your station stays on the air, and your 24 words bring it to any phone.', style: serif(15, color: boneFaint, italic: true)),
+        title: Text('Wipe the radio from this $thisDevice?', style: serif(22)),
+        content: Text('Everything it keeps here becomes unreadable at once and cannot be brought back. Your station stays on the air, and your 24 words bring it to any phone or computer.', style: serif(15, color: boneFaint, italic: true)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: Text('NOT NOW', style: carved(11, color: boneFaint))),
           TextButton(onPressed: () => Navigator.pop(c, true), child: Text('WIPE IT', style: carved(11))),
@@ -1589,10 +1593,10 @@ class _SettingsPageState extends State<SettingsPage> {
         setting('Hide mature stations', pref('hide_mature') == true, (v) => setState(() => pref('hide_mature', v)), sub: 'Strong language or themes.'),
         setting('Show explicit stations', pref('show_explicit') == true, (v) => setState(() => pref('show_explicit', v)), sub: 'Sexual or graphic material.'),
         setting('Pictures only from stations I keep', (Native.call({'cmd': 'art_kept_only'}) as Map)['value'] == true, (v) => setState(() => Native.call({'cmd': 'art_kept_only', 'value': v})), sub: 'Other stations show by name alone.'),
-        setting('Save ahead on Wi-Fi', provisions, (v) {
+        setting(isComputer ? 'Save ahead' : 'Save ahead on Wi-Fi', provisions, (v) {
           Native.call({'cmd': 'provisions', 'value': v});
           setState(() => provisions = v);
-        }, sub: 'Your kept stations, for when there is no signal.'),
+        }, sub: isComputer ? 'Your kept stations, for when the connection drops.' : 'Your kept stations, for when there is no signal.'),
         if (Platform.isAndroid)
           action(wakeOn ? 'Wake to the radio at ${(wake['hour'] as num).toInt().toString().padLeft(2, '0')}:${(wake['minute'] as num).toInt().toString().padLeft(2, '0')}' : 'Wake to the radio', setWake,
               sub: wakeOn ? '${wake['name'] ?? 'The station'} rises from quiet each morning. Tap to change.' : 'A station instead of an alarm. If no sound comes, the phone\'s alarm rings.'),
@@ -1631,7 +1635,17 @@ class _SettingsPageState extends State<SettingsPage> {
           pref('carry_mine_only', !v);
           if (!v) Native.call({'cmd': 'ballast_ok', 'value': false, 'unmetered': false});
           setState(() => mineOnly = !v);
-        }, sub: Platform.isAndroid ? 'Only on Wi-Fi while the phone charges, so it costs no data or battery.' : 'Uses up to 20 GB, less on a fuller disk.'),
+        }, sub: Platform.isAndroid ? 'Only on Wi-Fi while the phone charges, so it costs no data or battery.' : 'Up to ${carryGb()} GB of this computer\'s disk, less on a fuller one.'),
+        // A computer gives a modest share unless its owner offers more.
+        if (isComputer && !mineOnly)
+          Wrap(children: [
+            for (final gb in [2, 8, 20])
+              chip('$gb GB', carryGb() == gb, () {
+                pref('carry_gb', gb);
+                Native.call({'cmd': 'ballast_size', 'gb': gb});
+                setState(() {});
+              }),
+          ]),
         if (Platform.isAndroid) const DrawerLantern(),
       ]),
       section('PRIVACY AND SAFETY', [
@@ -1651,7 +1665,7 @@ class _SettingsPageState extends State<SettingsPage> {
               Native.call({'cmd': 'pin_set', 'duress': true});
               setState(() => duressSet = false);
             }
-          }, sub: 'A second PIN to give if you are forced to unlock the radio. It wipes the radio from this phone.'),
+          }, sub: 'A second PIN to give if you are forced to unlock the radio. It wipes the radio from this $thisDevice.'),
         setting('Disguise my voice', disguise, (v) {
           pref('disguise', v ? -4 : 0);
           setState(() => disguise = v);
@@ -1672,10 +1686,11 @@ class _SettingsPageState extends State<SettingsPage> {
           final n = r is Map ? (r['cleared'] as num?)?.toInt() : null;
           toast(context, r is Map && r['error'] != null ? 'Not cleared: ${r['error']}' : (n == null || n == 0 ? 'Nothing to clear.' : 'Cleared.'));
         }, sub: 'Removes the sound saved from stations you played. Your own station is kept.'),
-        action('Wipe the radio from this phone', scuttle, sub: 'For a phone about to be taken. Everything it keeps becomes unreadable at once.', color: bloodBright),
+        action('Wipe the radio from this $thisDevice', scuttle, sub: 'For a $thisDevice about to be taken. Everything it keeps becomes unreadable at once.', color: bloodBright),
       ]),
       section('SHARING', [
-        action('Send the app to someone nearby', () => pyrateSheet(context, const PassItOn()), sub: 'Phone to phone, no internet needed.'),
+        // Handing the app over is a phone's: the computer copy comes from the site.
+        if (!isComputer) action('Send the app to someone nearby', () => pyrateSheet(context, const PassItOn()), sub: 'Phone to phone, no internet needed.'),
         action('Open a station file', () async {
           final picked = await FilePicker.platform.pickFiles();
           final path = picked?.files.single.path;
@@ -1714,7 +1729,7 @@ class _SettingsPageState extends State<SettingsPage> {
           setting('Connect directly when needed', !strict, (v) {
             Native.call({'cmd': 'direct_ok', 'value': v});
             setState(() => strict = !v);
-          }, sub: 'Off, the radio always goes through two other devices and waits when it cannot. On, it plays sooner on a quiet network, and the device it asks sees this phone\'s address.'),
+          }, sub: 'Off, the radio always goes through two other devices and waits when it cannot. On, it plays sooner on a quiet network, and the device it asks sees this $thisDevice\'s address.'),
           if (gridMsg != null) Padding(padding: const EdgeInsets.only(top: 6), child: note(gridMsg!)),
         ]),
         fold('About this copy', [

@@ -691,6 +691,23 @@ impl Inner {
         }
     }
 
+    /// One line: each open connection's chosen path, direct or relayed, and its round trip.
+    fn log_paths(&self) {
+        let conns: Vec<(EndpointId, Connection)> = self.conns.lock().unwrap().iter().filter(|(_, c)| c.close_reason().is_none()).map(|(n, c)| (*n, c.clone())).collect();
+        let mut parts: Vec<String> = conns
+            .iter()
+            .filter_map(|(n, c)| {
+                let paths = c.paths();
+                let p = paths.iter().find(|p| p.is_selected())?;
+                Some(format!("{} {} {} ms", n.fmt_short(), if p.is_relay() { "relay" } else { "direct" }, p.rtt().as_millis()))
+            })
+            .collect();
+        parts.sort();
+        if !parts.is_empty() {
+            say(&format!("paths: {}", parts.join(", ")));
+        }
+    }
+
     async fn conn(&self, node: EndpointId) -> Result<Connection> {
         if let Some(c) = self.conns.lock().unwrap().get(&node) {
             if c.close_reason().is_none() {
@@ -1241,6 +1258,30 @@ impl Inner {
         n
     }
 
+    /// A station's work if it is done, from memory or the hold; if not, the search starts on a
+    /// thread of its own and this says None until it is found. Raising a station never waits on
+    /// it, and the tick never stalls on it: the card goes out on the first tick after.
+    fn pow_ready(self: &Arc<Self>, station: &StationId) -> Option<u64> {
+        static BUSY: Mutex<Option<std::collections::HashSet<StationId>>> = Mutex::new(None);
+        if let Some(n) = self.pow.lock().unwrap().get(station) {
+            return Some(*n);
+        }
+        let note = format!("pow/{}", station.to_hex());
+        let old = self.cfg.dir.join("keys").join(format!("{}.pow", station.to_hex()));
+        if let Some(n) = self.hold.read_note(&self.cfg.dir, &note, Some(&old)).and_then(|b| String::from_utf8(b).ok()).and_then(|s| s.trim().parse().ok()).filter(|n| net::pow_ok(station, *n)) {
+            self.pow.lock().unwrap().insert(*station, n);
+            return Some(n);
+        }
+        if BUSY.lock().unwrap().get_or_insert_with(Default::default).insert(*station) {
+            let (inner, id) = (self.clone(), *station);
+            std::thread::spawn(move || {
+                inner.pow_for(&id);
+                BUSY.lock().unwrap().get_or_insert_with(Default::default).remove(&id);
+            });
+        }
+        None
+    }
+
     /// Every twenty seconds: fly our colours, say what we carry, count who is aboard.
     /// With the Log near full, our own stations' work climbs a little each tick, off the async
     /// threads, so they outwork any flood of cheap cards. Nothing is spent when there is room.
@@ -1248,7 +1289,7 @@ impl Inner {
         // A station of ours that has not yet done the work to be listed climbs a little faster,
         // a second or two of work a tick, until it has: a few minutes after it is raised.
         for id in own.iter().copied() {
-            if net::pow_bits(&id, self.pow_for(&id)) >= net::LIST_BITS {
+            if self.pow_ready(&id).is_none_or(|p| net::pow_bits(&id, p) >= net::LIST_BITS) {
                 continue;
             }
             let inner = self.clone();
@@ -1292,7 +1333,7 @@ impl Inner {
         };
         self.pow_climb(&own);
         for id in own {
-            let pow = self.pow_for(&id);
+            let Some(pow) = self.pow_ready(&id) else { continue };
             let freq = Some(self.freq_for(&id));
             let a = {
                 let s = self.store.lock().unwrap();
@@ -2478,6 +2519,12 @@ impl Node {
                 if n % 360 == 7 {
                     i2.log_aboard();
                 }
+                // A Lantern says, every ten minutes, how it reaches the radios it talks to:
+                // straight or through a relay, and the round trip. Hops between Lanterns are
+                // the slow part of a listener's route when they go through a relay.
+                if i2.cfg.lantern && n % 60 == 11 {
+                    i2.log_paths();
+                }
                 if n % 6 == 1 {
                     i2.save_log();
                 }
@@ -2579,7 +2626,8 @@ impl Node {
                 s.add_key_for(id, deputy)?;
             }
         }
-        self.inner.pow_for(&id);
+        // The work for the station's card goes on in the background (see `pow_ready`).
+        let _ = self.inner.pow_ready(&id);
         Ok((id, words))
     }
 
@@ -2718,7 +2766,7 @@ impl Node {
                         // Kept to its link by its keeper; and when it joins the dial otherwise, a
                         // day after it first went on the air.
                         "link_only": a.is_some_and(|a| a.link_only()),
-                        "dial_at": a.and_then(|a| a.entries().first()).map(|e| e.entry.at_ms + net::LIST_AGE_MS),
+                        "dial_at": a.and_then(|a| a.entries().first()).map(|e| e.entry.at_ms + net::list_age_ms()),
                         "direct": inner.direct.lock().unwrap().contains(&id),
                         // Three stems with no taker and no leave to go direct: the station waits.
                         "waiting": !inner.direct.lock().unwrap().contains(&id) && inner.stem_misses.lock().unwrap().get(&id).is_some_and(|m| *m >= 3),
