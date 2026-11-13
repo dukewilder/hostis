@@ -1448,6 +1448,12 @@ impl Inner {
             if let Some(a) = a {
                 self.broadcast(&Gossip::Station(a)).await;
             }
+            // Running dark, no one can open a route to this node, so it never says it carries:
+            // a hold kept as a hidden spare drew routes from every tab and phone that each timed
+            // out (13 November). It still keeps and syncs everything.
+            if self.dark {
+                continue;
+            }
             let g = Gossip::Carrier { station, node: me, head };
             self.on_gossip(g.clone());
             // Signed for nodes that check, plain for older ones, which believe it only from

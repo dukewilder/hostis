@@ -8,6 +8,11 @@
 # No rights reserved.
 import hashlib, json, os, sys, time, urllib.parse, urllib.request
 
+# Wikimedia and the Library of Congress refuse Python's default agent (HTTP 403). Say who asks.
+_o = urllib.request.build_opener()
+_o.addheaders = [("User-Agent", "PyrateRadio-fetch/1.0 (https://hostis.black/pyrateradio/; free-to-air recordings for a HOSTIS station)")]
+urllib.request.install_opener(_o)
+
 manifest, out = sys.argv[1], sys.argv[2]
 os.makedirs(out, exist_ok=True)
 items = json.load(open(manifest, encoding="utf-8"))
@@ -33,14 +38,17 @@ for x in items:
             return hashlib.sha1(open(path, "rb").read()).hexdigest() == x["sha1"]
         return not x.get("size") or os.path.getsize(path) == x["size"]
     if not whole():
-        for attempt in range(3):
+        for attempt in range(4):
             try:
+                # Wikimedia and the Library of Congress limit how fast one asker may take files.
+                if "archive.org" not in url:
+                    time.sleep(4)
                 urllib.request.urlretrieve(url, path + ".part")
                 os.replace(path + ".part", path)
                 break
             except Exception as e:
                 print(f"  {name}: {e}; again shortly")
-                time.sleep(5 * (attempt + 1))
+                time.sleep(30 * (attempt + 1) if "429" in str(e) else 5 * (attempt + 1))
         if not whole():
             print(f"FAILED {name}")
             bad += 1

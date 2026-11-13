@@ -63,5 +63,16 @@
   "kinds": [
    "music"
   ]
+ },
+ {
+  "id": "1ae4f9701e693ae457d51e386abb935a4fdb36c4dea03e59c2eb96d366ca2ca6",
+  "name": "Contraband",
+  "call_sign": "GEFAFA·B3C0",
+  "art": "art/contraband.jpg",
+  "banner_art": "art/contraband-banner.jpg",
+  "about": "Books that kings, censors and courts tried to stop, read aloud round the clock. Milton, Paine, Voltaire, Douglass, Thoreau, Goldman.",
+  "kinds": [
+   "talk"
+  ]
  }
 ]

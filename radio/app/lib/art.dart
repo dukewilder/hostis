@@ -42,6 +42,7 @@ const bakedArt = {
   '8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd',
   '23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a',
   'dce68389447e6319303ddbc67bb874863559b8f93015bf810a3b18d0b1eab572',
+  '1ae4f9701e693ae457d51e386abb935a4fdb36c4dea03e59c2eb96d366ca2ca6',
 };
 
 class StationArt extends StatefulWidget {
