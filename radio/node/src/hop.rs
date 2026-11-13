@@ -74,6 +74,9 @@ pub enum Hop {
     Stem { station: StationId, entries: Vec<Vec<u8>>, chunks: Vec<(Hash, Vec<u8>)>, announce: Option<Announce>, hops: u8 },
 }
 
+/// The most of a log one answer along a route carries.
+const HOP_PAGE: usize = 256 * 1024;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) enum Ask {
     Log { station: StationId, from: u64 },
@@ -379,7 +382,20 @@ impl Inner {
                         } else {
                             let _ = tokio::time::timeout(Duration::from_secs(4), self.sync_log_direct(station)).await;
                         }
-                        self.serve(Request::Log { station, from })
+                        // A page along a route crosses two relays: a quarter of a megabyte at a
+                        // time, so each answer is back in a second or two and the next follows.
+                        match self.serve(Request::Log { station, from }) {
+                            Response::Entries(mut list) => {
+                                let mut sum = 0;
+                                let keep = list.iter().take_while(|b| {
+                                    sum += b.len();
+                                    sum <= HOP_PAGE || sum == b.len()
+                                }).count();
+                                list.truncate(keep);
+                                Response::Entries(list)
+                            }
+                            other => other,
+                        }
                     }
                     // An exit passes what it fetches straight through: nothing it relays for a stranger
                     // lands on its own device.
