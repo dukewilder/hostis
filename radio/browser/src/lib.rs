@@ -1183,8 +1183,11 @@ impl Ship {
         match &r {
             Ok(_) => self.hop_misses.store(0, Relaxed),
             Err(RouteFail::FirstHop) => {
-                // The first hop is gone: the next request draws another.
+                // The first hop is gone: the next request draws another, and this one counts as
+                // slow until it answers, so the draw passes over it (a door this tab cannot
+                // reach at all was being drawn again and again).
                 *self.first_hop.lock().unwrap() = None;
+                self.answered(first, 8_000.0);
             }
             Err(RouteFail::NoAnswer) => {
                 self.suspect.lock().unwrap().insert(exit, self.now());
