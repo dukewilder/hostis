@@ -34,7 +34,13 @@ head = """<!DOCTYPE html>
 <meta name="apple-mobile-web-app-title" content="Pyrate Radio">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <style>
-""" + fonts.faces() + "\n" + fonts.sheet()
+"""
+# The faces are files beside the page, not 400 KB inside it, so the page paints before they land
+# (font-display: swap). The two the first screen is set in come first: the station's name and
+# the masthead in Pica, and every reading on the set in the mono.
+face_css, face_files, face_latin = fonts.linked()
+first_faces = [face_latin[("IM Fell DW Pica SC", "400", "normal")], face_latin[("JetBrains Mono", "400", "normal")]]
+head += face_css + "\n" + fonts.sheet()
 extra = "\n" + open(f"{R}/browser/player.css", encoding="utf-8").read()
 body = open(f"{R}/browser/body.html", encoding="utf-8").read()
 js = open(f"{W}/app.js", encoding="utf-8").read()
@@ -71,6 +77,7 @@ def build(scope, dist, open_players):
     # The radio itself (the module, its glue and the wasm, a megabyte and a half) starts coming
     # with the page, not after the script at the end of it asks.
     meta += f'<link rel="modulepreload" href="app.js?v={v}">\n<link rel="modulepreload" href="pkg/pyrate_browser.js?v={v}">\n<link rel="preload" href="pkg/pyrate_browser_bg.{v}.wasm" as="fetch" type="application/wasm" crossorigin>\n'
+    meta += "".join(f'<link rel="preload" href="{f}" as="font" type="font/woff2" crossorigin>\n' for f in first_faces)
     assert head.count('<meta charset="utf-8">\n') == 1
     h = head.replace('<meta charset="utf-8">\n', '<meta charset="utf-8">\n' + meta, 1).replace("{{SCOPE}}", scope)
     if scope == "open":
@@ -84,6 +91,9 @@ def build(scope, dist, open_players):
     open(f"{dist}/pkg/pyrate_browser.js", "w", encoding="utf-8").write(glue.replace("new URL('pyrate_browser_bg.wasm', import.meta.url)", f"new URL('pyrate_browser_bg.{v}.wasm', import.meta.url)"))
     shutil.copy(f"{W}/pkg/pyrate_browser_bg.wasm", f"{dist}/pkg/pyrate_browser_bg.{v}.wasm")
     shutil.copy(f"{W}/opus-decoder.min.js", dist)
+    os.makedirs(f"{dist}/fonts")
+    for name, data in face_files.items():
+        open(f"{dist}/fonts/{name}", "wb").write(data)
     if scope == "open":
         # Raising colours from the tab: libopus in wasm, run off the page's thread.
         shutil.copy(f"{W}/encode-worker.js", dist)

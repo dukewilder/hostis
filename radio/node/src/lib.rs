@@ -326,6 +326,8 @@ pub struct Inner {
     cards: Mutex<HashMap<StationId, (u64, u64, Announce)>>,
     /// What each own station last sent down the stem: from which entry, how many, when, and the card's time.
     pub(crate) stem_sent: Mutex<HashMap<StationId, (u64, usize, u64, u64)>>,
+    /// Stems in a row that found no way out through the guard: two, and another guard is drawn.
+    pub(crate) guard_misses: std::sync::atomic::AtomicU32,
     /// The first doors this node was handed, before any peer met since.
     pub(crate) doors: Vec<EndpointId>,
     /// The relay each peer's signed note named.
@@ -1728,7 +1730,9 @@ impl Inner {
                     "banner": banners.get(id).filter(|_| show),
                     "accent": accent,
                     "id": hex, "call_sign": id.call_sign(), "name": shown(&a.name), "about": pyrate_core::chat::shown(&a.about), "mixed": pyrate_core::chat::mixed_script(&a.name),
-                    "port": a.port.as_deref().map(shown), "live": a.live, "aboard": aboard, "kept": is_kept, "marooned": is_marooned, "since": a.since,
+                    // Live only while the card is fresh: one left behind by a keeper who vanished
+                    // mid-show says live for good.
+                    "port": a.port.as_deref().map(shown), "live": a.live && now_ms().saturating_sub(a.at_ms) < 2 * 60_000, "aboard": aboard, "kept": is_kept, "marooned": is_marooned, "since": a.since,
                     "tracks": a.tracks, "signed_ms": a.at_ms, "named": a.named, "freq": a.freq,
                     "carriers": l.carriers.values().filter(|(_, s)| now.saturating_sub(*s) < 10 * 60_000).count(),
                     "pocket": self.is_pocket(id),
@@ -1937,6 +1941,21 @@ impl Inner {
                         me.handle.spawn(async move { m2.stem_push(station, None).await });
                     }
                 }
+            }
+            // What is left of the last six seconds goes out, then the end of the broadcast, so
+            // listeners go back to the schedule at once.
+            {
+                let mut s = me.store.lock().unwrap();
+                if let Ok(Some((c, bytes))) = enc.finish() {
+                    if s.put_chunk(&c.hash, &bytes).is_ok() {
+                        let _ = s.write(station, now_ms(), Body::Live { chunk: c, channels: 1, bitrate: 24_000 });
+                    }
+                }
+                let _ = s.write(station, now_ms() + 1, Body::LiveEnd);
+            }
+            if me.cfg.private && !me.is_pocket(&station) {
+                let m2 = me.clone();
+                me.handle.spawn(async move { m2.stem_push(station, None).await });
             }
             say(&format!("off the air {}", station.call_sign()));
             let _ = buf;
@@ -2321,6 +2340,7 @@ impl Node {
             pow_cursor: Mutex::new(HashMap::new()),
             cards: Mutex::new(HashMap::new()),
             stem_sent: Mutex::new(HashMap::new()),
+            guard_misses: std::sync::atomic::AtomicU32::new(0),
             doors: doors.clone(),
             met: Mutex::new(met.iter().cloned().collect()),
             neighbours: Mutex::new(Default::default()),

@@ -212,6 +212,8 @@ button.small:hover{color:var(--black);background:var(--ink);border-color:var(--i
 .chart .dot{cursor:pointer}.chart .dot circle{fill:var(--ink);stroke:var(--black);stroke-width:1}
 .chart .dot.live circle{fill:var(--redup)}.chart .dot.on circle{r:5;fill:var(--black);stroke:var(--red);stroke-width:1.5}
 .chart .dot:hover circle,.chart .dot:focus-visible circle{r:5}
+/* each dot answers a finger over a wider ring than it is drawn: ten pixels across on a phone */
+.chart .dot circle.hit,.chart .dot.live circle.hit,.chart .dot.on circle.hit,.chart .dot:hover circle.hit,.chart .dot:focus-visible circle.hit{r:11px;fill:transparent;stroke:none}
 .chart p{margin-top:.6rem}
 
 /* your colours */
@@ -229,6 +231,13 @@ textarea{display:block;width:100%;min-height:9rem;padding:.7rem;margin:1rem 0 .6
 .line:last-child{border-bottom:0}
 .line .who{font:400 .68rem var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
 .line .who:hover{color:var(--redup)}
+/* two voices wearing one name: each carries its call sign beside it */
+.line .vm{font:400 .62rem var(--mono);letter-spacing:.08em;color:var(--faint);margin-left:.45rem;padding:0 .3rem;border:1px solid var(--line)}
+@media (max-width:720px){.line .who{display:inline-flex;align-items:center;min-height:32px}}
+.mrows{margin:0 0 1rem}
+.mrow{display:flex;align-items:center;justify-content:space-between;gap:1rem;min-height:48px;border-bottom:1px solid var(--line-soft)}
+.mrow span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--bonedim)}
+.mrow .btn{flex:0 0 auto;min-height:36px;padding:.3rem .8rem;font-size:.66rem}
 .line.keeper .who{color:var(--ink)}.line.keeper .who::before{content:'\2620\FE0E';font-family:var(--skull);margin-right:.4rem;color:var(--red)}
 .line.mine .who{color:var(--bonedim);cursor:default}.line.mine .who:hover{color:var(--bonedim)}
 .line small{font:400 .66rem var(--mono);color:var(--faint);margin-left:.6rem}
@@ -327,7 +336,7 @@ input[type=password]{background:var(--panel);color:var(--ink);border:1px solid r
 .drop:hover,.drop.over{border-color:var(--faint)}
 .drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
 .drop-lead{font:400 1.15rem var(--sc);letter-spacing:.05em;color:var(--ink)}.drop-sub{font:400 .68rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
-.st-opts{display:flex;justify-content:center;margin:0 0 1rem;font-size:1rem;color:var(--bonedim)}.st-opts label{display:flex;align-items:center;gap:.7rem;cursor:pointer}
+.st-opts{display:flex;flex-wrap:wrap;justify-content:center;gap:.4rem 1.8rem;margin:0 0 1rem;font-size:1rem;color:var(--bonedim)}.st-opts label{display:flex;align-items:center;gap:.7rem;cursor:pointer;min-height:44px}
 .st-queue{margin:0 0 1rem}
 .qi{display:flex;align-items:baseline;gap:.8rem;padding:.55rem 0;border-bottom:1px solid var(--line-soft)}
 .qi .qt{flex:1;min-width:0;color:var(--bonedim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

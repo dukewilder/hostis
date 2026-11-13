@@ -678,21 +678,34 @@ impl Inner {
         let strict = self.cfg.private && self.strict.load(std::sync::atomic::Ordering::Relaxed);
         if !resend || strict {
             if let Some(g) = self.guard() {
-                let others: Vec<EndpointId> = self.known_nodes().into_iter().filter(|n| *n != g).collect();
-                let x = (!others.is_empty()).then(|| others[rand::random::<usize>() % others.len()]);
-                if let Some(x) = x {
+                // Up to three second nodes a tick, each a different one: a node that declines
+                // (a phone that relays for nobody, a tab that has gone) costs a moment, not the
+                // six seconds to the next tick, and a live show does not fall behind.
+                let mut others: Vec<EndpointId> = self.known_nodes().into_iter().filter(|n| *n != g).collect();
+                others.shuffle(&mut rand::thread_rng());
+                let mut guard_answered = false;
+                for x in others.into_iter().take(3) {
                     let ask = Ask::Stem { station, entries: entries.clone(), chunks: chunks.clone(), announce: announce.clone() };
-                    if let Ok((sealed, c)) = seal(x.as_bytes(), &ask) {
-                        if let Ok(blob) = postcard::to_stdvec(&sealed) {
-                            let r = tokio::time::timeout(Duration::from_secs(25), self.hop(g, &Hop::Forward { next: *x.as_bytes(), blob })).await;
-                            if let Ok(Ok(raw)) = r {
-                                let took = c.decrypt(Nonce::from_slice(&ANSWER_NONCE), raw.as_slice()).ok().and_then(|p| postcard::from_bytes::<Response>(&p).ok());
-                                if matches!(took, Some(Response::Sealed(Some(_)))) {
-                                    return true;
-                                }
-                            }
-                        }
+                    let Ok((sealed, c)) = seal(x.as_bytes(), &ask) else { continue };
+                    let Ok(blob) = postcard::to_stdvec(&sealed) else { continue };
+                    let r = tokio::time::timeout(Duration::from_secs(25), self.hop(g, &Hop::Forward { next: *x.as_bytes(), blob })).await;
+                    let Ok(Ok(raw)) = r else { break };
+                    // An empty answer is a guard that relays for nobody, whatever the second node.
+                    if raw.is_empty() {
+                        break;
                     }
+                    guard_answered = true;
+                    let took = c.decrypt(Nonce::from_slice(&ANSWER_NONCE), raw.as_slice()).ok().and_then(|p| postcard::from_bytes::<Response>(&p).ok());
+                    if matches!(took, Some(Response::Sealed(Some(_)))) {
+                        self.guard_misses.store(0, std::sync::atomic::Ordering::Relaxed);
+                        return true;
+                    }
+                }
+                // A guard that does not answer, or relays for nobody, twice in a row is let go:
+                // the next tick draws another, rather than waiting on it for good.
+                if !guard_answered || self.guard_misses.fetch_add(1, std::sync::atomic::Ordering::Relaxed) >= 1 {
+                    self.guard_misses.store(0, std::sync::atomic::Ordering::Relaxed);
+                    self.hold.remove_note(&self.cfg.dir, "stem-guard");
                 }
             }
         }

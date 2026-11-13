@@ -34,6 +34,8 @@ def tone(name, f, secs, amp=0.3):
     return path
 MUSIC = tone("Test Band - Middle C.wav", 523.25, 70)
 PAD = tone("Ident.wav", 880, 3)
+# The station's own schedule, which comes back after the show: one recording, a 660 Hz tone.
+REC = tone("Closing Theme.wav", 660, 20)
 
 # Every device the keeper's tab opens, and every connection any of its sound makes to its speakers.
 HOOKS = """
@@ -67,6 +69,8 @@ try:
         a.check("#st-written"); a.click("#st-done")
         wait(a, "!document.getElementById('st-status').textContent.includes('ready') && document.getElementById('st-status').textContent.length > 0", 120)
         sid = a.evaluate("window.pyrate.mine()[0]")
+        a.set_input_files("#st-files", [REC])
+        wait(a, "!!document.querySelector('#st-queue .qi.done')", 60)
         # The keeper's tab plays its own station, then goes live with the microphone alone.
         a.click("#st-tune"); time.sleep(1.5)
         playing_before = a.evaluate("window.pyrate.state().playing")
@@ -150,7 +154,15 @@ try:
             if c.evaluate("window.pyrate.plan()?.kind !== 'live' || !document.getElementById('np').textContent.includes('Live from the station')"): t_off = now() - T["end"]; break
             time.sleep(0.25)
         check(t_off is not None and t_off < 10, f"a listener leaves Live within 10 s of the end ({t_off and round(t_off, 1)} s)")
-        time.sleep(max(0, T["end"] + 24 - now()))
+        # The last words still queued play out under Live, and then the station's schedule returns.
+        np_end = c.text_content("#np") or ""
+        check("Live from the station" in np_end, "the set stays on Live while the last words play: " + repr(np_end))
+        t_back = None
+        while now() - T["end"] < 45:
+            if (c.text_content("#np") or "") == "Closing Theme": t_back = now() - T["end"]; break
+            time.sleep(0.25)
+        check(t_back is not None, f"then the station's own schedule comes back ({t_back and round(t_back, 1)} s after the end)")
+        time.sleep(max(0, T["end"] + 24 - now(), (t_back or 0) + T["end"] + 6 - now()))
         t0, raw = c.evaluate(TAKE)
         csp = a.evaluate("window.__csp") + c.evaluate("window.__csp")
         b.close()
@@ -201,6 +213,12 @@ try:
         check(len(F) > sr and abs(top(F) - 880) < 10, f"a pad fires and is heard ({top(F) if len(F) else 0:.0f} Hz)")
         w = t0 + int(np.argmax(np.abs(x))) / sr - D; k = max((k for k in T if T[k] <= w), key=lambda k: T[k], default=None)
         check(pk(x) < 1.0, f"the air never clips (peak {pk(x):.3f}, {k and round(w - T[k], 1)} s into phase {k})")
+        # The sign-off: the second input's beep in the last seconds before the end reaches the
+        # listener, and the station's recording follows it.
+        # t_back is when the listener's set named the recording, already on the listener's clock.
+        S, R = seg(at("end", -3.5), at("end", -0.5)), seg(T["end"] + t_back + 1.0 - t0 if t_back else at("end", 3.0), len(x) / sr)
+        check(len(S) > sr and band(S, top(A)) > 0.1 * band(A, top(A)), f"the last words before the end are heard ({band(S, top(A)):.4f} against {band(A, top(A)):.4f})")
+        check(len(R) > sr and abs(top(R) - 660) < 10, f"and the station's own recording after them ({top(R) if len(R) > sr else 0:.0f} Hz over {len(R) / sr:.1f} s)")
     check(not csp, "nothing is refused by the page's own policy: %s" % csp[:3])
     check(not errs, "no page errors: %s" % errs[:3])
 finally:
