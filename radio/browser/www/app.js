@@ -1459,7 +1459,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && pl
 
 // For anyone looking under the hood: what the player is doing.
 let tapped = null;
-window.pyrate = { node: () => radio?.id(), routes: id => radio?.route_check(id ?? cur?.id), mine: () => kept().map(k => k.id), tap: () => { if (!ctx) return null; if (!tapped) { tapped = ctx.createMediaStreamDestination(); gain.connect(tapped) } return tapped.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, heard: heard(), stage, trouble, station: cur?.id, scheduled: sources.length, ahead_ms: playing ? aheadMs : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, view: viewOn, webcodecs }) };
+window.pyrate = { node: () => radio?.id(), routes: (id, chunk) => radio?.route_check(id ?? cur?.id, chunk ?? ''), mine: () => kept().map(k => k.id), tap: () => { if (!ctx) return null; if (!tapped) { tapped = ctx.createMediaStreamDestination(); gain.connect(tapped) } return tapped.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, heard: heard(), stage, trouble, station: cur?.id, scheduled: sources.length, ahead_ms: playing ? aheadMs : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, view: viewOn, webcodecs }) };
 // ---- Finding the way: the sections under the set -------------------------------------------
 // Stations, the station page, starting a station and settings each have their own view. The
 // browser's Back button steps back through them, and nothing about them goes in the address.
