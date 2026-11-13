@@ -578,7 +578,8 @@ impl Ship {
         // Two hops first, as the app does: the carrier that answers never sees this tab.
         let mut added = 0;
         let mut private = false;
-        for _ in 0..32 {
+        // Exits answer a quarter of a megabyte at a time: enough rounds for the longest log a tab keeps.
+        for _ in 0..140 {
             let from = self.archives.lock().unwrap().get(&station).map(|a| a.len()).unwrap_or(0);
             // A log this tab has never seen goes out along two routes at once; the first to
             // bring entries wins.
@@ -895,7 +896,7 @@ impl Ship {
             if !matches!(g, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Harbour { .. }) {
                 continue;
             }
-            match &g { Gossip::Station(_) => kinds.0 += 1, Gossip::Carried { node, .. } => { kinds.1 += 1; *kinds.4.entry(hex(&node[..5])).or_default() += 1 } _ => kinds.2 += 1 }
+            match &g { Gossip::Station(_) => kinds.0 += 1, Gossip::Carried { node, .. } => { kinds.1 += 1; *kinds.4.entry(hex(&node[..5])).or_default() += 1 } Gossip::Harbour { node, relay, .. } => { kinds.2 += 1; say(&format!("  {} is reached through {relay}", hex(&node[..5]))) } _ => kinds.2 += 1 }
             let Some(g) = g.from_network(now, node.as_bytes()) else { kinds.3 += 1; continue };
             if let Some(st) = self.on_gossip(g) {
                 if *self.tuned.lock().unwrap() == Some(st) {
@@ -2084,6 +2085,12 @@ impl Radio {
         Ok(wasm_bindgen_futures::future_to_promise(async move {
             s.sync(st).await.map(|n| JsValue::from(n as u32)).map_err(js)
         }))
+    }
+
+    /// For `?debug` only: each log this tab holds, with its entries and bytes.
+    pub fn log_sizes(&self) -> String {
+        let a = self.ship.archives.lock().unwrap();
+        json!(a.iter().map(|(k, v)| json!([k.call_sign(), v.len(), v.bytes()])).collect::<Vec<_>>()).to_string()
     }
 
     /// For `?debug` only: the first page of a station's log along every route this tab knows,
