@@ -329,6 +329,11 @@ pub struct Inner {
     pub(crate) stem_sent: Mutex<HashMap<StationId, (u64, usize, u64, u64)>>,
     /// Stems in a row that found no way out through the guard: two, and another guard is drawn.
     pub(crate) guard_misses: std::sync::atomic::AtomicU32,
+    /// Private fetches in a row whose guard brought back nothing at all.
+    pub(crate) fetch_guard_misses: std::sync::atomic::AtomicU32,
+    /// Nodes that have carried a hop for this one: an empty answer through one of them is the
+    /// second node's doing, not its own.
+    pub(crate) relayed: Mutex<std::collections::HashSet<EndpointId>>,
     /// The first doors this node was handed, before any peer met since.
     pub(crate) doors: Vec<EndpointId>,
     /// The relay each peer's signed note named.
@@ -2285,6 +2290,8 @@ impl Node {
             cards: Mutex::new(HashMap::new()),
             stem_sent: Mutex::new(HashMap::new()),
             guard_misses: std::sync::atomic::AtomicU32::new(0),
+            fetch_guard_misses: std::sync::atomic::AtomicU32::new(0),
+            relayed: Mutex::new(std::collections::HashSet::new()),
             doors: doors.clone(),
             met: Mutex::new(met.iter().cloned().collect()),
             neighbours: Mutex::new(Default::default()),

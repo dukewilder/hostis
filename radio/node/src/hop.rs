@@ -157,7 +157,10 @@ impl Inner {
                 return Some(g);
             }
         }
-        let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.doors.contains(n)).copied().collect();
+        // Not one that failed lately: a tab or a phone that relays for nobody turns every fetch away.
+        let failed = self.failed.lock().unwrap().clone();
+        let now = now_ms();
+        let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.doors.contains(n) && !failed.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS)).copied().collect();
         others.shuffle(&mut rand::thread_rng());
         // A peer met in an earlier run before a newcomer: a crowd of nodes that appeared today
         // cannot make one of their own a guard. Within each, one this node is talking to now
@@ -242,6 +245,24 @@ impl Inner {
                 return Err(e);
             }
         };
+        // An empty answer is a guard that relays for nobody (a tab, a phone on mobile data), or
+        // an exit that turned the hop away. Twice in a row with different exits, and the guard
+        // is let go: the next fetch draws another, rather than every fetch failing on it.
+        if raw.is_empty() {
+            self.failed.lock().unwrap().insert(*exit.as_bytes(), now_ms());
+            // A guard that has relayed before keeps its place: the exit said no.
+            if self.relayed.lock().unwrap().contains(&guard) {
+                return Err(anyhow!("turned away"));
+            }
+            if self.fetch_guard_misses.fetch_add(1, std::sync::atomic::Ordering::Relaxed) >= 1 {
+                self.fetch_guard_misses.store(0, std::sync::atomic::Ordering::Relaxed);
+                self.failed.lock().unwrap().insert(*guard.as_bytes(), now_ms());
+                self.hold.remove_note(&self.cfg.dir, "fetch-guard");
+            }
+            return Err(anyhow!("turned away"));
+        }
+        self.fetch_guard_misses.store(0, std::sync::atomic::Ordering::Relaxed);
+        self.relayed.lock().unwrap().insert(guard);
         c.decrypt(Nonce::from_slice(&ANSWER_NONCE), raw.as_slice()).map_err(|_| {
             self.failed.lock().unwrap().insert(*exit.as_bytes(), now_ms());
             anyhow!("open")
@@ -600,7 +621,9 @@ impl Inner {
         }
         // Prefer anyone but the well-known Lanterns: a guard everyone shares would hold every
         // broadcaster's address in one place, and that place could be compelled to hand it over.
-        let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.doors.contains(n)).copied().collect();
+        let failed = self.failed.lock().unwrap().clone();
+        let now = now_ms();
+        let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.doors.contains(n) && !failed.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS)).copied().collect();
         others.shuffle(&mut rand::thread_rng());
         // A peer met in an earlier run before a newcomer: a crowd of nodes that appeared today
         // cannot make one of their own a guard.
@@ -690,10 +713,18 @@ impl Inner {
                     let Ok(blob) = postcard::to_stdvec(&sealed) else { continue };
                     let r = tokio::time::timeout(Duration::from_secs(25), self.hop(g, &Hop::Forward { next: *x.as_bytes(), blob })).await;
                     let Ok(Ok(raw)) = r else { break };
-                    // An empty answer is a guard that relays for nobody, whatever the second node.
+                    // An empty answer through a guard that has relayed before is the second node
+                    // turning the cargo away: another second node is tried. Through one that has
+                    // not, it is the guard that relays for nobody.
                     if raw.is_empty() {
+                        if self.relayed.lock().unwrap().contains(&g) {
+                            guard_answered = true;
+                            self.failed.lock().unwrap().insert(*x.as_bytes(), now_ms());
+                            continue;
+                        }
                         break;
                     }
+                    self.relayed.lock().unwrap().insert(g);
                     guard_answered = true;
                     let took = c.decrypt(Nonce::from_slice(&ANSWER_NONCE), raw.as_slice()).ok().and_then(|p| postcard::from_bytes::<Response>(&p).ok());
                     if matches!(took, Some(Response::Sealed(Some(_)))) {
@@ -705,6 +736,7 @@ impl Inner {
                 // the next tick draws another, rather than waiting on it for good.
                 if !guard_answered || self.guard_misses.fetch_add(1, std::sync::atomic::Ordering::Relaxed) >= 1 {
                     self.guard_misses.store(0, std::sync::atomic::Ordering::Relaxed);
+                    self.failed.lock().unwrap().insert(*g.as_bytes(), now_ms());
                     self.hold.remove_note(&self.cfg.dir, "stem-guard");
                 }
             }
