@@ -1380,17 +1380,69 @@ function place(port) {
   const hit = n && chartData.places.find(p => (norm(p[0]) === n || norm(p[1]) === n) && (!q || norm(p[2]).startsWith(q) || norm(p[3]).startsWith(q) || norm(p[4]) === q));
   const r = hit ? [hit[5], hit[6]] : null; ports.set(port, r); return r;
 }
+// Nearby home ports are gathered so that every station on the chart is a tap target of at least
+// 44 px and none sits on top of another. Points within `gap` chart units merge, the merged point
+// at their centre of mass; what is left is at least `gap` apart. Pure, so the browser sweep can
+// check it with made-up points.
+function clusterChart(pts, gap) {
+  const cs = pts.map(p => ({ x: p.x, y: p.y, members: [p.s] }));
+  for (;;) {
+    let bi = -1, bj = -1, bd = Infinity;
+    for (let i = 0; i < cs.length; i++) for (let j = i + 1; j < cs.length; j++) {
+      const d = Math.hypot(cs[i].x - cs[j].x, cs[i].y - cs[j].y);
+      if (d < bd) { bd = d; bi = i; bj = j }
+    }
+    if (bi < 0 || bd >= gap) break;
+    const a = cs[bi], b = cs[bj], na = a.members.length, nb = b.members.length;
+    a.x = (a.x * na + b.x * nb) / (na + nb); a.y = (a.y * na + b.y * nb) / (na + nb);
+    a.members = a.members.concat(b.members); cs.splice(bj, 1);
+  }
+  return cs;
+}
 async function chart() {
   // One fetch of the chart at a time, however often the list redraws while it loads.
   if (!chartData) { try { chartData = await (chartLoad ??= fetch('chart.json').then(r => r.json())) } catch (e) { chartLoad = null; $('chart').innerHTML = '<p class="fine">The chart did not load. The list still works.</p>'; return } }
-  const m = marooned(); let dots = '', n = 0;
+  const m = marooned(); const pts = [];
   for (const s of stations.filter(s => !m.has(s.id) && allowed(s) && inSet(s) && s.port)) {
-    const p = place(s.port); if (!p) continue; n++;
+    const p = place(s.port); if (!p) continue;
     const j = parseInt(s.id.slice(0, 4), 16), x = (p[1] + 180) * 2 + (j % 7 - 3) * .6, y = (90 - p[0]) * 2 + ((j >> 3) % 7 - 3) * .6;
-    dots += '<g class="dot' + (s.live ? ' live' : '') + (cur?.id === s.id ? ' on' : '') + '" data-id="' + s.id + '" tabindex="0" role="button" aria-label="' + esc(s.name + ', ' + s.port) + '"><circle class="hit" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="11"/><circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3.4"/><title>' + esc(s.name + ', ' + s.port) + '</title></g>';
+    pts.push({ x, y, s });
   }
-  $('chart').innerHTML = '<svg viewBox="0 20 720 290" role="img" aria-label="The chart of the seas"><path class="land" d="' + chartData.land + '"/>' + dots + '</svg><p class="fine">' + (n ? n + (n === 1 ? ' station names' : ' stations name') + ' a home town. The rest name none.' : 'No station on the air has named a home port yet.') + '</p>';
-  $('chart').querySelectorAll('.dot').forEach(d => { const go = () => { const s = stations.find(x => x.id === d.dataset.id); if (s) { listen(s); goView('radio') } }; d.onclick = go; d.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go() } } });
+  const n = pts.length;
+  // The SVG's 720 units fill the chart's width, so a target 23 units from its centre comes out at
+  // 46 CSS px whatever the screen; ports closer than two of those become one target.
+  const sc = Math.max(0.05, ($('chart').clientWidth || innerWidth || 360) / 720), r = Math.min(80, 23 / sc);
+  const clusters = clusterChart(pts, 2 * r);
+  let dots = '';
+  clusters.forEach((c, i) => {
+    const one = c.members.length === 1 ? c.members[0] : null, live = c.members.some(s => s.live), on = one && cur?.id === one.id;
+    const cx = c.x.toFixed(1), cy = c.y.toFixed(1);
+    const label = one ? one.name + ', ' + one.port : c.members.length + ' stations here: ' + c.members.map(s => s.name).join(', ');
+    dots += '<g class="' + (one ? 'dot' : 'cluster') + (live ? ' live' : '') + (on ? ' on' : '') + '" data-i="' + i + '"' + (one ? ' data-id="' + one.id + '"' : '') + ' tabindex="0" role="button" aria-label="' + esc(label) + '">'
+      + '<circle class="hit" cx="' + cx + '" cy="' + cy + '" r="' + r.toFixed(1) + '"/>'
+      + (one ? '<circle cx="' + cx + '" cy="' + cy + '" r="3.4"/>'
+             : '<circle class="co" cx="' + cx + '" cy="' + cy + '" r="7"/><text class="cn" x="' + cx + '" y="' + cy + '">' + c.members.length + '</text>')
+      + '<title>' + esc(label) + '</title></g>';
+  });
+  $('chart').innerHTML = '<svg viewBox="0 20 720 290" role="img" aria-label="The chart of the seas"><path class="land" d="' + chartData.land + '"/>' + dots + '</svg><p class="fine">' + (n ? n + (n === 1 ? ' station names' : ' stations name') + ' a home town. The rest name none.' : 'No station on the air has named a home port yet.') + '</p><div id="chartpick" class="chartpick" hidden></div>';
+  const go = s => { listen(s); goView('radio') };
+  const pickClose = () => { const b = $('chartpick'); if (b) { b.hidden = true; b.innerHTML = '' } };
+  $('chart').querySelectorAll('.dot').forEach(d => {
+    const act = () => { const s = stations.find(x => x.id === d.dataset.id); if (s) go(s) };
+    d.onclick = act; d.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act() } };
+  });
+  $('chart').querySelectorAll('.cluster').forEach(g => {
+    const members = clusters[+g.dataset.i].members;
+    const open = () => {
+      const b = $('chartpick');
+      b.innerHTML = '<p class="fine">' + members.length + ' stations here</p>' + members.map(s => '<button type="button" data-id="' + s.id + '">' + esc(s.name) + '<small>' + esc(s.port || '') + '</small></button>').join('') + '<button type="button" class="x">Close</button>';
+      b.hidden = false;
+      b.querySelectorAll('button[data-id]').forEach(btn => btn.onclick = () => { const s = stations.find(x => x.id === btn.dataset.id); pickClose(); if (s) go(s) });
+      b.querySelector('.x').onclick = pickClose;
+      const first = b.querySelector('button[data-id]'); if (first) first.focus();
+    };
+    g.onclick = open; g.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() } };
+  });
 }
 function view(c) { $('chart').hidden = !c; $('rows').hidden = c; $('vchart').classList.toggle('on', c); $('vlist').classList.toggle('on', !c); $('vchart').setAttribute('aria-pressed', c); $('vlist').setAttribute('aria-pressed', !c); if (c) chart() }
 $('vlist').onclick = () => view(false); $('vchart').onclick = () => view(true);
@@ -2522,7 +2574,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && pl
 
 // For anyone looking under the hood: what the player is doing.
 let tapped = null;
-window.pyrate = { node: () => radio?.id(), routes: (id, chunk) => radio?.route_check(id ?? cur?.id, chunk ?? ''), sizes: () => radio && JSON.parse(radio.log_sizes()), mine: () => kept().map(k => k.id), tap: () => { if (!ctx) return null; if (!tapped) { tapped = ctx.createMediaStreamDestination(); gain.connect(tapped) } return tapped.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, heard: heard(), stage, trouble, station: cur?.id, scheduled: sources.length, ahead_ms: playing ? aheadMs : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, view: viewOn, webcodecs }) };
+window.pyrate = { node: () => radio?.id(), routes: (id, chunk) => radio?.route_check(id ?? cur?.id, chunk ?? ''), sizes: () => radio && JSON.parse(radio.log_sizes()), mine: () => kept().map(k => k.id), chartClusters: (pts, gap) => clusterChart(pts, gap).map(c => ({ x: c.x, y: c.y, n: c.members.length })), tap: () => { if (!ctx) return null; if (!tapped) { tapped = ctx.createMediaStreamDestination(); gain.connect(tapped) } return tapped.stream }, plan: at => radio && cur ? JSON.parse(radio.plan(cur.id, at ?? radio.now())) : null, state: () => ({ playing, heard: heard(), stage, trouble, station: cur?.id, scheduled: sources.length, ahead_ms: playing ? aheadMs : 0, ctx: ctx?.state, neighbours: radio?.neighbours(), stations: stations.length, view: viewOn, webcodecs }) };
 window.pyrate.desk = () => ({ live: !!live, music: !!live?.music, sent: live?.sent ?? 0, checking: dk.checking, mic: !!dk.mic, open: dk.micOpen, hearing: dk.monOn, two: dk.two?.name ?? null, deck: { tracks: dk.list.length, at: dk.at, playing: !dk.el.paused }, pads: dk.pads.map(p => p?.name ?? null), ctx: dk.ac?.state ?? null, duck: dk.duck ? +dk.duck.gain.value.toFixed(3) : null });
 window.pyrate.deskCtx = () => dk.ac;
 window.pyrate.card = id => { const s = stations.find(x => x.id === id); return s ? { ...s, playable: playable(s) } : null };

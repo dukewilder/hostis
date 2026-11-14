@@ -753,11 +753,30 @@ def listener(pw, browser, w, visitor):
     pg.select_option("#sort", "newest"); time.sleep(0.2); newest = [r["name"] for r in rows(pg)]
     pg.select_option("#sort", "aboard"); time.sleep(0.2)
     note(f"order by Newest: {newest[:6]}")
-    t0 = time.time(); press(pg, "#vchart"); _, t = poll(lambda: pg.locator("#chart svg .dot").count() > 0, 15, 0.02); timed("Map shows the stations' home ports", t)
+    t0 = time.time(); press(pg, "#vchart"); _, t = poll(lambda: pg.locator("#chart svg .dot, #chart svg .cluster").count() > 0, 15, 0.02); timed("Map shows the stations' home ports", t)
     note("map: " + txt(pg, "#chart .fine")); shot(pg, f"listener-{tag}-8-map"); layout(pg, "the map")
+    # Every station on the map is a tap target of at least 44 px, and no two overlap: nearby home
+    # ports are gathered into one target rather than the 11 px dots that sat on top of one another.
+    hits = pg.eval_on_selector_all("#chart svg .hit", "els => els.map(e => { const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width, r.height] })")
+    small = [h for h in hits if h[2] < 43.5 or h[3] < 43.5]
+    check(bool(hits) and not small, f"map {w}: every station is a tap target of at least 44 px", f"{len(hits)} targets; {len(small)} too small: {[[round(x) for x in s] for s in small[:3]]}")
+    over = [(i, j) for i in range(len(hits)) for j in range(i + 1, len(hits)) if math.hypot(hits[i][0] - hits[j][0], hits[i][1] - hits[j][1]) < (hits[i][2] + hits[j][2]) / 2 - 1.5]
+    check(not over, f"map {w}: no two tap targets overlap", f"{len(over)} overlapping pairs of {len(hits)}")
+    # A lone dot tunes straight to its station; a gathered cluster opens a short list to choose from.
     if pg.locator("#chart .dot").count():
-        d = pg.locator("#chart .dot").first; did = d.get_attribute("data-id"); t0 = time.time(); d.click()
-        _, t = poll(lambda: st(pg).get("station") == did, 3, 0.01); check(t is not None, "a dot on the map tunes to its station")
+        d = pg.locator("#chart .dot").first; did = d.get_attribute("data-id"); d.click()
+        _, t = poll(lambda: st(pg).get("station") == did, 3, 0.01); check(t is not None, f"map {w}: a lone dot tunes to its station")
+    elif pg.locator("#chart .cluster").count():
+        pg.locator("#chart .cluster").first.click()
+        _, t = poll(lambda: shown(pg, "#chartpick"), 3, 0.02); check(t is not None, f"map {w}: a cluster opens a list of its stations")
+        b = pg.locator("#chartpick button[data-id]").first; did = b.get_attribute("data-id"); b.click()
+        _, t = poll(lambda: st(pg).get("station") == did, 3, 0.01); check(t is not None, f"map {w}: choosing a station in a cluster tunes to it")
+    else:
+        check(False, f"map {w}: at least one station on the map", str(hits))
+    # The gathering itself, on made-up points so it holds whatever the test network carries: two
+    # points a pixel apart become one target; a far one stays its own.
+    cl = pg.evaluate("() => window.pyrate.chartClusters([{x:100,y:100},{x:100.8,y:100.8},{x:460,y:210}], 60).length")
+    check(cl == 2, f"map {w}: near points gather into one target, far ones stay apart", f"{cl} clusters, want 2")
     view(pg, "list"); press(pg, "#vlist"); check(shown(pg, "#rows"), "List returns from the map")
     errors(pg, "on the station page, Share, Keep, More, search and the map")
     # 9. The mini player, above the tabs wherever the radio is out of view.

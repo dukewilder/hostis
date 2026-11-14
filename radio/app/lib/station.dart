@@ -1596,11 +1596,45 @@ class Chart {
       });
 }
 
+// Nearby home ports are gathered so that every station on the chart is a tap target of at least
+// 44 px and none sits on top of another, however far the chart is pinched open. Points within
+// `gap` chart units merge, the merged point at their centre of mass; what is left is `gap` apart.
+class _Cluster {
+  Offset at;
+  final List<Map> members;
+  _Cluster(this.at, this.members);
+}
+
+List<_Cluster> clusterChart(List<(Offset, Map)> pts, double gap) {
+  final cs = [for (final p in pts) _Cluster(p.$1, [p.$2])];
+  while (true) {
+    var bi = -1, bj = -1;
+    var bd = double.infinity;
+    for (var i = 0; i < cs.length; i++) {
+      for (var j = i + 1; j < cs.length; j++) {
+        final d = (cs[i].at - cs[j].at).distance;
+        if (d < bd) {
+          bd = d;
+          bi = i;
+          bj = j;
+        }
+      }
+    }
+    if (bi < 0 || bd >= gap) break;
+    final a = cs[bi], b = cs[bj];
+    final na = a.members.length, nb = b.members.length;
+    a.at = Offset((a.at.dx * na + b.at.dx * nb) / (na + nb), (a.at.dy * na + b.at.dy * nb) / (na + nb));
+    a.members.addAll(b.members);
+    cs.removeAt(bj);
+  }
+  return cs;
+}
+
 class ChartPainter extends CustomPainter {
   final Chart chart;
-  final List<(Offset, Map)> dots;
+  final List<_Cluster> clusters;
   final String? tuned;
-  ChartPainter(this.chart, this.dots, this.tuned);
+  ChartPainter(this.chart, this.clusters, this.tuned);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1617,15 +1651,35 @@ class ChartPainter extends CustomPainter {
       canvas.drawPath(path, fill);
       canvas.drawPath(path, edge);
     }
-    for (final (o, s) in dots) {
-      final on = s['id'] == tuned;
-      canvas.drawCircle(o, on ? 5 : 3.4, Paint()..color = black);
-      canvas.drawCircle(o, on ? 4 : 2.6, Paint()..color = s['live'] == true ? bloodBright : bone);
-      if (on) {
-        canvas.drawCircle(o, 6.5, Paint()
-          ..color = bloodBright
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2);
+    for (final c in clusters) {
+      final o = c.at;
+      if (c.members.length == 1) {
+        final s = c.members.first;
+        final on = s['id'] == tuned;
+        canvas.drawCircle(o, on ? 5 : 3.4, Paint()..color = black);
+        canvas.drawCircle(o, on ? 4 : 2.6, Paint()..color = s['live'] == true ? bloodBright : bone);
+        if (on) {
+          canvas.drawCircle(o, 6.5, Paint()
+            ..color = bloodBright
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2);
+        }
+      } else {
+        final on = c.members.any((s) => s['id'] == tuned);
+        final live = c.members.any((s) => s['live'] == true);
+        canvas.drawCircle(o, 7, Paint()..color = black);
+        canvas.drawCircle(o, 6, Paint()..color = live ? bloodBright : bone);
+        final tp = TextPainter(
+          text: TextSpan(text: '${c.members.length}', style: const TextStyle(color: black, fontSize: 7, fontWeight: FontWeight.w700)),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas, Offset(o.dx - tp.width / 2, o.dy - tp.height / 2));
+        if (on) {
+          canvas.drawCircle(o, 9, Paint()
+            ..color = bloodBright
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2);
+        }
       }
     }
   }
@@ -1649,6 +1703,37 @@ class _ChartPageState extends State<ChartPage> {
   void initState() {
     super.initState();
     Chart.load().then((c) => mounted ? setState(() => chart = c) : null);
+  }
+
+  // A gathered cluster opens a short list of the stations at that spot; tapping one tunes to it.
+  void _pick(BuildContext context, List<Map> members) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: panel,
+      builder: (sheet) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+          children: [
+            note('${members.length} stations here. Tap one to tune.'),
+            const SizedBox(height: 6),
+            for (final s in members)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(s['name'] ?? '', style: serif(17)),
+                subtitle: Text((s['port'] ?? '').toString().toUpperCase(), style: carved(11, color: boneFaint, spacing: 0.25)),
+                trailing: Text('${s['aboard'] ?? 0}', style: mono(13, color: boneDim, weight: FontWeight.w700)),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  widget.radio.tune(s['id'] as String);
+                  widget.onTune();
+                  Navigator.pop(context);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -1676,6 +1761,10 @@ class _ChartPageState extends State<ChartPage> {
               const SizedBox(height: 12),
               LayoutBuilder(builder: (context, box) {
                 final w = box.maxWidth, k = w / 720;
+                // A tap target of at least 44 px whatever the chart's size, so nearby home ports
+                // are gathered into one target rather than dots on top of one another.
+                final r = (23 / k) > 80 ? 80.0 : 23 / k;
+                final clusters = clusterChart(dots, 2 * r);
                 return Container(
                   decoration: BoxDecoration(border: Border.all(color: boneGhost, width: 0.5)),
                   child: InteractiveViewer(
@@ -1683,17 +1772,22 @@ class _ChartPageState extends State<ChartPage> {
                     child: GestureDetector(
                       onTapUp: (d) {
                         final at = Offset(d.localPosition.dx / k, d.localPosition.dy / k + 20);
-                        (Offset, Map)? best;
-                        for (final dot in dots) {
-                          if (best == null || (dot.$1 - at).distance < (best.$1 - at).distance) best = dot;
+                        _Cluster? best;
+                        for (final cl in clusters) {
+                          if (best == null || (cl.at - at).distance < (best.at - at).distance) best = cl;
                         }
-                        if (best != null && (best.$1 - at).distance < 14) {
-                          widget.radio.tune(best.$2['id'] as String);
-                          widget.onTune();
-                          Navigator.pop(context);
+                        if (best != null && (best.at - at).distance < r) {
+                          final b = best;
+                          if (b.members.length == 1) {
+                            widget.radio.tune(b.members.first['id'] as String);
+                            widget.onTune();
+                            Navigator.pop(context);
+                          } else {
+                            _pick(context, b.members);
+                          }
                         }
                       },
-                      child: CustomPaint(size: Size(w, 290 * k), painter: ChartPainter(c, dots, widget.radio.tuned)),
+                      child: CustomPaint(size: Size(w, 290 * k), painter: ChartPainter(c, clusters, widget.radio.tuned)),
                     ),
                   ),
                 );
