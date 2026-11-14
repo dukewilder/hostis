@@ -1097,7 +1097,9 @@ def t_landing(pw, browser):
                             if raw != "#" and not pg.evaluate("id => !!document.getElementById(id)", raw[1:]): dead.append(f"{label!r} -> {raw} (no such anchor)")
                             elif raw == "#": dead.append(f"{label!r} -> # (goes nowhere)")
                         elif u.scheme in ("http", "https") and u.netloc == f"127.0.0.1:{port}":
-                            if not u.path.startswith("/listen") and status(absu.split("#")[0]) != 200: dead.append(f"{label!r} -> {raw} ({status(absu.split('#')[0])})")
+                            # landing/out is served here at the root; the site serves it at /pyrateradio/.
+                            local = absu.split("#")[0].replace(f"127.0.0.1:{port}/pyrateradio/", f"127.0.0.1:{port}/", 1)
+                            if not u.path.startswith("/listen") and status(local) != 200: dead.append(f"{label!r} -> {raw} ({status(local)})")
                         elif u.scheme in ("http", "https"):
                             ext.add(u.netloc)
                             if not u.netloc or " " in absu: dead.append(f"{label!r} -> {raw} (malformed)")
