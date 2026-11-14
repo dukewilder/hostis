@@ -274,6 +274,16 @@ def silent(pg, secs, what):
 
 def until_heard(pg, sid=None, timeout=60):
     return poll(lambda: (lambda s: s.get("heard") and (sid is None or s.get("station") == sid))(st(pg)), timeout, 0.03)[1]
+def mid_track(pg, need, timeout=40):
+    """Wait until one track has played long enough that a capture of `need` seconds stays inside
+    it, clear of the bell at the top and the join at the end. The position check then reads the
+    same every run instead of racing the station's clock (the 'Low Tide' flake)."""
+    def ready():
+        p = pg.evaluate("window.pyrate.plan()") or {}
+        if p.get("kind") != "track" or not st(pg).get("heard"): return False
+        pos, dur = p.get("position_ms"), p.get("duration_ms")
+        return pos is not None and dur and 2000 <= pos <= dur - int(need * 1000 + 2000)
+    return poll(ready, timeout, 0.1)[1]
 SOUNDING = ("Gangway", "Second Watch")      # the test network's stations with recordings
 def row_id(pg, name):
     return next((r["id"] for r in rows(pg) if r["name"] == name), None)
@@ -628,7 +638,7 @@ def listener(pw, browser, w, visitor):
     sid = st(pg).get("station"); t1 = time.time(); press(pg, "#go")
     _, t = poll(lambda: txt(pg, "#go .lbl") == "Stop", 3, 0.01); timed("Listen: the button says Stop", t, 0.2)
     t = until_heard(pg, sid); timed("Listen to first sound", t)
-    hear(capture(pg, 8), "what Listen plays")
+    mid_track(pg, 8); hear(capture(pg, 8), "what Listen plays")
     m = pg.evaluate("navigator.mediaSession && navigator.mediaSession.metadata ? [navigator.mediaSession.metadata.title, navigator.mediaSession.metadata.artist] : null")
     check(m and m[0], "the phone's own controls name what plays", str(m))
     check(pg.evaluate("document.title").startswith("▶"), "the tab's title says it plays", pg.evaluate("document.title"))
@@ -791,13 +801,15 @@ def listener(pw, browser, w, visitor):
     tune(pg, "Gangway"); view(pg, "settings"); shot(pg, f"listener-{tag}-10-settings", full=True); layout(pg, "Settings")
     pg.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)"); time.sleep(0.6)
     layout(pg, "the foot of Settings, scrolled to the end"); shot(pg, f"listener-{tag}-10-foot"); pg.evaluate("window.scrollTo(0, 0)")
-    cover = lambda: pg.evaluate("(() => { const c = document.getElementById('cover'); return !c.hidden && getComputedStyle(c).display !== 'none' })()")
-    pics0 = (cover(), pg.eval_on_selector_all(".row .mini img", "l => l.length"))
-    pg.uncheck("#sw-art"); time.sleep(1.5)
-    imgs = pg.eval_on_selector_all(".row .mini img", "l => l.length")
-    check(not cover() and imgs == 0, "Show station pictures off hides every picture", f"before: cover {pics0[0]}, {pics0[1]} row pictures; after: cover shown {cover()}, {imgs} row pictures")
-    # Row pictures load as rows come into view, so they are looked for back on the list.
-    pg.check("#sw-art"); view(pg, "list"); _, t = poll(lambda: cover() and pg.eval_on_selector_all(".row .mini img", "l => l.length") >= pics0[1], 10, 0.05)
+    pics = lambda: pg.evaluate("(() => { const c = document.getElementById('cover'); const im = [...document.querySelectorAll('.row .mini img')]; return { cover: !!c && !c.hidden && getComputedStyle(c).display !== 'none', live: !!c && !c.hidden && c.complete && c.naturalWidth > 0, imgs: im.length, loaded: im.filter(i => i.complete && i.naturalWidth > 0).length } })()")
+    p0 = pics()
+    # Off hides every picture: wait on that being true, not on a fixed delay.
+    pg.uncheck("#sw-art"); _, t = poll(lambda: (lambda q: not q["cover"] and q["imgs"] == 0)(pics()), 5, 0.02)
+    q = pics(); check(t is not None, "Show station pictures off hides every picture", f"before: cover {p0['cover']}, {p0['imgs']} row pictures; after: cover shown {q['cover']}, {q['imgs']} row pictures")
+    # On brings them back: wait until the cover is a live image again and every row picture now
+    # shown has loaded (the real thing), not a count carried over from the settings view.
+    pg.check("#sw-art"); view(pg, "list")
+    _, t = poll(lambda: (lambda q: q["live"] and q["imgs"] > 0 and q["loaded"] == q["imgs"])(pics()), 12, 0.05)
     timed("Show station pictures on brings them back (on the list)", t); view(pg, "settings")
     ok_src = pg.evaluate("(() => { const c = document.getElementById('cover'); return !c.hidden && c.complete && c.naturalWidth > 0 })()")
     check(ok_src, "the picture on the set is a live image after pictures go off and on")
