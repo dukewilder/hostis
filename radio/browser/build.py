@@ -49,7 +49,8 @@ harbour = os.environ.get("PYRATE_HARBOUR") or ",".join(open(f"{R}/app/assets/boo
 import json
 # HOSTIS's own stations: the only ones the landing page's set offers.
 # A test build can name its own: PYRATE_HARBOUR_STATIONS=<a json file like harbour.json>.
-harbour_stations = json.dumps(json.load(open(os.environ.get("PYRATE_HARBOUR_STATIONS") or f"{R}/browser/harbour.json", encoding="utf-8")), ensure_ascii=False)
+# A station whose key is still to be made (an empty id) waits in the list, in its place, and is left out.
+harbour_stations = json.dumps([h for h in json.load(open(os.environ.get("PYRATE_HARBOUR_STATIONS") or f"{R}/browser/harbour.json", encoding="utf-8")) if re.fullmatch(r"[0-9a-f]{64}", h["id"])], ensure_ascii=False)
 # Each value goes in as a JSON string, so nothing in it can close the quote it sits in.
 for k in ["'{{HARBOUR}}'", "'{{RELAYS}}'", "'{{HARBOUR_STATIONS}}'", "'{{SCOPE}}'", "'{{OPEN_PLAYERS}}'", "'{{STUN}}'", "'{{DOORS}}'"]:
     assert js.count(k) == 1, k

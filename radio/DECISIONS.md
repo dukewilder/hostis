@@ -12,7 +12,7 @@ A station that plays all day and all night, that anyone can raise in three taps,
 
 **Home.** The existing HOSTIS repository, in `radio/`, served at `hostis.black/radio/`. One ship, one flag. The site already says the site will be taken down. Pyrate Radio is built so that when it is, nothing on the air goes quiet.
 
-**Licence.** CC0, as the rest of the repository already is. No rights reserved, all copies welcome. The Articles say a copy takes nothing from the maker, and a GPL would fence the code the Articles say cannot be fenced. Dependencies keep their own licences. Each is listed in `radio/THIRD_PARTY.md`.
+**Licence.** CC0, as the rest of the repository already is. No rights reserved, all copies welcome. HOSTIS gives its own work away, and fences none of it. Dependencies keep their own licences. Each is listed in `radio/THIRD_PARTY.md`.
 
 **Branch.** All work lands on `radio` first. Nothing reaches `main`, and so nothing reaches the live site, until Dylan says so.
 
@@ -604,7 +604,7 @@ Dylan: "build something to keep people from spamming stations... a joke station 
 
 ## LI. The listeners are the network (13 November 2026)
 
-Dylan's brief, in his words: the fullest expression of the HOSTIS mythos, anti-enclosure brought to maturity, in the spirit of Radio Caroline. At launch he wants to claim, reasonably, the most anonymous, decentralised, secure, resilient and uncensorable audio service there is, free, with no barrier to entry, self-moderated, and a genuinely good radio.
+Dylan's brief is the fullest expression of the HOSTIS mythos, anti-enclosure brought to maturity, in the spirit of the free-radio tradition of speech nobody licenses on a dial nobody owns. At launch he wants to claim, reasonably, the most private, decentralised, secure and resilient audio service there is, free, with no barrier to entry, self-moderated, and a genuinely good radio.
 
 - **Listening is participation.** Every listener, in the app or a browser, carries more than it takes (Crew, efabb2f): it passes on sealed requests for any station and serves what it plays behind three hops; computers carry quiet stations too.
 - **No part is load-bearing.** Lanterns, relays and HOSTIS's own machines are extra strength, never required. Doors (in progress) makes app listeners the doors and relays browsers need. Every copy of the player, and every shared link, carries a way in.

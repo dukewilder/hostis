@@ -24,7 +24,7 @@ for f in "$R"/landing/out/pyrate-radio-*-windows.zip* "$R"/landing/out/pyrate-ra
 done
 rm -rf pyrateradio/listen
 cp -r "$R/landing/out/listen" pyrateradio/listen
-for d in handbook how-it-works; do
+for d in handbook how-it-works terms sources; do
   rm -rf "pyrateradio/$d"
   cp -r "$R/landing/out/$d" "pyrateradio/$d"
 done

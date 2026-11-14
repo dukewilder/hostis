@@ -628,6 +628,7 @@ class _LiveDeskState extends State<LiveDesk> with WidgetsBindingObserver {
           Text('SECOND INPUT', style: caps(10.5, spacing: 0.22)),
           const SizedBox(height: 4),
           note('A guest\'s microphone or an interface. It loses its hum and nothing else.'),
+          note('For a guest on a call, or sound you made. Air only what is yours to air.'),
           const SizedBox(height: 8),
           Wrap(children: [
             chip('Off', two == null, () => _set({'cmd': 'desk_set', 'two_dev': null})),

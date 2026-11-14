@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # The seed folders of HOSTIS's stations, less their recordings (fetch.py brings those): the bell,
 # the programme and the notices. The Numbers and Shanties keep their own.
+# Drift, Concert Hall and Brass are drawn here too; their covers are still to come.
 #   folders.py <voice.onnx> <stations folder> [station ...]      (every station, or those named)
 # The bells are spoken by Piper's LJ Speech model (a public domain recording) over a struck chord.
 # No rights reserved.
@@ -93,7 +94,8 @@ def main():
         programme(f"{d}/programme.json", "shuffle")
         notices(f"{d}/notices.txt",
                 "Every record here was published in 1925 or earlier and is in the public domain in the United States. "
-                "The records of 1926 follow on 1 January 2027.")
+                "The records of 1926 follow on 1 January 2027.",
+                "A few tunes of the early 1920s come in newer recordings by the U.S. Air Force Band, a work of the U.S. Government and as free as the rest.")
     if want("readings"):
         d = f"{ROOT}/readings"
         os.makedirs(d, exist_ok=True)
@@ -107,11 +109,17 @@ def main():
     if want("netlabel"):
         from build_pass import NETLABEL
         night = {item for item, _, _, n in NETLABEL if n}
-        tracks = [f"{x['by']} - {x['title']}" for x in json.load(open(f"{HERE}/netlabel.json", encoding="utf-8")) if x["item"] in night]
+        rows = json.load(open(f"{HERE}/netlabel.json", encoding="utf-8"))
+        tracks = [f"{x['by']} - {x['title']}" for x in rows if x["item"] in night]
+        # The most abstract releases play in the small hours alone.
+        late = {"Generative_I", "Jade_Furnace_I", "Seetyca_Suite"}
+        day = [f"{x['by']} - {x['title']}" for x in rows if x["item"] not in late]
+        assert len(day) <= 500, len(day)
         d = f"{ROOT}/netlabel"
         os.makedirs(d, exist_ok=True)
         bell(f"{d}/bell.ogg", ["Net label.", "Free music. " + say_as], [146.83, 220.0, 293.66, 349.23])
-        programme(f"{d}/programme.json", "shuffle", [slot("The Small Hours", "Ambient and drone, eleven at night to seven in the morning.", 23 * 60, 8 * 60, tracks)])
+        programme(f"{d}/programme.json", "shuffle", [slot("The Small Hours", "Ambient and drone, eleven at night to seven in the morning.", 23 * 60, 8 * 60, tracks),
+                                                    slot("", "", 7 * 60, 16 * 60, day)])
         notices(f"{d}/notices.txt",
                 "Released by netlabels under Creative Commons Attribution or Attribution-ShareAlike, or given to the public domain. "
                 "Every recording carries its artist, its release and its licence.",
@@ -132,12 +140,40 @@ def main():
         bell(f"{d}/bell.ogg", ["Contraband.", say_as], [130.81, 155.56, 196.0, 261.63])
         programme(f"{d}/programme.json", "in_order")
         notices(f"{d}/notices.txt",
-                "Read by LibriVox volunteers, who give their recordings to the public domain. "
+                "Every book here was once banned or pursued, and every one is now in the public domain. "
+                "LibriVox volunteers read them and give their recordings to the public domain too. "
                 "The books play in order, a chapter at a time, round the clock.",
                 "Milton printed Areopagitica in 1644 without the licence it argued against. "
                 "Common Sense came out in 1776 with no author's name on it. Candide was condemned in Geneva and Paris the year it appeared.",
                 "Douglass sailed for Britain in 1845, months after his Narrative named the men who had owned him. "
-                "Thoreau spent a night in the Concord jail for refusing his poll tax. Emma Goldman was deported from the United States in 1919.")
+                "Thoreau spent a night in the Concord jail for refusing his poll tax. Emma Goldman was deported from the United States in 1919.",
+                "Ulysses was banned in the United States from 1921 to 1933. Lady Chatterley's Lover waited until 1959 there and 1960 in Britain, "
+                "and a London court ordered The Well of Loneliness destroyed in 1928. Passages of Dorian Gray were read against Wilde in court.")
+    if want("drift"):
+        d = f"{ROOT}/drift"
+        os.makedirs(d, exist_ok=True)
+        bell(f"{d}/bell.ogg", ["Drift.", say_as], [110.0, 164.81, 220.0, 329.63])
+        programme(f"{d}/programme.json", "shuffle")
+        notices(f"{d}/notices.txt",
+                "Long ambient, drone and piano, for work and for sleep. Its makers released it under Creative Commons Attribution or "
+                "Attribution-ShareAlike, or gave it to the public domain. Every recording carries its artist, its release and its licence.")
+    if want("concert-hall"):
+        d = f"{ROOT}/concert-hall"
+        os.makedirs(d, exist_ok=True)
+        bell(f"{d}/bell.ogg", ["Concert Hall.", say_as], [261.63, 329.63, 392.0, 523.25])
+        programme(f"{d}/programme.json", "shuffle")
+        notices(f"{d}/notices.txt",
+                "Every work here is in the public domain, and so is nearly every performance. Kimiko Ishizaka and Musopen gave theirs away, "
+                "and the U.S. Air Force Band's belong to everyone. Kevin MacLeod and Mikael Lind ask only for credit, under Creative Commons Attribution.")
+    if want("brass"):
+        d = f"{ROOT}/brass"
+        os.makedirs(d, exist_ok=True)
+        bell(f"{d}/bell.ogg", ["Brass.", say_as], [233.08, 293.66, 349.23, 466.16])
+        programme(f"{d}/programme.json", "shuffle")
+        notices(f"{d}/notices.txt",
+                "John Philip Sousa's marches up to those of 1926, played by the United States Marine Band, with hymns and tunes from the bands of the Navy, Army and Air Force. "
+                "Their recordings are works of the U.S. Government and belong to everyone.",
+                "The band records of 1925 and before, from Sousa's own band, Arthur Pryor's, the Scots Guards and others, came over from Shanties.")
 
 
 if __name__ == "__main__":
