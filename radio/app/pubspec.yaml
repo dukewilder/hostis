@@ -1,7 +1,7 @@
 name: pyrate
 description: "Pyrate Radio. Every install a station, a carrier and a relay. No rights reserved."
 publish_to: 'none'
-version: 0.9.15+37
+version: 0.9.16+38
 
 environment:
   sdk: ^3.9.0
@@ -12,6 +12,9 @@ dependencies:
   ffi: ^2.1.0
   path_provider: ^2.1.0
   file_picker: ^10.0.0
+  # Computers: the tray icon, and the window that closes into it (lib/tray.dart).
+  tray_manager: ^0.5.3
+  window_manager: ^0.5.1
 
 flutter:
   uses-material-design: true
@@ -25,6 +28,9 @@ flutter:
     - assets/stations/
     # The open player, for the computers to share and save (tools/open_player.py --tar).
     - path: assets/player/
+      platforms: [windows, macos, linux]
+    # The tray's icon: a .ico on Windows, a template for the Mac's menu bar.
+    - path: assets/tray/
       platforms: [windows, macos, linux]
   fonts:
     - family: Cinzel

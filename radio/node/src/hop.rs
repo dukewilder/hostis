@@ -96,19 +96,51 @@ pub(crate) enum Ask {
     /// To the radio that leads to a deck: open `lead`, which was sealed to this radio and names
     /// the listener behind the deck, and pass `blob` (a `Hop::Sealed` for the deck's key) to it.
     Lead { lead: Vec<u8>, blob: Vec<u8> },
+    /// From a deck no relay reaches (a tab behind a door), sealed to its way in and sent along
+    /// an ordinary three-hop route: the tab, its guard, a middle, this radio. It brings the
+    /// deck's answers to asks it was handed (by number), and now and then its note to pass on,
+    /// and takes back the asks waiting for it, held a few seconds when there are none. `cookie`
+    /// is what the deck's lead names in place of a node (`pyrate_core::route::LEAD_PULL`), so
+    /// the way in learns neither the listener's node nor its address, and the guard sees one
+    /// more sealed forward to a middle.
+    Pull { cookie: [u8; 32], note: Vec<u8>, answers: Vec<(u64, Vec<u8>)> },
 }
 
 impl Ask {
     fn station(&self) -> Option<StationId> {
         match self {
             Ask::Log { station, .. } | Ask::Chunk { station, .. } | Ask::Token { station, .. } | Ask::Sealed { station, .. } | Ask::Stem { station, .. } => Some(*station),
-            Ask::Relay { .. } | Ask::Lead { .. } => None,
+            Ask::Relay { .. } | Ask::Lead { .. } | Ask::Pull { .. } => None,
         }
     }
 }
 
 /// The longest a middle or a way in waits on the radio after it.
 const PASS_MS: u64 = 8_000;
+/// How long a way in holds a deck's pull when no ask waits for it: well inside the middle's
+/// `PASS_MS`, so the route stands, and about as long as a slow fetch.
+const PULL_HOLD_MS: u64 = 4_000;
+/// How long a requester's ask waits for the deck's answer at its way in.
+const PULL_ANSWER_MS: u64 = 6_500;
+/// Decks one way in keeps, asks waiting for one deck, and pulls held for one deck at once.
+const PULL_BOXES: usize = 256;
+const PULL_QUEUE: usize = 16;
+const PULL_PARKED: usize = 3;
+/// A deck that has not pulled for this long has gone.
+const PULL_GONE_MS: u64 = 45_000;
+
+/// A deck behind a door, as its way in keeps it: the asks waiting to be pulled, by number, and
+/// who waits on each answer. Nothing in it names the listener.
+#[derive(Default)]
+pub(crate) struct PullBox {
+    seen: u64,
+    noted: u64,
+    next: u64,
+    queue: std::collections::VecDeque<(u64, Vec<u8>)>,
+    answers: std::collections::HashMap<u64, tokio::sync::oneshot::Sender<Vec<u8>>>,
+    parked: usize,
+    wake: Arc<tokio::sync::Notify>,
+}
 /// How long a radio must have been known before it may be a first hop.
 pub(crate) const NEWCOMER_MS: u64 = 10 * 60_000;
 /// How long a radio's word that it is of the crew is believed: it says so every two minutes, so
@@ -293,7 +325,7 @@ impl Inner {
         // Apart from the guard: a middle homed on the guard's relay, or named by the radio that
         // named the guard, would put both in one operator's view. Where none is apart, the draw
         // goes on and is counted.
-        let home = |n: &[u8; 32]| self.crew_radios.lock().unwrap().get(n).map(|(r, _)| r.clone()).or_else(|| EndpointId::from_bytes(n).ok().and_then(|id| self.met.lock().unwrap().get(&id).cloned()));
+        let home = |n: &[u8; 32]| self.crew_radios.lock().unwrap().get(n).map(|(r, _)| r.clone()).filter(|r| !r.is_empty()).or_else(|| EndpointId::from_bytes(n).ok().and_then(|id| self.met.lock().unwrap().get(&id).cloned()));
         let g_home: Vec<String> = guards.iter().filter_map(home).collect();
         let apart: Vec<[u8; 32]> = pool.iter().filter(|n| home(n).is_none_or(|h| !g_home.contains(&h))).copied().collect();
         if apart.is_empty() && !pool.is_empty() && !g_home.is_empty() {
@@ -622,6 +654,11 @@ impl Inner {
                 if matches!(ask, Ask::Relay { .. } | Ask::Lead { .. }) {
                     return self.pass_on(ask, &c).await;
                 }
+                if let Ask::Pull { cookie, note, answers } = ask {
+                    let Some(items) = self.on_pull(cookie, note, answers).await else { return vec![] };
+                    let out = postcard::to_stdvec(&items).unwrap_or_default();
+                    return c.encrypt(Nonce::from_slice(&ANSWER_NONCE), out.as_slice()).unwrap_or_default();
+                }
                 let resp = match ask {
                     // What is here goes back at once, and the exit catches up behind it: a listener
                     // tuning in waits on one answer, not on every carrier this exit could ask first.
@@ -660,7 +697,7 @@ impl Inner {
                         let took = Box::pin(self.on_stem(station, entries, chunks, announce)).await;
                         Response::Sealed(took.then(|| vec![1]))
                     }
-                    Ask::Relay { .. } | Ask::Lead { .. } => return vec![],
+                    Ask::Relay { .. } | Ask::Lead { .. } | Ask::Pull { .. } => return vec![],
                 };
                 let out = postcard::to_stdvec(&resp).unwrap_or_default();
                 if matches!(resp, Response::Entries(_) | Response::Chunk(_) | Response::Sealed(Some(_))) {
@@ -688,6 +725,18 @@ impl Inner {
             Ask::Relay { next, blob } => (next, blob),
             Ask::Lead { lead, blob } => {
                 let Some(l) = pyrate_core::route::open_lead(&self.secret, &me, &lead) else { return vec![] };
+                // A deck behind a door: handed to it in its next pull, never dialled.
+                if l.relay == pyrate_core::route::LEAD_PULL {
+                    if !matches!(postcard::from_bytes::<Hop>(&blob), Ok(Hop::Sealed { .. })) {
+                        return vec![];
+                    }
+                    let raw = self.pull_hand(l.to, blob).await;
+                    if raw.is_empty() {
+                        return raw;
+                    }
+                    self.relayed_bytes.fetch_add(raw.len() as u64, std::sync::atomic::Ordering::Relaxed);
+                    return pyrate_core::route::seal_answer(c, &raw);
+                }
                 // The listener is reached through the relay its lead names, and nowhere else.
                 let Ok(url) = l.relay.parse::<iroh::RelayUrl>() else { return vec![] };
                 if !crate::net::relay_public(&l.relay) {
@@ -721,6 +770,122 @@ impl Inner {
         };
         self.relayed_bytes.fetch_add(raw.len() as u64, std::sync::atomic::Ordering::Relaxed);
         pyrate_core::route::seal_answer(c, &raw)
+    }
+
+    /// A deck's pull, at its way in: the answers it brings go to the requesters waiting on them,
+    /// its note (if it is this deck's, naming this radio and this cookie) goes on to the
+    /// network, and the asks waiting for it come back, after up to `PULL_HOLD_MS` when there
+    /// are none. None when this radio keeps too many decks already, or holds enough of this
+    /// one's pulls.
+    pub(crate) async fn on_pull(self: &Arc<Self>, cookie: [u8; 32], note: Vec<u8>, answers: Vec<(u64, Vec<u8>)>) -> Option<Vec<(u64, Vec<u8>)>> {
+        if !self.crew.load(std::sync::atomic::Ordering::Relaxed) {
+            return None;
+        }
+        let now = now_ms();
+        let (wake, noted) = {
+            let mut p = self.pulls.lock().unwrap();
+            p.retain(|_, b| now.saturating_sub(b.seen) < PULL_GONE_MS);
+            if !p.contains_key(&cookie) && p.len() >= PULL_BOXES {
+                return None;
+            }
+            let b = p.entry(cookie).or_default();
+            b.seen = now;
+            for (id, raw) in answers.into_iter().take(PULL_QUEUE) {
+                if let Some(tx) = b.answers.remove(&id) {
+                    let _ = tx.send(raw);
+                }
+            }
+            let noted = !note.is_empty() && now.saturating_sub(b.noted) > 20_000;
+            if noted {
+                b.noted = now;
+            }
+            if b.parked >= PULL_PARKED {
+                return Some(vec![]);
+            }
+            b.parked += 1;
+            (b.wake.clone(), noted)
+        };
+        if noted {
+            if let Some(g) = self.pull_note(&cookie, &note) {
+                self.notes.lock().unwrap().keep(&g, &note, now);
+                let _ = self.on_gossip(g.clone());
+                let d = self.door.lock().unwrap().clone();
+                if let Some(d) = d {
+                    d.push(&note);
+                }
+                let i = self.clone();
+                tokio::spawn(async move { i.broadcast(&g).await });
+            }
+        }
+        let end = tokio::time::Instant::now() + Duration::from_millis(PULL_HOLD_MS);
+        loop {
+            let waited = wake.notified();
+            tokio::pin!(waited);
+            waited.as_mut().enable();
+            {
+                let mut p = self.pulls.lock().unwrap();
+                let Some(b) = p.get_mut(&cookie) else { return Some(vec![]) };
+                if !b.queue.is_empty() || tokio::time::Instant::now() >= end {
+                    b.parked = b.parked.saturating_sub(1);
+                    let mut out = Vec::new();
+                    let mut bytes = 0;
+                    while let Some((id, blob)) = b.queue.pop_front() {
+                        bytes += blob.len();
+                        out.push((id, blob));
+                        if bytes > 256 * 1024 {
+                            break;
+                        }
+                    }
+                    return Some(out);
+                }
+            }
+            let _ = tokio::time::timeout_at(end, waited).await;
+        }
+    }
+
+    /// A requester's ask for a deck behind a door, handed to the deck's next pull: the deck's
+    /// answer, or nothing within `PULL_ANSWER_MS`.
+    async fn pull_hand(&self, cookie: [u8; 32], blob: Vec<u8>) -> Vec<u8> {
+        let now = now_ms();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let id = {
+            let mut p = self.pulls.lock().unwrap();
+            let Some(b) = p.get_mut(&cookie).filter(|b| now.saturating_sub(b.seen) < PULL_GONE_MS) else { return vec![] };
+            if b.queue.len() >= PULL_QUEUE {
+                return vec![];
+            }
+            b.next += 1;
+            let id = b.next;
+            b.queue.push_back((id, blob));
+            b.answers.insert(id, tx);
+            b.wake.notify_waiters();
+            id
+        };
+        let r = tokio::time::timeout(Duration::from_millis(PULL_ANSWER_MS), rx).await;
+        if let Some(b) = self.pulls.lock().unwrap().get_mut(&cookie) {
+            b.answers.remove(&id);
+            b.queue.retain(|(i, _)| *i != id);
+        }
+        match r {
+            Ok(Ok(raw)) => raw,
+            _ => vec![],
+        }
+    }
+
+    /// A deck's note brought by its pull, if it is that deck's: signed by the deck, naming this
+    /// radio as its way in, with a lead that opens here to this cookie.
+    fn pull_note(&self, cookie: &[u8; 32], raw: &[u8]) -> Option<Gossip> {
+        if raw.len() > 1024 {
+            return None;
+        }
+        let g: Gossip = postcard::from_bytes(raw).ok()?;
+        let me = *self.endpoint.id().as_bytes();
+        let (_, _, d) = g.deck_checked(now_ms())?;
+        if d.intro != me {
+            return None;
+        }
+        let l = pyrate_core::route::open_lead(&self.secret, &me, &d.lead)?;
+        (l.to == *cookie && l.relay == pyrate_core::route::LEAD_PULL).then_some(g)
     }
 
     /// A stem's cargo, arrived plain or sealed: passed on, or kept and shown after a wait.
@@ -1106,6 +1271,37 @@ mod tests {
         assert!(matches!(got, Ask::Sealed { name, .. } if name == [7; 32]));
         let raw = pyrate_core::route::seal_answer(&c_mid, &pyrate_core::route::seal_answer(&c_intro, &pyrate_core::route::seal_answer(&c_deck, b"sound")));
         assert_eq!(open_layers(&ciphers, &raw).as_deref(), Some(&b"sound"[..]));
+    }
+
+    #[test]
+    fn a_deck_behind_a_door_pulls_through_a_middle_and_its_way_in_learns_no_listener() {
+        // The tab builds its pull as an ordinary three-hop route whose exit is its way in.
+        let ((mid_seed, middle), (intro_seed, intro), (_, listener)) = (radio(2), radio(4), radio(6));
+        let cookie = [8u8; 32];
+        let note = Gossip::deck(&[5; 32], StationId([9; 32]), 3, intro, vec![], 10_000);
+        let raw_note = postcard::to_stdvec(&note).unwrap();
+        let ask = Ask::Pull { cookie, note: raw_note, answers: vec![(1, b"sealed answer".to_vec())] };
+        let (Hop::Forward { next, blob }, _) = three_hops(&middle, &intro, &postcard::to_stdvec(&ask).unwrap(), None).unwrap() else { panic!() };
+        // The guard (the door) sees a forward to a middle, as for any route: no way in, no
+        // cookie, no station.
+        assert_eq!(next, middle);
+        for secret in [&intro[..], &cookie[..], &[9u8; 32][..]] {
+            assert!(!holds(&blob, secret), "the guard's blob names nothing it should not");
+        }
+        // The middle sees the way in, and neither the cookie nor the station.
+        let (Ask::Relay { next, blob }, _, plain) = open(&mid_seed, &middle, &blob) else { panic!() };
+        assert_eq!(next, intro);
+        assert!(!holds(&plain, &cookie) && !holds(&plain, &[9u8; 32]));
+        // The way in reads the cookie, and nothing names the listener's node.
+        let (Ask::Pull { cookie: c, answers, .. }, _, plain) = open(&intro_seed, &intro, &blob) else { panic!("a pull") };
+        assert_eq!(c, cookie);
+        assert_eq!(answers.len(), 1);
+        assert!(!holds(&plain, &listener));
+        // Its lead names the cookie and no relay, and opens only for the way in.
+        let lead = pyrate_core::route::make_lead(&intro, &pyrate_core::route::Lead { to: cookie, relay: pyrate_core::route::LEAD_PULL.into() }).unwrap();
+        let l = pyrate_core::route::open_lead(&intro_seed, &intro, &lead).unwrap();
+        assert_eq!((l.to, l.relay.as_str()), (cookie, pyrate_core::route::LEAD_PULL));
+        assert!(pyrate_core::route::open_lead(&mid_seed, &middle, &lead).is_none());
     }
 
     #[test]

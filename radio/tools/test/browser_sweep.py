@@ -124,7 +124,12 @@ def connected(pg, timeout=60):
 def rows(pg):
     return pg.eval_on_selector_all(".row:not(.skel)", "rs => rs.map(r => ({ id: r.dataset.id, name: r.querySelector('.name').firstChild.textContent, tags: [...r.querySelectorAll('.tag')].map(t => t.textContent) }))")
 def view(pg, v):
-    press(pg, f".tab[data-v={v}]")
+    # The station page has no tab of its own (the player's four places): it opens from Page on the set.
+    if v == "page":
+        if st(pg).get("view") != "radio": press(pg, ".tab[data-v=radio]")
+        press(pg, "#pagego")
+    else:
+        press(pg, f".tab[data-v={v}]")
     return poll(lambda: st(pg).get("view") == v, 5, 0.02)[1]
 
 def shot(pg, name, full=False):
@@ -141,7 +146,13 @@ def shot(pg, name, full=False):
 # top of one another, names on the dial that overlap, and tap targets too small for a thumb.
 LAYOUT = r"""() => {
   const W = innerWidth, out = [];
-  const vis = e => { if (e.closest('[hidden]') || (e.closest('details:not([open])') && !e.closest('summary'))) return false; const s = getComputedStyle(e); if (s.visibility === 'hidden' || s.display === 'none' || +s.opacity === 0) return false; const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 };
+  // What shows of an element: its box cut to every box round it that clips (a view that scrolls
+  // inside the page), or null when none of it shows. The player's views scroll on their own
+  // above the mini player and the tabs, so what has scrolled under them is out of sight.
+  const vrect = e => { const r = e.getBoundingClientRect(); let t = r.top, b = r.bottom, l = r.left, rt = r.right;
+    for (let a = e.parentElement; a && a !== document.body && a !== document.documentElement; a = a.parentElement) { const s = getComputedStyle(a); if (s.overflowX === 'visible' && s.overflowY === 'visible') continue; const q = a.getBoundingClientRect(); t = Math.max(t, q.top); b = Math.min(b, q.bottom); l = Math.max(l, q.left); rt = Math.min(rt, q.right) }
+    return b - t > 2 && rt - l > 2 ? { top: t, bottom: b, left: l, right: rt } : null };
+  const vis = e => { if (e.closest('[hidden]') || (e.closest('details:not([open])') && !e.closest('summary'))) return false; const s = getComputedStyle(e); if (s.visibility === 'hidden' || s.display === 'none' || +s.opacity === 0) return false; const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !!vrect(e) };
   const nm = e => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (typeof e.className === 'string' && e.className.trim() ? '.' + e.className.trim().split(/\s+/).join('.') : '') + ' "' + (e.textContent || e.value || e.placeholder || '').trim().replace(/\s+/g, ' ').slice(0, 28) + '"';
   if (document.documentElement.scrollWidth > W + 1) out.push('the page scrolls sideways: ' + document.documentElement.scrollWidth + ' px in ' + W);
   for (const e of document.querySelectorAll('body *')) {
@@ -153,10 +164,10 @@ LAYOUT = r"""() => {
     if (e.children.length === 0 && e.textContent.trim() && e.scrollWidth > e.clientWidth + 2 && s.overflowX !== 'visible') out.push((s.textOverflow === 'ellipsis' ? 'cut short with an ellipsis: ' : 'text clipped: ') + nm(e));
     if (e.children.length === 0 && e.textContent.trim() && e.scrollHeight > e.clientHeight + 3 && s.overflowY === 'hidden' && s.webkitLineClamp === 'none') out.push('text clipped at the bottom: ' + nm(e));
   }
-  // The mini player is fixed over the page: what it covers counts only at the foot of the page,
-  // where nothing can be scrolled out from under it.
+  // The mini player sits below the view that scrolls: what it covers is what shows of anything
+  // over it, at the foot of the page, where nothing can be scrolled out from under it.
   const mini = document.getElementById('mini'), atFoot = scrollY + innerHeight >= document.documentElement.scrollHeight - 2;
-  if (mini && vis(mini) && atFoot) { const m = mini.getBoundingClientRect(); for (const e of document.querySelectorAll('a, button, input, select, textarea, p')) { if (mini.contains(e) || !vis(e)) continue; const r = e.getBoundingClientRect(); if (Math.min(r.right, m.right) - Math.max(r.left, m.left) > 2 && Math.min(r.bottom, m.bottom) - Math.max(r.top, m.top) > 2) out.push('at the foot of the page the mini player covers ' + nm(e)) } }
+  if (mini && vis(mini) && atFoot) { const m = mini.getBoundingClientRect(); for (const e of document.querySelectorAll('a, button, input, select, textarea, p')) { if (mini.contains(e) || !vis(e)) continue; const r = vrect(e); if (Math.min(r.right, m.right) - Math.max(r.left, m.left) > 2 && Math.min(r.bottom, m.bottom) - Math.max(r.top, m.top) > 2) out.push('at the foot of the page the mini player covers ' + nm(e)) } }
   // A bar that sticks to the top while the page scrolls covers whatever passes under it: only
   // two things that move together, or two that are both pinned, can truly overlap.
   // A menu that opens over the page (absolute, raised) is meant to cover what is under it.
@@ -164,13 +175,15 @@ LAYOUT = r"""() => {
   const ctl = [...document.querySelectorAll('button, a, input, select, textarea, h1, h2, .np, .by, .slot, .time, .ident, .cs, .tag')].filter(e => !e.closest('#glass, svg, .skip-link, #mini') && vis(e));
   for (let i = 0; i < ctl.length; i++) for (let j = i + 1; j < ctl.length; j++) {
     const a = ctl[i], b = ctl[j]; if (a.contains(b) || b.contains(a) || pinned(a) !== pinned(b)) continue;
-    const p = a.getBoundingClientRect(), q = b.getBoundingClientRect();
+    const p = vrect(a), q = vrect(b); if (!p || !q) continue;
     if (Math.min(p.right, q.right) - Math.max(p.left, q.left) > 2 && Math.min(p.bottom, q.bottom) - Math.max(p.top, q.top) > 2) out.push('overlap: ' + nm(a) + ' / ' + nm(b));
   }
   const dn = [...document.querySelectorAll('#names button')];
   for (let i = 0; i < dn.length; i++) for (let j = i + 1; j < dn.length; j++) { const p = dn[i].getBoundingClientRect(), q = dn[j].getBoundingClientRect(); if (Math.min(p.right, q.right) - Math.max(p.left, q.left) > 1 && Math.min(p.bottom, q.bottom) - Math.max(p.top, q.top) > 1) out.push('names overlap on the dial: ' + dn[i].textContent + ' / ' + dn[j].textContent) }
   // A box inside its label is tapped through the label: the label is what must be big enough.
-  if (W < 600) for (const e of document.querySelectorAll('button, a, input, select, [role=button], summary, label')) { if (e.closest('.skip-link, footer, #glass') || !vis(e) || (e.matches('input[type=checkbox], input[type=radio]') && e.closest('label')) || (e.matches('label') && !e.querySelector('input[type=checkbox], input[type=radio]'))) continue; const r = e.getBoundingClientRect(); if (r.height < 30 || r.width < 30) out.push('small to tap: ' + nm(e) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)) }
+  // A link inside a sentence is sized by its text, as WCAG's target-size rule allows.
+  const inline = e => e.matches('a') && getComputedStyle(e).display === 'inline' && !!e.parentElement && e.parentElement.textContent.trim().length > e.textContent.trim().length + 12;
+  if (W < 600) for (const e of document.querySelectorAll('button, a, input, select, [role=button], summary, label')) { if (e.closest('.skip-link, footer, #glass') || !vis(e) || inline(e) || (e.matches('input[type=checkbox], input[type=radio]') && e.closest('label')) || (e.matches('label') && !e.querySelector('input[type=checkbox], input[type=radio]'))) continue; const r = e.getBoundingClientRect(); if (r.height < 30 || r.width < 30) out.push('small to tap: ' + nm(e) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)) }
   return [...new Set(out)].slice(0, 30);
 }"""
 def layout(pg, where):

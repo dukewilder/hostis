@@ -18,6 +18,7 @@ import 'mirror.dart';
 import 'more.dart';
 import 'native.dart';
 import 'station.dart';
+import 'tray.dart';
 
 // The site's ink.
 const black = Color(0xFF030303);
@@ -184,6 +185,8 @@ void main(List<String> args) async {
   // are invitations and flocks; hostis.black carries HOSTIS's stations alone.
   openPlayers = (await rootBundle.loadString('assets/open_players.txt')).split('\n').map((l) => l.trim()).where((l) => l.startsWith('https://')).toList();
   if (nodeStarted && openPlayers.isNotEmpty) Native.call({'cmd': 'open_player', 'url': openPlayers.first});
+  // A computer may keep the radio running with its window closed (lib/tray.dart).
+  if (isComputer) await Tray.it.start(hidden: args.contains('--quiet')).catchError((_) {});
   runApp(const PyrateApp());
 }
 
@@ -202,6 +205,7 @@ class Tuner extends ChangeNotifier {
   Timer? _poll;
   Timer? _scan;
   int _ticks = 0;
+  int _hidden = 0;
   final int _born = DateTime.now().millisecondsSinceEpoch;
   /// Stations opened by a link this session: in reach whether or not they are listed.
   final Set<String> linked = {};
@@ -255,7 +259,12 @@ class Tuner extends ChangeNotifier {
     Native.call({'cmd': 'hiss', 'value': pref('hiss') != false});
     // "Carry the radio while you listen": on unless its owner turned it off.
     Native.call({'cmd': 'crew', 'on': pref('crew') != false});
-    _poll = Timer.periodic(const Duration(milliseconds: 700), (_) => _refresh());
+    // With the window closed and the radio in the tray, news from the node every five seconds
+    // or so: nobody is looking, and the computer should not feel it running.
+    _poll = Timer.periodic(const Duration(milliseconds: 700), (_) {
+      if (!Tray.shown && ++_hidden % 7 != 0) return;
+      _refresh();
+    });
     // Ballast fills only on Wi-Fi while charging, so the fleet never costs the owner.
     _ballast = Timer.periodic(const Duration(seconds: 60), (_) => _checkBallast());
     // A computer carries a modest share for the fleet, 2 GB, unless its owner offers more.
@@ -538,12 +547,16 @@ class Tuner extends ChangeNotifier {
     playing = true;
     _acts++;
     busySince = DateTime.now().millisecondsSinceEpoch;
-    if (!firstTuneDone && isComputer && pref('autostart') == null) {
-      // After the first listen a computer starts with itself, which is how the radio stays up
-      // for everyone; said once, calmly, and undone in Settings.
-      pref('autostart', true);
-      unawaited(Autostart.set(true));
-      say('This computer will now start the radio when it starts, so the stations stay up. You can turn that off in Settings.');
+    if (!firstTuneDone && isComputer && (pref('autostart') == null || pref('keep_running') == null)) {
+      // After the first listen a computer starts with itself and keeps the radio running when
+      // its window closes, which is how the radio stays up for everyone; said once, calmly,
+      // and undone in Settings.
+      if (pref('autostart') == null) {
+        pref('autostart', true);
+        unawaited(Autostart.set(true));
+      }
+      if (pref('keep_running') == null) unawaited(Tray.it.set(true));
+      say('This computer will now start the radio when it starts and keep it running in ${Tray.place} when you close the window, so the stations stay up. You can change either in Settings.');
     }
     firstTuneDone = true;
     pref('first_tune', true);
@@ -705,6 +718,9 @@ class _PyrateAppState extends State<PyrateApp> {
         splashFactory: NoSplash.splashFactory,
         highlightColor: Colors.transparent,
       ),
+      // With the window closed into the tray nothing moves: no animation asks for a frame, so a
+      // radio left running draws nothing at all (lib/tray.dart).
+      builder: (context, child) => ValueListenableBuilder<bool>(valueListenable: Tray.visible, builder: (_, v, c) => TickerMode(enabled: v, child: c!), child: child),
       home: ListenableBuilder(
         listenable: radio,
         // Back from Stations, Broadcast or Settings comes back to the radio before it leaves.
