@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-6MBa8wXKLGTYFDz3rGwbGGk4F/lu0RO4nT6soMe1ZC4='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https: wss:; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<link rel="modulepreload" href="app.js?v=3971982435">
-<link rel="modulepreload" href="pkg/pyrate_browser.js?v=3971982435">
-<link rel="preload" href="pkg/pyrate_browser_bg.3971982435.wasm" as="fetch" type="application/wasm" crossorigin>
+<link rel="modulepreload" href="app.js?v=73fb8f5cb9">
+<link rel="modulepreload" href="pkg/pyrate_browser.js?v=73fb8f5cb9">
+<link rel="preload" href="pkg/pyrate_browser_bg.73fb8f5cb9.wasm" as="fetch" type="application/wasm" crossorigin>
 <link rel="preload" href="fonts/im-fell-dw-pica-sc-400-860d6a62.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/jetbrains-mono-400-cfd8dabe.woff2" as="font" type="font/woff2" crossorigin>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -492,11 +492,25 @@ button.small:hover{color:var(--black);background:var(--ink);border-color:var(--i
 .row .mini{width:54px;height:54px;align-content:center}
 .chart svg{display:block;width:100%;height:auto;border:1px solid var(--line);background:var(--panel)}
 .chart .land{fill:rgba(237,228,206,.07);stroke:var(--ghost);stroke-width:.4}
-.chart .dot{cursor:pointer}.chart .dot circle{fill:var(--ink);stroke:var(--black);stroke-width:1}
-.chart .dot.live circle{fill:var(--redup)}.chart .dot.on circle{r:5;fill:var(--black);stroke:var(--red);stroke-width:1.5}
-.chart .dot:hover circle,.chart .dot:focus-visible circle{r:5}
-/* each dot answers a finger over a wider ring than it is drawn: ten pixels across on a phone */
-.chart .dot circle.hit,.chart .dot.live circle.hit,.chart .dot.on circle.hit,.chart .dot:hover circle.hit,.chart .dot:focus-visible circle.hit{r:11px;fill:transparent;stroke:none}
+.chart{position:relative}
+.chart .dot,.chart .cluster{cursor:pointer}
+.chart .dot circle:not(.hit),.chart .cluster .co{fill:var(--ink);stroke:var(--black);stroke-width:1}
+.chart .dot.live circle:not(.hit),.chart .cluster.live .co{fill:var(--redup)}
+.chart .dot.on circle:not(.hit){r:5;fill:var(--black);stroke:var(--red);stroke-width:1.5}
+.chart .dot:hover circle:not(.hit),.chart .dot:focus-visible circle:not(.hit){r:5}
+.chart .cluster .cn{fill:var(--black);font:700 7px "JetBrains Mono",monospace;text-anchor:middle;dominant-baseline:central;pointer-events:none}
+.chart .cluster:hover .co,.chart .cluster:focus-visible .co{stroke:var(--red);stroke-width:1.5}
+.chart .dot:focus-visible,.chart .cluster:focus-visible{outline:none}
+/* each station answers a finger over a ring at least 44 px across, so nearby home ports are
+   gathered into one tap target rather than sitting on top of one another */
+.chart .hit{fill:transparent;stroke:none}
+.chartpick{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:20;background:var(--black);border:1px solid var(--ghost);max-width:min(280px,90%);max-height:76%;overflow:auto;padding:6px}
+.chartpick .fine{margin:.2rem .3rem .4rem}
+.chartpick button{display:block;width:100%;min-height:44px;text-align:left;padding:6px 10px;background:none;border:0;border-top:1px solid var(--line);color:var(--ink);cursor:pointer;font:inherit}
+.chartpick button:first-of-type{border-top:0}
+.chartpick button small{display:block;color:var(--ghost);font-size:.72em;text-transform:uppercase;letter-spacing:.04em}
+.chartpick button.x{text-align:center;color:var(--ghost);min-height:38px}
+.chartpick button:hover,.chartpick button:focus-visible{background:var(--line)}
 .chart p{margin-top:.6rem}
 
 /* your colours */
@@ -1162,6 +1176,6 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 <button id="mini-up" class="mp-main" aria-label="Back to the radio"><span id="mini-art" class="mp-art" aria-hidden="true"></span><span class="mp-text"><span id="mini-name" class="mp-name"></span><span id="mini-np" class="mp-np"></span></span></button>
 <button id="mini-go" class="mp-go" aria-label="Listen"><span class="glyph" aria-hidden="true"></span></button>
 </div>
-<script type="module" src="app.js?v=3971982435"></script>
+<script type="module" src="app.js?v=73fb8f5cb9"></script>
 </body>
 </html>

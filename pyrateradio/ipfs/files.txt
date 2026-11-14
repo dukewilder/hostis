@@ -8,4 +8,4 @@ bafybeif736juxf2nquix2g7xpvp3keyqb6owbvkrl7dmnryw5mihpnpjra pyrate-radio-0.9.5.a
 bafybeic2ta476qzcxfxp5erq43eu436af6gqgwgzxoubj5zq2v3ffory3m pyrate-radio-0.9.16-macos.zip
 bafybeiepuqbtqmv3j6f7i4u2kr5cb4gohsbmttwexxlwf2q2p45br3ksrm pyrate-radio-0.9.16-windows.zip
 bafybeidbt4d5fppy6zor4yof2zinppg4vc265ax33iusj34kijr6vi4uh4 pyrate-radio-0.9.16-linux-x64.tar.gz
-bafybeih2ledg7t73ixcedwd4l6oyd7cjz62pn3fz4ozqs74nmggrtwgqem source/pyrate-radio-src-8556137.tar.gz
+bafybeif3fhi7be6ns5vbdk2do4vdhyvsmb77yjlw3bvmocuxtfhj24a4me source/pyrate-radio-src-1cfc711.tar.gz
