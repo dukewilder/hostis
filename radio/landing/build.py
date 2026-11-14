@@ -27,7 +27,7 @@ else:
     sha, size, magnet = "(build pending)", "?", "#"
 import json
 op = json.load(open(f"{R}/browser/www/open.json"))
-page = page.replace("{{OPEN_ORIGIN}}", op["players"][0].rstrip("/")).replace("{{OPEN_PLAYERS}}", json.dumps(op["players"])).replace("{{HARBOUR_IDS}}", json.dumps([h["id"] for h in json.load(open(f"{R}/browser/harbour.json", encoding="utf-8"))]))
+page = page.replace("{{OPEN_ORIGIN}}", op["players"][0].rstrip("/")).replace("{{OPEN_PLAYERS}}", json.dumps(op["players"])).replace("{{HARBOUR_IDS}}", json.dumps([h["id"] for h in json.load(open(f"{R}/browser/harbour.json", encoding="utf-8")) if re.fullmatch(r"[0-9a-f]{64}", h["id"])]))
 # Every other copy of the open player: its IPFS names and the Lanterns in browser/mirrors.txt.
 page = page.replace("{{MIRRORS}}", "<br>".join(f'<a href="{u}" target="_blank" rel="noopener noreferrer">{u.split("://", 1)[1].rstrip("/")}</a>' for u in op["players"]))
 page = page.replace("{{VERSION}}", version).replace("{{SHA}}", sha).replace("{{SIZE}}", size).replace("{{MAGNET}}", magnet.replace("&", "&amp;"))
@@ -76,7 +76,9 @@ foot = page[page.index("<footer>"):page.index("</footer>") + 9]
 desc = re.search(r'<meta name="description" content="([^"]*)">', head).group(1)
 for slug, body, title, about in [
     ("handbook", "handbook.body.html", "The Keeper's Handbook", "What Pyrate Radio does to keep a station keeper unknown, what only the keeper can do, and how the network stands."),
-    ("how-it-works", "how.body.html", "Nobody Can Switch It Off · How Pyrate Radio Works", "No server and nobody in charge. How Pyrate Radio carries every station, keeps listeners and keepers unseen, and what it would take to stop it."),
+    ("terms", "terms.body.html", "Terms", "What using Pyrate Radio means: what you air is yours to answer for, what HOSTIS runs, and where to send a notice."),
+    ("sources", "sources.body.html", "Sources", "Every recording on HOSTIS's own stations, with its licence and where it came from."),
+    ("how-it-works", "how.body.html", "How Pyrate Radio Works", "No server and nobody in charge. How Pyrate Radio carries every station, keeps listeners and keepers unseen, and what a censor would need to silence it."),
 ]:
     h = head.replace('"https://hostis.black/pyrateradio/"', f'"https://hostis.black/pyrateradio/{slug}/"')
     h = re.sub(r"<title>.*?</title>", f"<title>{title} · Pyrate Radio · HOSTIS</title>", h)

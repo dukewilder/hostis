@@ -494,7 +494,8 @@ class Tuner extends ChangeNotifier {
     if (!firstTuneDone) {
       final real = stations.where((s) => s['placeholder'] != true);
       final kept = real.where((s) => s['kept'] == true);
-      final home = real.where((s) => harbour.contains(s['id']));
+      // HOSTIS's own in the harbour's order, so a new listener hears the first of them.
+      final home = [for (final id in harbour) ...real.where((s) => s['id'] == id)];
       final waited = DateTime.now().millisecondsSinceEpoch - _born >= 3000;
       final pick = kept.isNotEmpty ? kept.first : home.isNotEmpty ? home.first : waited && real.isNotEmpty ? real.first : null;
       if (pick != null) tune(pick['id'] as String);
@@ -1641,7 +1642,7 @@ class _ColoursPageState extends State<ColoursPage> {
       if (mine == null || raising) ...[
         masthead('Start a station'),
         const SizedBox(height: 10),
-        note('Give it a name, add some recordings, and it plays day and night. Nobody can take it down.'),
+        note('Give it a name, add some recordings, and it plays day and night, carried by everyone who listens.'),
         const SizedBox(height: 18),
         TextField(enableIMEPersonalizedLearning: false, controller: name, style: serif(20), decoration: field('Station name'), maxLength: 40),
         TextField(enableIMEPersonalizedLearning: false, controller: about, style: serif(16), decoration: field('What it plays, in a line'), maxLength: 140),
@@ -1753,7 +1754,7 @@ class _ColoursPageState extends State<ColoursPage> {
             if (mine['waiting'] == true)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text('Waiting for another radio to pass your station on, so nobody can trace it to this $thisDevice. It goes out as soon as one does.',
+                child: Text('Waiting for another radio to pass your station on, so the first radio to show it cannot tell it came from this $thisDevice. It goes out as soon as one does.',
                     style: serif(13, color: boneDim, italic: true)),
               ),
             if (mine['direct'] == true)

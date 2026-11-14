@@ -21,7 +21,8 @@ POETS = ["short_poetry_001_librivox", "shortpoetry_002_librivox", "shortpoetry_0
 
 # Shanties: sea shanties, sea songs, pirate songs and hornpipes from 78s, cylinders and the
 # Library of Congress's National Jukebox, every one published in 1925 or earlier and so in the
-# public domain in the United States.
+# public domain in the United States. Shanties is shanties and sea songs alone: its marches and
+# band records left at launch, the bands' for Brass (build_launch.py writes both).
 SHANTIES = [
     '78_medley-of-sea-chanties_standard-male-quartette_gbia0381679a',
     'loc-jukebox-133664-medley-of-sea-songs',
@@ -55,7 +56,6 @@ SHANTIES = [
     '78_the-sailors-dance_kenneth-walters-j-l-molloy_gbia3030644a',
     '78_captain-mac_john-thorne-wilfred-sanderson_gbia3012549b',
     '78_captain-strattons-fancy_reinald-werrenrath-john-masefield-deems-taylor_gbia0040360b',
-    '78_the-anchors-weighed-march_peter-and-daniel-wyper_gbia3036507a',
     'loc-jukebox-428286-the-sailor-s-prayer',
     'edison-82314_01_9188',
     '78_viking-song-there-are-steel-ships-wanted-on-the-sea_emilio-de-gogorza-david-m_gbia0055438a',
@@ -63,12 +63,9 @@ SHANTIES = [
     'loc-jukebox-122001-when-the-bell-in-the-lighthouse-rings',
     '78_the-ship-that-never-returned_vernon-dalhart-and-company-henry-c-work_gbia0176570a',
     '78_gwraig-y-morwr-the-sailors-wife_miss-winifred-lewis-r-davies-dr-joseph-parry_gbia3002396b',
-    'loc-jukebox-654579-row-well-ye-mariners',
     '78_pirate-song_reinald-werrenrath-robert-louis-stevenson-henry-f-gilbert_gbia0040360a',
     'david-bispham-henri-f.-gilbet-pirate-song-columbia-tricolor-a-5778',
     '78_pirate-dreams_sophie-braslau-charles-huerter_gbia0484192a',
-    '78_the-pirates-of-penzance-part-i_the-band-of-hm-scots-guards-sullivan_gbia3015847a',
-    '78_the-pirates-of-penzance-part-ii_the-band-of-hm-scots-guards-sullivan_gbia3015847b',
     'edison-80251_01_3905',
     'edison-80251_01_3906',
     'loc-jukebox-129632-gems-from-pirates-of-penzance',
@@ -77,13 +74,9 @@ SHANTIES = [
     '78_gems-from-pinafore-part-2_victor-light-opera-company_gbia7027983b',
     'edison-80169_01_2992',
     'edison-80169_01_2993',
-    'loc-jukebox-128850-flying-dutchman-overture',
     '78_flying-dutchman-traft-ihr-das-schiff-a-ship-the-restless-ocean-sweeps-sentas_gbia0253553a',
     'loc-jukebox-666076-sailors-hornpipe-arranged',
     '78_the-sailors-hornpipe_george-ackroyd_gbia0337319b',
-    '78_jack-tar-march_sousas-band_gbia0011119a',
-    'loc-jukebox-124836-ship-ahoy-march',
-    'loc-jukebox-248883-blue-jackets-march',
     'loc-jukebox-250383-sailing',
     '78_hornpipe-medley_mr-alexander-prince_gbia3037857a',
     'loc-jukebox-649564-medley-of-sea-chanties',
@@ -104,29 +97,17 @@ SHANTIES = [
     '78_l-africana-all-erta-marinar-what-ho-mariners_titta-ruffo-meyerbeer_gbia0196322a',
     '78_cielo-e-mar-heaven-and-ocean_enrico-caruso-ponchielli_gbia0565987a',
     '78_recitoftheoceanaria_145_14',
-    '78_death-of-nelson-march_peter-and-daniel-wyper_gbia3036507b',
-    'edison-50995_01_5617',
-    'loc-jukebox-42208-anchors-aweigh',
     '78_sailors-hornpipe_r-murchie_gbia0057027b',
     'edison-51382_01_9261',
     '78_highland-fling-the-keelrow-sailors-hornpipe-college-hornpipe_london-dance',
 ]
 
-# Shanties beyond 1925, free by other roads, each checked by hand: what the armed forces' own
-# bands recorded (a work of the U.S. Government, 17 U.S.C. 105), and what their makers put under
+# Shanties beyond 1925, free by other roads, each checked by hand: what their makers put under
 # a public-domain dedication or a Creative Commons licence that needs no more than credit. The
 # item's licence on archive.org must still say what "lic" expects, or the build stops.
 # Left out on review: Captain Mac (an arrangement not shown to be the Navy's own), Captain Kidd
 # (its licence was set by the venue, not the singer), The COVID Shanty (not the station's sound).
 SHANTIES_FREE = [
-    dict(item="RoastBeefOfEngland", file="RoastBeefOfEngland.mp3", lic="publicdomain", by="United States Navy Band Ceremonial Band", title="The Roast Beef of Old England",
-         album="the Navy Band's ceremonial music", licence="Public domain in the United States: a work of the U.S. Navy Band, made by sailors in the course of their duty."),
-    *[dict(item=f"InternetJukebox.JPS.{n}", file=f, lic="publicdomain", by="United States Marine Band", title=t,
-           album="The Complete Marches of John Philip Sousa", licence=f"Public domain in the United States: a work of the U.S. Marine Band, made in the course of its duty; Sousa wrote the march in {y}.")
-      for n, f, t, y in [(83, "83_The_Chantyman's_March.mp3", "The Chantyman's March", 1918), (81, "81_Anchor_and_Star.mp3", "Anchor and Star", 1918),
-                         (62, "01 Jack Tar - US Marine Corps.mp3", "Jack Tar", 1903), (56, "56_Hands_Across_The_Sea.mp3", "Hands Across the Sea", 1899),
-                         (67, "67_The_Glory_of_the_Yankee_Navy.mp3", "The Glory of the Yankee Navy", 1909), (77, "77_The_Naval_Reserve.mp3", "The Naval Reserve", 1917),
-                         (93, "93_Who's_Who_in_the_Navy_Blue.mp3", "Who's Who in Navy Blue", 1920), (57, "57_The_Man_Behind_the_Gun.mp3", "The Man Behind the Gun", 1899)]],
     dict(item="HangingJohnny", file="HangingJohnny.mp3", lic="/by/", by="Jeff Carter", title="Hanging Johnny", album="a 2009 recording",
          licence="CC BY 3.0 US: Jeff Carter, https://archive.org/details/HangingJohnny"),
     dict(item="jamendo-381147", file="01-1841866-ebunny-Wellerman_s Apple _Sea Shanty Guitar_.mp3", lic="/by/", by="ebunny", title="Wellerman's Apple (Sea Shanty Guitar)",
@@ -134,7 +115,7 @@ SHANTIES_FREE = [
 ]
 
 # Shanties from hosts other than archive.org, fetched by URL. The Library of Congress's own
-# WPA California Folk Music Project recordings (1938 to 1940), which say they were made by a
+# WPA California Folk Music Project recordings (1938 to 1940), those it files as sea songs, which say they were made by a
 # field researcher employed by the U.S. Government, and Wikimedia Commons uploads under CC BY or
 # CC BY-SA. The Library of Congress gives no checksum, so the fetch checks those by size.
 WPA = "Public domain in the United States: recorded for the WPA California Folk Music Project by Sidney Robertson Cowell, a field researcher employed by the U.S. Government; the Library of Congress knows of no copyright in it."
@@ -155,14 +136,10 @@ SHANTIES_URLS = [
           ("2017701729", "a4228a2", 8220480, "Leighton Robinson", "A-Roodle-Tum-Toodle-Tum-Too", 1939),
           ("2017701408", "a3812b1", 6938880, "George Vinton Graham", "Down Around the Coast of La Barbaree", 1938),
           ("2017701396", "a3810a1", 4957440, "George Vinton Graham", "Her Sweet Sailor Boy", 1938),
-          ("2017701394", "a3816b1", 5967360, "George Vinton Graham", "Young Johnny the Sailor", 1938),
           ("2017701407", "a3812a2", 6810240, "George Vinton Graham", "Lowlands of Holland", 1938),
-          ("2017701454", "a4206b1", 9568320, "Pat Ford", "The Dark-Eyed Sailor", 1938),
           ("2017701809", "a4211b1", 6019200, "Pat Ford", "The Sailor's Grave", 1939),
           ("2017701439", "a4202a4", 2029440, "Warde Ford", "Proud Dacus and Captain Hull", 1938),
-          ("2017701429", "a4199a2", 5057280, "Warde Ford", "The Mermaid", 1938),
-          ("2017702043", "a3358a1", 2620800, "John Stone", "Life on the Ocean Wave", 1939),
-          ("2017701371", "a3354b1", 11465280, "John McCready", "Sailor Jack", 1939)]],
+          ("2017701429", "a4199a2", 5057280, "Warde Ford", "The Mermaid", 1938)]],
     *[dict(url="https://upload.wikimedia.org/wikipedia/commons/" + u, sha1=h, size=s, length=n, by=b, title=t, album=f"a {y} recording",
            licence=f"{lic}: {credit}, https://commons.wikimedia.org/wiki/File:{p}", source=f"https://commons.wikimedia.org/wiki/File:{p}")
       for u, p, h, s, n, b, t, y, lic, credit in [

@@ -2,7 +2,7 @@
 # The November 2026 stations pass: writes netlabel.json, poets.json and contraband.json beside
 # this script, the manifests fetch.py follows. Every item's licence is read from its archive.org
 # page and checked against what HOSTIS airs: the public domain, CC0, CC BY and CC BY-SA.
-# Anything else is refused and the run stops.
+# Anything else is refused and the run stops. build_launch.py runs after it and adds the launch pass.
 #   build_pass.py
 # No rights reserved.
 import html, json, os, re, sys, time, urllib.request

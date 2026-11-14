@@ -1,0 +1,46 @@
+[
+ {
+  "item": "FarewellBlues",
+  "file": "farewell_blues.mp3",
+  "sha1": "6b9a1e8ac65d36185267f6cd679c9bd6fd303d51",
+  "size": 5752093,
+  "length": 180,
+  "by": "U.S. Air Force Band",
+  "title": "farewell_blues",
+  "album": "Farewell Blues",
+  "licence": "Public domain in the United States, a work of the U.S. Government (17 U.S.C. 105): http://creativecommons.org/licenses/publicdomain/"
+ },
+ {
+  "item": "TheWabashBlues",
+  "file": "wabash_blues.mp3",
+  "sha1": "c696739dffb064f49a5e1f89b39d0518775f3e59",
+  "size": 8414491,
+  "length": 263,
+  "by": "U.S. Air Force Band",
+  "title": "wabash_blues",
+  "album": "The Wabash Blues",
+  "licence": "Public domain in the United States, a work of the U.S. Government (17 U.S.C. 105): http://creativecommons.org/licenses/publicdomain/"
+ },
+ {
+  "item": "MilenbergJoys",
+  "file": "milenberg_joys.mp3",
+  "sha1": "baac300a45765719fa60f765cab0786495ce7e31",
+  "size": 9936700,
+  "length": 311,
+  "by": "U.S. Air Force Band",
+  "title": "milenberg_joys",
+  "album": "Milenberg Joys",
+  "licence": "Public domain in the United States, a work of the U.S. Government (17 U.S.C. 105): http://creativecommons.org/licenses/publicdomain/"
+ },
+ {
+  "item": "GeorgeM.CohanMedley",
+  "file": "USAFB_CohansBigThree.mp3",
+  "sha1": "e2f09bbe826ef4690fd6ad7332937b07d1bf1417",
+  "size": 3171744,
+  "length": 230,
+  "by": "United States Air Force Concer",
+  "title": "USAFB_CohansBigThree",
+  "album": "George M. Cohan Medley",
+  "licence": "Public domain in the United States, a work of the U.S. Government (17 U.S.C. 105): http://creativecommons.org/licenses/publicdomain/"
+ }
+]

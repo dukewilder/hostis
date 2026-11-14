@@ -5,12 +5,12 @@
 # Nothing is deleted. fetch.py then fetches what is missing and rewrites every credit.
 #   tidy.py <manifest.json> <seed folder> <retired folder>
 # No rights reserved.
-import hashlib, json, os, sys
+import hashlib, json, os, sys, urllib.parse
 
 manifest, folder, retired = sys.argv[1], sys.argv[2], sys.argv[3]
 AUDIO = (".mp3", ".ogg", ".flac", ".wav", ".m4a", ".opus", ".oga")
 
-# The names fetch.py gives, in the same order and with the same suffix for a repeat.
+# The names fetch.py gives, in the same order, with the same suffix for a repeat and the same extension.
 want, used = {}, set()
 for x in json.load(open(manifest, encoding="utf-8")):
     name = f"{x['by']} - {x['title']}"
@@ -19,7 +19,8 @@ for x in json.load(open(manifest, encoding="utf-8")):
         name = f"{x['by']} - {x['title']} ({n})"
         n += 1
     used.add(name.lower())
-    want[name + ".mp3"] = x.get("sha1")
+    path = urllib.parse.urlparse(x["url"]).path if "url" in x else x["file"]
+    want[name + (os.path.splitext(path)[1].lower() or ".mp3")] = x.get("sha1")
 
 here = [f for f in os.listdir(folder) if f.lower().endswith(AUDIO) and not f.lower().startswith("bell.")]
 sha = {f: hashlib.sha1(open(os.path.join(folder, f), "rb").read()).hexdigest() for f in here if f not in want}

@@ -2,7 +2,7 @@
 # Fetches the recordings a manifest names into a Lantern seed folder, checks each against its
 # SHA-1 (or, where its host gives none, its size), and writes its credit and licence beside it
 # (Name.source.txt), as the Lantern reads them. A recording is named by its archive.org item and
-# file, or by a "url" on another host; such a file keeps its own extension (.ogg, .mp3). A file
+# file, or by a "url" on another host; every file keeps its own extension (.mp3, .ogg, .flac). A file
 # already here and whole is left alone, so a second run only fills the gaps.
 #   fetch.py <manifest.json> <seed folder>
 # No rights reserved.
@@ -29,7 +29,7 @@ for x in items:
         ext = os.path.splitext(urllib.parse.urlparse(url).path)[1].lower() or ".mp3"
     else:
         url = f"https://archive.org/download/{x['item']}/{urllib.parse.quote(x['file'])}"
-        ext = ".mp3"
+        ext = os.path.splitext(x["file"])[1].lower() or ".mp3"
     path = os.path.join(out, name + ext)
     def whole():
         if not os.path.exists(path):
