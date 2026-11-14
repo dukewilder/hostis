@@ -256,7 +256,9 @@ async function stockOut() {
 // a guard answers over the channel nothing but forwards. STUN from HOSTIS's servers only, and
 // no TURN: where no direct path exists, the relay carries on as before.
 const rtcPeers = new Map();
-const RTC_PART = 16 * 1024, RTC_MAX = 4 << 20;
+// A part and its five-byte head fit in one 16 KiB message, the most a door's channel takes
+// (its SDP says so): a larger request through a door was refused at once.
+const RTC_PART = 16 * 1024 - 5, RTC_MAX = 4 << 20;
 function rtcClose(peer) { const p = rtcPeers.get(peer); if (!p) return; rtcPeers.delete(peer); for (const w of p.pend.values()) w.no?.('closed'); try { p.ch?.close() } catch (e) { } try { p.pc.close() } catch (e) { } }
 // STUN from HOSTIS's servers, and from the door this tab is through, which sees its address already.
 function rtcPc() { const urls = (Array.isArray(STUN) ? STUN : []).concat(door?.ready ? ['stun:' + door.addr] : []); return new RTCPeerConnection({ iceServers: urls.length ? [{ urls }] : [], iceTransportPolicy: 'all' }) }

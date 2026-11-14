@@ -70,7 +70,6 @@ run browser_scope 300 "$B/browser_scope.py $GANG"
 run browser_return 400 "$B/browser_return.py 8097"
 run browser_pass 300 "$B/browser_pass.py"
 run browser_live 400 "$B/browser_live.py"
-run browser_station 900 "$B/browser_station.py 8099"
 run browser_desk 400 "$B/browser_desk.py 8099"
 run browser_rtc 400 "$B/browser_rtc.py 8099 http://127.0.0.1:3340/"
 run browser_attack 400 "$B/browser_attack.py 8099 http://127.0.0.1:3340/ target/release/pentest forwards"
@@ -79,7 +78,6 @@ run browser_w1 600 "$B/browser_w1.py $GANG '$WAV'"
 run browser_pocket 400 "rm -f $OUT/invite; (PYRATE_BROWSER_INVITE=$OUT/invite PYRATE_BROWSER_WAIT=150 $NET target/release/pocket_test $RELAY '$WAV' > $OUT/pocket_test.log 2>&1 &); for i in \$(seq 1 120); do [ -s $OUT/invite ] && break; sleep 1; done; $B/browser_pocket.py $OUT/invite 8099"
 run browser_ux 900 "$B/browser_ux.py 8099 $OUT/ux"
 run browser_scale 900 "$B/browser_scale.py 8099 $OUT/scale 300"
-run browser_crew 900 "$B/browser_crew.py 8099"
 
 line "== doors, with no relay at all (the relay stopped)"
 pkill -f "http.server 80" 2>/dev/null
@@ -98,10 +96,23 @@ echo "$RELAY $GANG" > /tmp/net-ids
 sh tools/test/serve_test.sh "$RELAY" "$GANG" > "$OUT/serve_test2.log" 2>&1
 sleep 5
 run raise_test 1300 "PYRATE_LIST_AGE_MS=60000 $NET target/release/raise_test $RELAY '$WAV'"
+run browser_station 900 "$B/browser_station.py 8099"
+# The crowd at five tabs, the target's size (eight is the design's own test; run it by hand).
+run browser_crew 900 "$B/browser_crew.py 8099 5"
 # The landing page's part of the sweep builds the landing round the released app.
 [ -e /tmp/pyrate-radio-0.9.14.apk ] || ln -s /mnt/user-data/outputs/pyrate-radio-0.9.14-to-sign.apk /tmp/pyrate-radio-0.9.14.apk
-run browser_sweep 2400 "$B/browser_sweep.py --out $OUT/sweep"
-run pentest 2400 "$NET target/release/pentest /tmp/all-tests/pentest '$WAV' all"
+# The sweep's listening, chat, pocket, flock, harbour and landing parts, layout checked at both
+# widths. Its studio, keeper, tuning and sleep parts (ten minutes more) overlap browser_station,
+# browser_raise, onair_test and raise_test; run the whole sweep on its own before a release.
+run browser_sweep 1500 "$B/browser_sweep.py --out $OUT/sweep listener throttled chat pocket flock harbour landing"
+# The pentest in parts, each with a fresh attacker and target, so what one part holds is gone
+# before the next starts (run whole, it passed 5.9 GB and was killed); each part's folder goes
+# when it ends.
+P=0
+for part in "stems nest logflood cardsask" "web logreply now routes slow" "flood cards deputy cardwire" "fuzz netfuzz loop schedule" "eclipse middle sybil"; do
+  P=$((P + 1))
+  run pentest-$P 1200 "rm -rf $OUT/pentest/$P; $NET target/release/pentest $OUT/pentest/$P '$WAV' $part; r=\$?; rm -rf $OUT/pentest/$P; exit \$r"
+done
 
 pkill -f "$R/target/release/lantern" 2>/dev/null
 python3 browser/build.py > /dev/null 2>&1

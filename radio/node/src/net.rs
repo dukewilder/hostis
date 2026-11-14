@@ -637,7 +637,8 @@ impl Gossip {
             return None;
         }
         StationId(*node).verify(&crew_message(node, relay, *at_ms), &sig).ok()?;
-        (relay_public(relay) || door_of_relay(relay).is_some_and(|d| d != *node)).then(|| (*node, relay.clone()))
+        // No relay named: a radio reached directly, with every relay down.
+        (relay.is_empty() || relay_public(relay) || door_of_relay(relay).is_some_and(|d| d != *node)).then(|| (*node, relay.clone()))
     }
 
     /// For a deck's note: the station, the deck and what a requester keeps of it, if the deck's
@@ -1428,6 +1429,7 @@ mod card_limit_tests {
         assert_eq!(door_of_relay(&relay), Some(door));
         assert_eq!(door_of_relay("door:12"), None);
         let now = 1_800_000_000_000;
+        assert!(Gossip::crew(&[3; 32], "", now).crew_checked(now).is_some(), "a radio with no relay is of the crew all the same");
         assert!(Gossip::crew(&[3; 32], &relay, now).crew_checked(now).is_some());
         let me = StationKey::from_seed([3; 32]).id().0;
         assert!(Gossip::crew(&[3; 32], &format!("door:{}", me.iter().map(|b| format!("{b:02x}")).collect::<String>()), now).crew_checked(now).is_none());

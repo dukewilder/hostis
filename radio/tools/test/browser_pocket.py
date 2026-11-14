@@ -25,8 +25,23 @@ with sync_playwright() as p:
     h = pg.evaluate("location.href")
     print(("PASS" if "#" not in h else "FAIL") + f" the pocket's id stays out of the address bar ({h!r})")
     print(("PASS" if pg.is_hidden("#pass") else "FAIL") + " no pass-it-on for a pocket")
-    pg.click("#chatgo"); time.sleep(6)
-    pg.fill("#sayt", "Ahoy from the browser"); pg.click("#say button"); time.sleep(4)
+    # The chat is on the station's page (the player's places): Page, then Join the chat.
+    pg.click("#pagego")
+    try:
+        pg.wait_for_selector("#chatgo", state="visible", timeout=30000)
+        pg.click("#chatgo")
+        pg.wait_for_selector("#chatroom", state="visible", timeout=30000)
+        joined = True
+    except Exception:
+        joined = False
+    print(("PASS" if joined else "FAIL") + " the pocket's chat opens from its page")
+    if joined:
+        pg.fill("#sayt", "Ahoy from the browser"); pg.click("#say button")
+        said = False
+        for _ in range(20):
+            time.sleep(0.5)
+            if "Ahoy from the browser" in (pg.text_content("#lines") or ""): said = True; break
+        print(("PASS" if said else "FAIL") + " a line said in the pocket's room shows in it")
     print("lines:", (pg.text_content("#lines") or "")[:200])
     print("console tail:", [l for l in logs if "error" in l.lower()][:5])
     b.close()

@@ -169,6 +169,9 @@ enum Ask {
     Relay { next: [u8; 32], blob: Vec<u8> },
     /// The way in to a deck: `lead` (sealed to this radio) names the listener; `blob` goes to it.
     Lead { lead: Vec<u8>, blob: Vec<u8> },
+    /// A deck behind a door keeping its way in (the node's `Ask::Pull`): its answers and its
+    /// note go up, the asks waiting for it come back.
+    Pull { cookie: [u8; 32], note: Vec<u8>, answers: Vec<(u64, Vec<u8>)> },
 }
 
 /// Why a route failed: its first hop could not be reached, or the hop gave no answer.
@@ -183,7 +186,7 @@ impl Ask {
     fn station(&self) -> Option<StationId> {
         match self {
             Ask::Log { station, .. } | Ask::Chunk { station, .. } | Ask::Token { station, .. } | Ask::Sealed { station, .. } | Ask::Stem { station, .. } => Some(*station),
-            Ask::Relay { .. } | Ask::Lead { .. } => None,
+            Ask::Relay { .. } | Ask::Lead { .. } | Ask::Pull { .. } => None,
         }
     }
 }
@@ -227,6 +230,12 @@ struct Deck {
     /// The sealed names of this station's chunks the tab has fetched, with when: a deck serves
     /// only what it has held for the last ten minutes, or stock it kept.
     names: HashMap<Hash, (Hash, u64)>,
+    /// Behind a door with no relay: the way in is kept by pulling through this tab's guard and a
+    /// middle, the lead names `cookie` (made for the deck alone, never the tab's node), and the
+    /// note goes up in the next pull (`note`), never through the door.
+    pull: bool,
+    cookie: [u8; 32],
+    note: Vec<u8>,
 }
 
 /// A tab's part in the crew: what it passes on for others, the decks it serves, and what it
@@ -380,6 +389,16 @@ struct Crew {
     stock_out: Vec<(StationId, Hash, Vec<u8>)>,
     /// Chunks kept from earlier visits: sealed name to station and address.
     stock: HashMap<Hash, (StationId, Hash)>,
+    /// Decks behind a door whose pulls are running, and pulls made, failed, and asks they brought.
+    pulling: HashSet<[u8; 32]>,
+    /// Deck asks by how they went (see `ask_deck`).
+    deck_why: [u64; 8],
+    /// Ways in that let a deck's pulls fall three times in a row, and when: passed over a while.
+    /// Kept apart from `suspect`, which a requester's failed deck ask fills with middles.
+    pull_bad: HashMap<EndpointId, u64>,
+    pulls: u64,
+    pull_fails: u64,
+    pulled: u64,
 }
 
 /// A computer passes on up to six times its own listening, a phone once: each carries itself
@@ -868,13 +887,26 @@ impl Ship {
         }
         drop(d);
         let c = self.crew.lock().unwrap();
-        c.relays.get(n).cloned().or_else(|| c.radios.get(n).map(|(r, _)| r.clone()))
+        c.relays.get(n).cloned().or_else(|| c.radios.get(n).map(|(r, _)| r.clone())).filter(|r| !r.is_empty())
+    }
+
+    /// The door a radio of the crew is behind, as it says or as this tab saw.
+    fn behind_door(&self, n: &EndpointId) -> Option<EndpointId> {
+        if let Some(d) = self.doors.lock().unwrap().behind.get(n) {
+            return Some(*d);
+        }
+        let c = self.crew.lock().unwrap();
+        c.radios.get(n).and_then(|(r, _)| net::door_of_relay(r)).and_then(|d| EndpointId::from_bytes(&d).ok())
     }
 
     /// Whether two radios of a route stand apart: not homed together, and not named to this tab
     /// by the same source.
     fn apart(&self, a: &EndpointId, b: &EndpointId) -> bool {
         if a == b {
+            return false;
+        }
+        // A door sees all that the radios behind it send and get.
+        if self.behind_door(a) == Some(*b) || self.behind_door(b) == Some(*a) {
             return false;
         }
         if let (Some(x), Some(y)) = (self.home(a), self.home(b)) {
@@ -1672,10 +1704,16 @@ impl Ship {
                 ds.trusted(d.as_bytes()) && ds.known.get(d.as_bytes()).is_some_and(|(n, _, _)| self.base_now().saturating_sub(n.since) >= DOOR_AGE_MS)
             };
             if ok {
+                let never = self.doors.lock().unwrap().relay_ok == 0;
                 let mut g = self.first_hop.lock().unwrap();
                 if *g != Some(d) {
                     *g = Some(d);
                     let mut c = self.crew.lock().unwrap();
+                    // First hops drawn while no relay had ever answered never saw this tab: they
+                    // leave the guard set, which is for radios that know where it is.
+                    if never {
+                        c.guards.clear();
+                    }
                     c.guards.retain(|x| *x != d);
                     c.guards.push(d);
                     if c.guards.len() > 3 {
@@ -2557,6 +2595,9 @@ impl Ship {
             .map(|(n, _)| *n)
             .collect();
         drop(c);
+        // Never a radio behind the first hop's door: the door would see the route come in and
+        // go on, who asks and where to.
+        let pool: Vec<EndpointId> = pool.into_iter().filter(|n| first.is_none_or(|f| self.behind_door(n) != Some(f))).collect();
         // Apart from the first hop and the exit where it can be, and under the 25% cap.
         let apart: Vec<EndpointId> = pool.iter().filter(|n| first.is_none_or(|f| self.apart(n, &f)) && not.iter().all(|x| self.apart(n, x)) && self.under_cap(n)).copied().collect();
         let pool = if apart.is_empty() { pool } else { apart };
@@ -2589,15 +2630,31 @@ impl Ship {
     /// A request to one of a station's decks in three hops: this tab, its first hop, a middle,
     /// the deck's way in, the deck. Never when the first hop is the deck's way in.
     async fn ask_deck(&self, ask: &Ask, deck: [u8; 32], note: &net::DeckNote) -> Result<Response> {
+        // Why deck asks fail, for the crowd test: no first hop, the first hop is the way in, no
+        // middle, timed out, the first hop failed, an empty answer, an answer that did not open.
+        let why = |i: usize| self.crew.lock().unwrap().deck_why[i] += 1;
         let nodes = self.route_nodes();
-        let first = self.first_hop_for(&nodes).ok_or_else(|| anyhow!("no first hop"))?;
+        let Some(first) = self.first_hop_for(&nodes) else {
+            why(0);
+            return Err(anyhow!("no first hop"));
+        };
         let intro = EndpointId::from_bytes(&note.intro)?;
         if first == intro {
+            why(1);
             return Err(anyhow!("the first hop leads to the deck"));
         }
-        let middle = self.middle(&[first, intro]).ok_or_else(|| anyhow!("no middle"))?;
+        let Some(middle) = self.middle(&[first, intro]) else {
+            why(2);
+            return Err(anyhow!("no middle"));
+        };
         let (hop, ciphers) = three_hops(middle.as_bytes(), &deck, &postcard::to_stdvec(ask)?, Some((&note.intro, &note.lead))).ok_or_else(|| anyhow!("seal"))?;
         let r = timeout(Duration::from_secs(8), self.ask(first, &Request::Hop(hop))).await;
+        why(match &r {
+            Err(_) => 3,
+            Ok(Err(_)) => 4,
+            Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => 7,
+            _ => 5,
+        });
         let opened = match r {
             Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => {
                 let mut b = Some(raw);
@@ -2613,6 +2670,7 @@ impl Ship {
             None => {
                 // The deck, or the middle on the way to it: both are passed over for a while.
                 let mut c = self.crew.lock().unwrap();
+                c.deck_why[6] += 1;
                 c.suspect.insert(deck, raw_now());
                 c.suspect.insert(*middle.as_bytes(), raw_now());
                 Err(anyhow!("the deck gave nothing"))
@@ -2671,6 +2729,144 @@ impl Ship {
         let others: Vec<EndpointId> = pool.iter().filter(|n| !self.harbour.contains(n)).copied().collect();
         let from = if others.is_empty() { pool } else { others };
         (!from.is_empty()).then(|| from[pick(from.len())])
+    }
+
+    /// Radios a deck behind a door may pull through or from: nodes of the crew heard from lately
+    /// (never a tab, which takes only small asks, and so never a radio behind the door), and never
+    /// the door, this tab's first hop or any of its guards, kept or drawn, a radio it gave a
+    /// direct link, one of `not`, or one that gave nothing lately. Those apart from the door
+    /// first (see `apart`); where none is, the rest, counted as routes are.
+    fn pull_radios(&self, not: &[EndpointId]) -> Vec<EndpointId> {
+        let now = raw_now();
+        let me = self.ep.id();
+        let Some(door) = self.door_now() else { return vec![] };
+        let first = *self.first_hop.lock().unwrap();
+        let c = self.crew.lock().unwrap();
+        let pool: Vec<EndpointId> = c
+            .radios
+            .iter()
+            .filter(|(n, (_, at))| now.saturating_sub(*at) < CREW_FRESH_MS && **n != me && **n != door && Some(**n) != first && !c.guards.contains(n) && !c.kept.contains(n) && !not.contains(n) && !c.rtc_clients.contains(*n))
+            .filter(|(n, (r, _))| (r.is_empty() || c.relays.contains_key(*n)) && net::door_of_relay(r).is_none())
+            .filter(|(n, _)| !c.pull_bad.get(*n).is_some_and(|t| now.saturating_sub(*t) < SUSPECT_MS))
+            .map(|(n, _)| *n)
+            .collect();
+        drop(c);
+        let apart: Vec<EndpointId> = pool.iter().filter(|n| self.apart(n, &door)).copied().collect();
+        if apart.is_empty() && !pool.is_empty() {
+            self.doors.lock().unwrap().routes_shared += 1;
+        }
+        if apart.is_empty() { pool } else { apart }
+    }
+
+    /// A deck behind a door's way in: a radio it may pull from, one other than the harbour's
+    /// own Lanterns where it can.
+    fn choose_pull_intro(&self) -> Option<EndpointId> {
+        let pool = self.pull_radios(&[]);
+        let others: Vec<EndpointId> = pool.iter().filter(|n| !self.harbour.contains(n)).copied().collect();
+        let from = if others.is_empty() { pool } else { others };
+        (!from.is_empty()).then(|| from[pick(from.len())])
+    }
+
+    /// The middle of one pull, drawn afresh each time: apart from the door first, and from the
+    /// way in too where it can be.
+    fn pull_middle(&self, intro: &EndpointId) -> Option<EndpointId> {
+        let pool = self.pull_radios(&[*intro]);
+        let apart: Vec<EndpointId> = pool.iter().filter(|n| self.apart(n, intro)).copied().collect();
+        let pool = if apart.is_empty() { pool } else { apart };
+        (!pool.is_empty()).then(|| pool[pick(pool.len())])
+    }
+
+    /// A deck behind a door keeps one pull held at its way in while it stays open: this tab, its
+    /// guard (the door), a middle drawn for each pull, the way in. Each pull carries the note when
+    /// one is due; each ask it brings back is answered in a pull of its own. Three pulls in a row
+    /// that come back with nothing and the way in is let go, for the next tick to draw another.
+    async fn pull_loop(self: Arc<Self>, deck: [u8; 32]) {
+        let mut fails = 0u64;
+        loop {
+            let job = {
+                let mut c = self.crew.lock().unwrap();
+                c.decks.iter_mut().find(|d| d.id == deck && d.pull).and_then(|d| Some((d.station, d.intro?, d.cookie, std::mem::take(&mut d.note))))
+            };
+            let Some((station, intro, cookie, note)) = job.filter(|_| self.crew_on() && self.door_only()) else { break };
+            match self.pull_once(deck, station, intro, cookie, note.clone(), vec![]).await {
+                Ok(()) => fails = 0,
+                Err(e) => {
+                    say(&format!("pull: through {} failed: {e}", intro.fmt_short()));
+                    let mut c = self.crew.lock().unwrap();
+                    if let Some(d) = c.decks.iter_mut().find(|d| d.id == deck && d.note.is_empty()) {
+                        d.note = note;
+                    }
+                    // No middle to be had is no fault of the way in: wait for one.
+                    if e.to_string() == "no middle" {
+                        drop(c);
+                        sleep(Duration::from_secs(2)).await;
+                        continue;
+                    }
+                    fails += 1;
+                    if fails >= 3 {
+                        let now = raw_now();
+                        c.pull_bad.retain(|_, t| now.saturating_sub(*t) < SUSPECT_MS);
+                        c.pull_bad.insert(intro, now);
+                        if let Some(d) = c.decks.iter_mut().find(|d| d.id == deck) {
+                            d.intro = None;
+                        }
+                        break;
+                    }
+                    drop(c);
+                    sleep(Duration::from_millis(500 * fails)).await;
+                }
+            }
+        }
+        self.crew.lock().unwrap().pulling.remove(&deck);
+    }
+
+    /// One pull, sealed to the way in and passed on by a middle: what it brings back is answered,
+    /// each ask in a pull of its own, within this minute's budget.
+    async fn pull_once(self: &Arc<Self>, deck: [u8; 32], station: StationId, intro: EndpointId, cookie: [u8; 32], note: Vec<u8>, answers: Vec<(u64, Vec<u8>)>) -> Result<()> {
+        use pyrate_core::route::{open_answer, seal_to};
+        let door = self.door_now().ok_or_else(|| anyhow!("no door"))?;
+        let middle = self.pull_middle(&intro).ok_or_else(|| anyhow!("no middle"))?;
+        let ask = postcard::to_stdvec(&Ask::Pull { cookie, note, answers })?;
+        let (eph, ct, c_in) = seal_to(intro.as_bytes(), &ask).ok_or_else(|| anyhow!("seal"))?;
+        let inner = postcard::to_stdvec(&Hop::Sealed { eph, ct })?;
+        let (eph, ct, c_mid) = seal_to(middle.as_bytes(), &postcard::to_stdvec(&Ask::Relay { next: *intro.as_bytes(), blob: inner })?).ok_or_else(|| anyhow!("seal"))?;
+        let fwd = postcard::to_stdvec(&Hop::Forward { next: *middle.as_bytes(), blob: postcard::to_stdvec(&Hop::Sealed { eph, ct })? })?;
+        self.crew.lock().unwrap().pulls += 1;
+        let r = timeout(Duration::from_secs(9), self.ask(door, &Request::Hop(fwd))).await;
+        let items: Option<Vec<(u64, Vec<u8>)>> = match r {
+            Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => open_answer(&c_mid, &raw).filter(|x| !x.is_empty()).and_then(|x| open_answer(&c_in, &x)).and_then(|x| postcard::from_bytes(&x).ok()),
+            _ => None,
+        };
+        let Some(items) = items else {
+            self.crew.lock().unwrap().pull_fails += 1;
+            return Err(anyhow!("the pull came back empty"));
+        };
+        for (id, blob) in items.into_iter().take(16) {
+            self.crew.lock().unwrap().pulled += 1;
+            let s = self.clone();
+            let f: std::pin::Pin<Box<dyn std::future::Future<Output = ()>>> = Box::pin(async move {
+                let out = s.deck_item(deck, station, &blob).await;
+                if out.is_empty() || !s.spend(out.len()) {
+                    return;
+                }
+                let _ = s.pull_once(deck, station, intro, cookie, vec![], vec![(id, out)]).await;
+            });
+            spawn(f);
+        }
+        Ok(())
+    }
+
+    /// An ask a pull brought: opened under the deck's own key and answered as the deck, sealed
+    /// back to the requester. The way in it came from is the deck's own, by the pull's seal.
+    async fn deck_item(self: &Arc<Self>, deck: [u8; 32], station: StationId, blob: &[u8]) -> Vec<u8> {
+        use pyrate_core::route::{open_sealed, seal_answer};
+        let Ok(Hop::Sealed { eph, ct }) = postcard::from_bytes::<Hop>(blob) else { return vec![] };
+        let seed = self.crew.lock().unwrap().decks.iter().find(|d| d.id == deck).map(|d| d.seed);
+        let Some(seed) = seed.filter(|_| self.crew_on()) else { return vec![] };
+        let Some((plain, c)) = open_sealed(&seed, &deck, &eph, &ct) else { return vec![] };
+        let Ok(ask) = postcard::from_bytes::<Ask>(&plain) else { return vec![] };
+        let resp = self.deck_answer(station, ask).await;
+        seal_answer(&c, &postcard::to_stdvec(&resp).unwrap_or_default())
     }
 
     /// Ballast for a computer: one or two stations it does not play, drawn by lot each hour from
@@ -2803,11 +2999,13 @@ impl Ship {
                 self.sync_soon(*st);
             }
         }
-        // Decks and ways in are reached through relays only: a tab that only a door reaches opens
-        // none, since its door, which knows its address, would see its way in's asks arrive.
+        // Through a door with no relay, the deck of what it plays, kept by pulling (`pull_loop`):
+        // the door, which knows this tab's address, sees only forwards to middles, and never the
+        // way in, the deck or its station. No ballast then: it would cost the door's bandwidth
+        // for stations nobody here hears.
         let door_only = self.door_only();
         let want: Vec<(StationId, bool)> = if door_only {
-            vec![]
+            play.iter().map(|s| (*s, false)).collect()
         } else {
             let c = self.crew.lock().unwrap();
             let mut w: Vec<(StationId, bool)> = play.iter().map(|s| (*s, false)).collect();
@@ -2817,13 +3015,16 @@ impl Ship {
         };
         {
             let mut c = self.crew.lock().unwrap();
-            c.decks.retain(|d| want.contains(&(d.station, d.ballast)));
+            // A deck made to be reached the other way closes: its lead names the wrong thing.
+            c.decks.retain(|d| want.contains(&(d.station, d.ballast)) && d.pull == door_only);
             for (st, b) in &want {
                 if !c.decks.iter().any(|d| d.station == *st) {
                     let mut seed = [0u8; 32];
                     let _ = getrandom::fill(&mut seed);
                     let id = pyrate_core::StationKey::from_seed(seed).id().0;
-                    c.decks.push(Deck { station: *st, seed, id, intro: None, lead: vec![], said: 0, ballast: *b, names: HashMap::new() });
+                    let mut cookie = [0u8; 32];
+                    let _ = getrandom::fill(&mut cookie);
+                    c.decks.push(Deck { station: *st, seed, id, intro: None, lead: vec![], said: 0, ballast: *b, names: HashMap::new(), pull: door_only, cookie, note: vec![] });
                 }
             }
         }
@@ -2833,30 +3034,52 @@ impl Ship {
         let me = *self.ep.id().as_bytes();
         let n = self.crew.lock().unwrap().decks.len();
         for i in 0..n {
-            let (st, intro, said) = {
+            let (st, intro, said, pull, cookie) = {
                 let c = self.crew.lock().unwrap();
                 let Some(d) = c.decks.get(i) else { break };
-                (d.station, d.intro, d.said)
+                (d.station, d.intro, d.said, d.pull, d.cookie)
             };
-            let fresh = intro.is_some_and(|x| Some(x) != first && !self.crew.lock().unwrap().rtc_clients.contains(&x) && self.crew.lock().unwrap().radios.get(&x).is_some_and(|(_, t)| now.saturating_sub(*t) < CREW_FRESH_MS) && !self.norelay.lock().unwrap().get(&x).is_some_and(|t| now.saturating_sub(*t) < 30 * 60_000));
-            let intro = if fresh { intro } else { self.choose_intro(&[]) };
+            let fresh = if pull {
+                intro.is_some_and(|x| self.pull_radios(&[]).contains(&x))
+            } else {
+                intro.is_some_and(|x| Some(x) != first && !self.crew.lock().unwrap().rtc_clients.contains(&x) && self.crew.lock().unwrap().radios.get(&x).is_some_and(|(_, t)| now.saturating_sub(*t) < CREW_FRESH_MS) && !self.norelay.lock().unwrap().get(&x).is_some_and(|t| now.saturating_sub(*t) < 30 * 60_000))
+            };
+            let intro = if fresh { intro } else if pull { self.choose_pull_intro() } else { self.choose_intro(&[]) };
             let Some(intro) = intro else { continue };
             let new = !fresh;
             if !new && now.saturating_sub(said) < 120_000 {
                 continue;
             }
-            let lead = if new { pyrate_core::route::make_lead(intro.as_bytes(), &pyrate_core::route::Lead { to: me, relay: relay.clone() }) } else { self.crew.lock().unwrap().decks.get(i).map(|d| d.lead.clone()) };
+            // Behind a door the lead names the deck's cookie, never this tab's node.
+            let named = if pull { pyrate_core::route::Lead { to: cookie, relay: pyrate_core::route::LEAD_PULL.into() } } else { pyrate_core::route::Lead { to: me, relay: relay.clone() } };
+            let lead = if new { pyrate_core::route::make_lead(intro.as_bytes(), &named) } else { self.crew.lock().unwrap().decks.get(i).map(|d| d.lead.clone()) };
             let Some(lead) = lead else { continue };
             let head = self.archives.lock().unwrap().get(&st).map(|a| a.len()).unwrap_or(0);
-            let seed = {
+            let (seed, id) = {
                 let mut c = self.crew.lock().unwrap();
                 let Some(d) = c.decks.get_mut(i) else { break };
                 d.intro = Some(intro);
                 d.lead = lead.clone();
                 d.said = now;
-                d.seed
+                (d.seed, d.id)
             };
-            self.broadcast(&Gossip::deck(&seed, st, head, *intro.as_bytes(), lead, net_now)).await;
+            let g = Gossip::deck(&seed, st, head, *intro.as_bytes(), lead, net_now);
+            if !pull {
+                self.broadcast(&g).await;
+                continue;
+            }
+            // The note goes up in the deck's next pull, and its way in passes it on.
+            let start = {
+                let mut c = self.crew.lock().unwrap();
+                if let Some(d) = c.decks.get_mut(i) {
+                    d.note = postcard::to_stdvec(&g).unwrap_or_default();
+                }
+                c.pulling.insert(id)
+            };
+            if start {
+                let s = self.clone();
+                spawn(async move { s.pull_loop(id).await });
+            }
         }
         // Ballast comes aboard as it plays, as if listened to in silence: from a minute into
         // the visit, one chunk at a time, so it never stands in the way of what the visitor hears.
@@ -3573,7 +3796,9 @@ impl Radio {
             "served": c.served, "served_stock": c.served_stock, "refused": c.refused, "peak_share": c.peak, "tries": c.tries, "rtc_bytes": c.rtc_bytes, "relay_first_bytes": c.relay_first_bytes, "rtc_refused": c.rtc_refused, "rtc_served": c.rtc_served,
             "first_hop": self.ship.first_hop.lock().unwrap().map(|f| f.to_string()), "kept": c.kept.iter().map(|k| k.to_string()).collect::<Vec<_>>(),
             "decks": c.decks.iter().filter(|d| d.intro.is_some()).map(|d| json!({ "station": d.station.to_hex(), "ballast": d.ballast })).collect::<Vec<_>>(),
-            "crew": c.radios.len(),
+            "crew": c.radios.len(), "pulls": c.pulls, "pull_fails": c.pull_fails, "pulled": c.pulled, "deck_why": c.deck_why,
+            "pull_decks": c.decks.iter().filter(|d| d.pull && d.intro.is_some()).count(),
+            "crew_nodes": c.radios.iter().filter(|(n, (r, at))| raw_now().saturating_sub(*at) < CREW_FRESH_MS && (r.is_empty() || c.relays.contains_key(*n))).count(),
             "known_decks": self.ship.tuned.lock().unwrap().and_then(|st| self.ship.log.lock().unwrap().get(&st).map(|l| l.decks.len())).unwrap_or(0),
         })
         .to_string()

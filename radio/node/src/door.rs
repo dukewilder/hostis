@@ -40,8 +40,9 @@ use crate::{Inner, net::{DoorCtl, Gossip, Request, Response}, now_ms, say};
 
 /// Browsers at once on one door: a computer's share, and a phone's.
 const MAX_SESSIONS: usize = 64;
-/// A data channel message: the same parts the tabs' own links use.
-const PART: usize = 16 * 1024;
+/// A data channel message: the same parts the tabs' own links use, each with its five-byte head
+/// inside the 16 KiB the channel's SDP allows.
+const PART: usize = 16 * 1024 - 5;
 /// The most one request or answer may be.
 const MESSAGE_MAX: usize = 4 << 20;
 /// Requests from one browser waiting on an answer at once.
