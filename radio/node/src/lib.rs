@@ -176,6 +176,30 @@ pub fn doors_from(text: &str) -> Vec<EndpointId> {
 
 pub static DOOR_RELAYS: Mutex<Vec<(EndpointId, String)>> = Mutex::new(Vec::new());
 
+/// A seed's kind field, with an optional rating after a slash: `music`, `talk`, `mono`, or any of
+/// them with `/mature` or `/explicit` after it (`talk/explicit`). Returns the base kind and the
+/// station's own word on itself: whether it calls itself mature, and whether explicit. The two
+/// are separate, as a station's Log keeps them.
+pub fn parse_kind(kind: &str) -> (&str, bool, bool) {
+    let (base, rating) = kind.split_once('/').unwrap_or((kind, ""));
+    (base, rating.eq_ignore_ascii_case("mature"), rating.eq_ignore_ascii_case("explicit"))
+}
+
+#[cfg(test)]
+mod seed_kind_tests {
+    use super::parse_kind;
+    #[test]
+    fn kind_and_rating() {
+        assert_eq!(parse_kind("music"), ("music", false, false));
+        assert_eq!(parse_kind("talk"), ("talk", false, false));
+        assert_eq!(parse_kind("mono"), ("mono", false, false));
+        assert_eq!(parse_kind("music/mature"), ("music", true, false));
+        assert_eq!(parse_kind("talk/explicit"), ("talk", false, true));
+        assert_eq!(parse_kind("talk/EXPLICIT"), ("talk", false, true));
+        assert_eq!(parse_kind("talk/nonsense"), ("talk", false, false));
+    }
+}
+
 /// number0's address lookup, asked only about the first doors and peers met before. A phone
 /// that asked it about every carrier would tell number0 which stations it was after, from its
 /// own address. Every other peer is found in the network's own book of signed notes.

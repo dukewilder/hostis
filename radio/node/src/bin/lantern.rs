@@ -4,6 +4,8 @@
 //!
 //! lantern --dir <data> [--quota-gb 20] [--bootstrap <id>,<id>] [--public-dns]
 //!         [--seed "Name|About|folder|music|Home port"]...   (the home port is optional)
+//!         The kind (music, mono or talk) may carry a rating after a slash: /mature or /explicit
+//!         (e.g. "...|talk/explicit"), the station's own word that a listener sees before it plays.
 //!         [--carry-own]   carry only this Lantern's own stations, and drop anything else it held
 //!                         (by default it carries the whole Log;
 //!                         maroon.txt, one station id per line, takes any station off this Lantern)
@@ -220,8 +222,11 @@ fn seed_all(node: &Node, seeds: &[String], reseed: &[String]) -> anyhow::Result<
                 continue;
             }
         };
+        // The kind may carry a rating after a slash, the station's own word on itself:
+        // music, talk or mono, with /mature or /explicit after it (Contraband|...|talk/explicit).
+        let (base, mature, explicit) = pyrate_node::parse_kind(kind);
         // "mono" is music recorded in one channel (old records): half the bytes, same sound.
-        let profile = match kind {
+        let profile = match base {
             "talk" => Profile::Talk,
             "mono" => Profile::Mono,
             _ => Profile::Music,
@@ -242,12 +247,23 @@ fn seed_all(node: &Node, seeds: &[String], reseed: &[String]) -> anyhow::Result<
             }
         }
 
-        // A station seeded with no kinds of its own takes the seed's, music or talk, so the
-        // Log's filters find it. Kinds set since by other means are left alone.
+        // A station seeded with no kinds of its own takes the seed's, music or talk, and the
+        // seed's rating if it names one, so the Log's filters find it and an explicit station
+        // stays off the open dial until a listener asks for it. Kinds set since by other means
+        // are left alone, but a rating named in the seed is the keeper's word, set if it is not
+        // already so (so an older station can be marked explicit by adding /explicit to its seed).
         if node.archive(&id).is_some_and(|a| a.details().is_none()) {
-            let k = if kind == "talk" { "talk" } else { "music" };
-            let r = node.call(&serde_json::json!({ "cmd": "details_set", "station": id.to_hex(), "kinds": [k], "mature": false }));
+            let k = if base == "talk" { "talk" } else { "music" };
+            let r = node.call(&serde_json::json!({ "cmd": "details_set", "station": id.to_hex(), "kinds": [k], "mature": mature, "explicit": explicit }));
             println!("  kinds set {r}");
+        } else if mature || explicit {
+            let a = node.archive(&id);
+            let (kinds, cur_mature) = a.as_ref().and_then(|a| a.details()).unwrap_or_else(|| (vec![if base == "talk" { "talk".to_string() } else { "music".to_string() }], false));
+            let cur_explicit = a.as_ref().is_some_and(|a| a.explicit());
+            if cur_mature != mature || cur_explicit != explicit {
+                let r = node.call(&serde_json::json!({ "cmd": "details_set", "station": id.to_hex(), "kinds": kinds, "mature": mature, "explicit": explicit }));
+                println!("  rating set {r}");
+            }
         }
 
         // station.jpg and banner.jpg in the folder are the station's art.
