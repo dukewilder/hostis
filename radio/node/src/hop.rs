@@ -204,6 +204,23 @@ impl Inner {
     }
 
     async fn hop(&self, node: EndpointId, hop: &Hop) -> Result<Vec<u8>> {
+        let tab = *node.as_bytes();
+        // A tab behind this node's own door: over its data channel, as a relay would carry it.
+        let door = self.door.lock().unwrap().clone();
+        if let Some(d) = door.filter(|d| d.has_client(&tab)) {
+            let b = d.ask(tab, &Request::Hop(postcard::to_stdvec(hop)?)).await;
+            return if b.is_empty() { Err(anyhow!("no answer through the door")) } else { Ok(b) };
+        }
+        // A tab behind another radio's door: to the door, which passes it on. The door sees this
+        // radio and the tab, as the tab's relay would; never what is asked.
+        let via = self.door_of.lock().unwrap().get(&tab).copied();
+        if let Some(d) = via.and_then(|d| EndpointId::from_bytes(&d).ok()).filter(|d| *d != self.endpoint.id()) {
+            let fwd = Hop::Forward { next: tab, blob: postcard::to_stdvec(hop)? };
+            return match self.ask(d, &Request::Hop(postcard::to_stdvec(&fwd)?)).await? {
+                Response::Hop(b) if !b.is_empty() => Ok(b),
+                _ => Err(anyhow!("no answer through the door")),
+            };
+        }
         match self.ask(node, &Request::Hop(postcard::to_stdvec(hop)?)).await? {
             Response::Hop(b) => Ok(b),
             _ => Err(anyhow!("unexpected answer")),
@@ -273,6 +290,16 @@ impl Inner {
             .filter(|(n, _)| !failed.get(*n).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS))
             .map(|(n, _)| *n)
             .collect();
+        // Apart from the guard: a middle homed on the guard's relay, or named by the radio that
+        // named the guard, would put both in one operator's view. Where none is apart, the draw
+        // goes on and is counted.
+        let home = |n: &[u8; 32]| self.crew_radios.lock().unwrap().get(n).map(|(r, _)| r.clone()).or_else(|| EndpointId::from_bytes(n).ok().and_then(|id| self.met.lock().unwrap().get(&id).cloned()));
+        let g_home: Vec<String> = guards.iter().filter_map(home).collect();
+        let apart: Vec<[u8; 32]> = pool.iter().filter(|n| home(n).is_none_or(|h| !g_home.contains(&h))).copied().collect();
+        if apart.is_empty() && !pool.is_empty() && !g_home.is_empty() {
+            self.routes_shared.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        let pool = if apart.is_empty() { pool } else { apart };
         pool.choose(&mut rand::thread_rng()).and_then(|n| EndpointId::from_bytes(n).ok())
     }
 

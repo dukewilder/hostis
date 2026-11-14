@@ -232,6 +232,94 @@ struct Deck {
 /// A tab's part in the crew: what it passes on for others, the decks it serves, and what it
 /// knows of the other radios of the crew. All of it in memory, gone when the tab closes, but
 /// ballast a computer keeps for the next visit (see `stock_take`).
+/// Doors (node/src/door.rs): listeners' apps this tab reaches over a WebRTC data channel, with
+/// no relay. Each is kept with the sources that named it: built into this copy (1), remembered
+/// from an earlier visit (2), carried in the link that opened the page (3), or passed on by a
+/// radio (that radio's id, folded). A door named by one source alone is a hint: it may be asked
+/// for cards, never drawn as a guard (see `trusted`).
+#[derive(Default)]
+struct Doors {
+    known: HashMap<[u8; 32], (net::DoorNote, Vec<u8>, Vec<u32>)>,
+    /// The door this tab is through now, and since when.
+    open: Option<(EndpointId, u64)>,
+    /// Crew radios (tabs) behind a door, and the door.
+    behind: HashMap<EndpointId, EndpointId>,
+    /// When a relay last answered, and last failed.
+    relay_ok: u64,
+    relay_bad: u64,
+    /// Which source first named each radio this tab knows of: a guard, a middle and an exit are
+    /// never all three from one.
+    intro: HashMap<EndpointId, u32>,
+    /// The source the items now being taken in came from.
+    now_from: u32,
+    /// Requests and bytes over the door's channel; forwards it carried for tabs behind doors.
+    asks: u64,
+    bytes: u64,
+    served: u64,
+    /// Routes drawn, and those where no exit apart from the guard (another relay home, /16 and
+    /// introducer) could be found and one was used all the same.
+    routes: u64,
+    routes_shared: u64,
+    /// The last hundred routes' exits and middles, for the 25% cap.
+    recent: VecDeque<EndpointId>,
+    capped: u64,
+    /// The minute the door was last asked for its cards.
+    cards_minute: u64,
+    /// Streams the kept guard turned away in a row.
+    busy: u32,
+    /// Doors the link that opened the page named, by address and fingerprint: a note for one of
+    /// them counts the link as one more source.
+    hints: Vec<(String, [u8; 32])>,
+}
+
+const SRC_BUILT_IN: u32 = 1;
+const SRC_REMEMBERED: u32 = 2;
+const SRC_LINK: u32 = 3;
+/// Handed to the page by the Lantern or app that served it, unsigned: one source like any other.
+const SRC_SERVED: u32 = 4;
+
+/// How long a door must have been open before it may be a guard (rule A). A test build sets a
+/// shorter wait with PYRATE_DOOR_AGE_MS.
+const DOOR_AGE_MS: u64 = match option_env!("PYRATE_DOOR_AGE_MS") {
+    Some(v) => match u64::from_str_radix(v, 10) {
+        Ok(n) => n,
+        Err(_) => 10 * 60_000,
+    },
+    None => 10 * 60_000,
+};
+
+fn src_of(id: &EndpointId) -> u32 {
+    0x100 | u32::from_le_bytes(id.as_bytes()[..4].try_into().unwrap()) << 8
+}
+
+impl Doors {
+    /// A door may be a guard when this copy carries it, it was used before, or two sources name it.
+    fn trusted(&self, d: &[u8; 32]) -> bool {
+        self.known.get(d).is_some_and(|(_, _, s)| s.contains(&SRC_BUILT_IN) || s.contains(&SRC_REMEMBERED) || s.len() >= 2)
+    }
+    fn add(&mut self, note: net::DoorNote, raw: Vec<u8>, src: u32) {
+        let hinted = self.hints.iter().any(|(a, f)| *f == note.fp && *a == note.addr.to_string());
+        let e = self.known.entry(note.node).or_insert_with(|| (note.clone(), raw.clone(), vec![]));
+        if hinted && !e.2.contains(&SRC_LINK) {
+            e.2.push(SRC_LINK);
+        }
+        if e.0.at_ms <= note.at_ms {
+            e.0 = note;
+            e.1 = raw;
+        }
+        if src != 0 && !e.2.contains(&src) && e.2.len() < 8 {
+            e.2.push(src);
+        }
+        if self.known.len() > 256 {
+            let mut v: Vec<([u8; 32], u64)> = self.known.iter().map(|(k, (n, _, _))| (*k, n.at_ms)).collect();
+            v.sort_by_key(|x| x.1);
+            for (k, _) in v.into_iter().take(64) {
+                self.known.remove(&k);
+            }
+        }
+    }
+}
+
 #[derive(Default)]
 struct Crew {
     /// Radios of the crew heard of: the relay each named and when.
@@ -409,6 +497,7 @@ struct Ship {
     /// no ballast.
     mobile: std::sync::atomic::AtomicBool,
     crew: Mutex<Crew>,
+    doors: Mutex<Doors>,
 }
 
 /// A relay named in a link someone passed on: HTTPS only, so a link cannot send the tab's
@@ -633,6 +722,37 @@ impl Ship {
     }
 
     async fn ask(&self, node: EndpointId, req: &Request) -> Result<Response> {
+        // Through the door. The door itself is asked over its channel for hops (it is this tab's
+        // guard) and cards, nothing else. With no relay answering, a hop for any other radio goes
+        // to the door as a forward, which it passes on as a relay would; the hop is sealed to
+        // that radio, so the door learns only that this tab talks to it. Nothing else is asked
+        // of anyone without a relay: what a tab wants goes by routes.
+        let door = self.door_now();
+        if let Some(d) = door {
+            if node == d && matches!(req, Request::Hop(_) | Request::Cards) {
+                return self.ask_door(req).await;
+            }
+            if self.door_only() {
+                match req {
+                    Request::Hop(b) if matches!(postcard::from_bytes::<Hop>(b), Ok(Hop::Sealed { .. })) => {
+                        let fwd = postcard::to_stdvec(&Hop::Forward { next: *node.as_bytes(), blob: b.clone() })?;
+                        return self.ask_door(&Request::Hop(fwd)).await;
+                    }
+                    Request::Cards => return self.ask_door(req).await,
+                    _ => {}
+                }
+            }
+        }
+        // A tab behind another door: to that door, as a forward it passes on.
+        if let Request::Hop(b) = req {
+            let behind = self.doors.lock().unwrap().behind.get(&node).copied();
+            if let Some(via) = behind.filter(|v| *v != node && *v != self.ep.id()) {
+                if matches!(postcard::from_bytes::<Hop>(b), Ok(Hop::Sealed { .. })) {
+                    let fwd = postcard::to_stdvec(&Hop::Forward { next: *node.as_bytes(), blob: b.clone() })?;
+                    return Box::pin(self.ask(via, &Request::Hop(fwd))).await;
+                }
+            }
+        }
         // To the tab's own guard, over the direct link when one is open; back on the relay at
         // once if it fails. No other radio is ever asked this way.
         let first = *self.first_hop.lock().unwrap() == Some(node);
@@ -663,6 +783,7 @@ impl Ship {
         let c = match self.conn(node).await {
             Ok(c) => c,
             Err(e) => {
+                self.doors.lock().unwrap().relay_bad = raw_now();
                 let now = self.now();
                 let mut f = self.failed.lock().unwrap();
                 f.retain(|_, t| now.saturating_sub(*t) < net::FAILED_MS);
@@ -681,10 +802,16 @@ impl Ship {
         match timeout(Duration::from_secs(20), fut).await {
             Ok(Ok(r)) => {
                 self.answered(node, (raw_now() - t) as f64);
+                self.doors.lock().unwrap().relay_ok = raw_now();
                 Ok(r)
             }
             Ok(Err(e)) => {
-                self.conns.lock().unwrap().remove(&node);
+                // A stream turned away on a connection that stands is a busy radio, not a lost
+                // one: the connection is kept.
+                let mut cs = self.conns.lock().unwrap();
+                if !(e.to_string().contains("reset by peer") && cs.get(&node).is_some_and(|c| c.close_reason().is_none())) {
+                    cs.remove(&node);
+                }
                 Err(e)
             }
             Err(_) => {
@@ -693,6 +820,89 @@ impl Ship {
                 self.failed.lock().unwrap().insert(*node.as_bytes(), self.now());
                 Err(anyhow!("request timed out"))
             }
+        }
+    }
+
+    /// The door this tab is through, if any.
+    fn door_now(&self) -> Option<EndpointId> {
+        self.doors.lock().unwrap().open.map(|(d, _)| d)
+    }
+
+    /// Through a door with no relay answering: everything goes through the door. A relay that
+    /// answered in the last twenty seconds keeps the tab on its usual paths, the door its guard.
+    fn door_only(&self) -> bool {
+        let d = self.doors.lock().unwrap();
+        d.open.is_some() && raw_now().saturating_sub(d.relay_ok) > 20_000
+    }
+
+    /// One request over the door's channel.
+    async fn ask_door(&self, req: &Request) -> Result<Response> {
+        let out = postcard::to_stdvec(req)?;
+        let p = door_ask_js(&out).map_err(|_| anyhow!("no door"))?;
+        let t = raw_now();
+        let v = wasm_bindgen_futures::JsFuture::from(p).await.map_err(|_| anyhow!("the door did not answer"))?;
+        let b = js_sys::Uint8Array::new(&v).to_vec();
+        {
+            let mut d = self.doors.lock().unwrap();
+            d.asks += 1;
+            d.bytes += (out.len() + b.len()) as u64;
+        }
+        if let Some(d) = self.door_now() {
+            self.answered(d, (raw_now() - t) as f64);
+        }
+        Ok(postcard::from_bytes(&b)?)
+    }
+
+    /// Where a radio is homed: its relay, or for a door its /16 (/32 for IPv6), or the door a
+    /// tab is behind. Two radios with the same home are seen together by whoever runs it.
+    fn home(&self, n: &EndpointId) -> Option<String> {
+        let d = self.doors.lock().unwrap();
+        if let Some((note, _, _)) = d.known.get(n.as_bytes()) {
+            return Some(match note.addr.ip() {
+                std::net::IpAddr::V4(v) => format!("ip4:{}.{}", v.octets()[0], v.octets()[1]),
+                std::net::IpAddr::V6(v) => format!("ip6:{:x}:{:x}", v.segments()[0], v.segments()[1]),
+            });
+        }
+        if let Some(b) = d.behind.get(n) {
+            return Some(format!("door:{b}"));
+        }
+        drop(d);
+        let c = self.crew.lock().unwrap();
+        c.relays.get(n).cloned().or_else(|| c.radios.get(n).map(|(r, _)| r.clone()))
+    }
+
+    /// Whether two radios of a route stand apart: not homed together, and not named to this tab
+    /// by the same source.
+    fn apart(&self, a: &EndpointId, b: &EndpointId) -> bool {
+        if a == b {
+            return false;
+        }
+        if let (Some(x), Some(y)) = (self.home(a), self.home(b)) {
+            if x == y {
+                return false;
+            }
+        }
+        let d = self.doors.lock().unwrap();
+        !matches!((d.intro.get(a), d.intro.get(b)), (Some(x), Some(y)) if x == y)
+    }
+
+    /// No one radio takes more than a quarter of this tab's last hundred exits and middles,
+    /// once there are twenty to count and more than four radios to share them (with four or
+    /// fewer, a quarter each cannot be had, and the cap would only block).
+    fn under_cap(&self, n: &EndpointId) -> bool {
+        let d = self.doors.lock().unwrap();
+        let k = d.recent.len();
+        let mut seen: Vec<&EndpointId> = d.recent.iter().collect();
+        seen.sort();
+        seen.dedup();
+        k < 20 || seen.len() <= 4 || d.recent.iter().filter(|x| *x == n).count() * 4 < k
+    }
+
+    fn drawn(&self, n: EndpointId) {
+        let mut d = self.doors.lock().unwrap();
+        d.recent.push_back(n);
+        if d.recent.len() > 100 {
+            d.recent.pop_front();
         }
     }
 
@@ -1140,6 +1350,12 @@ impl Ship {
 
     #[allow(dead_code)]
     async fn broadcast(&self, g: &Gossip) {
+        // Through a door: only this tab's own crew note, which the door passes on.
+        if self.door_now().is_some() && matches!(g, Gossip::Crew { .. }) {
+            if let Ok(b) = postcard::to_stdvec(&net::DoorCtl::Gossip(postcard::to_stdvec(g).unwrap_or_default())) {
+                let _ = door_ctl_js(&b);
+            }
+        }
         let tx = self.tx.lock().unwrap().clone();
         if let (Some(tx), Ok(bytes)) = (tx, postcard::to_stdvec(g)) {
             let _ = tx.broadcast(bytes.into()).await;
@@ -1184,9 +1400,19 @@ impl Ship {
             // checked against its own signature or dropped. With them the tab can reach the
             // carriers through two hops at once, without waiting for the network to repeat them.
             let Ok(g) = postcard::from_bytes::<Gossip>(&b) else { continue };
-            if !matches!(g, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Harbour { .. } | Gossip::Crew { .. } | Gossip::Deck { .. }) {
+            if !matches!(g, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Harbour { .. } | Gossip::Crew { .. } | Gossip::Deck { .. } | Gossip::Door { .. }) {
                 continue;
             }
+            // Every radio named here was named by `node`: never guard, middle and exit all from it.
+            if let Gossip::Carried { node: c, .. } | Gossip::Harbour { node: c, .. } = &g {
+                if let Ok(c) = EndpointId::from_bytes(c) {
+                    let mut d = self.doors.lock().unwrap();
+                    if d.intro.len() < 8_000 {
+                        d.intro.entry(c).or_insert(src_of(&node));
+                    }
+                }
+            }
+            self.doors.lock().unwrap().now_from = src_of(&node);
             match &g { Gossip::Station(_) => kinds.0 += 1, Gossip::Carried { node, .. } => { kinds.1 += 1; *kinds.4.entry(hex(&node[..5])).or_default() += 1 } Gossip::Harbour { node, relay, .. } => { kinds.2 += 1; say(&format!("  {} is reached through {relay}", hex(&node[..5]))) } _ => kinds.2 += 1 }
             let Some(g) = g.from_network(now, node.as_bytes()) else { kinds.3 += 1; continue };
             if let Some(st) = self.on_gossip(g) {
@@ -1195,6 +1421,7 @@ impl Ship {
                 }
             }
         }
+        self.doors.lock().unwrap().now_from = 0;
         say(&format!("  {} cards, {} carrier notes ({} refused), {} relay notes; carriers {:?}; route radios now {:?}", kinds.0, kinds.1, kinds.3, kinds.2, kinds.4, self.route_nodes().iter().map(|n| n.fmt_short().to_string()).collect::<Vec<_>>()));
     }
 
@@ -1269,6 +1496,17 @@ impl Ship {
                 }
                 None
             }
+            g @ Gossip::Door { .. } => {
+                let note = g.door_checked(self.base_now())?;
+                let raw = postcard::to_stdvec(&g).ok()?;
+                let mut d = self.doors.lock().unwrap();
+                let from = if d.now_from == 0 { 0x200 } else { d.now_from };
+                let Ok(id) = EndpointId::from_bytes(&note.node) else { return None };
+                d.intro.entry(id).or_insert(from);
+                // A door naming itself vouches for nothing.
+                d.add(note, raw, if from == src_of(&id) { 0 } else { from });
+                None
+            }
             g @ Gossip::Harbour { .. } => {
                 // A carrier's own word on where it can be reached: into the tab's address book,
                 // for carriers it knows and harbours only.
@@ -1290,8 +1528,25 @@ impl Ship {
                 if id == self.ep.id() {
                     return None;
                 }
-                if let Ok(url) = relay.parse::<iroh::RelayUrl>() {
-                    self.book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+                {
+                    let mut d = self.doors.lock().unwrap();
+                    let from = d.now_from;
+                    if from != 0 && d.intro.len() < 8_000 {
+                        d.intro.entry(id).or_insert(from);
+                    }
+                    match net::door_of_relay(&relay).and_then(|b| EndpointId::from_bytes(&b).ok()) {
+                        Some(via) => {
+                            d.behind.insert(id, via);
+                        }
+                        None => {
+                            d.behind.remove(&id);
+                        }
+                    }
+                }
+                if net::door_of_relay(&relay).is_none() {
+                    if let Ok(url) = relay.parse::<iroh::RelayUrl>() {
+                        self.book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+                    }
                 }
                 // Kept by when the radio said it, not when the word arrived: a note passed on in a
                 // Lantern's cards may be minutes old, and its radio gone since.
@@ -1408,6 +1663,31 @@ impl Ship {
     /// The visit's first hop, drawn once: from the radios this tab is already talking to where
     /// it can (they know its address already, and they answer at once), else from any it knows.
     fn first_hop_for(&self, nodes: &[EndpointId]) -> Option<EndpointId> {
+        // A door this tab is through is its guard when it may be one: named by this copy, by an
+        // earlier visit or by two sources, and open long enough (rule A). The first leg then runs
+        // on no relay at all.
+        if let Some(d) = self.door_now() {
+            let ok = {
+                let ds = self.doors.lock().unwrap();
+                ds.trusted(d.as_bytes()) && ds.known.get(d.as_bytes()).is_some_and(|(n, _, _)| self.base_now().saturating_sub(n.since) >= DOOR_AGE_MS)
+            };
+            if ok {
+                let mut g = self.first_hop.lock().unwrap();
+                if *g != Some(d) {
+                    *g = Some(d);
+                    let mut c = self.crew.lock().unwrap();
+                    c.guards.retain(|x| *x != d);
+                    c.guards.push(d);
+                    if c.guards.len() > 3 {
+                        c.guards.remove(0);
+                    }
+                }
+                return Some(d);
+            }
+            if self.door_only() {
+                return None;
+            }
+        }
         let mut g = self.first_hop.lock().unwrap();
         if g.is_none_or(|f| !nodes.contains(&f) && !(self.crew_on() && self.crew.lock().unwrap().radios.contains_key(&f))) {
             // The quickest to answer of the radios this tab knows, drawn among those within half
@@ -1505,8 +1785,27 @@ impl Ship {
         let first = self.first_hop_for(&nodes).ok_or_else(|| anyhow!("no first hop"))?;
         let exit = match exit.filter(|e| *e != first) {
             Some(e) => e,
-            None => *self.exits_for(&nodes, &[first], 1, ask.station()).first().ok_or_else(|| anyhow!("no exit"))?,
+            None => {
+                // An exit apart from the first hop (another relay home, /16 and introducer) and
+                // under the 25% cap where one exists; else the usual draw, counted.
+                let apart: Vec<EndpointId> = nodes.iter().filter(|n| **n != first && self.apart(n, &first) && self.under_cap(n)).copied().collect();
+                self.doors.lock().unwrap().routes += 1;
+                match self.exits_for(&apart, &[first], 1, ask.station()).first() {
+                    Some(e) => *e,
+                    None => {
+                        let e = *self.exits_for(&nodes, &[first], 1, ask.station()).first().ok_or_else(|| anyhow!("no exit"))?;
+                        let capped = !nodes.iter().any(|n| *n != first && self.under_cap(n));
+                        let mut d = self.doors.lock().unwrap();
+                        d.routes_shared += 1;
+                        if capped {
+                            d.capped += 1;
+                        }
+                        e
+                    }
+                }
+            }
         };
+        self.drawn(exit);
         let r = self.via(first, exit, ask, nodes.len()).await;
         use std::sync::atomic::Ordering::Relaxed;
         match &r {
@@ -1547,12 +1846,25 @@ impl Ship {
             match &r { Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => "answered".to_string(), Ok(Ok(_)) => "empty".into(), Ok(Err(e)) => format!("first hop failed: {e}"), Err(_) => "timed out".into() }, raw_now() - t));
         let raw = match r {
             Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => {
+                self.doors.lock().unwrap().busy = 0;
                 let mut ok = self.relayed.lock().unwrap();
                 ok.insert(first);
                 ok.insert(exit);
                 raw
             }
-            Ok(Err(_)) => return Err(RouteFail::FirstHop),
+            // A guard this tab keeps that turned a stream away (it was busy: a tab answers four at
+            // a time) is not let go for it while the connection to it stands; thirty in a row, or
+            // a connection that failed, and it is (sticky guards, crew addition A).
+            Ok(Err(e)) => {
+                let kept = self.crew.lock().unwrap().kept.contains(&first);
+                let standing = self.conns.lock().unwrap().get(&first).is_some_and(|c| c.close_reason().is_none());
+                let busy = e.to_string().contains("reset by peer") && kept && standing && {
+                    let mut d = self.doors.lock().unwrap();
+                    d.busy += 1;
+                    d.busy < 30
+                };
+                return Err(if busy { RouteFail::Other } else { RouteFail::FirstHop });
+            }
             // An empty answer: the first hop relays for nobody, or the exit it reached does not.
             // A first hop that has carried a route this visit is believed; one that has not is
             // the likelier to have said no, and it is the one left out.
@@ -1993,6 +2305,11 @@ extern "C" {
     fn rtc_accept(peer: &str, sdp: &str) -> Result<js_sys::Promise, JsValue>;
     #[wasm_bindgen(catch, js_name = pyrateRtcAsk)]
     fn rtc_ask(peer: &str, bytes: &[u8]) -> Result<js_sys::Promise, JsValue>;
+    /// The door's data channel (app.js): one request and its answer, and a control frame out.
+    #[wasm_bindgen(catch, js_name = pyrateDoorAsk)]
+    fn door_ask_js(bytes: &[u8]) -> Result<js_sys::Promise, JsValue>;
+    #[wasm_bindgen(catch, js_name = pyrateDoorCtl)]
+    fn door_ctl_js(bytes: &[u8]) -> Result<(), JsValue>;
 }
 
 impl Ship {
@@ -2239,7 +2556,15 @@ impl Ship {
             .filter(|(n, _)| !c.suspect.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < SUSPECT_MS))
             .map(|(n, _)| *n)
             .collect();
-        (!pool.is_empty()).then(|| pool[pick(pool.len())])
+        drop(c);
+        // Apart from the first hop and the exit where it can be, and under the 25% cap.
+        let apart: Vec<EndpointId> = pool.iter().filter(|n| first.is_none_or(|f| self.apart(n, &f)) && not.iter().all(|x| self.apart(n, x)) && self.under_cap(n)).copied().collect();
+        let pool = if apart.is_empty() { pool } else { apart };
+        let m = (!pool.is_empty()).then(|| pool[pick(pool.len())]);
+        if let Some(m) = m {
+            self.drawn(m);
+        }
+        m
     }
 
     /// This station's decks that this tab may ask, and its own: the keeper of `key` among all of
@@ -2405,7 +2730,27 @@ impl Ship {
             return;
         }
         let net_now = self.base_now();
-        let Some(relay) = self.ep.addr().relay_urls().next().map(|u| u.to_string()) else { return };
+        // Through a door with no relay answering, the tab is reached by forwarding to its door.
+        let relay = match self.door_now() {
+            Some(d) if self.door_only() => Some(format!("door:{}", hex(d.as_bytes()))),
+            _ => self.ep.addr().relay_urls().next().map(|u| u.to_string()),
+        };
+        // The door is asked for its cards again each minute while the relays are out: there is
+        // no gossip of the tab's own then, only what the door passes on.
+        if let Some(d) = self.door_now().filter(|_| self.door_only()) {
+            let due = {
+                let mut ds = self.doors.lock().unwrap();
+                let due = ds.cards_minute != now / 60_000;
+                ds.cards_minute = now / 60_000;
+                due
+            };
+            if due {
+                self.cards_asked.lock().unwrap().remove(&d);
+                let s = self.clone();
+                spawn(async move { s.cards_from(d).await });
+            }
+        }
+        let Some(relay) = relay else { return };
         if now.saturating_sub(self.crew.lock().unwrap().said_crew) > 120_000 {
             self.crew.lock().unwrap().said_crew = now;
             self.broadcast(&Gossip::crew(&self.secret, &relay, net_now)).await;
@@ -2453,12 +2798,17 @@ impl Ship {
                 None
             }
         };
-        if let Some(b) = &ballast {
+        if let Some(b) = ballast.as_ref().filter(|_| !self.door_only()) {
             for st in b {
                 self.sync_soon(*st);
             }
         }
-        let want: Vec<(StationId, bool)> = {
+        // Decks and ways in are reached through relays only: a tab that only a door reaches opens
+        // none, since its door, which knows its address, would see its way in's asks arrive.
+        let door_only = self.door_only();
+        let want: Vec<(StationId, bool)> = if door_only {
+            vec![]
+        } else {
             let c = self.crew.lock().unwrap();
             let mut w: Vec<(StationId, bool)> = play.iter().map(|s| (*s, false)).collect();
             let b = ballast.clone().unwrap_or_else(|| c.decks.iter().filter(|d| d.ballast).map(|d| d.station).collect());
@@ -2767,8 +3117,16 @@ impl Radio {
             crew_on: std::sync::atomic::AtomicBool::new(true),
             mobile: std::sync::atomic::AtomicBool::new(false),
             crew: Mutex::new(Crew::default()),
+            doors: Mutex::new(Doors::default()),
         });
         *proto.0.lock().unwrap() = Some(ship.clone());
+        // The harbours this copy was built with are named by the copy itself.
+        {
+            let mut d = ship.doors.lock().unwrap();
+            for h in &ship.harbour {
+                d.intro.insert(*h, SRC_BUILT_IN);
+            }
+        }
 
         // The crew's tick: its note, its decks and its ballast, every five seconds.
         {
@@ -3039,6 +3397,149 @@ impl Radio {
     /// A request that came over a direct link from `peer`, a requester that keeps this tab as
     /// its guard: a forward is passed on as one that came over the relay would be, within the
     /// same budget; anything else is refused, so the link is only ever the guard's leg.
+    /// Doors this copy was built with, remembered from an earlier visit, or handed over by
+    /// whoever served the page: signed notes in hex, by commas. `src` is 1 (built in), 2
+    /// (remembered) or 4 (served). Returns how many were taken.
+    pub fn doors_add(&self, list: &str, src: u32) -> u32 {
+        let now = self.ship.base_now();
+        let mut d = self.ship.doors.lock().unwrap();
+        let mut n = 0;
+        for h in list.split(|c: char| c == ',' || c.is_whitespace()).filter(|h| !h.is_empty() && h.len() <= 2048) {
+            let Ok(raw) = (0..h.len() / 2).map(|i| u8::from_str_radix(h.get(2 * i..2 * i + 2).unwrap_or("x"), 16)).collect::<Result<Vec<u8>, _>>() else { continue };
+            let Ok(g) = postcard::from_bytes::<Gossip>(&raw) else { continue };
+            let Some(note) = g.door_checked(now) else { continue };
+            d.add(note, raw, if matches!(src, SRC_BUILT_IN | SRC_REMEMBERED) { src } else { SRC_SERVED });
+            n += 1;
+        }
+        n
+    }
+
+    /// The doors the link that opened the page carried, as JSON [{addr, fp}]: hints only.
+    pub fn doors_hint(&self, list: &str) {
+        let v: Vec<Value> = serde_json::from_str(list).unwrap_or_default();
+        let mut d = self.ship.doors.lock().unwrap();
+        for x in v.iter().take(3) {
+            if let (Some(a), Some(f)) = (x["addr"].as_str(), x["fp"].as_str().and_then(|f| unhex32(f).ok())) {
+                d.hints.push((a.to_string(), f));
+            }
+        }
+    }
+
+    /// The doors this tab knows, as JSON, best first: those it may draw as a guard, then the
+    /// longest open. Each with its address, fingerprint, note (hex) and whether it is trusted.
+    pub fn doors(&self, n: u32) -> String {
+        let now = self.ship.base_now();
+        let d = self.ship.doors.lock().unwrap();
+        let mut v: Vec<(bool, u64, Value)> = d
+            .known
+            .iter()
+            .filter(|(_, (note, _, _))| now.saturating_sub(note.at_ms) < net::DOOR_FRESH_MS)
+            .map(|(k, (note, raw, _))| (d.trusted(k), note.since, json!({ "id": hex(k), "addr": note.addr.to_string(), "fp": hex(&note.fp), "since": note.since, "app": note.app, "link": note.link, "note": hex(raw), "trusted": d.trusted(k), "aged": now.saturating_sub(note.since) >= DOOR_AGE_MS })))
+            .collect();
+        v.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+        json!(v.into_iter().take(n as usize).map(|x| x.2).collect::<Vec<_>>()).to_string()
+    }
+
+    /// The door's channel is open: `note` is what the door sent first, `fp` the fingerprint this
+    /// tab dialled (hex), `src` how the tab came to dial it (1 built in, 2 remembered, 3 a link).
+    /// The note must be the door's own and name that fingerprint. Returns the tab's hello.
+    pub fn door_up(&self, note: &[u8], fp: &str, src: u32) -> Result<Vec<u8>, JsValue> {
+        let ctl: net::DoorCtl = postcard::from_bytes(note).map_err(|_| JsValue::from_str("not a door"))?;
+        let net::DoorCtl::Note(raw) = ctl else { return Err(JsValue::from_str("not a door")) };
+        let g: Gossip = postcard::from_bytes(&raw).map_err(|_| JsValue::from_str("not a door"))?;
+        let d = g.door_checked(self.ship.base_now()).ok_or_else(|| JsValue::from_str("the door's note does not hold"))?;
+        if hex(&d.fp) != fp.to_ascii_lowercase() {
+            return Err(JsValue::from_str("the door is not the one dialled"));
+        }
+        let id = EndpointId::from_bytes(&d.node).map_err(|_| JsValue::from_str("id"))?;
+        {
+            let mut ds = self.ship.doors.lock().unwrap();
+            ds.add(d.clone(), raw.clone(), src.clamp(SRC_BUILT_IN, SRC_LINK));
+            ds.open = Some((id, raw_now()));
+            ds.intro.entry(id).or_insert(src_of(&id));
+        }
+        self.ship.cards_asked.lock().unwrap().remove(&id);
+        let s = self.ship.clone();
+        spawn(async move { s.cards_from(id).await });
+        let at_ms = self.ship.base_now();
+        let me = *self.ship.ep.id().as_bytes();
+        let key = pyrate_core::StationKey::from_seed(self.ship.secret);
+        let sig = key.sign(&net::door_hello_message(&d.node, &me, at_ms)).to_vec();
+        say(&format!("through the door {} at {}", id.fmt_short(), d.addr));
+        postcard::to_stdvec(&net::DoorCtl::Hello { node: me, at_ms, sig }).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// The door's channel closed.
+    pub fn door_down(&self) {
+        let d = self.ship.doors.lock().unwrap().open.take();
+        if let Some((d, _)) = d {
+            let mut f = self.ship.first_hop.lock().unwrap();
+            if *f == Some(d) {
+                *f = None;
+            }
+        }
+    }
+
+    /// A control frame from the door: gossip it passes on.
+    pub fn door_ctl(&self, bytes: &[u8]) {
+        let Ok(net::DoorCtl::Gossip(raw)) = postcard::from_bytes::<net::DoorCtl>(bytes) else { return };
+        let Some(d) = self.ship.door_now() else { return };
+        let Ok(g) = postcard::from_bytes::<Gossip>(&raw) else { return };
+        let Some(g) = g.from_network(self.ship.now(), d.as_bytes()) else { return };
+        self.ship.doors.lock().unwrap().now_from = src_of(&d);
+        let st = self.ship.on_gossip(g);
+        self.ship.doors.lock().unwrap().now_from = 0;
+        if let Some(st) = st {
+            if *self.ship.tuned.lock().unwrap() == Some(st) {
+                self.ship.sync_soon(st);
+            }
+        }
+    }
+
+    /// A request from the door, for this tab: a hop another radio forwarded to it, which it
+    /// answers as it would one over a relay (a middle's pass, or nothing).
+    pub fn door_serve(&self, bytes: &[u8]) -> js_sys::Promise {
+        let s = self.ship.clone();
+        let bytes = bytes.to_vec();
+        wasm_bindgen_futures::future_to_promise(async move {
+            let from = s.door_now().ok_or_else(|| JsValue::from_str("no door"))?;
+            let out = match postcard::from_bytes::<Request>(&bytes) {
+                Ok(Request::Hop(b)) if s.crew_on() => {
+                    s.doors.lock().unwrap().served += 1;
+                    s.on_hop(from, b).await
+                }
+                _ => vec![],
+            };
+            let r = postcard::to_stdvec(&Response::Hop(out)).unwrap_or_default();
+            Ok(js_sys::Uint8Array::from(&r[..]).into())
+        })
+    }
+
+    /// Doors a shared link of `station` may carry, as JSON [{addr, fp}]: at most two, only doors
+    /// this tab trusts whose owners let links name them, never one that carries the station, and
+    /// drawn by the same rule for every station (oldest open first), so a link's doors say
+    /// nothing about what is shared.
+    pub fn doors_for_link(&self, station: &str) -> String {
+        let st = unhex32(station).ok();
+        let carriers: HashSet<[u8; 32]> = st.and_then(|st| self.ship.log.lock().unwrap().get(&StationId(st)).map(|l| l.carriers.keys().copied().collect())).unwrap_or_default();
+        let now = self.ship.base_now();
+        let d = self.ship.doors.lock().unwrap();
+        let mut v: Vec<&net::DoorNote> = d.known.iter().filter(|(k, (n, _, _))| d.trusted(k) && n.link && !carriers.contains(*k) && now.saturating_sub(n.at_ms) < net::DOOR_FRESH_MS).map(|(_, (n, _, _))| n).collect();
+        v.sort_by_key(|n| (n.since, n.node));
+        json!(v.into_iter().take(2).map(|n| json!({ "addr": n.addr.to_string(), "fp": hex(&n.fp) })).collect::<Vec<_>>()).to_string()
+    }
+
+    /// What the doors have done this visit, as JSON: counts only.
+    pub fn door_stats(&self) -> String {
+        let only = self.ship.door_only();
+        let first = *self.ship.first_hop.lock().unwrap();
+        let d = self.ship.doors.lock().unwrap();
+        json!({ "open": d.open.map(|(x, _)| x.to_string()), "door_only": only, "asks": d.asks, "bytes": d.bytes, "served": d.served,
+            "known": d.known.len(), "trusted": d.known.keys().filter(|k| d.trusted(k)).count(), "behind": d.behind.len(),
+            "routes": d.routes, "routes_shared": d.routes_shared, "capped": d.capped, "relay_ok_ago": if d.relay_ok == 0 { -1.0 } else { raw_now().saturating_sub(d.relay_ok) as f64 },
+            "first_hop": first.map(|f| f.to_string()) }).to_string()
+    }
+
     pub fn rtc_serve(&self, peer: &str, bytes: &[u8]) -> js_sys::Promise {
         let s = self.ship.clone();
         let (peer, bytes) = (peer.to_string(), bytes.to_vec());
@@ -3751,7 +4252,7 @@ impl Radio {
                         Gossip::Aboard { station, .. } => *station == st,
                         Gossip::Harbour { .. } => true,
                         // No decks and no crew inside a pocket: its sound stays among its members.
-                        Gossip::Crew { .. } | Gossip::Deck { .. } => false,
+                        Gossip::Crew { .. } | Gossip::Deck { .. } | Gossip::Door { .. } => false,
                     };
                     if ok {
                         s2.on_gossip(g);

@@ -39,6 +39,11 @@ symphonia = "0.6"
 rubato = "5"
 # The desk's encoder hears each frame back as listeners will, which takes libopus itself.
 opusic-sys = "0.7"
+# Doors: a listener's app takes browsers' WebRTC data channels straight, with no relay and no
+# TLS (WebRTC-direct). Sans-IO, on the same aws-lc-rs the node already links.
+str0m = { version = "0.25", default-features = false, features = ["aws-lc-rs"] }
+# A door asks the home router for a port: UPnP-IGD first; NAT-PMP and PCP are spoken by hand.
+igd-next = { version = "0.17", default-features = false, features = ["aio_tokio"] }
 
 p256 = { version = "0.14", features = ["ecdsa", "pkcs8"], optional = true }
 rcgen = { version = "0.14", default-features = false, features = ["ring"], optional = true }

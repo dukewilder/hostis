@@ -94,7 +94,7 @@ impl Inner {
                     // Where the members can be reached, each in its own hand.
                     Gossip::Harbour { .. } => true,
                     // No decks and no crew inside a pocket: its sound stays among its members.
-                    Gossip::Crew { .. } | Gossip::Deck { .. } => false,
+                    Gossip::Crew { .. } | Gossip::Deck { .. } | Gossip::Door { .. } => false,
                 };
                 if ok {
                     me.on_gossip(g);

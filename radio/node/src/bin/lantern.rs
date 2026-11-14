@@ -24,8 +24,8 @@ fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     // An unknown flag stops the Lantern before it starts: a mistyped or test flag must never
     // bring up a stray node on whatever network the shell happens to be on.
-    const VALUED: &[&str] = &["--dir", "--quota-gb", "--bootstrap", "--seed", "--http", "--open-hails", "--relay", "--release-keys", "--words", "--withdraw", "--reseed", "--player"];
-    const BARE: &[&str] = &["--carry-own", "--public-dns", "--scuttle", "--web-all"];
+    const VALUED: &[&str] = &["--dir", "--quota-gb", "--bootstrap", "--seed", "--http", "--open-hails", "--relay", "--release-keys", "--words", "--withdraw", "--reseed", "--player", "--door"];
+    const BARE: &[&str] = &["--carry-own", "--public-dns", "--scuttle", "--web-all", "--listener", "--door-links", "--lan"];
     let mut i = 1;
     while i < args.len() {
         let a = args[i].as_str();
@@ -63,8 +63,26 @@ fn main() -> anyhow::Result<()> {
         println!("{n} {} opened into {out}", if n == 1 { "hail" } else { "hails" });
         return Ok(());
     }
-    let node = Node::start(Config { dir: dir.clone(), quota, lantern: true, carry_all: !args.iter().any(|a| a == "--carry-own"), bootstrap, public_dns: args.iter().any(|a| a == "--public-dns"), private: false, ballast: 0, release_keys: get("--release-keys").map(|p| std::fs::read_to_string(p).unwrap_or_default().lines().filter_map(|l| pyrate_core::StationId::from_hex(l.trim()).ok().map(|i| i.0)).collect()).unwrap_or_default() })?;
+    // --listener runs as a listener's app does (for the test network): no Lantern duties, fetching
+    // through routes, carrying for the crew.
+    let listener = args.iter().any(|a| a == "--listener");
+    let node = Node::start(Config { dir: dir.clone(), quota, lantern: !listener, carry_all: !listener && !args.iter().any(|a| a == "--carry-own"), bootstrap, public_dns: args.iter().any(|a| a == "--public-dns"), private: listener, ballast: 0, release_keys: get("--release-keys").map(|p| std::fs::read_to_string(p).unwrap_or_default().lines().filter_map(|l| pyrate_core::StationId::from_hex(l.trim()).ok().map(|i| i.0)).collect()).unwrap_or_default() })?;
     println!("LANTERN LIT");
+    if listener {
+        node.call(&serde_json::json!({ "cmd": "ballast_ok", "value": false, "unmetered": true }));
+    }
+    // --lan: find radios on this network with no relay and no internet (the test network's doors).
+    if args.iter().any(|a| a == "--lan") {
+        node.call(&serde_json::json!({ "cmd": "lan", "value": true }));
+    }
+    // --door <ip:port> opens a door for browsers at that outside address; --door auto asks the
+    // home router for a port (UPnP-IGD, NAT-PMP, PCP) and stays shut if none is given.
+    if let Some(d) = get("--door") {
+        let r = node.call(&serde_json::json!({ "cmd": "door", "on": true, "app": listener, "links": args.iter().any(|a| a == "--door-links"), "addr": if d == "auto" { serde_json::Value::Null } else { d.into() } }));
+        let _ = r;
+        std::thread::sleep(std::time::Duration::from_secs(4));
+        println!("door {}", node.call(&serde_json::json!({ "cmd": "door" })));
+    }
     // Carrying only its own stations: whatever else it held before goes, now.
     if args.iter().any(|a| a == "--carry-own") {
         let r = node.call(&serde_json::json!({ "cmd": "clear_hold" }));

@@ -48,6 +48,38 @@ Future<void> deskTidy(String dir) async {
   } catch (_) {}
 }
 
+/// "Start with this computer": an entry in the computer's own list of what starts at sign-in,
+/// written and removed here with no helper (a .desktop file on Linux, a Run value on Windows, a
+/// LaunchAgent on macOS). The radio starts with `--quiet`, playing nothing until asked.
+class Autostart {
+  static const _name = 'pyrate-radio';
+  static Future<void> set(bool on) async {
+    try {
+      final exe = Platform.resolvedExecutable, home = Platform.environment['HOME'] ?? '';
+      if (Platform.isLinux) {
+        final f = File('$home/.config/autostart/$_name.desktop');
+        if (on) {
+          f.parent.createSync(recursive: true);
+          f.writeAsStringSync('[Desktop Entry]\nType=Application\nName=Pyrate Radio\nExec="$exe" --quiet\nX-GNOME-Autostart-enabled=true\nNoDisplay=true\n');
+        } else if (f.existsSync()) {
+          f.deleteSync();
+        }
+      } else if (Platform.isWindows) {
+        const key = r'HKCU\Software\Microsoft\Windows\CurrentVersion\Run';
+        await Process.run('reg', on ? ['add', key, '/v', 'PyrateRadio', '/t', 'REG_SZ', '/d', '"$exe" --quiet', '/f'] : ['delete', key, '/v', 'PyrateRadio', '/f']);
+      } else if (Platform.isMacOS) {
+        final f = File('$home/Library/LaunchAgents/black.hostis.pyrate-radio.plist');
+        if (on) {
+          f.parent.createSync(recursive: true);
+          f.writeAsStringSync('<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Label</key><string>black.hostis.pyrate-radio</string><key>ProgramArguments</key><array><string>$exe</string><string>--quiet</string></array><key>RunAtLoad</key><true/></dict></plist>\n');
+        } else if (f.existsSync()) {
+          f.deleteSync();
+        }
+      }
+    } catch (_) {}
+  }
+}
+
 /// The app's messenger, so the shell can say a word on any screen.
 final messenger = GlobalKey<ScaffoldMessengerState>();
 

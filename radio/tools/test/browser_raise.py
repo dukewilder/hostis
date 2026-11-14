@@ -30,7 +30,7 @@ with sync_playwright() as p:
     a.set_input_files("#st-files", wav)
     a.wait_for_selector(".qi.done, .qi.bad", timeout=120000)
     check(a.is_visible(".qi.done"), "the recording is on the clock: " + a.text_content(".qi .qs"))
-    a.wait_for_function("document.getElementById('st-status').textContent.startsWith('On the air')", timeout=180000)
+    a.wait_for_function("document.getElementById('st-status').textContent.startsWith('On the network · ')", timeout=180000)
     check(True, "it sailed: " + a.text_content("#st-status"))
     mine = json.loads(a.evaluate("pyrate && JSON.stringify(window.pyrate) && 0") or "0") if False else None
     sid = a.evaluate("window.pyrate.mine()[0]")
