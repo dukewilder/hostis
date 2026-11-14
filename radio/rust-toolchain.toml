@@ -1,0 +1,5 @@
+# Pinned so the browser player and the Lantern build the same bytes on any machine.
+# See tools/repro.sh and the Reproducible builds section of RELEASES.md.
+[toolchain]
+channel = "1.97.0"
+targets = ["wasm32-unknown-unknown"]
