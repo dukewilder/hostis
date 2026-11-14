@@ -22,7 +22,9 @@ fn main() -> anyhow::Result<()> {
     let mut heard_s = Vec::new();
     for round in 0..rounds {
         let t0 = Instant::now();
-        let r = k.call(&json!({ "cmd": "raise", "name": format!("Raised {round}"), "about": "test" }));
+        // Raised for the dial, as a keeper does once it is made (new stations start off it, 470fbab):
+        // what is timed here is the climb to the dial, which an unlisted station never makes.
+        let r = k.call(&json!({ "cmd": "raise", "name": format!("Raised {round}"), "about": "test", "link_only": false }));
         let id = r["id"].as_str().unwrap().to_string();
         println!("round {round}: raised {} in {:.1} s", &id[..10], t0.elapsed().as_secs_f64());
         k.call(&json!({ "cmd": "add_track", "station": id, "path": args[2], "title": "Harbour Lights" }));
@@ -40,7 +42,7 @@ fn main() -> anyhow::Result<()> {
         }
         let seen = t0.elapsed().as_secs_f64();
         let e = entry(&l);
-        println!("  {} the stranger sees it at {seen:.1} s (listed {})", if e.is_some() { "PASS" } else { "FAIL" }, e.as_ref().map(|e| e["listed"].to_string()).unwrap_or_default());
+        println!("{} the stranger sees it at {seen:.1} s (listed {})", if e.is_some() { "PASS" } else { "FAIL" }, e.as_ref().map(|e| e["listed"].to_string()).unwrap_or_default());
         seen_s.push(seen);
         l.call(&json!({ "cmd": "tune", "station": id }));
         let state = |n: &Node| n.call(&json!({ "cmd": "status" }))["now"]["state"].as_str().unwrap_or("").to_string();
@@ -48,7 +50,7 @@ fn main() -> anyhow::Result<()> {
             std::thread::sleep(Duration::from_millis(250));
         }
         let heard = t0.elapsed().as_secs_f64();
-        println!("  {} the stranger hears it at {heard:.1} s (state '{}')", if state(&l) == "playing" { "PASS" } else { "FAIL" }, state(&l));
+        println!("{} the stranger hears it at {heard:.1} s (state '{}')", if state(&l) == "playing" { "PASS" } else { "FAIL" }, state(&l));
         heard_s.push(heard);
         l.call(&json!({ "cmd": "stop" }));
         // Listed once the keeper's work climbs to it.
@@ -56,7 +58,8 @@ fn main() -> anyhow::Result<()> {
         while !entry(&l).is_some_and(|e| e["listed"] == true) && t1.elapsed() < Duration::from_secs(900) {
             std::thread::sleep(Duration::from_secs(2));
         }
-        println!("  listed for the stranger {:.0} s after it was heard", t1.elapsed().as_secs_f64());
+        let listed = entry(&l).is_some_and(|e| e["listed"] == true);
+        println!("{} listed for the stranger {:.0} s after it was heard", if listed { "PASS" } else { "FAIL" }, t1.elapsed().as_secs_f64());
     }
     println!("seen {seen_s:.0?} heard {heard_s:.0?}");
     Ok(())

@@ -86,7 +86,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with: { channel: stable, flutter-version: "3.47.9" }
-      - run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libasound2-dev
+      # libayatana-appindicator3-dev: the tray icon that keeps the radio running with its window closed.
+      - run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libasound2-dev libayatana-appindicator3-dev
       - run: cargo build --release --locked -p pyrate-ffi
       # The open player rides in the app, for sharing on a Wi-Fi and saving to a folder: the one
       # this app names, fetched from IPFS and checked block by block.

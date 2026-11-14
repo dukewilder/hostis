@@ -124,7 +124,12 @@ def connected(pg, timeout=60):
 def rows(pg):
     return pg.eval_on_selector_all(".row:not(.skel)", "rs => rs.map(r => ({ id: r.dataset.id, name: r.querySelector('.name').firstChild.textContent, tags: [...r.querySelectorAll('.tag')].map(t => t.textContent) }))")
 def view(pg, v):
-    press(pg, f".tab[data-v={v}]")
+    # The station page has no tab of its own (the player's four places): it opens from Page on the set.
+    if v == "page":
+        if st(pg).get("view") != "radio": press(pg, ".tab[data-v=radio]")
+        press(pg, "#pagego")
+    else:
+        press(pg, f".tab[data-v={v}]")
     return poll(lambda: st(pg).get("view") == v, 5, 0.02)[1]
 
 def shot(pg, name, full=False):
@@ -141,7 +146,13 @@ def shot(pg, name, full=False):
 # top of one another, names on the dial that overlap, and tap targets too small for a thumb.
 LAYOUT = r"""() => {
   const W = innerWidth, out = [];
-  const vis = e => { if (e.closest('[hidden]') || (e.closest('details:not([open])') && !e.closest('summary'))) return false; const s = getComputedStyle(e); if (s.visibility === 'hidden' || s.display === 'none' || +s.opacity === 0) return false; const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 };
+  // What shows of an element: its box cut to every box round it that clips (a view that scrolls
+  // inside the page), or null when none of it shows. The player's views scroll on their own
+  // above the mini player and the tabs, so what has scrolled under them is out of sight.
+  const vrect = e => { const r = e.getBoundingClientRect(); let t = r.top, b = r.bottom, l = r.left, rt = r.right;
+    for (let a = e.parentElement; a && a !== document.body && a !== document.documentElement; a = a.parentElement) { const s = getComputedStyle(a); if (s.overflowX === 'visible' && s.overflowY === 'visible') continue; const q = a.getBoundingClientRect(); t = Math.max(t, q.top); b = Math.min(b, q.bottom); l = Math.max(l, q.left); rt = Math.min(rt, q.right) }
+    return b - t > 2 && rt - l > 2 ? { top: t, bottom: b, left: l, right: rt } : null };
+  const vis = e => { if (e.closest('[hidden]') || (e.closest('details:not([open])') && !e.closest('summary'))) return false; const s = getComputedStyle(e); if (s.visibility === 'hidden' || s.display === 'none' || +s.opacity === 0) return false; const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !!vrect(e) };
   const nm = e => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (typeof e.className === 'string' && e.className.trim() ? '.' + e.className.trim().split(/\s+/).join('.') : '') + ' "' + (e.textContent || e.value || e.placeholder || '').trim().replace(/\s+/g, ' ').slice(0, 28) + '"';
   if (document.documentElement.scrollWidth > W + 1) out.push('the page scrolls sideways: ' + document.documentElement.scrollWidth + ' px in ' + W);
   for (const e of document.querySelectorAll('body *')) {
@@ -153,10 +164,10 @@ LAYOUT = r"""() => {
     if (e.children.length === 0 && e.textContent.trim() && e.scrollWidth > e.clientWidth + 2 && s.overflowX !== 'visible') out.push((s.textOverflow === 'ellipsis' ? 'cut short with an ellipsis: ' : 'text clipped: ') + nm(e));
     if (e.children.length === 0 && e.textContent.trim() && e.scrollHeight > e.clientHeight + 3 && s.overflowY === 'hidden' && s.webkitLineClamp === 'none') out.push('text clipped at the bottom: ' + nm(e));
   }
-  // The mini player is fixed over the page: what it covers counts only at the foot of the page,
-  // where nothing can be scrolled out from under it.
+  // The mini player sits below the view that scrolls: what it covers is what shows of anything
+  // over it, at the foot of the page, where nothing can be scrolled out from under it.
   const mini = document.getElementById('mini'), atFoot = scrollY + innerHeight >= document.documentElement.scrollHeight - 2;
-  if (mini && vis(mini) && atFoot) { const m = mini.getBoundingClientRect(); for (const e of document.querySelectorAll('a, button, input, select, textarea, p')) { if (mini.contains(e) || !vis(e)) continue; const r = e.getBoundingClientRect(); if (Math.min(r.right, m.right) - Math.max(r.left, m.left) > 2 && Math.min(r.bottom, m.bottom) - Math.max(r.top, m.top) > 2) out.push('at the foot of the page the mini player covers ' + nm(e)) } }
+  if (mini && vis(mini) && atFoot) { const m = mini.getBoundingClientRect(); for (const e of document.querySelectorAll('a, button, input, select, textarea, p')) { if (mini.contains(e) || !vis(e)) continue; const r = vrect(e); if (Math.min(r.right, m.right) - Math.max(r.left, m.left) > 2 && Math.min(r.bottom, m.bottom) - Math.max(r.top, m.top) > 2) out.push('at the foot of the page the mini player covers ' + nm(e)) } }
   // A bar that sticks to the top while the page scrolls covers whatever passes under it: only
   // two things that move together, or two that are both pinned, can truly overlap.
   // A menu that opens over the page (absolute, raised) is meant to cover what is under it.
@@ -164,13 +175,15 @@ LAYOUT = r"""() => {
   const ctl = [...document.querySelectorAll('button, a, input, select, textarea, h1, h2, .np, .by, .slot, .time, .ident, .cs, .tag')].filter(e => !e.closest('#glass, svg, .skip-link, #mini') && vis(e));
   for (let i = 0; i < ctl.length; i++) for (let j = i + 1; j < ctl.length; j++) {
     const a = ctl[i], b = ctl[j]; if (a.contains(b) || b.contains(a) || pinned(a) !== pinned(b)) continue;
-    const p = a.getBoundingClientRect(), q = b.getBoundingClientRect();
+    const p = vrect(a), q = vrect(b); if (!p || !q) continue;
     if (Math.min(p.right, q.right) - Math.max(p.left, q.left) > 2 && Math.min(p.bottom, q.bottom) - Math.max(p.top, q.top) > 2) out.push('overlap: ' + nm(a) + ' / ' + nm(b));
   }
   const dn = [...document.querySelectorAll('#names button')];
   for (let i = 0; i < dn.length; i++) for (let j = i + 1; j < dn.length; j++) { const p = dn[i].getBoundingClientRect(), q = dn[j].getBoundingClientRect(); if (Math.min(p.right, q.right) - Math.max(p.left, q.left) > 1 && Math.min(p.bottom, q.bottom) - Math.max(p.top, q.top) > 1) out.push('names overlap on the dial: ' + dn[i].textContent + ' / ' + dn[j].textContent) }
   // A box inside its label is tapped through the label: the label is what must be big enough.
-  if (W < 600) for (const e of document.querySelectorAll('button, a, input, select, [role=button], summary, label')) { if (e.closest('.skip-link, footer, #glass') || !vis(e) || (e.matches('input[type=checkbox], input[type=radio]') && e.closest('label')) || (e.matches('label') && !e.querySelector('input[type=checkbox], input[type=radio]'))) continue; const r = e.getBoundingClientRect(); if (r.height < 30 || r.width < 30) out.push('small to tap: ' + nm(e) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)) }
+  // A link inside a sentence is sized by its text, as WCAG's target-size rule allows.
+  const inline = e => e.matches('a') && getComputedStyle(e).display === 'inline' && !!e.parentElement && e.parentElement.textContent.trim().length > e.textContent.trim().length + 12;
+  if (W < 600) for (const e of document.querySelectorAll('button, a, input, select, [role=button], summary, label')) { if (e.closest('.skip-link, footer, #glass') || !vis(e) || inline(e) || (e.matches('input[type=checkbox], input[type=radio]') && e.closest('label')) || (e.matches('label') && !e.querySelector('input[type=checkbox], input[type=radio]'))) continue; const r = e.getBoundingClientRect(); if (r.height < 30 || r.width < 30) out.push('small to tap: ' + nm(e) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height)) }
   return [...new Set(out)].slice(0, 30);
 }"""
 def layout(pg, where):
@@ -264,11 +277,17 @@ def until_heard(pg, sid=None, timeout=60):
 SOUNDING = ("Gangway", "Second Watch")      # the test network's stations with recordings
 def row_id(pg, name):
     return next((r["id"] for r in rows(pg) if r["name"] == name), None)
+def pick(pg, sid):
+    """Presses a station's row: from Stations when the row is out of sight (a phone's radio, or
+    any place but the radio at a computer's width). Choosing a row brings the radio forward."""
+    sel = f".row[data-id='{sid}']"
+    if not shown(pg, sel): view(pg, "list")
+    press(pg, sel)
 def tune(pg, name):
     """Plays the named station from its row, and waits for its sound."""
     sid = row_id(pg, name)
     if not sid: return None
-    if st(pg).get("station") != sid or not st(pg).get("playing"): press(pg, f".row[data-id='{sid}']")
+    if st(pg).get("station") != sid or not st(pg).get("playing"): pick(pg, sid)
     until_heard(pg, sid); return sid
 
 # ---- Recordings for the studio -------------------------------------------------------------
@@ -569,7 +588,7 @@ def listener(pw, browser, w, visitor):
         other = {"id": tune(pg, "Second Watch")}
         if other["id"]:
             time.sleep(2); press(pg, "#keep"); time.sleep(0.5)
-        pg.select_option("#sort", "newest"); time.sleep(0.3)
+        view(pg, "list"); pg.select_option("#sort", "newest"); time.sleep(0.3)
         view(pg, "settings"); pg.uncheck("#sw-hiss"); time.sleep(0.3)
         SHARED[f"kept-{w}"] = other and other["id"]; SHARED[f"first-{w}"] = st(pg).get("station")
         ctx.close()
@@ -604,7 +623,7 @@ def listener(pw, browser, w, visitor):
         note(f"returning: the set opens on {txt(pg, '#name')!r}" + (" (the kept station)" if on_set == kid else " (not the kept or last-played station)"))
         check(pg.input_value("#sort") == "newest", "returning: the list keeps its order (Newest)")
         check(not pg.is_checked("#sw-hiss"), "returning: the hiss setting is remembered")
-        view(pg, "settings"); pg.check("#sw-hiss"); view(pg, "list"); pg.select_option("#sort", "aboard")
+        view(pg, "settings"); pg.check("#sw-hiss"); view(pg, "list"); pg.select_option("#sort", "aboard"); view(pg, "radio")
     # 2. Listening, as soon as the list is in.
     sid = st(pg).get("station"); t1 = time.time(); press(pg, "#go")
     _, t = poll(lambda: txt(pg, "#go .lbl") == "Stop", 3, 0.01); timed("Listen: the button says Stop", t, 0.2)
@@ -635,10 +654,12 @@ def listener(pw, browser, w, visitor):
         return now
     cur = st(pg).get("station"); other = next((n for n in SOUNDING if row_id(pg, n) and row_id(pg, n) != cur), None)
     if other:
-        oid = row_id(pg, other); switch("the list", lambda: press(pg, f".row[data-id='{oid}']"), oid)
+        oid = row_id(pg, other); switch("the list", lambda: pick(pg, oid), oid)
         cur = st(pg).get("station"); back = next((row_id(pg, n) for n in SOUNDING if row_id(pg, n) != cur), None)
         if back and pg.locator(f"#names button[data-id='{back}']").count(): switch("a name on the dial", lambda: press(pg, f"#names button[data-id='{back}']"), back)
-        else: check(False, "the other sounding station has a name on the dial")
+        # The dial names only the stations near the needle that fit (the new dial), so on a phone
+        # the other may be a mark with no name; then there is no name to press.
+        else: note("the other sounding station is a mark with no name on the dial here: no switch by its name")
         switch("Spin", lambda: press(pg, "#spin"))
         if not phone(pg):
             pg.focus("#glass"); switch("the right arrow on the dial", lambda: pg.keyboard.press("ArrowRight"))
@@ -670,8 +691,9 @@ def listener(pw, browser, w, visitor):
         with pg.expect_download(timeout=5000) as dl: press(pg, ".cal >> nth=0")
         body = open(dl.value.path()).read(); check("BEGIN:VCALENDAR" in body and "DTSTART" in body, "+ CAL gives a calendar file", dl.value.suggested_filename)
     shot(pg, f"listener-{tag}-4-page", full=True); layout(pg, "the station page")
-    pg.go_back(); _, t = poll(lambda: st(pg).get("view") == "list", 3, 0.02); check(t is not None, "Back returns from the station page to the stations")
-    press(pg, "#artgo"); check(poll(lambda: st(pg).get("view") == "page", 3, 0.02)[1] is not None, "the station's picture opens its page"); view(pg, "list")
+    # The station page opens over the radio (the player's four places), so Back returns to it.
+    pg.go_back(); _, t = poll(lambda: st(pg).get("view") == "radio", 3, 0.02); check(t is not None, "Back returns from the station page to the radio")
+    press(pg, "#artgo"); check(poll(lambda: st(pg).get("view") == "page", 3, 0.02)[1] is not None, "the station's picture opens its page"); view(pg, "radio")
     # 5. Share: the link, the code to scan, Copy.
     t0 = time.time(); press(pg, "#pass"); _, t = poll(lambda: shown(pg, "#passbox"), 3, 0.01); timed("Share opens", t, 0.3)
     link = txt(pg, "#plink"); sid = st(pg).get("station")
@@ -703,10 +725,12 @@ def listener(pw, browser, w, visitor):
     press(pg, "#playedgo"); _, t = poll(lambda: shown(pg, "#played"), 3, 0.01)
     played = pg.eval_on_selector_all("#played li", "l => l.map(x => x.textContent)")
     check(played and "Nothing yet" not in played[0], "Recently played lists what was heard", " | ".join(played[:4]))
-    if phone(pg): pg.locator(".mh-sub.open-only").tap()
+    # Any press outside it closes More; the subtitle is not shown on a phone, the signal line is.
+    if phone(pg): pg.locator("#signal").tap()
     else: pg.keyboard.press("Escape")
     time.sleep(0.3); check(not shown(pg, "#morebox"), "More closes " + ("on a tap outside" if phone(pg) else "with Escape"))
-    # 8. Search and the kinds.
+    # 8. Search and the kinds, on Stations.
+    view(pg, "list")
     def find(q):
         before = txt(pg, "#rows"); t0 = time.time(); pg.fill("#find", q)
         _, t = poll(lambda: txt(pg, "#rows") != before, 2, 0.01)
@@ -734,27 +758,27 @@ def listener(pw, browser, w, visitor):
     if pg.locator("#chart .dot").count():
         d = pg.locator("#chart .dot").first; did = d.get_attribute("data-id"); t0 = time.time(); d.click()
         _, t = poll(lambda: st(pg).get("station") == did, 3, 0.01); check(t is not None, "a dot on the map tunes to its station")
-    press(pg, "#vlist"); check(shown(pg, "#rows"), "List returns from the map")
+    view(pg, "list"); press(pg, "#vlist"); check(shown(pg, "#rows"), "List returns from the map")
     errors(pg, "on the station page, Share, Keep, More, search and the map")
-    # 9. The mini player once the set scrolls away.
-    pg.evaluate("document.body.style.minHeight = '4000px'; window.scrollTo(0, document.body.scrollHeight)")
+    # 9. The mini player, above the tabs wherever the radio is out of view.
     _, t = poll(lambda: shown(pg, "#mini"), 3, 0.05); check(t is not None, "the mini player shows once the set is out of view")
     shot(pg, f"listener-{tag}-9-mini"); layout(pg, "the mini player")
     if t is not None:
         was = st(pg).get("playing"); press(pg, "#mini-go"); time.sleep(0.4); check(st(pg).get("playing") != was, "the mini player's button plays and stops")
         if not st(pg).get("playing"): press(pg, "#mini-go"); until_heard(pg)
-        press(pg, "#mini-up"); time.sleep(0.8)
-    pg.evaluate("document.body.style.minHeight = ''; window.scrollTo(0, 0)")
+        press(pg, "#mini-up"); _, t = poll(lambda: st(pg).get("view") == "radio", 3, 0.02)
+        check(t is not None and not shown(pg, "#mini"), "the mini player opens the radio, and gives way to it")
     # 10. Settings, every control.
     tune(pg, "Gangway"); view(pg, "settings"); shot(pg, f"listener-{tag}-10-settings", full=True); layout(pg, "Settings")
     pg.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)"); time.sleep(0.6)
     layout(pg, "the foot of Settings, scrolled to the end"); shot(pg, f"listener-{tag}-10-foot"); pg.evaluate("window.scrollTo(0, 0)")
-    pics0 = (shown(pg, "#cover"), pg.eval_on_selector_all(".row .mini img", "l => l.length"))
+    cover = lambda: pg.evaluate("(() => { const c = document.getElementById('cover'); return !c.hidden && getComputedStyle(c).display !== 'none' })()")
+    pics0 = (cover(), pg.eval_on_selector_all(".row .mini img", "l => l.length"))
     pg.uncheck("#sw-art"); time.sleep(1.5)
     imgs = pg.eval_on_selector_all(".row .mini img", "l => l.length")
-    check(not shown(pg, "#cover") and imgs == 0, "Show station pictures off hides every picture", f"before: cover {pics0[0]}, {pics0[1]} row pictures; after: cover shown {shown(pg, '#cover')}, {imgs} row pictures")
+    check(not cover() and imgs == 0, "Show station pictures off hides every picture", f"before: cover {pics0[0]}, {pics0[1]} row pictures; after: cover shown {cover()}, {imgs} row pictures")
     # Row pictures load as rows come into view, so they are looked for back on the list.
-    pg.check("#sw-art"); view(pg, "list"); _, t = poll(lambda: shown(pg, "#cover") and pg.eval_on_selector_all(".row .mini img", "l => l.length") >= pics0[1], 10, 0.05)
+    pg.check("#sw-art"); view(pg, "list"); _, t = poll(lambda: cover() and pg.eval_on_selector_all(".row .mini img", "l => l.length") >= pics0[1], 10, 0.05)
     timed("Show station pictures on brings them back (on the list)", t); view(pg, "settings")
     ok_src = pg.evaluate("(() => { const c = document.getElementById('cover'); return !c.hidden && c.complete && c.naturalWidth > 0 })()")
     check(ok_src, "the picture on the set is a live image after pictures go off and on")
@@ -797,7 +821,7 @@ def listener(pw, browser, w, visitor):
         press(pg, "#mlist")
     errors(pg, "in Settings")
     # 11. Hide this station from More, and bring it back.
-    view(pg, "list"); tune(pg, "Gangway"); hid = st(pg).get("station"); hname = txt(pg, "#name")
+    tune(pg, "Gangway"); view(pg, "radio"); hid = st(pg).get("station"); hname = txt(pg, "#name")
     press(pg, "#more"); t0 = time.time(); press(pg, "#mhide")
     _, t = poll(lambda: all(r["id"] != hid for r in rows(pg)), 5, 0.02); timed("Hide this station takes it off the list", t, 0.5)
     check(hid not in pg.eval_on_selector_all("#names button", "b => b.map(x => x.dataset.id)"), "and off the dial")
@@ -814,7 +838,8 @@ def listener(pw, browser, w, visitor):
     errors(pg, "hiding and unhiding")
     # 12. Forget this browser.
     if visitor == "returning" or w == WIDTHS[-1]:
-        pg.check("#sw-direct"); press(pg, "#keep") if txt(pg, "#keep span") == "Keep" else None
+        pg.check("#sw-direct")
+        if txt(pg, "#keep span") == "Keep": view(pg, "radio"); press(pg, "#keep"); view(pg, "settings")
         t0 = time.time(); press(pg, "#forget"); pg.wait_for_load_state("load"); time.sleep(1.5)
         left = pg.evaluate("Object.keys(localStorage).filter(k => k.startsWith('pyrate.'))")
         check(not pg.is_checked("#sw-direct") and txt(pg, "#keep span") != "Kept", "Forget this browser resets settings and kept stations", f"keys after the reload: {left}")
@@ -1021,7 +1046,8 @@ def t_harbour(pw, browser):
         t0 = time.time(); press(pg, "#go"); t = until_heard(pg); timed("hostis.black copy: Listen to first sound", t)
         if t is not None: hear(capture(pg, 6), "hostis.black copy")
         view(pg, "page"); check(txt(pg, "#chatopen") and pg.get_attribute("#chatopen", "href").endswith("#" + GANG), "the chat points to this station's room in the open player", pg.get_attribute("#chatopen", "href"))
-        press(pg, "#go"); view(pg, "list")
+        # Listen and Share live on the set (the player's four places), not on the page or the list.
+        view(pg, "radio"); press(pg, "#go")
         press(pg, "#pass"); check(txt(pg, "#plink") == "https://hostis.black/pyrateradio/listen/#" + GANG, "Share gives the hostis.black link", txt(pg, "#plink")); press(pg, "#pclose")
         shot(pg, f"harbour-{w}", full=True); layout(pg, "hostis.black's copy")
         errors(pg, "on hostis.black's copy")

@@ -425,6 +425,9 @@ pub struct Inner {
     pub(crate) door_of: Mutex<HashMap<[u8; 32], [u8; 32]>>,
     /// Middles drawn with none apart from the guard's relay, drawn all the same.
     pub routes_shared: std::sync::atomic::AtomicU64,
+    /// Decks behind doors that keep this node as their way in, by the cookie their lead names
+    /// (see `hop::PullBox`).
+    pub(crate) pulls: Mutex<HashMap<[u8; 32], hop::PullBox>>,
 }
 
 pub struct Node {
@@ -1551,7 +1554,23 @@ impl Inner {
             // would send every phone to a door that does not open.
             let local = std::env::var("PYRATE_RELAY_LOCAL").ok().and_then(|u| u.parse::<iroh::RelayUrl>().ok());
             let own = std::env::var("PYRATE_RELAY_URL").ok().filter(|_| local.is_some() && self.endpoint.addr().relay_urls().next() == local.as_ref());
-            if let Some(relay) = own.or_else(|| self.endpoint.addr().relay_urls().next().map(|u| u.to_string())) {
+            let relay = own.or_else(|| self.endpoint.addr().relay_urls().next().map(|u| u.to_string()));
+            // No relay at all (every relay down, or none to be had): it still says it is of the
+            // crew, with no relay named, so the tabs behind doors have middles and ways in that
+            // are not each other. Radios reach it directly; nobody is sent anywhere by the note.
+            if relay.is_none() && self.crew.load(std::sync::atomic::Ordering::Relaxed) && self.relay_ok.load(std::sync::atomic::Ordering::Relaxed) {
+                self.last_harbour.store(now, std::sync::atomic::Ordering::Relaxed);
+                let crew = Gossip::crew(&self.secret, "", now);
+                static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                if !SAID.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    say("no relay answers: of the crew all the same, reached directly");
+                }
+                if let Ok(raw) = postcard::to_stdvec(&crew) {
+                    self.notes.lock().unwrap().keep(&crew, &raw, now);
+                }
+                self.broadcast(&crew).await;
+            }
+            if let Some(relay) = relay {
                 self.last_harbour.store(now, std::sync::atomic::Ordering::Relaxed);
                 let note = Gossip::harbour(&self.secret, &relay, now);
                 if let Ok(raw) = postcard::to_stdvec(&note) {
@@ -2545,6 +2564,7 @@ impl Node {
             door: Mutex::new(None),
             door_of: Mutex::new(HashMap::new()),
             routes_shared: Default::default(),
+            pulls: Mutex::new(HashMap::new()),
         });
         *proto.0.lock().unwrap() = Some(inner.clone());
         {

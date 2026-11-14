@@ -14,6 +14,7 @@ import 'main.dart';
 import 'mirror.dart';
 import 'native.dart';
 import 'station.dart';
+import 'tray.dart';
 
 const ship = ShellChannel();
 
@@ -1694,6 +1695,11 @@ class _SettingsPageState extends State<SettingsPage> {
             Autostart.set(v);
             setState(() {});
           }, sub: 'The radio starts quietly when you sign in, playing nothing, and carries for others. This is how the radio stays up.'),
+        if (isComputer)
+          setting('Keep the radio running when the window is closed', pref('keep_running') == true, (v) {
+            unawaited(Tray.it.set(v));
+            setState(() {});
+          }, sub: 'Closing the window leaves the radio in ${Tray.place}, carrying for others and playing on if it was playing. Open it again or quit it from there.'),
         // A computer gives a modest share unless its owner offers more.
         if (isComputer && !mineOnly)
           Wrap(children: [

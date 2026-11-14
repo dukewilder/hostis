@@ -115,9 +115,15 @@ with sync_playwright() as p:
     passed = sum(c.get("passed_today", 0) for c in crew)
     decks = sum(len(c.get("decks", [])) for c in crew)
     check(all(s.get("behind", 0) >= 1 for s in stats), f"the tabs know each other as crew behind the door ({[s.get('behind') for s in stats]})")
-    # Decks and ways in stay relay-only: a tab reached only through a door opens no deck, so with
-    # no relay at all the tabs carry nothing (the forced trade-off, reported, not worked around).
-    check(decks == 0, f"no tab opened a deck through a door ({decks}); carried with no relay: {served} forwards, {passed // 1024} KB")
+    # With no relay, a deck keeps its way in by pulling through its own guard (the door) and a
+    # middle: the tabs carry, and the door sees only forwards to middles.
+    from_tabs = sum(c.get("from_decks", 0) for c in crew)
+    from_others = sum(c.get("from_others", 0) for c in crew)
+    tries = [sum(c.get("tries", [0] * 6)[i] for c in crew) for i in range(6)]
+    print(f"  pulls {[c.get('pulls') for c in crew]}, failed {[c.get('pull_fails') for c in crew]}, asks brought {[c.get('pulled') for c in crew]}; "
+          f"deck asks: no deck {tries[0]}, its own {tries[1]}, no route {tries[2]}, no answer {tries[3]}, without it {tries[4]}, answered {tries[5]}", flush=True)
+    check(decks >= 3 and all(c.get("pull_decks", 0) == len(c.get("decks", [])) for c in crew), f"the tabs opened decks through the door, kept by pulling ({decks} decks)")
+    check(from_tabs > 0, f"with no relay the crowd carries: chunks from tabs {from_tabs}, from Lanterns {from_others} ({from_tabs / max(1, from_tabs + from_others):.0%} from tabs); {served} forwards, {passed // 1024} KB passed on")
     shared = [s.get("routes_shared", 0) for s in stats]
     routes = [s.get("routes", 0) for s in stats]
     print(f"  routes drawn {routes}; with no exit apart from the guard {shared}; capped {[s.get('capped', 0) for s in stats]}", flush=True)

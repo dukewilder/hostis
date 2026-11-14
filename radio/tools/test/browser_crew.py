@@ -97,6 +97,8 @@ def run(b, crew_on):
         print(f"  [{label}] deck asks since each tab opened: {[sum(c.get('tries', [0] * 6)[i] for c in c1) for i in range(6)]}", flush=True)
         print(f"  [{label}] decks each tab knows of its station: {[c.get('known_decks', 0) for c in c1]}", flush=True)
         print(f"  [{label}] deck asks: no deck {tries[0]}, its own {tries[1]}, no route {tries[2]}, no answer {tries[3]}, without it {tries[4]}, answered {tries[5]}", flush=True)
+        why = [sum(b.get("deck_why", [0] * 8)[i] - a.get("deck_why", [0] * 8)[i] for a, b in zip(c0, c1)) for i in range(8)]
+        print(f"  [{label}] deck routes: no first hop {why[0]}, first hop is the way in {why[1]}, no middle {why[2]}, timed out {why[3]}, first hop failed {why[4]}, empty {why[5]}, unopened {why[6]}, came back {why[7]}", flush=True)
     for ctx in ctxs:
         ctx.close()
     return {"share": share, "per": per, "first": first, "playing": playing, "errors": errors, "chunks": from_tabs + from_lanterns}

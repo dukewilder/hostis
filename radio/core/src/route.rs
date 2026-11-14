@@ -75,6 +75,12 @@ pub struct Lead {
     pub relay: String,
 }
 
+/// A lead's `relay` for a deck no relay reaches (a tab behind a door). Its `to` is then a
+/// cookie made for the deck alone, not the listener's node: the deck keeps its way in by
+/// pulling (`Ask::Pull` in the node), through its own guard and a middle, so the way in learns
+/// neither the listener's node nor its address.
+pub const LEAD_PULL: &str = "pull";
+
 /// A lead for `intro`: the ephemeral key and the sealed `Lead`, as postcard bytes.
 pub fn make_lead(intro: &[u8; 32], lead: &Lead) -> Option<Vec<u8>> {
     let (eph, ct, _) = seal_to(intro, &postcard::to_stdvec(lead).ok()?)?;
