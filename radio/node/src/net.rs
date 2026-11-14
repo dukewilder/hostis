@@ -432,6 +432,73 @@ pub enum Gossip {
     /// to it) names the listener. The note names neither the listener nor its node, and is
     /// signed with the deck's own key. A deck is narrow, so requesters reach it in three hops.
     Deck { deck: [u8; 32], station: StationId, head: u64, intro: [u8; 32], lead: Vec<u8>, at_ms: u64, sig: Vec<u8> },
+    /// A door: a listener's app that takes browsers' WebRTC data channels straight at `addr`
+    /// (ip:port, UDP), behind the DTLS certificate whose SHA-256 is `fp`, with no relay and no
+    /// TLS. `since` is when it opened, so a tab can tell a long-lived door from a fresh one, and
+    /// `app` says it is a listener's app (not a Lantern); `link` that its owner lets shared links
+    /// name it. Signed with its own node key. Older nodes do not know this message and pass over it.
+    Door { node: [u8; 32], addr: String, fp: [u8; 32], since: u64, app: bool, link: bool, at_ms: u64, sig: Vec<u8> },
+}
+
+fn door_message(node: &[u8; 32], addr: &str, fp: &[u8; 32], since: u64, app: bool, link: bool, at_ms: u64) -> Vec<u8> {
+    let mut m = b"pyrate/door/v1\0".to_vec();
+    m.extend_from_slice(node);
+    m.extend_from_slice(fp);
+    m.extend_from_slice(&since.to_le_bytes());
+    m.push(app as u8 | (link as u8) << 1);
+    m.extend_from_slice(&at_ms.to_le_bytes());
+    m.extend_from_slice(addr.as_bytes());
+    m
+}
+
+/// A door as a tab keeps it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DoorNote {
+    pub node: [u8; 32],
+    pub addr: std::net::SocketAddr,
+    pub fp: [u8; 32],
+    pub since: u64,
+    pub app: bool,
+    pub link: bool,
+    pub at_ms: u64,
+}
+
+/// A door is believed for this long after it last said so; it says so every two minutes.
+pub const DOOR_FRESH_MS: u64 = 15 * 60_000;
+
+/// What goes on a door's data channel beside requests and answers, under frame id 0.
+#[derive(Debug, Serialize, Deserialize)]
+pub enum DoorCtl {
+    /// The door's own signed note (`Gossip::Door`), the first thing on a new channel, so the tab
+    /// learns which radio it reached; the certificate it checked is the one the note names.
+    Note(Vec<u8>),
+    /// The tab saying which radio it is, signed with its node key over the door's id and the
+    /// time, so no other tab can take forwards meant for it.
+    Hello { node: [u8; 32], at_ms: u64, sig: Vec<u8> },
+    /// Gossip as it came: the door passes on what it hears; a tab may send its own crew note.
+    Gossip(Vec<u8>),
+}
+
+pub fn door_hello_message(door: &[u8; 32], node: &[u8; 32], at_ms: u64) -> Vec<u8> {
+    let mut m = b"pyrate/door-hello/v1\0".to_vec();
+    m.extend_from_slice(door);
+    m.extend_from_slice(node);
+    m.extend_from_slice(&at_ms.to_le_bytes());
+    m
+}
+
+/// A crew radio behind a door names it in its note's relay field as `door:<hex id>`: it is
+/// reached by forwarding to the door, never at an address of its own.
+pub fn door_of_relay(relay: &str) -> Option<[u8; 32]> {
+    let h = relay.strip_prefix("door:")?;
+    if h.len() != 64 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for i in 0..32 {
+        out[i] = u8::from_str_radix(h.get(2 * i..2 * i + 2)?, 16).ok()?;
+    }
+    Some(out)
 }
 
 fn crew_message(node: &[u8; 32], relay: &str, at_ms: u64) -> Vec<u8> {
@@ -539,6 +606,29 @@ impl Gossip {
         Gossip::Deck { deck, station, head, intro, lead, at_ms, sig }
     }
 
+    /// This node's door, signed with the node's own secret.
+    pub fn door(secret: &[u8; 32], addr: &str, fp: [u8; 32], since: u64, app: bool, link: bool, at_ms: u64) -> Self {
+        let key = StationKey::from_seed(*secret);
+        let node = key.id().0;
+        Gossip::Door { node, addr: addr.into(), fp, since, app, link, at_ms, sig: key.sign(&door_message(&node, addr, &fp, since, app, link, at_ms)).to_vec() }
+    }
+
+    /// For a door's note: the door, if it signed it within `DOOR_FRESH_MS` of `now` and names a
+    /// plain public address (a loopback or private one only on a test network).
+    pub fn door_checked(&self, now: u64) -> Option<DoorNote> {
+        let Gossip::Door { node, addr, fp, since, app, link, at_ms, sig } = self else { return None };
+        if addr.len() > 64 || now.saturating_sub(*at_ms) > DOOR_FRESH_MS || at_ms.saturating_sub(now) > 5 * 60_000 || since > at_ms {
+            return None;
+        }
+        let sig: [u8; 64] = sig.as_slice().try_into().ok()?;
+        StationId(*node).verify(&door_message(node, addr, fp, *since, *app, *link, *at_ms), &sig).ok()?;
+        let a: std::net::SocketAddr = addr.parse().ok()?;
+        if a.port() == 0 || !relay_public(&format!("http://{a}/")) {
+            return None;
+        }
+        Some(DoorNote { node: *node, addr: a, fp: *fp, since: *since, app: *app, link: *link, at_ms: *at_ms })
+    }
+
     /// For a crew note: the radio and its relay, if the radio itself signed it near `now`.
     pub fn crew_checked(&self, now: u64) -> Option<([u8; 32], String)> {
         let Gossip::Crew { node, relay, at_ms, sig } = self else { return None };
@@ -547,7 +637,7 @@ impl Gossip {
             return None;
         }
         StationId(*node).verify(&crew_message(node, relay, *at_ms), &sig).ok()?;
-        relay_public(relay).then(|| (*node, relay.clone()))
+        (relay_public(relay) || door_of_relay(relay).is_some_and(|d| d != *node)).then(|| (*node, relay.clone()))
     }
 
     /// For a deck's note: the station, the deck and what a requester keeps of it, if the deck's
@@ -586,6 +676,7 @@ pub struct Notes {
     carried: std::collections::HashMap<(StationId, [u8; 32]), (u64, Vec<u8>)>,
     crew: std::collections::HashMap<[u8; 32], (u64, Vec<u8>)>,
     decks: std::collections::HashMap<(StationId, [u8; 32]), (u64, Vec<u8>)>,
+    doors: std::collections::HashMap<[u8; 32], (u64, Vec<u8>)>,
 }
 
 impl Notes {
@@ -593,6 +684,13 @@ impl Notes {
     const CARRIED: usize = 20_000;
     /// Notes older than this are not handed on, so the one who takes them still believes them.
     const FRESH_MS: u64 = 14 * 60_000;
+
+    /// The freshest `n` doors' notes, as they came, longest open first among the fresh.
+    pub fn doors(&self, now: u64, n: usize) -> Vec<Vec<u8>> {
+        let mut d: Vec<&(u64, Vec<u8>)> = self.doors.values().filter(|(t, _)| now.saturating_sub(*t) < DOOR_FRESH_MS).collect();
+        d.sort_by(|a, b| b.0.cmp(&a.0));
+        d.into_iter().take(n).map(|x| x.1.clone()).collect()
+    }
 
     pub fn keep(&mut self, g: &Gossip, raw: &[u8], now: u64) {
         if raw.len() > 1024 {
@@ -622,6 +720,14 @@ impl Notes {
                 }
                 if self.crew.len() > Self::HARBOURS {
                     Self::trim(&mut self.crew, now, Self::HARBOURS);
+                }
+            }
+            Gossip::Door { node, at_ms, .. } if g.door_checked(now).is_some() => {
+                if self.doors.get(node).is_none_or(|(t, _)| t < at_ms) {
+                    self.doors.insert(*node, (*at_ms, raw.to_vec()));
+                }
+                if self.doors.len() > Self::HARBOURS {
+                    Self::trim(&mut self.doors, now, Self::HARBOURS);
                 }
             }
             Gossip::Deck { .. } => {
@@ -684,6 +790,8 @@ impl Notes {
         let mut crew: Vec<&(u64, Vec<u8>)> = self.crew.values().filter(|(t, _)| fresh(t)).collect();
         crew.sort_by(|a, b| b.0.cmp(&a.0));
         out.extend(crew.into_iter().take(64).map(|c| c.1.clone()));
+        // The doors, so a tab that came in through one learns others to fall back on.
+        out.extend(self.doors(now, 16));
         for st in stations {
             let mut d: Vec<&(u64, Vec<u8>)> = self.decks.iter().filter(|((s, _), (t, _))| s == st && now.saturating_sub(*t) < DECK_FRESH_MS).map(|(_, v)| v).collect();
             d.sort_by(|a, b| b.0.cmp(&a.0));
@@ -1294,5 +1402,34 @@ mod card_limit_tests {
         assert!(deputy_current(&c, Some(&arch)));
         arch.write(&master, 2_000, pyrate_core::Body::Revoke { key: deputy.id().0 }).unwrap();
         assert!(!deputy_current(&c, Some(&arch)));
+    }
+
+    #[test]
+    fn a_door_note_holds_only_as_its_door_signed_it() {
+        LOCAL_RELAYS_OK.store(false, std::sync::atomic::Ordering::Relaxed);
+        let now = 1_800_000_000_000;
+        let g = Gossip::door(&[5; 32], "1.2.3.4:40000", [9; 32], now - 60_000, true, false, now);
+        let d = g.door_checked(now).expect("a door's own note holds");
+        assert_eq!((d.addr.port(), d.fp, d.app, d.link), (40000, [9; 32], true, false));
+        // Moved to another address, another certificate, or said to be older: it no longer holds.
+        let Gossip::Door { node, fp, since, app, link, at_ms, sig, .. } = g.clone() else { unreachable!() };
+        assert!(Gossip::Door { node, addr: "198.51.100.1:40000".into(), fp, since, app, link, at_ms, sig: sig.clone() }.door_checked(now).is_none());
+        assert!(Gossip::Door { node, addr: "1.2.3.4:40000".into(), fp: [8; 32], since, app, link, at_ms, sig: sig.clone() }.door_checked(now).is_none());
+        assert!(Gossip::Door { node, addr: "1.2.3.4:40000".into(), fp, since: since - 1, app, link: true, at_ms, sig }.door_checked(now).is_none());
+        // A door at a house's private address, or long silent, is no door.
+        assert!(Gossip::door(&[5; 32], "192.168.1.4:40000", [9; 32], now, true, false, now).door_checked(now).is_none());
+        assert!(g.door_checked(now + DOOR_FRESH_MS + 1).is_none());
+    }
+
+    #[test]
+    fn a_tab_behind_a_door_names_the_door_and_never_itself() {
+        let door = [7u8; 32];
+        let relay = format!("door:{}", "07".repeat(32));
+        assert_eq!(door_of_relay(&relay), Some(door));
+        assert_eq!(door_of_relay("door:12"), None);
+        let now = 1_800_000_000_000;
+        assert!(Gossip::crew(&[3; 32], &relay, now).crew_checked(now).is_some());
+        let me = StationKey::from_seed([3; 32]).id().0;
+        assert!(Gossip::crew(&[3; 32], &format!("door:{}", me.iter().map(|b| format!("{b:02x}")).collect::<String>()), now).crew_checked(now).is_none());
     }
 }

@@ -197,7 +197,24 @@ impl Web {
     }
 }
 
+/// The node, for the player's page: it hands the player the doors it knows.
+static NODE: std::sync::OnceLock<std::sync::Weak<Inner>> = std::sync::OnceLock::new();
+
+/// The doors this node knows, as signed notes in hex, freshest first.
+fn doors_hex(n: usize) -> Vec<String> {
+    let Some(inner) = NODE.get().and_then(|w| w.upgrade()) else { return vec![] };
+    let mut list = inner.notes.lock().unwrap().doors(crate::now_ms(), n);
+    let own = inner.door.lock().unwrap().clone();
+    if let Some(g) = own.and_then(|d| d.note(&inner.secret, crate::now_ms())).and_then(|g| postcard::to_stdvec(&g).ok()) {
+        list.retain(|x| *x != g);
+        list.insert(0, g);
+        list.truncate(n);
+    }
+    list.iter().map(|b| crate::hex(b)).collect()
+}
+
 pub async fn serve(inner: Arc<Inner>, addr: SocketAddr, every_station: bool) -> anyhow::Result<()> {
+    let _ = NODE.set(Arc::downgrade(&inner));
     let web = Web {
         inner,
         towers: Arc::new(Mutex::new(HashMap::new())),
@@ -211,6 +228,9 @@ pub async fn serve(inner: Arc<Inner>, addr: SocketAddr, every_station: bool) -> 
         .route("/", get(|| async { ([(header::CONTENT_SECURITY_POLICY, PAGE_CSP), (header::REFERRER_POLICY, "no-referrer"), (header::X_CONTENT_TYPE_OPTIONS, "nosniff")], Html(PAGE)) }))
         .route("/listen.js", get(|| async { ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8"), (header::X_CONTENT_TYPE_OPTIONS, "nosniff"), (header::CACHE_CONTROL, "max-age=600")], PAGE_JS) }))
         .route("/log.json", get(log))
+        // The doors this node knows, one signed note (hex) a line: what a build bakes into the
+        // player at deploy time.
+        .route("/doors.txt", get(|| async { ([(header::CONTENT_TYPE, "text/plain; charset=utf-8"), (header::CACHE_CONTROL, "no-store")], doors_hex(16).join("\n")) }))
         .route("/now/{id}", get(now))
         .route("/listen", get(|| async { axum::response::Redirect::permanent("/listen/") }))
         .route("/listen/", get(|| async { player(String::new()).await }))
@@ -541,6 +561,18 @@ async fn player(path: String) -> Response {
     let Ok(bytes) = tokio::fs::read(&file).await else { return StatusCode::NOT_FOUND.into_response() };
     let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("");
     let kind = player_type(ext);
+    // The page is handed the doors this node knows now, beside those built into it. The player
+    // takes them as one source among several (never a guard on this node's word alone), and a
+    // signed copy's check of its own files leaves this line out.
+    let bytes = if ext == "html" && path.trim_end_matches('/').rsplit('/').next().is_none_or(|f| f.is_empty() || f == "index.html") {
+        let d = doors_hex(8);
+        match std::str::from_utf8(&bytes) {
+            Ok(t) if !d.is_empty() && t.contains("<meta charset=\"utf-8\">") => t.replacen("<meta charset=\"utf-8\">", &format!("<meta charset=\"utf-8\">\n<meta name=\"pyrate-doors\" content=\"{}\">", d.join(",")), 1).into_bytes(),
+            _ => bytes,
+        }
+    } else {
+        bytes
+    };
     (
         [
             (header::CONTENT_TYPE, kind),

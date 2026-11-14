@@ -3,7 +3,7 @@
 #   www/dist-open  the open player: the whole Log, served from IPFS and Lanterns, owned by nobody
 # The open copy is packed as a CAR (www/open.car) under its IPFS name, and that name is what
 # hostis.black's copy, the landing and the app send every other station to.
-import re, os, shutil, subprocess, sys, hashlib
+import re, os, shutil, subprocess, sys, hashlib, time
 R = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 W = f"{R}/browser/www"
 # The vendored Opus files must match their recorded fingerprints before anything ships.
@@ -51,7 +51,7 @@ import json
 # A test build can name its own: PYRATE_HARBOUR_STATIONS=<a json file like harbour.json>.
 harbour_stations = json.dumps(json.load(open(os.environ.get("PYRATE_HARBOUR_STATIONS") or f"{R}/browser/harbour.json", encoding="utf-8")), ensure_ascii=False)
 # Each value goes in as a JSON string, so nothing in it can close the quote it sits in.
-for k in ["'{{HARBOUR}}'", "'{{RELAYS}}'", "'{{HARBOUR_STATIONS}}'", "'{{SCOPE}}'", "'{{OPEN_PLAYERS}}'", "'{{STUN}}'"]:
+for k in ["'{{HARBOUR}}'", "'{{RELAYS}}'", "'{{HARBOUR_STATIONS}}'", "'{{SCOPE}}'", "'{{OPEN_PLAYERS}}'", "'{{STUN}}'", "'{{DOORS}}'"]:
     assert js.count(k) == 1, k
 # Lanterns that serve the open player at /listen/ on names of their own (tools/vps/install.sh
 # prints each one's address), one per line in browser/mirrors.txt. Every copy names them all,
@@ -88,8 +88,19 @@ def stun_list():
         if u not in out: out.append(u)
     return out
 STUN = stun_list()
+# The doors every copy carries: signed notes (hex), one a line in browser/doors.txt, as a deploy
+# takes them from a harbour Lantern (curl <lantern>/doors.txt > browser/doors.txt). A test build
+# names its own with PYRATE_DOORS (comma separated). Each is checked again in the tab.
+def door_list():
+    raw = os.environ.get("PYRATE_DOORS")
+    lines = raw.split(",") if raw is not None else (open(f"{R}/browser/doors.txt").read().split() if os.path.exists(f"{R}/browser/doors.txt") else [])
+    out = [l.strip().lower() for l in lines if l.split("#", 1)[0].strip()]
+    for l in out:
+        assert re.fullmatch(r"[0-9a-f]{80,2048}", l), f"doors: not a signed note in hex: {l[:40]}"
+    return out[:16]
+DOORS = door_list()
 mirrors_html = "".join(f'<li><a href="{u}" target="_blank" rel="noopener noreferrer">{u[8:].rstrip("/")}</a></li>' for u in MIRRORS)
-base_js = js.replace("'{{HARBOUR}}'", json.dumps(harbour)).replace("'{{RELAYS}}'", json.dumps(os.environ.get("PYRATE_RELAYS", ""))).replace("'{{HARBOUR_STATIONS}}'", harbour_stations).replace("'{{STUN}}'", json.dumps(STUN))
+base_js = js.replace("'{{HARBOUR}}'", json.dumps(harbour)).replace("'{{RELAYS}}'", json.dumps(os.environ.get("PYRATE_RELAYS", ""))).replace("'{{HARBOUR_STATIONS}}'", harbour_stations).replace("'{{STUN}}'", json.dumps(STUN)).replace("'{{DOORS}}'", json.dumps(DOORS))
 
 def build(scope, dist, open_players):
     out_js = base_js.replace("'{{SCOPE}}'", json.dumps(scope)).replace("'{{OPEN_PLAYERS}}'", json.dumps(open_players))
@@ -175,6 +186,23 @@ def build(scope, dist, open_players):
                "icons": [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
                          {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}]},
               open(f"{dist}/manifest.webmanifest", "w"), indent=1)
+    # The installed player's keeper (www/sw.js), with the release keys it checks new copies by,
+    # and the list of every file in this copy with its SHA-256 under the copy's code: what two of
+    # the three keyholders sign (`release sign <words> <n> player.manifest <code>`, the lines going
+    # into player.sigs beside it). An unsigned copy still plays; it is never installed over one.
+    keys = [k for k in (os.environ.get("PYRATE_RELEASE_KEYS", "").split(",") if os.environ.get("PYRATE_RELEASE_KEYS") else open(f"{R}/app/assets/release_keys.txt").read().split()) if k]
+    assert len(keys) == 3 and all(re.fullmatch(r"[0-9a-f]{64}", k) for k in keys), "three release keys"
+    sw = open(f"{W}/sw.js", encoding="utf-8").read()
+    assert sw.count("'{{RELEASE_KEYS}}'") == 1
+    open(f"{dist}/sw.js", "w", encoding="utf-8").write(sw.replace("'{{RELEASE_KEYS}}'", json.dumps(keys)))
+    code = int(os.environ.get("PYRATE_PLAYER_CODE") or time.time() // 60)
+    lines = []
+    for root, _, files in os.walk(dist):
+        for f in files:
+            path = os.path.relpath(os.path.join(root, f), dist).replace(os.sep, "/")
+            if path in ("player.manifest", "player.sigs"): continue
+            lines.append(hashlib.sha256(open(os.path.join(root, f), "rb").read()).hexdigest() + "  " + path)
+    open(f"{dist}/player.manifest", "w", encoding="utf-8").write(f"pyrate-player/v1 code {code}\n" + "\n".join(sorted(lines, key=lambda l: l[66:])) + "\n")
     print("built", scope, v)
     return v
 

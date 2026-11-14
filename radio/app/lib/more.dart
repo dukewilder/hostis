@@ -1683,6 +1683,17 @@ class _SettingsPageState extends State<SettingsPage> {
           Native.call({'cmd': 'crew', 'on': v});
           setState(() => crewOn = v);
         }, sub: 'While you listen, this $thisDevice passes on what it plays and other listeners\' requests, through three hops, so no one can tell who hears what. It stops passing on what it plays when you stop playing.${Platform.isAndroid ? ' A phone does this only on Wi-Fi.' : ''}'),
+        setting('Let shared links name this radio', pref('door_links') == true, (v) {
+          pref('door_links', v);
+          Native.call({'cmd': 'door', 'links': v});
+          setState(() {});
+        }, sub: 'When this $thisDevice is a door for browsers, links that listeners share may carry its address, so people can tune in when every website is down. Its address then travels with those links. Off unless you turn it on.'),
+        if (isComputer)
+          setting('Start with this computer', pref('autostart') == true, (v) {
+            pref('autostart', v);
+            Autostart.set(v);
+            setState(() {});
+          }, sub: 'The radio starts quietly when you sign in, playing nothing, and carries for others. This is how the radio stays up.'),
         // A computer gives a modest share unless its owner offers more.
         if (isComputer && !mineOnly)
           Wrap(children: [

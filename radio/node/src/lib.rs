@@ -15,6 +15,8 @@ pub mod trust;
 pub mod clockfix;
 mod desk;
 mod deck;
+pub mod door;
+mod portmap;
 pub mod net;
 pub mod page;
 #[cfg(feature = "playback")]
@@ -417,6 +419,12 @@ pub struct Inner {
     pub relayed_bytes: std::sync::atomic::AtomicU64,
     /// The deck of what this node plays, while it plays it (see `deck`).
     pub(crate) deck: Mutex<Option<deck::Deck>>,
+    /// This node's door for browsers, while open (see `door`).
+    pub door: Mutex<Option<Arc<door::Door>>>,
+    /// Crew radios behind a door (tabs), and the door each is reached through.
+    pub(crate) door_of: Mutex<HashMap<[u8; 32], [u8; 32]>>,
+    /// Middles drawn with none apart from the guard's relay, drawn all the same.
+    pub routes_shared: std::sync::atomic::AtomicU64,
 }
 
 pub struct Node {
@@ -1198,6 +1206,8 @@ impl Inner {
             }
             // Opened into a plain note by `from_network` before it reaches here.
             Gossip::Carried { .. } => return None,
+            // Doors are kept in the notes, for the cards and the player; nothing else to do here.
+            Gossip::Door { .. } => return None,
             Gossip::Aboard { station, hour, tokens } => {
                 drop(log);
                 for (token, nonce) in tokens.into_iter().take(10_000) {
@@ -1231,7 +1241,15 @@ impl Inner {
                 if node == *self.endpoint.id().as_bytes() {
                     return None;
                 }
-                if let (Ok(id), Ok(url)) = (EndpointId::from_bytes(&node), relay.parse::<iroh::RelayUrl>()) {
+                // A tab behind a door is reached through the door, never at an address of its own.
+                if let Some(d) = net::door_of_relay(&relay) {
+                    let mut m = self.door_of.lock().unwrap();
+                    if m.len() > 4_000 {
+                        m.clear();
+                    }
+                    m.insert(node, d);
+                } else if let (Ok(id), Ok(url)) = (EndpointId::from_bytes(&node), relay.parse::<iroh::RelayUrl>()) {
+                    self.door_of.lock().unwrap().remove(&node);
                     self.book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
                 }
                 self.first_seen.lock().unwrap().entry(node).or_insert(now);
@@ -2131,6 +2149,22 @@ impl Node {
     /// For harnesses: `n` routes drawn as this node would draw them now, each as its first hop
     /// and its middle (either missing when none can be drawn).
     #[doc(hidden)]
+    /// For the sybil test: radios this node has known for `ms` already (patient attackers), and
+    /// its kept guard let go, so the next draw starts afresh.
+    #[doc(hidden)]
+    pub fn age_peers(&self, ids: &[[u8; 32]], ms: u64) {
+        let mut f = self.inner.first_seen.lock().unwrap();
+        for id in ids {
+            f.insert(*id, now_ms().saturating_sub(ms));
+        }
+        let _ = std::fs::remove_file(self.inner.hold.note_path(&self.inner.cfg.dir, "fetch-guard"));
+        let _ = std::fs::remove_file(self.inner.cfg.dir.join("fetch-guard"));
+    }
+
+    pub fn routes_shared(&self) -> u64 {
+        self.inner.routes_shared.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     pub fn crew_draw(&self, n: usize) -> Vec<(Option<[u8; 32]>, Option<[u8; 32]>)> {
         let nodes = self.inner.known_nodes_pub();
         (0..n)
@@ -2508,6 +2542,9 @@ impl Node {
             served_bytes: Default::default(),
             relayed_bytes: Default::default(),
             deck: Mutex::new(None),
+            door: Mutex::new(None),
+            door_of: Mutex::new(HashMap::new()),
+            routes_shared: Default::default(),
         });
         *proto.0.lock().unwrap() = Some(inner.clone());
         {
@@ -2601,6 +2638,13 @@ impl Node {
                 };
                 let Ok(g) = postcard::from_bytes::<Gossip>(&msg.content) else { continue };
                 i2.notes.lock().unwrap().keep(&g, &msg.content, now_ms());
+                // The tabs behind this node's door hear the Log through it.
+                if matches!(g, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Harbour { .. } | Gossip::Crew { .. } | Gossip::Deck { .. } | Gossip::Door { .. }) {
+                    let d = i2.door.lock().unwrap().clone();
+                    if let Some(d) = d {
+                        d.push(&msg.content);
+                    }
+                }
                 let Some(g) = g.from_network(now_ms(), msg.delivered_from.as_bytes()) else { continue };
                 if let Some(st) = i2.on_gossip(g) {
                     if i2.wants(&st) {
@@ -3444,6 +3488,48 @@ impl Node {
                 inner.ballast_bytes.store(gb * 1_000_000_000, std::sync::atomic::Ordering::Relaxed);
                 inner.store.lock().unwrap().quota = inner.cfg.quota + gb * 1_000_000_000;
                 Ok(json!({ "gb": gb }))
+            }
+            // A door for browsers (see `door`): opened when the app says this radio may be one (a
+            // computer, or a phone on Wi-Fi while charging, with carrying on), closed otherwise.
+            // `addr` names the outside address where the keeper knows it; else the router is asked.
+            "door" => {
+                match req["on"].as_bool() {
+                    Some(true) if inner.door.lock().unwrap().is_none() => {
+                        let public = req["addr"].as_str().and_then(|a| a.parse().ok());
+                        let app = req["app"].as_bool().unwrap_or(true);
+                        let links = req["links"].as_bool().unwrap_or(false);
+                        let i2 = inner.clone();
+                        self.rt.spawn(async move {
+                            let _ = i2.door_open(public, app, links).await;
+                        });
+                    }
+                    Some(false) => inner.door_close(),
+                    _ => {}
+                }
+                // "Let shared links name this radio": its owner's choice, never on by itself.
+                if let (Some(l), Some(d)) = (req["links"].as_bool(), inner.door.lock().unwrap().clone()) {
+                    d.link.store(l, std::sync::atomic::Ordering::Relaxed);
+                }
+                let d = inner.door.lock().unwrap().clone();
+                let mapped_by = ["none", "upnp", "nat-pmp", "pcp"][portmap::HOW.load(std::sync::atomic::Ordering::Relaxed).min(3) as usize];
+                Ok(match d {
+                    Some(d) => json!({ "open": true, "addr": d.public.lock().unwrap().map(|a| a.to_string()), "fp": hex(&d.fp), "since": d.since,
+                        "browsers": d.clients(), "sessions": d.sessions.load(std::sync::atomic::Ordering::Relaxed), "opened": d.opened.load(std::sync::atomic::Ordering::Relaxed),
+                        "served": d.served.load(std::sync::atomic::Ordering::Relaxed), "stun": d.stun.load(std::sync::atomic::Ordering::Relaxed),
+                        "mapped_by": mapped_by }),
+                    None => json!({ "open": false }),
+                })
+            }
+            // The doors this node knows, as signed notes (hex), freshest first: for a build to bake
+            // into the player, and for a Lantern or app serving the player to hand to it.
+            "doors" => {
+                let mut list: Vec<String> = inner.notes.lock().unwrap().doors(now_ms(), req["n"].as_u64().unwrap_or(8).min(32) as usize).iter().map(|b| hex(b)).collect();
+                let own = inner.door.lock().unwrap().clone().and_then(|d| d.note(&inner.secret, now_ms())).and_then(|g| postcard::to_stdvec(&g).ok());
+                if let Some(o) = own {
+                    list.retain(|x| *x != hex(&o));
+                    list.insert(0, hex(&o));
+                }
+                Ok(json!({ "doors": list }))
             }
             // "Carry the radio while you listen": on, this node is a middle and a way in for the
             // crew (when its connection may carry others' traffic) and fetches through decks.

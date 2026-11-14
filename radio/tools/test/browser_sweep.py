@@ -337,7 +337,7 @@ def t_studio(pw, browser):
     poll(queue, 300, 0.2)
     for title, (secs, s_, ok) in qtimes.items():
         check(ok, f"studio: {title!r} goes on the clock", s_); timed(f"studio: a 20 s recording ({title}) from choosing to on the clock (cumulative)", secs, 5)
-    _, t = poll(lambda: txt(pg, "#st-status").startswith("On the air") and f"{len(order)} recordings" in txt(pg, "#st-status"), 240, 0.2)
+    _, t = poll(lambda: txt(pg, "#st-status").startswith("On the network · ") and f"{len(order)} recordings" in txt(pg, "#st-status"), 240, 0.2)
     timed("studio: from choosing three recordings to 'On the air'", time.time() - t0 if t else None, 10)
     seen.append(txt(pg, "#st-status")); note("studio statuses seen: " + " | ".join(dict.fromkeys(seen)))
     shot(pg, "studio-1440-mine"); layout(pg, "the station card with its recordings")
@@ -358,7 +358,7 @@ def t_studio(pw, browser):
     top = pg.evaluate("(() => { const q = document.querySelector('.qi'); return q ? [q.className, q.textContent] : null })()")
     check(top and "done" in top[0], "the five-minute recording goes on the clock", str(top))
     note(f"the studio's queue for the second station still lists the first station's recordings: {pg.locator('.qi').count()} rows")
-    _, t = poll(lambda: txt(pg, "#st-status").startswith("On the air"), 300, 0.25)
+    _, t = poll(lambda: txt(pg, "#st-status").startswith("On the network · "), 300, 0.25)
     timed("studio: the five-minute recording from choosing to 'On the air'", time.time() - t0 if t else None, 20)
     errors(pg, "while raising and sending")
     # A stranger's tab: the new station in its list, and each recording heard as the tone it is.
@@ -412,7 +412,7 @@ def t_studio(pw, browser):
     connected(pg); view(pg, "studio")
     _, t = poll(lambda: shown(pg, "#st-mine") and txt(pg, "#st-mname") == "Sweep Tones", 120, 0.1)
     timed("returning keeper: the Broadcast tab shows the station again", time.time() - t0 if t else None, 3)
-    _, t = poll(lambda: txt(pg, "#st-status").startswith("On the air"), 60, 0.2)
+    _, t = poll(lambda: txt(pg, "#st-status").startswith("On the network · "), 60, 0.2)
     check(t is not None, "returning keeper: its status is on the air", txt(pg, "#st-status"))
     # Lock it under a passphrase, reload, unlock.
     pg.click("summary:has-text('Lock this station in this browser')")
@@ -452,7 +452,7 @@ def t_studio(pw, browser):
     _, t = poll(lambda: shown(rp, "#st-mine") and txt(rp, "#st-mname") == "Sweep Tones", 120, 0.05)
     timed("studio: Bring it back from the 24 words to the station card", t, 3)
     check(t is not None and rp.evaluate("window.pyrate.mine()").count(sid) == 1, "the words bring back the same station", txt(rp, "#st-note"))
-    _, t = poll(lambda: txt(rp, "#st-status").startswith("On the air"), 60, 0.2)
+    _, t = poll(lambda: txt(rp, "#st-status").startswith("On the network · "), 60, 0.2)
     check(t is not None, "the restored station knows its recordings", txt(rp, "#st-status"))
     shot(rp, "studio-390-restored"); layout(rp, "the restored station")
     errors(rp, "restoring")
@@ -479,7 +479,7 @@ def t_keeper(pw, browser):
     t0 = time.time(); pg.set_input_files("#st-files", f); marks = {}
     while time.time() - t0 < 150 and len(marks) < 3:
         if "clock" not in marks and pg.locator(".qi.done").count(): marks["clock"] = time.time() - t0
-        if "status" not in marks and txt(pg, "#st-status").startswith("On the air"): marks["status"] = time.time() - t0
+        if "status" not in marks and txt(pg, "#st-status").startswith("On the network · "): marks["status"] = time.time() - t0
         if "heard" not in marks and (lp.evaluate("window.pyrate.plan()") or {}).get("kind") == "track" and st(lp).get("scheduled", 0) > 0: marks["heard"] = time.time() - t0
         time.sleep(0.2)
     timed("keeper: a 20 s recording from choosing to on the clock", marks.get("clock"))

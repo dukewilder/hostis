@@ -274,7 +274,8 @@ class Tuner extends ChangeNotifier {
     // A radio left playing comes back on where it was, the moment the app opens: the node is
     // tuned at once, and finds the station's carriers while the dial fills.
     final resume = pref('resume');
-    if (firstTuneDone && resume is String && resume.length == 64 && Native.call({'cmd': 'status'})?['tuned'] == null) {
+    // Started with the computer (--quiet), it carries and plays nothing until asked.
+    if (firstTuneDone && !launchArgs.contains('--quiet') && resume is String && resume.length == 64 && Native.call({'cmd': 'status'})?['tuned'] == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => tune(resume));
     }
     unawaited(sweepTemp());
@@ -332,6 +333,10 @@ class Tuner extends ChangeNotifier {
     // "Keep only what I play": no ballast, and no serving of others' sealed chunks.
     final mine = pref('carry_mine_only') == true && pref('lantern') != true;
     final r = Native.call({'cmd': 'ballast_ok', 'value': !mine && unmetered && c['charging'] == true, 'unmetered': !mine && unmetered});
+    // A door for browsers: a computer with carrying on, or a phone on Wi-Fi while it charges.
+    // The node asks the router for a port and stays shut if none is given.
+    final door = pref('crew') != false && !mine && (isComputer || (unmetered && c['charging'] == true));
+    Native.call({'cmd': 'door', 'on': door, 'app': true, 'links': pref('door_links') == true});
     if (r is Map && r['carrying'] is int) carrying = r['carrying'];
     if (r is Map && r['carried_bytes'] is int) carriedBytes = r['carried_bytes'];
   }
@@ -533,6 +538,13 @@ class Tuner extends ChangeNotifier {
     playing = true;
     _acts++;
     busySince = DateTime.now().millisecondsSinceEpoch;
+    if (!firstTuneDone && isComputer && pref('autostart') == null) {
+      // After the first listen a computer starts with itself, which is how the radio stays up
+      // for everyone; said once, calmly, and undone in Settings.
+      pref('autostart', true);
+      unawaited(Autostart.set(true));
+      say('This computer will now start the radio when it starts, so the stations stay up. You can turn that off in Settings.');
+    }
     firstTuneDone = true;
     pref('first_tune', true);
     // A station tuned before its card came is kept on the dial as it stands.
