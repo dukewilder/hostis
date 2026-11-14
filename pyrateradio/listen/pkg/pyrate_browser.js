@@ -497,6 +497,146 @@ export class Radio {
         }
     }
     /**
+     * A control frame from the door: gossip it passes on.
+     * @param {Uint8Array | number[]} bytes
+     */
+    door_ctl(bytes) {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.radio_door_ctl(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
+     * The door's channel closed.
+     */
+    door_down() {
+        wasm.radio_door_down(this.__wbg_ptr);
+    }
+    /**
+     * A request from the door, for this tab: a hop another radio forwarded to it, which it
+     * answers as it would one over a relay (a middle's pass, or nothing).
+     * @param {Uint8Array | number[]} bytes
+     * @returns {Promise<any>}
+     */
+    door_serve(bytes) {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.radio_door_serve(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
+     * What the doors have done this visit, as JSON: counts only.
+     * @returns {string}
+     */
+    door_stats() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.radio_door_stats(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * The door's channel is open: `note` is what the door sent first, `fp` the fingerprint this
+     * tab dialled (hex), `src` how the tab came to dial it (1 built in, 2 remembered, 3 a link).
+     * The note must be the door's own and name that fingerprint. Returns the tab's hello.
+     * @param {Uint8Array | number[]} note
+     * @param {string} fp
+     * @param {number} src
+     * @returns {Uint8Array}
+     */
+    door_up(note, fp, src) {
+        const val3 = +src;
+        let ptr0, len0, ptr1, len1;
+        try {
+            ptr0 = passArray8ToWasm0(note, wasm.__wbindgen_malloc);
+            len0 = WASM_VECTOR_LEN;
+            ptr1 = passStringToWasm0(fp, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len1 = WASM_VECTOR_LEN;
+        } catch (e) {
+            if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+            if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+            throw e;
+        }
+        const ret = wasm.radio_door_up(this.__wbg_ptr, ptr0, len0, ptr1, len1, val3);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v4 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v4;
+    }
+    /**
+     * The doors this tab knows, as JSON, best first: those it may draw as a guard, then the
+     * longest open. Each with its address, fingerprint, note (hex) and whether it is trusted.
+     * @param {number} n
+     * @returns {string}
+     */
+    doors(n) {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.radio_doors(this.__wbg_ptr, n);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * A request that came over a direct link from `peer`, a requester that keeps this tab as
+     * its guard: a forward is passed on as one that came over the relay would be, within the
+     * same budget; anything else is refused, so the link is only ever the guard's leg.
+     * Doors this copy was built with, remembered from an earlier visit, or handed over by
+     * whoever served the page: signed notes in hex, by commas. `src` is 1 (built in), 2
+     * (remembered) or 4 (served). Returns how many were taken.
+     * @param {string} list
+     * @param {number} src
+     * @returns {number}
+     */
+    doors_add(list, src) {
+        const val2 = +src;
+        const ptr0 = passStringToWasm0(list, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.radio_doors_add(this.__wbg_ptr, ptr0, len0, val2);
+        return ret >>> 0;
+    }
+    /**
+     * Doors a shared link of `station` may carry, as JSON [{addr, fp}]: at most two, only doors
+     * this tab trusts whose owners let links name them, never one that carries the station, and
+     * drawn by the same rule for every station (oldest open first), so a link's doors say
+     * nothing about what is shared.
+     * @param {string} station
+     * @returns {string}
+     */
+    doors_for_link(station) {
+        let deferred2_0;
+        let deferred2_1;
+        try {
+            const ptr0 = passStringToWasm0(station, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            const len0 = WASM_VECTOR_LEN;
+            const ret = wasm.radio_doors_for_link(this.__wbg_ptr, ptr0, len0);
+            deferred2_0 = ret[0];
+            deferred2_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+        }
+    }
+    /**
+     * The doors the link that opened the page carried, as JSON [{addr, fp}]: hints only.
+     * @param {string} list
+     */
+    doors_hint(list) {
+        const ptr0 = passStringToWasm0(list, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.radio_doors_hint(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
      * A chunk or a picture by its fingerprint, checked against it. Resolves to its bytes.
      * @param {string} id
      * @param {string} hash
@@ -1161,9 +1301,6 @@ export class Radio {
         return takeFromExternrefTable0(ret[0]);
     }
     /**
-     * A request that came over a direct link from `peer`, a requester that keeps this tab as
-     * its guard: a forward is passed on as one that came over the relay would be, within the
-     * same budget; anything else is refused, so the link is only ever the guard's leg.
      * @param {string} peer
      * @param {Uint8Array | number[]} bytes
      * @returns {Promise<any>}
@@ -1741,6 +1878,13 @@ function __wbg_get_imports() {
             const ret = arg0.push(arg1);
             return ret;
         },
+        __wbg_pyrateDoorAsk_34384d7a5fb72f4e: function() { return handleError(function (arg0, arg1) {
+            const ret = pyrateDoorAsk(getArrayU8FromWasm0(arg0, arg1));
+            return ret;
+        }, arguments); },
+        __wbg_pyrateDoorCtl_17597cb564f0a483: function() { return handleError(function (arg0, arg1) {
+            pyrateDoorCtl(getArrayU8FromWasm0(arg0, arg1));
+        }, arguments); },
         __wbg_pyrateRtcAccept_b0cd3e07a52ad745: function() { return handleError(function (arg0, arg1, arg2, arg3) {
             const ret = pyrateRtcAccept(getStringFromWasm0(arg0, arg1), getStringFromWasm0(arg2, arg3));
             return ret;
@@ -1947,42 +2091,42 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_generic_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 2590, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 2609, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke___wasm_bindgen_b7c0b3f1bb65bebe___JsValue______true_);
             return ret;
         },
         __wbindgen_generic_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4180, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4198, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke___wasm_bindgen_b7c0b3f1bb65bebe___JsValue__core_7d5f0a2ba6a62c33___result__Result_____wasm_bindgen_b7c0b3f1bb65bebe___JsError___true_);
             return ret;
         },
         __wbindgen_generic_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("CloseEvent")], shim_idx: 1340, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("CloseEvent")], shim_idx: 1359, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke___web_sys_ab6ad03aa4ba2834___features__gen_CloseEvent__CloseEvent______true_);
             return ret;
         },
         __wbindgen_generic_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 2996, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 3015, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke___web_sys_ab6ad03aa4ba2834___features__gen_MessageEvent__MessageEvent______true_);
             return ret;
         },
         __wbindgen_generic_0000000000000005: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2549, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2568, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke_______true_);
             return ret;
         },
         __wbindgen_generic_0000000000000006: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2730, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2749, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke_______true__1_);
             return ret;
         },
         __wbindgen_generic_0000000000000007: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2732, ret: Unit, inner_ret: Some(Unit) }, mutable: false }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2751, ret: Unit, inner_ret: Some(Unit) }, mutable: false }) -> Externref`.
             const ret = makeClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke_______true__2_);
             return ret;
         },
         __wbindgen_generic_0000000000000008: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 4161, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 4179, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke_______true__3_);
             return ret;
         },
@@ -2431,7 +2575,7 @@ async function __wbg_init_once(module_or_path) {
     }
 
     if (module_or_path === undefined) {
-        module_or_path = new URL('pyrate_browser_bg.9f972deb92.wasm', import.meta.url);
+        module_or_path = new URL('pyrate_browser_bg.f03d621e2f.wasm', import.meta.url);
     }
     const imports = __wbg_get_imports();
 

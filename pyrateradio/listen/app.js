@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js?v=9f972deb92';
+import init, { Radio } from './pkg/pyrate_browser.js?v=f03d621e2f';
 
 const HARBOUR = "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442,f6d5c5276a98baf5d4964683115e9f0f6095e713f46bec34c25c29a66e46d753";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -15,7 +15,7 @@ const EMBED = document.documentElement.classList.contains('embed');
 // flock goes straight to an open player, the same set served where no one owns it (IPFS, a
 // Lantern). 'open' is that copy: the whole Log, the chatter and the colours.
 const SCOPE = "harbour";
-const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeie2qjkdbcpgl7a5wgprcqn2k2issug5ujvyfwlh3o2iol4rhkv5lq.ipfs.inbrowser.link/", "https://bafybeie2qjkdbcpgl7a5wgprcqn2k2issug5ujvyfwlh3o2iol4rhkv5lq.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeie2qjkdbcpgl7a5wgprcqn2k2issug5ujvyfwlh3o2iol4rhkv5lq/"];
+const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeihv6vjsv7upigg4alfozka7gmfxcbxmndaj6eupz5gosyjed472ie.ipfs.inbrowser.link/", "https://bafybeihv6vjsv7upigg4alfozka7gmfxcbxmndaj6eupz5gosyjed472ie.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeihv6vjsv7upigg4alfozka7gmfxcbxmndaj6eupz5gosyjed472ie/"];
 const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
 const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
 // HOSTIS's stations carry their pictures in the page, so they show before the network answers.
@@ -46,6 +46,17 @@ function handOff() {
   return true;
 }
 const RELAYS = "";
+// Doors (node/src/door.rs): listeners' apps a tab reaches with no relay. This copy carries the
+// doors known when it was built (signed notes), and a Lantern or app serving it may add its own
+// in a meta tag. A link may carry two more after its station: `#<station>~<door>.<door>`.
+const DOORS = [];
+const SERVED_DOORS = (document.querySelector('meta[name="pyrate-doors"]')?.content || '').split(',').filter(x => /^[0-9a-f]{40,2048}$/.test(x)).slice(0, 16);
+// A link's doors leave the address bar at once; they are hints, never a guard on their word alone.
+const LINK_DOORS = (() => {
+  const h = location.hash, i = h.indexOf('~'); if (i < 0) return [];
+  try { history.replaceState(history.state, '', location.pathname + location.search + h.slice(0, i)) } catch (e) { }
+  return h.slice(i + 1).split('.').map(doorDecode).filter(Boolean).slice(0, 3);
+})();
 const AHEAD_MS = 12000;
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -247,7 +258,8 @@ async function stockOut() {
 const rtcPeers = new Map();
 const RTC_PART = 16 * 1024, RTC_MAX = 4 << 20;
 function rtcClose(peer) { const p = rtcPeers.get(peer); if (!p) return; rtcPeers.delete(peer); for (const w of p.pend.values()) w.no?.('closed'); try { p.ch?.close() } catch (e) { } try { p.pc.close() } catch (e) { } }
-function rtcPc() { return new RTCPeerConnection({ iceServers: Array.isArray(STUN) && STUN.length ? [{ urls: STUN }] : [], iceTransportPolicy: 'all' }) }
+// STUN from HOSTIS's servers, and from the door this tab is through, which sees its address already.
+function rtcPc() { const urls = (Array.isArray(STUN) ? STUN : []).concat(door?.ready ? ['stun:' + door.addr] : []); return new RTCPeerConnection({ iceServers: urls.length ? [{ urls }] : [], iceTransportPolicy: 'all' }) }
 function rtcGathered(pc) { return new Promise(ok => { if (pc.iceGatheringState === 'complete') return ok(); const t = setTimeout(ok, 2500); pc.addEventListener('icegatheringstatechange', () => { if (pc.iceGatheringState === 'complete') { clearTimeout(t); ok() } }) }) }
 function rtcSend(p, id, bytes) {
   for (let at = 0; at === 0 || at < bytes.length; at += RTC_PART) {
@@ -300,6 +312,133 @@ globalThis.pyrateRtcAsk = (peer, bytes) => {
 };
 globalThis.pyrateRtcOpen = () => [...rtcPeers].filter(([, p]) => p.ready).map(([peer, p]) => ({ peer, role: p.role }));
 function rtcCloseAll() { for (const peer of [...rtcPeers.keys()]) rtcClose(peer) }
+
+// ---- Doors ----
+// A door is dialled WebRTC-direct: the tab knows its address and certificate fingerprint from a
+// signed note, writes the door's half of the session itself, and no server is asked anything.
+// The door's ICE name and password are one random string it reads off the first check. Over the
+// channel go the same requests and answers as over iroh, in the same parts as the guard's link.
+// The door sees this tab's address, as a guard does; the tab draws it as its guard only when it
+// may be one (radio.doors: trusted and open long enough).
+let door = null, doorTried = new Set(), doorQuietSince = 0, swCopy = null;
+// Declared, not assigned: the link's doors are read before the rest of the page is.
+function b64u(b) { return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') }
+function unb64u(t) { return Uint8Array.from(atob(t.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((t.length + 3) % 4)), c => c.charCodeAt(0)) }
+function hexOf(b) { return [...b].map(x => x.toString(16).padStart(2, '0')).join('') }
+function doorDecode(c) {
+  try {
+    const b = unb64u(c); if (b.length !== 38 && b.length !== 50) return null;
+    const v6 = b.length === 50, n = v6 ? 16 : 4, port = b[n] << 8 | b[n + 1];
+    const ip = v6 ? '[' + [...Array(8)].map((_, i) => ((b[2 * i] << 8) | b[2 * i + 1]).toString(16)).join(':') + ']' : [...b.subarray(0, 4)].join('.');
+    return port ? { addr: ip + ':' + port, fp: hexOf(b.subarray(n + 2)) } : null;
+  } catch (e) { return null }
+}
+function doorEncode(d) {
+  const m = /^\[?([0-9a-f:.]+)\]?:(\d+)$/i.exec(d.addr); if (!m || !/^[0-9a-f]{64}$/.test(d.fp)) return null;
+  let ip;
+  if (m[1].includes(':')) { const [a, z] = m[1].split('::'), l = a ? a.split(':') : [], r = z !== undefined ? (z ? z.split(':') : []) : [], g = l.concat(Array(8 - l.length - r.length).fill('0'), r); ip = g.flatMap(x => [parseInt(x, 16) >> 8, parseInt(x, 16) & 255]) }
+  else ip = m[1].split('.').map(Number);
+  const port = +m[2];
+  return b64u(new Uint8Array([...ip, port >> 8, port & 255, ...d.fp.match(/../g).map(x => parseInt(x, 16))]));
+}
+// What a shared link carries after its station: at most two doors the radio may name.
+function doorTail(st) { try { const l = JSON.parse(radio?.doors_for_link(st.id) || '[]').map(doorEncode).filter(Boolean); return l.length ? '~' + l.join('.') : '' } catch (e) { return '' } }
+const shareUrl = st => shareBase(st) + '#' + st.id + doorTail(st);
+function doorSend(id, bytes) { if (door?.ready || id === 0) rtcSend(door, id, bytes) }
+function doorClose(why) {
+  const d = door; if (!d) return; door = null;
+  for (const w of d.pend.values()) w.no?.('closed');
+  try { d.ch.close() } catch (e) { } try { d.pc.close() } catch (e) { }
+  try { radio?.door_down() } catch (e) { }
+  console.info('door closed', why || '');
+  setTimeout(doorsDial, 3000);
+}
+async function doorOpen(d, src) {
+  const m = /^\[?([0-9a-f:.]+)\]?:(\d+)$/i.exec(d.addr); if (!m) throw 'address';
+  const ip = m[1], port = +m[2], r = new Uint8Array(12); crypto.getRandomValues(r);
+  const ufrag = 'pyrate+door+v1/' + hexOf(r);
+  const pc = new RTCPeerConnection({ iceServers: [] });
+  const ch = pc.createDataChannel('pyrate', { negotiated: true, id: 0, ordered: true });
+  const p = { pc, ch, ready: false, pend: new Map(), next: 1, addr: d.addr, fp: d.fp };
+  ch.binaryType = 'arraybuffer';
+  // The tab's own half goes as the browser made it (Chrome refuses changed ICE credentials); the
+  // door's ICE name and password are the random string, which the door reads off the first check.
+  await pc.setLocalDescription(await pc.createOffer());
+  const v = ip.includes(':') ? 6 : 4;
+  await pc.setRemoteDescription({ type: 'answer', sdp: ['v=0', `o=- 0 0 IN IP${v} ${ip}`, 's=-', `c=IN IP${v} ${ip}`, 't=0 0', 'a=ice-lite',
+    `m=application ${port} UDP/DTLS/SCTP webrtc-datachannel`, 'a=mid:0', 'a=setup:passive', `a=ice-ufrag:${ufrag}`, `a=ice-pwd:${ufrag}`,
+    'a=fingerprint:sha-256 ' + d.fp.match(/../g).join(':').toUpperCase(), 'a=sctp-port:5000', 'a=max-message-size:16384',
+    `a=candidate:1 1 UDP 2130706431 ${ip} ${port} typ host`, 'a=end-of-candidates', ''].join('\r\n') });
+  const parts = new Map();
+  return await new Promise((ok, no) => {
+    const t = setTimeout(() => { no('timeout'); try { pc.close() } catch (e) { } }, 8000);
+    pc.onconnectionstatechange = () => { if (['failed', 'closed'].includes(pc.connectionState)) { if (!p.ready) { clearTimeout(t); no(pc.connectionState) } else if (door === p) doorClose(pc.connectionState) } };
+    ch.onclose = () => { if (door === p) doorClose('channel') };
+    ch.onmessage = e => {
+      const f = new Uint8Array(e.data); if (f.length < 5) return;
+      const id = new DataView(f.buffer).getUint32(0), last = f[4] === 1;
+      const w = parts.get(id) || { parts: [], n: 0 }; parts.set(id, w);
+      w.parts.push(f.subarray(5)); w.n += f.length - 5;
+      if (w.n > RTC_MAX || parts.size > 24) return doorClose('too much');
+      if (!last) return;
+      parts.delete(id);
+      const all = new Uint8Array(w.n); let i = 0; for (const x of w.parts) { all.set(x, i); i += x.length }
+      if (id === 0) {
+        if (!p.ready) {
+          // The door's note first: it must be the door dialled. Then this tab's hello.
+          try { const hello = radio.door_up(all, d.fp, src); p.ready = true; door = p; rtcSend(p, 0, hello); clearTimeout(t); ok(p) } catch (e) { clearTimeout(t); no(String(e)); try { pc.close() } catch (x) { } }
+        } else try { radio.door_ctl(all) } catch (e) { }
+        return;
+      }
+      if (id >= 0x80000000) {
+        // Another radio's forward, for this tab: answered as a hop over a relay would be.
+        radio.door_serve(all).then(r => { if (door === p) rtcSend(p, id, r) }).catch(() => { });
+        return;
+      }
+      const q = p.pend.get(id); if (q) { p.pend.delete(id); q.ok(all) }
+    };
+  });
+}
+globalThis.pyrateDoorAsk = bytes => {
+  const p = door; if (!p?.ready) return Promise.reject('no door');
+  const id = p.next++; if (p.next >= 0x80000000) p.next = 1;
+  return new Promise((ok, no) => { p.pend.set(id, { ok, no }); try { rtcSend(p, id, bytes) } catch (e) { p.pend.delete(id); no('send') } setTimeout(() => { if (p.pend.delete(id)) no('slow') }, 10000) });
+};
+globalThis.pyrateDoorCtl = bytes => { if (door?.ready) rtcSend(door, 0, bytes) };
+// Which door to go through: one this tab may draw as its guard, open long enough, first. When no
+// relay has answered for a few seconds, any door this tab knows, and then a link's doors, are
+// tried for the cards they hold; none of those is a guard until a second source names it.
+async function doorsDial() {
+  if (!radio) return;
+  let known = []; try { known = JSON.parse(radio.doors(12)) } catch (e) { }
+  // Through a door that may not be a guard (a hint) while one that may is known: over to it.
+  if (door) {
+    const here = known.find(d => d.fp === door.fp);
+    if (!(here?.trusted && here?.aged) && known.some(d => d.trusted && d.aged && d.fp !== door.fp)) doorClose('a door two sources name is known');
+    return;
+  }
+  let st = {}; try { st = JSON.parse(radio.door_stats()) } catch (e) { }
+  const quiet = st.relay_ok_ago < 0 || st.relay_ok_ago > 20000;
+  if (quiet && !doorQuietSince) doorQuietSince = Date.now();
+  const late = quiet && Date.now() - doorQuietSince > 4000;
+  const tries = known.filter(d => d.trusted && d.aged).map(d => [d, 2])
+    .concat(late ? known.filter(d => !(d.trusted && d.aged)).map(d => [d, 2]) : [])
+    .concat(late ? LINK_DOORS.filter(l => !known.some(d => d.fp === l.fp)).map(d => [d, 3]) : []);
+  for (const [d, src] of tries) {
+    if (doorTried.has(d.addr + d.fp) && tries.length > 1) continue;
+    doorTried.add(d.addr + d.fp);
+    try { await doorOpen(d, LINK_DOORS.some(l => l.fp === d.fp) ? 3 : src); console.info('through the door at', d.addr); return } catch (e) { console.info('door', d.addr, 'did not open:', e) }
+  }
+  if (doorTried.size >= tries.length) doorTried.clear();
+}
+// The doors this tab trusted this visit, for the next: never one it knew only as a hint.
+function doorsKeep() { try { const l = JSON.parse(radio.doors(16)).filter(d => d.trusted).slice(0, 8).map(d => d.note); if (l.length) store('pyrate.doors', JSON.stringify(l)) } catch (e) { } }
+function doorsIn() {
+  try { if (LINK_DOORS.length) radio.doors_hint(JSON.stringify(LINK_DOORS)) } catch (e) { }
+  try { if (Array.isArray(DOORS) && DOORS.length) radio.doors_add(DOORS.join(','), 1) } catch (e) { }
+  try { const r = JSON.parse(store('pyrate.doors') || '[]'); if (Array.isArray(r) && r.length) radio.doors_add(r.filter(x => typeof x === 'string').join(','), 2) } catch (e) { }
+  try { if (SERVED_DOORS.length) radio.doors_add(SERVED_DOORS.join(','), 4) } catch (e) { }
+}
 function stockLine() { const el = $('stockuse'); if (el) { el.hidden = !keepsStock(); el.textContent = 'Kept for the crew: ' + mb(stockBytes) + ' of 500 MB' } }
 function marooned() { try { return new Set(JSON.parse(store('pyrate.maroon') || '[]')) } catch (e) { return new Set() } }
 function setMarooned(s) { store('pyrate.maroon', JSON.stringify([...s])) }
@@ -1322,7 +1461,7 @@ function clipType() { for (const t of ['video/mp4;codecs=avc1.42E01E,mp4a.40.2',
 async function clipIt() {
   const type = clipType(); if (!type || !playing || !cur) return;
   const W = 720, H = 1280, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
-  const st = cur, url = shareBase(st) + '#' + st.id, q = JSON.parse(radio.qr(url));
+  const st = cur, url = shareUrl(st), q = JSON.parse(radio.qr(url));
   const coverUrl = await pic(st.id, st.cover); let img = null;
   if (coverUrl) { img = new Image(); img.src = coverUrl; await img.decode().catch(() => { img = null }) }
   const dest = ctx.createMediaStreamDestination(); gain.connect(dest);
@@ -1396,7 +1535,7 @@ $('tipclose').onclick = () => { $('tipbox').hidden = true; $('tipcopy').textCont
 
 // Pass it on: the station's code to scan, its link to copy or share.
 $('pass').onclick = () => {
-  const url = shareBase() + '#' + cur.id, q = JSON.parse(radio.qr(url)), n = q.size;
+  const url = shareUrl(cur), q = JSON.parse(radio.qr(url)), n = q.size;
   let d = ''; for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.bits[y * n + x] === '1') d += 'M' + (x + 4) + ' ' + (y + 4) + 'h1v1h-1z';
   $('qr').innerHTML = '<svg viewBox="0 0 ' + (n + 8) + ' ' + (n + 8) + '" role="img" aria-label="QR code for this station"><rect width="100%" height="100%" fill="#fbf8f1"/><path d="' + d + '" fill="#0a0a0a"/></svg>';
   $('plink').textContent = url; $('passbox').hidden = false; $('passbox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1536,7 +1675,7 @@ function dialNote(k) {
     : work ? 'Still finishing its work to join the dial. Keep this page open.'
     : 'On the dial at ' + fqs(k.id) + '.';
   $('st-work').hidden = !work;
-  const url = shareBase() + '#' + k.id;
+  const url = shareUrl(k);
   if ($('st-link').textContent !== url) $('st-link').textContent = url;
 }
 $('st-copy').onclick = async () => { const url = $('st-link').textContent; try { await navigator.clipboard.writeText(url); $('st-copy').textContent = 'Copied'; setTimeout(() => { $('st-copy').textContent = 'Copy the link' }, 2500) } catch (e) { prompt('The link', url) } };
@@ -2324,6 +2463,11 @@ async function boot() {
   }
   radio.set_direct_ok(store('pyrate.direct') === '1');
   crewSet();
+  doorsIn(); doorsDial();
+  // The installed player keeps this copy whole, and takes a new one only under two of the three
+  // release signatures (sw.js). Not inside another page.
+  if (!EMBED && 'serviceWorker' in navigator && (location.protocol === 'https:' || /^(127\.0\.0\.1|localhost)$/.test(location.hostname))) navigator.serviceWorker.register('sw.js').then(r => { navigator.serviceWorker.addEventListener('message', e => { if (e.data?.pyrate === 'copy') swCopy = e.data }); (r.active || r.installing || r.waiting)?.postMessage?.('check') }).catch(() => { });
+  setInterval(() => { doorsKeep(); doorsDial() }, 5000);
   // hostis.black's copy keeps HOSTIS's logs between visits: they come back before anything is
   // asked of the network, so a returning Listen needs only the newest entries and a chunk.
   if (HOSTIS_ONLY) { logsTaken = await logsIn(); setInterval(logsOut, 30000) }
@@ -2382,6 +2526,9 @@ window.pyrate.card = id => { const s = stations.find(x => x.id === id); return s
 window.pyrate.logs = () => ({ taken: logsTaken, kept: !!logsMark });
 window.pyrate.crew = () => radio ? JSON.parse(radio.crew_stats()) : null;
 window.pyrate.rtc = () => globalThis.pyrateRtcOpen();
+window.pyrate.doors = () => { try { return { ...JSON.parse(radio.door_stats()), through: door?.ready ? door.addr : null, link: LINK_DOORS.length } } catch (e) { return null } };
+window.pyrate.shareUrl = () => cur ? shareUrl(cur) : null;
+window.pyrate.copy = () => swCopy;
 window.pyrate.keeper = () => radio ? JSON.parse(radio.mine()) : [];
 window.pyrate.station = id => radio ? JSON.parse(radio.station_info(id)) : null;
 
