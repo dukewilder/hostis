@@ -133,7 +133,7 @@ impl Inner {
     }
 
     /// The deck's pulls, one after another while it lasts: each brings back the asks waiting at
-    /// its way in, and each ask is answered in a pull of its own. Three pulls in a row that fail
+    /// its way in, and each ask is answered in a pull of its own. Six pulls in a row that fail
     /// let the way in go, and the next tick draws another.
     async fn deck_pull_loop(self: Arc<Self>, deck: [u8; 32]) {
         let mut fails = 0u64;
@@ -157,9 +157,11 @@ impl Inner {
                         tokio::time::sleep(Duration::from_secs(3)).await;
                         continue;
                     }
+                    // Each failed pull marks its middle; six in a row, with a new middle each
+                    // time, and the way in is the likelier fault.
                     fails += 1;
-                    if fails >= 3 {
-                        say(&format!("deck: three pulls failed ({e}); another way in next"));
+                    if fails >= 6 {
+                        say(&format!("deck: six pulls failed ({e}); another way in next"));
                         if let Some(d) = self.deck.lock().unwrap().as_mut().filter(|d| d.id == deck) {
                             d.intro = None;
                             d.said = 0;
@@ -188,7 +190,11 @@ impl Inner {
             let ask = postcard::to_stdvec(&Ask::Pull { cookie, note, answers })?;
             let (hop, ciphers) = crate::hop::three_hops(middle.as_bytes(), &intro, &ask, None)?;
             let raw = tokio::time::timeout(Duration::from_secs(12), self.hop(guard, &hop)).await.map_err(|_| anyhow!("slow pull"))??;
-            let items: Vec<(u64, Vec<u8>)> = crate::hop::open_layers(&ciphers, &raw).and_then(|p| postcard::from_bytes(&p).ok()).ok_or_else(|| anyhow!("the pull came back empty"))?;
+            let Some(items) = crate::hop::open_layers(&ciphers, &raw).and_then(|p| postcard::from_bytes::<Vec<(u64, Vec<u8>)>>(&p).ok()) else {
+                // Most often a middle that has gone: the next pull draws another.
+                self.failed.lock().unwrap().insert(*middle.as_bytes(), now_ms());
+                return Err(anyhow!("the pull came back empty"));
+            };
             for (id, blob) in items.into_iter().take(16) {
                 let me = self.clone();
                 tokio::spawn(async move {

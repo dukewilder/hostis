@@ -13,7 +13,8 @@ use pyrate_core::{Body, StationId, audio::ChunkDecoder};
 use pyrate_node::{Config, Node};
 use serde_json::{Value, json};
 
-const MIC_HZ: f64 = 700.0;
+/// Above the hum comb, which takes out every harmonic of 50 and 60 Hz to 1 kHz.
+const MIC_HZ: f64 = 1_100.0;
 const DECK_HZ: f64 = 1500.0;
 const PAD_HZ: f64 = 3200.0;
 const TWO_HZ: f64 = 2400.0;
