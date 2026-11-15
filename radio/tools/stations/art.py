@@ -76,7 +76,78 @@ def anchor(size, rope=True):
             f'{r}</svg>')
 
 
+def tide(w, h, n=22):
+    """Slow swells running to a low horizon, a red moon above them: the small hours."""
+    import math
+    lines = []
+    for i in range(n):
+        y0 = h * 0.30 + (h * 0.66) * (i / n) ** 1.35
+        amp = 4 + 22 * (i / n)
+        k = 2 * math.pi / (w * (0.55 - 0.25 * i / n))
+        ph = i * 0.9
+        pts = " ".join(f"{x},{y0 + amp * math.sin(k * x + ph):.1f}" for x in range(0, w + 1, 12))
+        lines.append(f'<polyline points="{pts}" fill="none" stroke="rgba(237,228,206,{0.08 + 0.55 * (i / n) ** 1.6:.3f})" stroke-width="{1 + 1.6 * i / n:.2f}"/>')
+    moon = f'<circle cx="{w * 0.68:.0f}" cy="{h * 0.17:.0f}" r="{w * 0.045:.0f}" fill="#c52828"/>'
+    return f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}">{moon}{"".join(lines)}</svg>'
+
+
+def staff(w, gap=26, notes=True):
+    """Five engraved lines, a run of open notes, and a red fermata over the held one."""
+    h = gap * 4 + 140
+    top = 110
+    out = "".join(f'<line x1="0" y1="{top + i * gap}" x2="{w}" y2="{top + i * gap}" stroke="rgba(237,228,206,.55)" stroke-width="2"/>' for i in range(5))
+    out += f'<line x1="2" y1="{top}" x2="2" y2="{top + 4 * gap}" stroke="#ede4ce" stroke-width="4"/><line x1="{w - 2}" y1="{top}" x2="{w - 2}" y2="{top + 4 * gap}" stroke="#ede4ce" stroke-width="4"/>'
+    if notes:
+        steps = [6, 4, 5, 3, 2, 4]
+        for j, s in enumerate(steps):
+            x = w * (0.16 + 0.14 * j)
+            y = top + 4 * gap - s * gap / 2
+            out += f'<ellipse cx="{x:.0f}" cy="{y:.0f}" rx="{gap * 0.72:.0f}" ry="{gap * 0.5:.0f}" fill="none" stroke="#ede4ce" stroke-width="5" transform="rotate(-18 {x:.0f} {y:.0f})"/>'
+        fx = w * (0.16 + 0.14 * 4)
+        out += (f'<path d="M {fx - 40:.0f} {top - 34} A 40 40 0 0 1 {fx + 40:.0f} {top - 34}" fill="none" stroke="#c52828" stroke-width="7" stroke-linecap="round"/>'
+                f'<circle cx="{fx:.0f}" cy="{top - 44}" r="7" fill="#c52828"/>')
+    return f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" style="display:block;margin:0 auto">{out}</svg>'
+
+
+def drum(size):
+    """A field drum on its ropes, the tension cords in red, two sticks crossed above."""
+    zig = " ".join(f"{30 + i * 20},{70 if i % 2 == 0 else 160}" for i in range(8))
+    return (f'<svg width="{size}" height="{int(size * 1.05)}" viewBox="0 0 200 210" style="display:block;margin:0 auto">'
+            '<g stroke="#ede4ce" stroke-linecap="round"><line x1="40" y1="10" x2="150" y2="62" stroke-width="7"/><line x1="160" y1="10" x2="50" y2="62" stroke-width="7"/></g>'
+            '<g fill="#ede4ce"><circle cx="40" cy="10" r="8"/><circle cx="160" cy="10" r="8"/></g>'
+            '<g fill="none" stroke="#ede4ce" stroke-width="6"><ellipse cx="100" cy="70" rx="80" ry="18"/>'
+            '<path d="M20,70 L20,160 Q100,196 180,160 L180,70"/><path d="M20,154 Q100,190 180,154" stroke-width="5"/><path d="M20,78 Q100,114 180,78" stroke-width="5"/></g>'
+            f'<polyline points="{zig}" fill="none" stroke="#c52828" stroke-width="4" stroke-linejoin="round"/></svg>')
+
+
 STATIONS = {
+    "drift": {
+        "title": "Drift", "cap": "music for the small hours",
+        "cover": lambda: f'<div style="position:absolute;top:96px;left:56px;right:56px">{tide(1168, 700)}</div>'
+                         f'<div style="position:absolute;bottom:150px;left:0;right:0;text-align:center"><div class="title" style="font-size:150px">Drift</div>'
+                         f'<div class="cap" style="font-size:22px;margin-top:26px">Pyrate Radio &middot; a HOSTIS station</div></div>',
+        "banner": lambda: f'<div style="position:absolute;left:34px;top:34px">{tide(900, 432)}</div>'
+                          f'<div style="position:absolute;right:110px;top:150px;text-align:right"><div class="title" style="font-size:110px">Drift</div>'
+                          f'<div class="cap" style="font-size:18px;margin-top:22px">Music for the small hours</div></div>',
+    },
+    "concert-hall": {
+        "title": "Concert Hall", "cap": "the classics, freely played",
+        "cover": lambda: f'<div style="position:absolute;top:250px;left:130px;right:130px">{staff(1020, 44)}</div>'
+                         f'<div style="position:absolute;bottom:150px;left:0;right:0;text-align:center"><div class="title" style="font-size:96px">Concert Hall</div>'
+                         f'<div class="cap" style="font-size:22px;margin-top:26px">Pyrate Radio &middot; a HOSTIS station</div></div>',
+        "banner": lambda: f'<div style="position:absolute;left:90px;top:110px;width:500px">{staff(500, 22)}</div>'
+                          f'<div style="position:absolute;right:110px;top:160px;text-align:right"><div class="title" style="font-size:72px">Concert Hall</div>'
+                          f'<div class="cap" style="font-size:18px;margin-top:22px">The classics, freely played</div></div>',
+    },
+    "brass": {
+        "title": "Brass", "cap": "marches and band music",
+        "cover": lambda: f'<div style="position:absolute;top:120px;left:0;right:0">{drum(540)}</div>'
+                         f'<div style="position:absolute;bottom:150px;left:0;right:0;text-align:center"><div class="title" style="font-size:150px">Brass</div>'
+                         f'<div class="cap" style="font-size:22px;margin-top:26px">Pyrate Radio &middot; a HOSTIS station</div></div>',
+        "banner": lambda: f'<div style="position:absolute;left:150px;top:56px">{drum(360)}</div>'
+                          f'<div style="position:absolute;right:110px;top:150px;text-align:right"><div class="title" style="font-size:110px">Brass</div>'
+                          f'<div class="cap" style="font-size:18px;margin-top:22px">Marches and band music</div></div>',
+    },
     "the-numbers": {
         "title": "The Numbers", "cap": "",
         "cover": lambda: f'<div style="position:absolute;top:150px;left:0;right:0;text-align:center"><div class="skull" style="font-size:64px">☠︎</div></div>'
