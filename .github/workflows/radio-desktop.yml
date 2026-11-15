@@ -51,6 +51,10 @@ jobs:
           Compress-Archive -Path "$out/*" -DestinationPath pyrate-radio-windows.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: pyrate-radio-windows, path: radio/pyrate-radio-windows.zip }
+      # The release tool for the key holders and for signing APKs (HOLDERS.md, RELEASES.md).
+      - run: cargo build --release --locked -p pyrate-node --bin release
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with: { name: pyrate-release-tool-windows, path: radio/target/release/release.exe }
   macos:
     runs-on: macos-latest
     defaults: { run: { working-directory: radio } }
@@ -111,7 +115,7 @@ jobs:
           tar -C "$B/.." -czf pyrate-radio-linux-x64.tar.gz --transform 's,^bundle,pyrate-radio,' bundle
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: pyrate-radio-linux, path: radio/pyrate-radio-linux-x64.tar.gz }
-  # A signed statement that these three files came from this workflow run on this commit, kept
+  # A signed statement that these four files came from this workflow run on this commit, kept
   # by GitHub and checked with: gh attestation verify <file> --repo <owner>/<repo>. Only this
   # job may write attestations and mint the identity token; the builds above stay read-only.
   attest:
@@ -123,10 +127,11 @@ jobs:
       attestations: write
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with: { path: dist, pattern: "pyrate-radio-*", merge-multiple: true }
+        with: { path: dist, pattern: "pyrate-*", merge-multiple: true }
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             dist/pyrate-radio-windows.zip
             dist/pyrate-radio-macos.zip
             dist/pyrate-radio-linux-x64.tar.gz
+            dist/release.exe
