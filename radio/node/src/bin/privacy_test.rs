@@ -114,6 +114,9 @@ fn main() -> anyhow::Result<()> {
     // first hop (the crew's rule against a crowd of new radios), and a door is one at once.
     let r = Node::start(Config { carry_all: true, lantern: true, ..cfg("relay", false) })?;
     r.call(&json!({ "cmd": "lan", "value": true }));
+    // A guard is a radio known under one id for a week: the keeper's phone has known the other
+    // keeper's that long, so it has a first hop, and the Lantern, the second node, takes the stem.
+    b.age_peers(&[*k.id().as_bytes()], 8 * 86_400_000);
     let l2 = Node::start(Config { bootstrap: vec![r.addr().id], ..cfg("listener2", true) })?;
     l2.call(&json!({ "cmd": "lan", "value": true }));
     for _ in 0..60 {

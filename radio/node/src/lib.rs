@@ -2582,6 +2582,14 @@ impl Node {
                 book.add_endpoint_info(iroh::EndpointAddr { id: *id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
             }
         }
+        // On a private network (PYRATE_RELAYS), a first door named without a relay is reached
+        // through that network's own relay: there is no directory there to ask.
+        let private_relays: Vec<iroh::RelayUrl> = std::env::var("PYRATE_RELAYS").unwrap_or_default().split(',').filter_map(|r| r.trim().parse().ok()).collect();
+        if let Some(r) = private_relays.first() {
+            for id in cfg.bootstrap.iter().filter(|id| !met.iter().any(|(m, _)| m == *id)) {
+                book.add_endpoint_info(iroh::EndpointAddr { id: *id, addrs: [iroh::TransportAddr::Relay(r.clone())].into_iter().collect() });
+            }
+        }
         let book2 = book.clone();
         let asked: Arc<std::collections::HashSet<EndpointId>> = Arc::new(cfg.bootstrap.iter().copied().collect());
         let lantern = cfg.lantern;
