@@ -134,6 +134,17 @@ pub fn voice(secret: &[u8; 32], station: &StationId) -> StationKey {
     StationKey::from_seed(*h.finalize().as_bytes())
 }
 
+/// The voice a listener speaks with under one station's colours in one week, counted from the
+/// Unix epoch. It is unrelated to the same listener's voice there the week before or after, and
+/// to their voice under any other station.
+pub fn voice_week(secret: &[u8; 32], station: &StationId, week: u64) -> StationKey {
+    let mut h = blake3::Hasher::new_keyed(secret);
+    h.update(b"pyrate/chat/voice/week/v1");
+    h.update(&station.0);
+    h.update(&week.to_le_bytes());
+    StationKey::from_seed(*h.finalize().as_bytes())
+}
+
 fn zeros(h: &[u8; 32]) -> u32 {
     let mut n = 0;
     for b in h {
@@ -169,47 +180,112 @@ pub fn shown(s: &str) -> String {
         .collect()
 }
 
-/// A title made from a file name, without what a phone or recorder writes into one: the
-/// moment it was made (a date with a time, which gives away the keeper's day and zone) and the
-/// device's own words around it ("VID", "Recording", "PXL"). A bare date stays, since a keeper
-/// may mean it. Returns the title and whether anything was taken out.
+/// A title made from a file name, without what a phone or recorder writes into one. That is the
+/// moment it was made (a clock time, which gives away the keeper's zone, with any date beside
+/// it, or a date written as eight figures), a recorder's own name for a take
+/// (`AUD-20261114-WA0003`), a computer's name (`jane-mbp`), and the device's own words around
+/// them ("VID", "Recording", "PXL"). A bare date stays, since a keeper may mean it. Returns the
+/// title and whether anything was taken out.
 pub fn plain_title(s: &str) -> (String, bool) {
+    let (t, cut) = plain_words(s);
+    if !cut {
+        return (s.trim().to_string(), false);
+    }
+    (if t.is_empty() { "Untitled".to_string() } else { t }, true)
+}
+
+/// A name for who made a recording, cleaned as [`plain_title`] cleans a title; empty when
+/// nothing is left.
+pub fn plain_by(s: &str) -> String {
+    let (t, cut) = plain_words(s);
+    if cut { t } else { s.trim().to_string() }
+}
+
+fn plain_words(s: &str) -> (String, bool) {
     let toks: Vec<&str> = s.split(|c: char| c.is_whitespace() || c == '_').filter(|t| !t.is_empty()).collect();
-    let stampy = |t: &str| t.chars().all(|c| c.is_ascii_digit() || "-.:hms".contains(c)) && t.chars().filter(|c| c.is_ascii_digit()).count() >= 2;
+    let bare = |t: &str| t.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase();
+    let digits = |t: &str| t.chars().filter(|c| c.is_ascii_digit()).count();
+    // Figures and the marks between them: a date, a time, or part of one.
+    let stampy = |t: &str| {
+        let t = t.trim_end_matches(',');
+        t.chars().all(|c| c.is_ascii_digit() || "-.:hms".contains(c)) && digits(t) >= 2
+    };
+    // A clock time: 21:03, 9.03, 21.03.55, 9pm, 9.03PM.
+    let clock = |t: &str| {
+        let b = bare(t);
+        let b = b.strip_suffix("am").or_else(|| b.strip_suffix("pm")).map(|x| (x.to_string(), true)).unwrap_or((b.clone(), false));
+        let parts: Vec<&str> = b.0.split([':', '.']).collect();
+        let figures = |p: &str, n: std::ops::RangeInclusive<usize>| n.contains(&p.len()) && p.chars().all(|c| c.is_ascii_digit());
+        (parts.len() >= 2 && parts.len() <= 3 && figures(parts[0], 1..=2) && parts[1..].iter().all(|p| figures(p, 2..=2)))
+            || (b.1 && figures(&b.0, 1..=2))
+    };
+    // Eight figures in a row anywhere in a token: a date as a recorder writes it.
+    let eight = |t: &str| t.split(|c: char| !c.is_ascii_digit()).any(|r| r.len() >= 8);
+    const MERIDIEM: [&str; 4] = ["am", "pm", "a.m", "p.m"];
+    const MONTHS: [&str; 12] = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+    let month = |t: &str| {
+        let b = bare(t);
+        b.len() >= 3 && MONTHS.iter().any(|m| b.starts_with(m)) && ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december", "sept"].iter().any(|n| n.starts_with(&b) || b == n[..3])
+    };
+    // A computer or phone named for its owner: jane-mbp, Janes-MacBook-Pro, sam-iphone.
+    const MACHINES: [&str; 9] = ["mbp", "mba", "macbook", "imac", "iphone", "ipad", "laptop", "desktop", "pc"];
+    let machine = |t: &str| t.contains('-') && t.split('-').any(|p| MACHINES.contains(&p.to_lowercase().as_str()));
+    // Figures alone, with the marks a date or time puts between them.
+    let figs = |t: &str| {
+        let t = t.trim_end_matches(',');
+        t.chars().all(|c| c.is_ascii_digit() || "-.:".contains(c)) && digits(t) >= 1
+    };
+    let meridiem = |t: &str| MERIDIEM.contains(&bare(t).as_str());
+    let joining = |t: &str| ["at", "on"].contains(&bare(t).as_str());
     let mut keep = vec![true; toks.len()];
-    let mut i = 0;
     let mut cut = false;
+    // A stretch of figures goes when it holds a clock time or an eight-figure date, or has
+    // twelve figures or more (ten across two tokens or more); with it go the date words beside
+    // it, and an "at" or "on" before it.
+    let mut i = 0;
     while i < toks.len() {
-        if !stampy(toks[i]) {
+        let starts = stampy(toks[i]) || clock(toks[i]) || month(toks[i]) || (figs(toks[i]) && toks.get(i + 1).is_some_and(|t| meridiem(t)));
+        if !starts {
             i += 1;
             continue;
         }
+        let near = |t: &str| figs(t) || stampy(t) || clock(t) || meridiem(t) || month(t) || joining(t);
         let mut j = i;
-        let mut digits = 0;
-        while j < toks.len() && stampy(toks[j]) {
-            digits += toks[j].chars().filter(|c| c.is_ascii_digit()).count();
+        let (mut n, mut timed) = (0, false);
+        while j < toks.len() && near(toks[j]) {
+            n += digits(toks[j]);
+            timed |= clock(toks[j]) || eight(toks[j]) || (meridiem(toks[j]) && j > i);
             j += 1;
         }
-        if digits >= 12 {
-            keep[i..j].iter_mut().for_each(|k| *k = false);
+        // An "at" or "on" closing the stretch belongs to the words after it.
+        while j > i + 1 && joining(toks[j - 1]) {
+            j -= 1;
+        }
+        if timed || n >= 12 || (n >= 10 && j - i >= 2) {
+            let from = if i > 0 && joining(toks[i - 1]) { i - 1 } else { i };
+            keep[from..j].iter_mut().for_each(|k| *k = false);
             cut = true;
         }
-        i = j;
+        i = j.max(i + 1);
+    }
+    // A recorder's name for a take, figures and all.
+    for (k, t) in toks.iter().enumerate() {
+        if keep[k] && ((eight(t) && t.chars().any(|c| c.is_alphabetic())) || machine(t)) {
+            keep[k] = false;
+            cut = true;
+        }
     }
     if cut {
         const DEVICE: [&str; 14] = ["vid", "img", "aud", "rec", "pxl", "voice", "recording", "audio", "video", "sound", "new", "memo", "screen", "record"];
         for (k, t) in toks.iter().enumerate() {
-            if keep[k] && DEVICE.contains(&t.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase().as_str()) {
+            if keep[k] && DEVICE.contains(&bare(t).as_str()) {
                 keep[k] = false;
             }
         }
     }
     let out: Vec<&str> = toks.iter().zip(&keep).filter(|(_, k)| **k).map(|(t, _)| *t).collect();
-    let t = out.join(" ").trim_matches(|c: char| c == '-' || c == '.' || c.is_whitespace()).to_string();
-    if !cut {
-        return (s.trim().to_string(), false);
-    }
-    (if t.is_empty() { "Untitled".to_string() } else { t }, true)
+    let t = out.join(" ").trim_matches(|c: char| c == '-' || c == '.' || c == ',' || c.is_whitespace()).to_string();
+    (t, cut)
 }
 
 /// True when a name mixes Latin with Greek or Cyrillic letters, the usual way to pass for
@@ -329,8 +405,29 @@ mod tests {
         assert_eq!(super::plain_title("Sea shanty 20261110-2103"), ("Sea shanty".into(), true));
         assert_eq!(super::plain_title("1999-12-31 Party"), ("1999-12-31 Party".into(), false));
         assert_eq!(super::plain_title("Track 01"), ("Track 01".into(), false));
+        // The fifth audit's recorder names, each of which once went out as it was.
+        assert_eq!(super::plain_title("Audio Recording 2026-11-14 at 21.03.55"), ("Untitled".into(), true));
+        assert_eq!(super::plain_title("Nov 14, 2026 9.03 PM"), ("Untitled".into(), true));
+        assert_eq!(super::plain_title("11-14-26 21-03"), ("Untitled".into(), true));
+        assert_eq!(super::plain_title("AUD-20261114-WA0003"), ("Untitled".into(), true));
+        assert_eq!(super::plain_title("jane-mbp take 2"), ("take 2".into(), true));
+        assert_eq!(super::plain_title("Recording_20261114_210355"), ("Untitled".into(), true));
+        assert_eq!(super::plain_title("Segment, 21:03"), ("Segment".into(), true));
+        assert_eq!(super::plain_title("Harbour song 9pm"), ("Harbour song".into(), true));
+        assert_eq!(super::plain_title("Night watch at 21:03 on the quay"), ("Night watch on the quay".into(), true));
+        assert_eq!(super::plain_title("Show 9 PM"), ("Show".into(), true));
+        assert_eq!(super::plain_title("May Day"), ("May Day".into(), false));
+        assert_eq!(super::plain_title("Side 1.5"), ("Side 1.5".into(), false));
+        assert_eq!(super::plain_by("jane-mbp"), "");
+        assert_eq!(super::plain_by("Jane 20261114"), "Jane");
+        assert_eq!(super::plain_by("The Crew"), "The Crew");
         assert!(!super::mixed_script("\u{41f}\u{438}\u{440}\u{430}\u{442}"));
         assert_eq!(super::shown("one\ntwo\u{200b}"), "one\ntwo");
+        let (sec, st) = ([7u8; 32], crate::StationId([9u8; 32]));
+        let this = super::voice_week(&sec, &st, 2900).id();
+        assert_eq!(this, super::voice_week(&sec, &st, 2900).id(), "the same all week");
+        assert_ne!(this, super::voice_week(&sec, &st, 2901).id(), "and another the next");
+        assert_ne!(this, super::voice(&sec, &st).id(), "and never the kept voice");
     }
 
     use super::*;
