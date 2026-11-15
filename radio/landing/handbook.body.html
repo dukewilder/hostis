@@ -21,7 +21,7 @@
 <div class="prose">
 <p>The radio cannot hide what you put on the air yourself.</p>
 </div>
-<details class="fold"><summary>Your voice, and the room around it</summary><div>The app takes out mains hum, which can date and place a recording. It cannot take out a siren, a church bell, a train or a neighbour's voice, so record somewhere quiet. Disguise my voice, in Settings, shifts your voice lower and make it not quite yours. A voice you have used anywhere else in public is a voice that can be matched.</div></details>
+<details class="fold"><summary>Your voice, and the room around it</summary><div>The app takes out mains hum, which can date and place a recording. It cannot take out a siren, a church bell, a train or a neighbour's voice, so record somewhere quiet. Disguise my voice, in Settings, shifts your voice lower by an amount your station keeps. It stops a casual ear, not a voice matcher: software that compares voices can still find yours, and a voice you have used anywhere else in public is a voice that can be matched.</div></details>
 <details class="fold"><summary>Your words</summary><div>Turns of phrase, spelling and the subjects you return to are as much yours as your face. Writing for a station in a voice you use nowhere else keeps the two apart.</div></details>
 <details class="fold"><summary>Your files</summary><div>Air what is yours to air. That means your own recordings, the public domain, and work its makers freed under a licence that lets anyone broadcast it. Bought and promotional music is somebody else's, and files can carry marks tied to the account that got them.</div></details>
 <details class="fold"><summary>What your station says of itself</summary><div>A home port is public, so leave it empty or name a city that is not yours. A programme that keeps clock times carries your time zone with it; one that only shuffles carries none. A Bitcoin tip address shows every payment to anyone who looks it up. Monero shows none.</div></details>
@@ -49,7 +49,7 @@
 <section id="words">
 <div class="sechead"><h2>Your Words</h2><span class="cap">the station itself</span></div>
 <div class="prose">
-<p>The 24 words are the station. Write them on paper, in order, and keep the paper somewhere a search of your home would not find it. Nobody from Pyrate Radio or HOSTIS will ever ask for them.</p>
+<p>The 24 words are the station. If you set a passphrase, the words and the passphrase together are the station, and the words alone open a different, empty one. Write them on paper, in order, and keep the paper somewhere a search of your home would not find it. Nobody from Pyrate Radio or HOSTIS will ever ask for them.</p>
 <p>A passphrase on top of the words, set when you raise the station, makes the words alone open a different, empty station. A photograph of the paper then gives nothing away. Keep the passphrase in your head or apart from the words, because a station whose passphrase is lost is lost with it.</p>
 <p>If a phone is lost or taken, put the words into the app on another phone. The station comes back, and the old phone can no longer speak for it.</p>
 </div>
@@ -59,8 +59,8 @@
 <section id="line">
 <div class="sechead"><h2>Your Line</h2><span class="cap">what your connection shows</span></div>
 <div class="prose">
-<p>The relay a phone or a tab connects through sees its address, and nothing of what passes. Your internet provider sees that you use the radio, and nothing of what you play or air.</p>
-<p>For more cover, run a VPN you trust on the phone, set to always on, so the radio never touches the network without it. In a browser, open the player in Tor Browser, and the relay sees only Tor.</p>
+<p>The relay a phone or a tab connects through sees its address, and nothing of what passes. Your internet provider sees that you use the radio, and nothing of what you play or air. Your guard, or your internet provider, can still line up the size and time of what you send with what appears on your station a little later, recordings and live shows alike. Through Tor answers that.</p>
+<p>For more cover, run a VPN you trust on the phone, set to always on, so the radio never touches the network without it. In a browser, open hostis.black's player or a Lantern's copy in Tor Browser, set to Standard for that site, and the relay sees only Tor. Tor Browser's Safer level turns off what the radio runs on, and Tor Browser keeps no service worker, so copies on inbrowser.link, and the invitations that go only to them, stay closed there.</p>
 <p>The app can go through Tor itself. Install Orbot, start it, and in Settings, under Advanced, Connections, turn on Go through Tor. From the next start the radio reaches the network only by way of Tor and offers no direct path, so no peer and no relay learns where the phone is. On a computer, Tor with its HTTP tunnel on port 8118 does the same.</p>
 </div>
 </section>
@@ -97,7 +97,7 @@
 <div class="prose">
 <p>Pyrate Radio has no server. Every phone with the app, every open player in a browser and every Lantern is a node, and the nodes keep the Log of stations between them. Each station is a key held by its keeper, and every entry in its log is signed by that key and checked by every node that carries it.</p>
 <p>HOSTIS writes and publishes the software, raises its own stations, and runs one Lantern among any number anyone may run. It ranks no station. HOSTIS can stop carrying a station on its own machines. It cannot take one off anyone else's, change what one plays or see who listens. HOSTIS holds no accounts, listening records or addresses. The stations hostis.black plays are HOSTIS's own, and every other station plays in the open player, which belongs to nobody.</p>
-<p>Updates are signed by two of three release keys held in separate places, and carried on the network like any station. The open player lives on IPFS under a name of its own, and the app, the source and the computers' builds travel by IPFS and BitTorrent as well as from this site.</p>
+<p>The app's updates are signed by two of three release keys held in separate places, and carried on the network like any station. The open player lives on IPFS under a name of its own, and the app, the source and the computers' builds travel by IPFS and BitTorrent as well as from this site.</p>
 </div>
 </section>
 <div class="divider"><span class="divider-glyph"></span></div>
