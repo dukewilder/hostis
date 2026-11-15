@@ -40,7 +40,8 @@ jobs:
       - run: python tools/open_player.py --tar app/assets/player/open-player.tar --need
       # The build's own version code, so the app can tell when a newer one is signed.
       - shell: bash
-        run: flutter build windows --release --dart-define=PYRATE_CODE=$(sed -n 's/^version: .*+\([0-9]*\)$/\1/p' pubspec.yaml)
+        run: |
+          flutter build windows --release --dart-define=PYRATE_CODE=$(sed -n 's/^version: .*+\([0-9]*\)$/\1/p' pubspec.yaml)
         working-directory: radio/app
       - name: Pack
         shell: pwsh
@@ -70,7 +71,8 @@ jobs:
       - run: python3 tools/open_player.py --tar app/assets/player/open-player.tar --need
       # The build's own version code, so the app can tell when a newer one is signed.
       - shell: bash
-        run: flutter build macos --release --dart-define=PYRATE_CODE=$(sed -n 's/^version: .*+\([0-9]*\)$/\1/p' pubspec.yaml)
+        run: |
+          flutter build macos --release --dart-define=PYRATE_CODE=$(sed -n 's/^version: .*+\([0-9]*\)$/\1/p' pubspec.yaml)
         working-directory: radio/app
       - name: Pack
         run: |
@@ -98,7 +100,8 @@ jobs:
       - run: python3 tools/open_player.py --tar app/assets/player/open-player.tar --need
       # The build's own version code, so the app can tell when a newer one is signed.
       - shell: bash
-        run: flutter build linux --release --dart-define=PYRATE_CODE=$(sed -n 's/^version: .*+\([0-9]*\)$/\1/p' pubspec.yaml)
+        run: |
+          flutter build linux --release --dart-define=PYRATE_CODE=$(sed -n 's/^version: .*+\([0-9]*\)$/\1/p' pubspec.yaml)
         working-directory: radio/app
       - name: Pack
         run: |
