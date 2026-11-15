@@ -203,7 +203,20 @@ def build(scope, dist, open_players):
             path = os.path.relpath(os.path.join(root, f), dist).replace(os.sep, "/")
             if path in ("player.manifest", "player.sigs"): continue
             lines.append(hashlib.sha256(open(os.path.join(root, f), "rb").read()).hexdigest() + "  " + path)
-    open(f"{dist}/player.manifest", "w", encoding="utf-8").write(f"pyrate-player/v1 code {code}\n" + "\n".join(sorted(lines, key=lambda l: l[66:])) + "\n")
+    manifest = (f"pyrate-player/v1 code {code}\n" + "\n".join(sorted(lines, key=lambda l: l[66:])) + "\n").encode()
+    open(f"{dist}/player.manifest", "wb").write(manifest)
+    # The holders' signatures over this list (`release sign-all`, sent back into browser/signed/),
+    # taken into the open player only when two of them match it: the installed copy is kept on
+    # content-addressed origins alone, so the hostis.black copy goes without.
+    sigs = os.path.join(os.environ.get("PYRATE_SIGNED") or f"{R}/browser/signed", "player.sigs")
+    if scope == "open" and os.path.exists(sigs):
+        sys.path.insert(0, f"{R}/tools")
+        from verify_players import verify
+        import struct
+        msg = b"pyrate/release/v1\0" + struct.pack("<I", code) + hashlib.sha256(manifest).digest()
+        good = {int(n) for n, h in (l.split() for l in open(sigs) if len(l.split()) == 2) if n.isdigit() and int(n) < 3 and re.fullmatch(r"[0-9a-f]{128}", h) and verify(bytes.fromhex(keys[int(n)]), msg, bytes.fromhex(h))}
+        if len(good) >= 2: shutil.copy(sigs, f"{dist}/player.sigs")
+        print(f"player.sigs: {len(good)} of its signatures match this build" + ("" if len(good) >= 2 else ", so it stays out (build again with the code they signed: PYRATE_PLAYER_CODE)"))
     print("built", scope, v)
     return v
 

@@ -42,7 +42,16 @@ for c in $APPCID $CID; do
 done
 ls -t pyrateradio/ipfs/*.car | tail -n +25 | xargs -r git rm -q --cached --ignore-unmatch
 ls -t pyrateradio/ipfs/*.car | tail -n +25 | xargs -r rm -f
-cp "$R/tools/pin_player.sh" pyrateradio/ipfs/pin_player.sh
+cp "$R/tools/pin_player.sh" "$R/tools/verify_players.py" pyrateradio/ipfs/
+# The holders' signatures over the list (release sign-all, sent back into browser/signed/): only
+# a list two release keys signed moves the player's fixed name (pin_player.sh).
+SIGNED=${PYRATE_SIGNED:-$R/browser/signed}
+[ -f "$SIGNED/players.sigs" ] && cp "$SIGNED/players.sigs" pyrateradio/ipfs/players.sigs
+if [ -f pyrateradio/ipfs/players.sigs ] && python3 "$R/tools/verify_players.py" pyrateradio/ipfs/players.txt pyrateradio/ipfs/players.sigs >/dev/null 2>&1; then
+  echo "players.txt is signed: the fixed name moves to the newest player within the hour"
+else
+  echo "players.txt is not signed by two holders yet: the fixed name stays where it is until they sign it (HOLDERS.md)"
+fi
 # The source at this commit, as a tarball and a torrent, so the code outlives any one host.
 mkdir -p pyrateradio/source
 git rm -q --ignore-unmatch "pyrateradio/source/pyrate-radio-src-*" >/dev/null 2>&1 || true
