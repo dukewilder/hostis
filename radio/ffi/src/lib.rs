@@ -105,7 +105,7 @@ fn start(dir: *const c_char, bootstrap: *const c_char) -> i32 {
             0
         }
         Err(e) => {
-            eprintln!("pyrate: {e:#}");
+            pyrate_node::say(&format!("pyrate: {e:#}"));
             if let Ok(mut last) = START_ERROR.lock() {
                 *last = Some(format!("{e:#}"));
             }
