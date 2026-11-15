@@ -46,6 +46,10 @@ class PlaybackService : MediaBrowserServiceCompat() {
     private var lastKey = ""
     @Volatile private var live = false
     @Volatile private var foreground = false
+    // True once this run has played a station, and until it is stopped. A paused session counts,
+    // so headset and lock-screen controls keep working; a media button sent by another app to a
+    // service with no session of ours does nothing.
+    @Volatile private var sessionOn = false
     private var alarmTone: Ringtone? = null
     @Volatile private var waking = false
 
@@ -68,9 +72,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
         audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         session = MediaSessionCompat(this, "pyrate").apply {
             setCallback(object : MediaSessionCompat.Callback() {
-                override fun onPlay() { work.post { resume() } }
+                override fun onPlay() { if (sessionOn) work.post { resume() } }
                 override fun onPause() = stopPlaying()
-                override fun onStop() = stopPlaying()
+                override fun onStop() { sessionOn = false; stopPlaying() }
                 override fun onSkipToNext() { work.post { Native.cmd("cmd" to "tune_next", "dir" to 1); startPlaying() } }
                 override fun onSkipToPrevious() { work.post { Native.cmd("cmd" to "tune_next", "dir" to -1); startPlaying() } }
                 override fun onPlayFromMediaId(id: String?, extras: Bundle?) {
@@ -108,6 +112,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     /** From any thread: the node is asked on its own, the speaker and the lock screen on the main one. */
     private fun startPlaying(title: String = "Pyrate Radio") {
+        sessionOn = true
         work.post {
             Native.cmd("cmd" to "volume", "value" to 1.0)
             main.post {
@@ -272,10 +277,10 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Another app may start an exported service. Only this app's own intents carry its key;
-        // a media button comes from the system. Anything else is turned away, after the
-        // foreground promise a start call makes has been kept.
+        // a media button comes from the system and is heard only while this run has a session.
+        // Anything else is turned away, after the foreground promise a start call makes has been kept.
         val media = intent?.action == Intent.ACTION_MEDIA_BUTTON
-        if (intent != null && !media && intent.getStringExtra("key") != Bells.bellKey(this)) {
+        if (intent != null && ((media && !sessionOn) || (!media && intent.getStringExtra("key") != Bells.bellKey(this)))) {
             if (!foreground) {
                 goForeground("Radio", "")
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -288,7 +293,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         androidx.media.session.MediaButtonReceiver.handleIntent(session, intent)
         when (intent?.action) {
             "wake" -> if (Regex("^[0-9a-f]{64}$").matches(intent.getStringExtra("station") ?: "")) wakeUp(intent.getStringExtra("station")) else stopSelf()
-            "stop" -> stopPlaying()
+            "stop" -> { sessionOn = false; stopPlaying() }
             else -> {
                 val ending = intent?.hasExtra("live") == true && !intent.getBooleanExtra("live", false)
                 if (intent?.hasExtra("live") == true) live = intent.getBooleanExtra("live", false)
