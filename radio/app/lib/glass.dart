@@ -122,6 +122,8 @@ class _DialGlassState extends State<DialGlass> {
       final o = order;
       return Semantics(
         label: 'The dial. Drag along it, or tap a name, to tune.',
+        onIncrease: () => radio.step(1),
+        onDecrease: () => radio.step(-1),
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
           onHover: (e) => setState(() => peek = nearest(e.localPosition.dx - 20, w, o)),

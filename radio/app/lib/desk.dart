@@ -263,10 +263,15 @@ class _LiveDeskState extends State<LiveDesk> with WidgetsBindingObserver {
 
   Widget _head(String label, {Widget? trailing}) => ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 40),
-        child: Row(children: [
-          Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: caps(11, spacing: 0.26))),
-          ?trailing,
-        ]),
+        // A Wrap, so the trailing part drops below the label when the text is large.
+        child: Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: caps(11, spacing: 0.26)),
+            ?trailing,
+          ],
+        ),
       );
 
   Widget _mini(String label, VoidCallback? onTap) => OutlinedButton(
@@ -566,7 +571,9 @@ class _LiveDeskState extends State<LiveDesk> with WidgetsBindingObserver {
         LayoutBuilder(
           builder: (c, b) {
             final w = (b.maxWidth - 8 * (cols - 1)) / cols;
-            return Wrap(spacing: 8, runSpacing: 8, children: [for (var i = 0; i < 6; i++) SizedBox(width: w, height: 64, child: _pad1(i, pads.length > i && pads[i] is Map ? pads[i] as Map : null))]);
+            // 64 high, and taller when the text is larger, so a pad's two lines of name still fit.
+            final h = math.max(64.0, 16 + 3.9 * MediaQuery.textScalerOf(c).scale(10));
+            return Wrap(spacing: 8, runSpacing: 8, children: [for (var i = 0; i < 6; i++) SizedBox(width: w, height: h, child: _pad1(i, pads.length > i && pads[i] is Map ? pads[i] as Map : null))]);
           },
         ),
         const SizedBox(height: 6),
@@ -650,8 +657,8 @@ class _LiveDeskState extends State<LiveDesk> with WidgetsBindingObserver {
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Padding(
             padding: const EdgeInsets.only(left: 14, right: 4),
-            child: Row(children: [
-              Expanded(child: Text('LIVE DESK', maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: caps(10.5, spacing: 0.22))),
+            child: Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              Text('LIVE DESK', maxLines: 1, softWrap: false, overflow: TextOverflow.fade, style: caps(10.5, spacing: 0.22)),
               Semantics(
                 toggled: d['hear'] == true,
                 label: 'Hear the mix, on headphones',
@@ -661,7 +668,7 @@ class _LiveDeskState extends State<LiveDesk> with WidgetsBindingObserver {
                     constraints: const BoxConstraints(minHeight: 44),
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: ExcludeSemantics(
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
                         Container(
                           width: 13,
                           height: 13,

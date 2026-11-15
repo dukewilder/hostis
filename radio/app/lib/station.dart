@@ -1471,7 +1471,10 @@ class _ChatterPanelState extends State<ChatterPanel> {
           padding: const EdgeInsets.symmetric(vertical: 5),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              GestureDetector(
+              Semantics(
+                container: true,
+                onLongPressHint: l['mine'] == true ? null : 'Mute this voice',
+                child: GestureDetector(
                 onLongPress: l['mine'] == true
                     ? null
                     : () async {
@@ -1491,7 +1494,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
                       },
                 child: Text('${(l['name'] ?? '').toString().isEmpty ? l['voice'] : l['name']}${l['keeper'] == true ? ' (the station)' : ''}'.toUpperCase(),
                     style: carved(11, color: l['keeper'] == true ? bone : (l['mine'] == true ? boneDim : boneFaint), spacing: 0.25)),
-              ),
+              )),
               const SizedBox(width: 8),
               Text(clockTime((l['at_ms'] as num).toInt()), style: mono(11, color: boneFaint)),
             ]),
@@ -1783,7 +1786,10 @@ class _ChartPageState extends State<ChartPage> {
                 final clusters = clusterChart(dots, 2 * r);
                 return Container(
                   decoration: BoxDecoration(border: Border.all(color: boneGhost, width: 0.5)),
-                  child: InteractiveViewer(
+                  child: Semantics(
+                    label: 'Map of the seas with a dot for each home port. Pinch to zoom, tap a dot to tune. The same stations are listed below it.',
+                    container: true,
+                    child: InteractiveViewer(
                     maxScale: 8,
                     child: GestureDetector(
                       onTapUp: (d) {
@@ -1805,7 +1811,7 @@ class _ChartPageState extends State<ChartPage> {
                       },
                       child: CustomPaint(size: Size(w, 290 * k), painter: ChartPainter(c, clusters, widget.radio.tuned)),
                     ),
-                  ),
+                  )),
                 );
               }),
               const SizedBox(height: 16),

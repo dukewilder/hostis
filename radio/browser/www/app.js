@@ -191,7 +191,7 @@ const keptAnywhere = k => store(k) ?? (() => { try { return sessionStorage.getIt
 // Small things this browser keeps that say something of its listener (hidden stations, the chat
 // name and mutes, the doors and guards it went through, the radios that answered it) are sealed
 // too, opened once at boot and held here; an older build's plain copy is sealed when read.
-const SEALED = ['pyrate.maroon', 'pyrate.name', 'pyrate.mutes', 'pyrate.doors', 'pyrate.guards', 'pyrate.peers'];
+const SEALED = ['pyrate.held', 'pyrate.maroon', 'pyrate.name', 'pyrate.mutes', 'pyrate.doors', 'pyrate.guards', 'pyrate.peers'];
 const sealedMem = new Map();
 function sget(k) { if (sealedMem.has(k)) return sealedMem.get(k); const v = keptAnywhere(k); return v && v.startsWith('{"d":1') ? null : v }
 function sset(k, v) { if (sealedMem.get(k) === v) return; sealedMem.set(k, v); keepSealed(k, v) }
@@ -1807,6 +1807,7 @@ function studioStatus() {
   el.textContent = !k.pow ? 'Getting your station ready · a few seconds'
     : airing ? 'Adding a recording'
     : k.unsent ? 'Sending · ' + Math.round(100 * (k.chunks - k.unsent) / k.chunks) + '%'
+    : k.held ? 'Held until the next quarter hour, then sent'
     : !on ? 'Reaching the network · about a minute'
     : !k.tracks ? 'On the network · add a recording to start it playing'
     : 'On the network · ' + k.tracks + (k.tracks === 1 ? ' recording' : ' recordings') + ' · ' + k.carriers + (k.carriers === 1 ? ' radio helping' : ' radios helping');
@@ -1858,13 +1859,29 @@ async function studioBoot() {
 // fifteen for a while, since a log can take a few tries to find on a quiet network. Meanwhile
 // the studio says it is looking, instead of offering an empty form.
 let seeking = 0;
+// A keeper's entries are stamped at the next quarter hour and wait in the tab until then. Those
+// still waiting are kept here, sealed like the other keys, and handed back to the log when the
+// station is taken up again, so a tab closed in the wait loses nothing. A key held for this tab
+// alone is not kept, and neither is what it signed.
+const heldStored = () => { try { const o = JSON.parse(sget('pyrate.held') || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {} } catch (e) { return {} } };
+function keepHeld() {
+  if (!radio || SCOPE !== 'open' || EMBED || SHARED || tabKeys()) return;
+  let now = {}; try { now = JSON.parse(radio.held_export()) } catch (e) { return }
+  const old = heldStored(), all = {};
+  for (const id of Object.keys(old)) if (!adopted.has(id) && /^[0-9a-f]{64}$/.test(id)) all[id] = old[id];
+  for (const id of Object.keys(now)) all[id] = now[id];
+  const text = JSON.stringify(all);
+  if (text === '{}') { if (sget('pyrate.held') !== null) { sealedMem.delete('pyrate.held'); unstore('pyrate.held'); try { sessionStorage.removeItem('pyrate.held') } catch (e) { } } return }
+  sset('pyrate.held', text);
+}
+setInterval(keepHeld, 1500); addEventListener('pagehide', keepHeld);
 const SEEK = [1000, 2000, 4000, 8000, 15000, 15000, 15000, 15000];
 function adoptAll() {
   for (const k of kept()) {
     mineCur ??= k.id; seeking++;
     const done = () => { seeking--; studioShow() };
     const retry = n => n < SEEK.length ? setTimeout(() => go(n + 1), SEEK[n]) : done();
-    const go = n => radio.adopt(k.id, k.deputy).then(ok => {
+    const go = n => radio.adopt(k.id, k.deputy, heldStored()[k.id] ? JSON.stringify(heldStored()[k.id]) : undefined).then(ok => {
       if (!ok) return retry(n);
       adopted.add(k.id);
       if (!(typeof k.pow === 'number' && radio.set_pow(k.id, k.pow))) powWork(k.id);

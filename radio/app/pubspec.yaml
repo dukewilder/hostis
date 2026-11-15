@@ -16,6 +16,10 @@ dependencies:
   tray_manager: ^0.5.3
   window_manager: ^0.5.1
 
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
 flutter:
   uses-material-design: true
   assets:

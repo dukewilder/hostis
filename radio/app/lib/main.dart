@@ -122,9 +122,10 @@ class LeadButton extends StatelessWidget {
             border: Border.all(color: !on ? boneGhost : quiet ? bone : red, width: 1),
           ),
           child: ExcludeSemantics(
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
+            // A Wrap, so a long label at a large text size runs onto a second line instead of off the edge.
+            child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, alignment: WrapAlignment.center, children: [
               if (glyph != null) ...[Text(glyph!, style: TextStyle(fontFamily: 'Skull', fontSize: 13, height: 1, color: !on ? boneGhost : quiet ? bone : bloodBright)), const SizedBox(width: 12)],
-              Text(label, style: pica(18, color: on ? bone : boneFaint, spacing: 0.06)),
+              Text(label, textAlign: TextAlign.center, style: pica(18, color: on ? bone : boneFaint, spacing: 0.06)),
             ]),
           ),
         ),
@@ -774,6 +775,12 @@ class _PyrateAppState extends State<PyrateApp> {
   int tab = 0;
 
   @override
+  void dispose() {
+    radio.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Pyrate Radio',
@@ -902,10 +909,11 @@ class MiniPlayer extends StatelessWidget {
             'tuning' => 'Tuning in',
             _ => 'Finding the station',
           };
+    // At least 64 high, and taller when the text is larger, with the Stop button as tall as the bar.
     return Container(
-      height: 64,
+      constraints: const BoxConstraints(minHeight: 64),
       decoration: const BoxDecoration(color: panel, border: Border(top: BorderSide(color: line, width: 1))),
-      child: Row(children: [
+      child: IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Expanded(
           child: Tappable(
             onTap: onOpen,
@@ -943,7 +951,7 @@ class MiniPlayer extends StatelessWidget {
             ),
           ),
         ),
-      ]),
+      ])),
     );
   }
 }
@@ -1078,7 +1086,7 @@ class Dial extends StatelessWidget {
         return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           const Diamond(size: 4, color: boneFaint),
           const SizedBox(width: 9),
-          Text(real == 0 ? 'CONNECTING' : '$real ${real == 1 ? 'STATION' : 'STATIONS'} ON THE AIR', style: caps(11, color: boneFaint, spacing: 0.18)),
+          Flexible(child: Text(real == 0 ? 'CONNECTING' : '$real ${real == 1 ? 'STATION' : 'STATIONS'} ON THE AIR', textAlign: TextAlign.center, style: caps(11, color: boneFaint, spacing: 0.18))),
         ]);
       }),
       Expanded(
@@ -1124,7 +1132,13 @@ class Dial extends StatelessWidget {
                       if (v != 0) radio.step(v > 0 ? 1 : -1, wheel: true);
                     }
                   },
-                  child: GestureDetector(
+                  child: Semantics(
+                    label: 'Radio face. Swipe to change station. Press and hold to scan.',
+                    container: true,
+                    onIncrease: () => radio.step(1),
+                    onDecrease: () => radio.step(-1),
+                    onLongPress: radio.startScan,
+                    child: GestureDetector(
                     onLongPress: radio.startScan,
                     onTap: radio.scanning ? radio.stopScan : null,
                     child: ScrollConfiguration(
@@ -1140,7 +1154,7 @@ class Dial extends StatelessWidget {
                         itemBuilder: (context, i) => _StationFace(radio: radio, s: stations[i]),
                       ),
                     ),
-                  ),
+                  )),
                 ),
               ),
       ),
@@ -1332,7 +1346,7 @@ class _StationFace extends StatelessWidget {
         Row(mainAxisSize: MainAxisSize.min, children: [
           Text(freqLabel(id), style: mono(15, color: bone)),
           const SizedBox(width: 10),
-          Text(s['call_sign'] ?? '', style: caps(12, color: boneFaint, spacing: 0.14)),
+          Flexible(child: Text(s['call_sign'] ?? '', textAlign: TextAlign.center, style: caps(12, color: boneFaint, spacing: 0.14))),
         ]),
         // A card signed by a co-host is shown as unconfirmed until this phone holds the
         // station's log and the log still names that co-host.
@@ -1827,7 +1841,7 @@ class _ColoursPageState extends State<ColoursPage> {
           setting('Invite-only', pocket, (v) => setState(() => pocket = v), sub: 'Left out of Stations. Only people you send an invitation can find it or hear it, and they can see each other\'s devices. It cannot be changed later.'),
         ]),
         const SizedBox(height: 14),
-        Row(children: [LeadButton(label: raising ? 'Starting' : 'Start the station', onPressed: raising ? null : raise)]),
+        Align(alignment: Alignment.centerLeft, child: LeadButton(label: raising ? 'Starting' : 'Start the station', onPressed: raising ? null : raise)),
         // Raising takes a few seconds: a key is made, and the work done that lets a station
         // on the air at all. It is said, so nobody wonders whether the press took.
         if (raising) ...[
