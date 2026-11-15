@@ -62,6 +62,12 @@ fn verdict(ok: bool) -> &'static str {
 }
 
 fn main() -> anyhow::Result<()> {
+    // A phone dates its entries to the quarter hour and its cargo waits for it; the test network
+    // waits twenty seconds instead.
+    if std::env::var_os("PYRATE_QUARTER_MS").is_none() {
+        // SAFETY: set before any node starts, while this process has one thread.
+        unsafe { std::env::set_var("PYRATE_QUARTER_MS", "20000") };
+    }
     let args: Vec<String> = std::env::args().collect();
     let boot = vec![args.get(1).expect("desk_test <bootstrap id> [work dir]").parse()?];
     let work = PathBuf::from(args.get(2).cloned().unwrap_or_else(|| "/tmp/desk-test".into()));

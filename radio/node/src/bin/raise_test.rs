@@ -8,6 +8,12 @@ use pyrate_node::{Config, Node};
 use serde_json::json;
 
 fn main() -> anyhow::Result<()> {
+    // A phone dates its entries to the quarter hour and its cargo waits for it; the test network
+    // waits twenty seconds instead.
+    if std::env::var_os("PYRATE_QUARTER_MS").is_none() {
+        // SAFETY: set before any node starts, while this process has one thread.
+        unsafe { std::env::set_var("PYRATE_QUARTER_MS", "20000") };
+    }
     let args: Vec<String> = std::env::args().collect();
     let boot = vec![args[1].parse()?];
     let rounds: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(1);

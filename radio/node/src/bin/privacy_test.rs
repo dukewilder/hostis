@@ -1,11 +1,55 @@
 //! privacy_test <dir> <wav>
 //! Privacy fails closed. A phone that cannot find two hops sends no request naming a station
 //! straight to a carrier: no log, no chunk. With "ask carriers directly" turned on, it plays.
-//! Run with PYRATE_LAN_ANY=1: the nodes find each other on the local network.
-use std::{path::PathBuf, time::Duration};
+//! A stranger who dials a keeper's phone or a listener's straight learns nothing of what it
+//! keeps or played. Run with PYRATE_LAN_ANY=1: the nodes find each other on the local network.
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
-use pyrate_node::{Config, Node};
+use iroh::{Endpoint, EndpointAddr, endpoint::presets};
+use pyrate_core::{Body, StationId};
+use pyrate_node::{
+    Config, Node,
+    net::{ALPN, Request, Response},
+};
 use serde_json::json;
+
+/// One request from a fresh identity no one has met, dialled straight: the answer, if any.
+fn probe(addr: EndpointAddr, req: Request) -> Option<Response> {
+    let rt = tokio::runtime::Runtime::new().ok()?;
+    rt.block_on(async {
+        let ep = Endpoint::builder(presets::Minimal)
+            .crypto_provider(Arc::new(rustls::crypto::aws_lc_rs::default_provider()))
+            .relay_mode(iroh::RelayMode::Disabled)
+            .bind()
+            .await
+            .ok()?;
+        let c = tokio::time::timeout(Duration::from_secs(10), ep.connect(addr, ALPN)).await.ok()?.ok()?;
+        let (mut s, mut r) = c.open_bi().await.ok()?;
+        s.write_all(&postcard::to_stdvec(&req).ok()?).await.ok()?;
+        s.finish().ok()?;
+        let b = tokio::time::timeout(Duration::from_secs(10), r.read_to_end(64 << 20)).await.ok()?.ok()?;
+        postcard::from_bytes(&b).ok()
+    })
+}
+
+/// Whether a probe's answer gave anything away.
+fn told(r: &Option<Response>) -> bool {
+    match r {
+        Some(Response::Entries(e)) => !e.is_empty(),
+        Some(Response::Chunk(c)) => c.is_some(),
+        Some(Response::Sealed(c)) => c.is_some(),
+        Some(Response::Chatter(c)) => !c.is_empty(),
+        _ => false,
+    }
+}
+
+/// The first track chunk a node holds of a station.
+fn first_chunk(n: &Node, st: &StationId) -> Option<[u8; 32]> {
+    n.archive(st)?.entries().iter().find_map(|e| match e.entry.body() {
+        Body::Track { chunks, .. } => chunks.first().map(|c| c.hash),
+        _ => None,
+    })
+}
 
 fn check(c: bool, what: &str) {
     println!("{} {what}", if c { "PASS" } else { "FAIL" });
@@ -16,6 +60,12 @@ fn playing(n: &Node) -> bool {
 }
 
 fn main() -> anyhow::Result<()> {
+    // A phone dates its entries to the quarter hour and its cargo waits for it; the test network
+    // waits twenty seconds instead.
+    if std::env::var_os("PYRATE_QUARTER_MS").is_none() {
+        // SAFETY: set before any node starts, while this process has one thread.
+        unsafe { std::env::set_var("PYRATE_QUARTER_MS", "20000") };
+    }
     let a: Vec<String> = std::env::args().collect();
     let work = PathBuf::from(&a[1]);
     let cfg = |d: &str, private: bool| Config { dir: work.join(d), quota: 1 << 30, lantern: false, bootstrap: vec![], public_dns: false, private, ballast: 0, carry_all: false, release_keys: vec![] };
@@ -91,6 +141,29 @@ fn main() -> anyhow::Result<()> {
         }
     }
     check(out, "with a second node in reach, the broadcasting phone's station goes out two hops away");
+
+    // A stranger dials the keeper's phone and asks for its own station: a chunk in the clear,
+    // the same chunk sealed, and the log. Each answer is the one a node with nothing gives.
+    let own = first_chunk(&b, &bid);
+    check(own.is_some(), "the keeper's phone holds its own station's sound");
+    if let Some(h) = own {
+        check(!told(&probe(b.addr(), Request::Chunk { hash: h })), "a keeper's phone hands a stranger no chunk of its own station");
+        check(!told(&probe(b.addr(), Request::SealedChunk { name: pyrate_core::seal::name(&h) })), "nor the same chunk sealed");
+    }
+    check(!told(&probe(b.addr(), Request::Log { station: bid, from: 0 })), "nor its own station's log");
+    // The listener played Watched: a stranger asks it for that log, and for a chunk of it that
+    // no ballast share put there.
+    let wid = StationId::from_hex(&id)?;
+    let played = first_chunk(&l, &wid);
+    check(l.archive(&wid).is_some(), "the listener holds the log of the station it played");
+    check(!told(&probe(l.addr(), Request::Log { station: wid, from: 0 })), "a listener's phone hands a stranger no log of a station it played");
+    if let Some(h) = played {
+        check(!told(&probe(l.addr(), Request::SealedChunk { name: pyrate_core::seal::name(&h) })), "nor a sealed chunk outside its share");
+        check(!told(&probe(l.addr(), Request::Chunk { hash: h })), "nor that chunk in the clear");
+    }
+    check(!told(&probe(l.addr(), Request::Chatter { station: wid })), "nor the lines of a room it sits in");
+    // The same probe of a Lantern, which answers for what it carries, shows the probe works.
+    check(told(&probe(r.addr(), Request::Log { station: wid, from: 0 })), "a Lantern answers the same probe for a station it carries");
 
     // A door names the address it was given. A radio in the open opens one at a test address;
     // a radio running dark (through Tor) opens none and names nothing, even when told to.
