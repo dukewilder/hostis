@@ -377,7 +377,41 @@ fn within_bounds(body: &Body) -> bool {
     }
 }
 
+/// A quarter of an hour, the grain a phone's entries are dated to.
+pub const QUARTER_MS: u64 = 15 * 60_000;
+
+/// The date a phone signs onto an entry that is not live sound. It is the next quarter hour
+/// after `now`, and later than `last`, the entry before it. The cargo waits until then, so the
+/// date says nothing of the minute the keeper signed it.
+pub fn quarter_stamp(now: u64, last: Option<u64>) -> u64 {
+    let q = (now / QUARTER_MS + 1) * QUARTER_MS;
+    last.map_or(q, |l| q.max(l + 1))
+}
+
+/// Whether an entry is dated to the quarter hour on a phone. Live sound and the keeper's
+/// takedowns (a strike, a revoked co-host, a withdrawn recording) go at once; the rest waits.
+pub fn waits_for_quarter(b: &Body) -> bool {
+    !matches!(b.inner(), Body::Live { .. } | Body::LiveEnd | Body::Strike | Body::Revoke { .. } | Body::Withdraw { .. })
+}
+
 impl Archive {
+    /// How many of the first entries may leave by `now`. Those dated by then may, and so may any
+    /// dated later that a live chunk or a takedown behind it needs first, since those cannot wait.
+    pub fn due(&self, now: u64) -> usize {
+        self.entries.iter().rposition(|e| e.entry.at_ms <= now || !waits_for_quarter(&e.entry.body)).map_or(0, |i| i + 1)
+    }
+
+    /// The log as it stood after its first `n` entries.
+    pub fn prefix(&self, n: usize) -> Archive {
+        let mut a = Archive::new(self.station);
+        for e in self.entries.iter().take(n) {
+            if a.append(e.clone()).is_err() {
+                break;
+            }
+        }
+        a
+    }
+
     pub fn new(station: StationId) -> Self {
         Self { station, entries: Vec::new(), head: [0; 32], deputies: Default::default(), bytes: 0, track_at: Default::default(), art_of: Default::default(), latest: Latest::default() }
     }
@@ -745,5 +779,34 @@ mod bounds {
         assert!(a.write(&key, 1, Body::Live { chunk: fat, channels: 2, bitrate: 64_000 }).is_err());
         let fine = Chunk { hash: [7; 32], len: 48_000, frames: 300 };
         assert!(a.write(&key, 1, Body::Live { chunk: fine, channels: 2, bitrate: 64_000 }).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod quarters {
+    use super::*;
+
+    #[test]
+    fn a_phones_entries_wait_for_the_quarter_hour_and_a_live_show_comes_after() {
+        let q = QUARTER_MS;
+        let now = 100 * q + 7 * 60_000 + 123;
+        assert_eq!(quarter_stamp(now, None), 101 * q, "the next quarter hour");
+        assert_eq!(quarter_stamp(101 * q, None), 102 * q, "after now, never at it");
+        assert_eq!(quarter_stamp(now, Some(101 * q)), 101 * q + 1, "a second entry in the same quarter comes just after the first");
+        // A recording signed now waits; a live show begun before its quarter hour is dated after
+        // it, so the log keeps its order, and taking the live chunk out takes the recording too.
+        let key = StationKey::generate().unwrap();
+        let mut a = Archive::new(key.id());
+        a.write(&key, 1_000, Body::Colours { name: "n".into(), about: String::new(), port: None, tip: None }).unwrap();
+        let track = Body::Track { title: "t".into(), by: String::new(), source: String::new(), channels: 2, bitrate: 64_000, chunks: vec![Chunk { hash: [1; 32], len: 100, frames: 300 }] };
+        let pending = quarter_stamp(now, a.entries().last().map(|e| e.entry.at_ms));
+        a.write(&key, pending, track).unwrap();
+        assert_eq!(a.due(now), 1, "the recording waits for its quarter hour");
+        assert_eq!(a.due(pending), 2, "and goes when it comes");
+        let live_at = now.max(pending + 1);
+        assert!(live_at > pending);
+        a.write(&key, live_at, Body::Live { chunk: Chunk { hash: [2; 32], len: 100, frames: 300 }, channels: 2, bitrate: 64_000 }).unwrap();
+        assert_eq!(a.due(now), 3, "a live chunk cannot wait, so what is before it goes with it");
+        assert_eq!(a.prefix(1).len(), 1);
     }
 }
