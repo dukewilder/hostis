@@ -332,6 +332,8 @@ class Tuner extends ChangeNotifier {
     if (now - last < 3 * 3600000) return;
     final c = await _service.invokeMethod<Map>('conditions').catchError((_) => <dynamic, dynamic>{}) ?? {};
     if (c['unmetered'] != true) return;
+    // Through Tor with the tunnel down: no feed is read until it answers.
+    if (await torTunnel() == 'down') return;
     pref('feeds_at', now);
     await Feeds.refresh();
   }
@@ -1509,6 +1511,24 @@ class _ColoursPageState extends State<ColoursPage> {
         ),
       );
       await secure(false);
+      // Asked once, as a single question: the lock screen and the app switcher, always.
+      if (!isComputer && pref('hide_asked') != true && mounted) {
+        pref('hide_asked', true);
+        final yes = await showDialog<bool>(
+          context: context,
+          builder: (c) => AlertDialog(
+            backgroundColor: panel,
+            shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+            title: Text('Hide what is playing?', style: serif(22)),
+            content: Text('While you are on air, this phone keeps your lock screen and the app switcher blank. Do the same the rest of the time too, so what you listen to is not shown there?', style: serif(15, color: boneFaint, italic: true)),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(c, false), child: Text('NOT NOW', style: carved(12, color: boneFaint))),
+              TextButton(onPressed: () => Navigator.pop(c, true), child: Text('HIDE IT', style: carved(12))),
+            ],
+          ),
+        );
+        if (yes == true) await _service.invokeMethod('plain_lock_set', {'value': true}).catchError((_) {});
+      }
     }
     String? shaped;
     if (r is Map && r['id'] is String) justRaised = r['id'] as String;
@@ -1554,14 +1574,18 @@ class _ColoursPageState extends State<ColoursPage> {
         shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
         title: Text(kind == 'banner' ? 'BANNER FROM A LINK' : 'COVER FROM A LINK', style: carved(13)),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Your $thisDevice fetches the picture once and redraws it. The site you link sees this $thisDevice\'s address; listeners never touch it.',
+          Text('Your $thisDevice fetches the picture once and redraws it. The site you link sees this $thisDevice\'s address, or Tor\'s exit if Go through Tor is on. Listeners never touch it.',
               style: serif(13, color: boneFaint, italic: true)),
           TextField(enableIMEPersonalizedLearning: false, controller: link, autofocus: true, style: mono(12, color: bone), decoration: field('https://')),
         ]),
         actions: [TextButton(onPressed: () => Navigator.pop(c, link.text.trim()), child: Text('FETCH', style: carved(11)))],
       ),
     );
-    if (url == null || !url.startsWith('http')) return;
+    if (url == null || url.isEmpty) return;
+    if (!url.startsWith('https://')) {
+      setState(() => artNote = 'Only https links are fetched.');
+      return;
+    }
     setState(() => artNote = 'Fetching the picture');
     final path = await fetchOut(url);
     if (path == null) {

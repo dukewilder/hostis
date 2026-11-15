@@ -922,7 +922,7 @@ class _StartShapePickerState extends State<StartShapePicker> {
         'in_order' => 'Your recordings in the order you add them, over and over.',
         'daily' => 'Your recordings start from the top at the same time every day.',
         'weekly' => 'Your recordings start from the top at the same time every week.',
-        'feed' => 'Paste the feed link of your podcast, or one you have permission to play. New episodes are added by themselves. The podcast\'s host sees this $thisDevice\'s address, as with any podcast app.',
+        'feed' => 'Paste the feed link of your podcast, or one you have permission to play. New episodes are added by themselves. The podcast\'s host sees this $thisDevice\'s address, or Tor\'s exit if Go through Tor is on. It can also match each download to this station, because an episode is set on the air soon after it is fetched.',
         'live' => 'Your recordings play all day, and the same hour each day is kept for you to go live.',
         _ => 'Everything you add, shuffled, day and night.',
       }),
@@ -1085,7 +1085,7 @@ class _FeedsPanelState extends State<FeedsPanel> {
     final mine = Feeds.load().where((f) => f['station'] == widget.station).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       heading('PODCAST FEEDS'),
-      note('New episodes are added by themselves every few hours${isComputer ? '' : ' on Wi-Fi'} while the app is open. The podcast\'s host sees this $thisDevice\'s address, as with any podcast app.'),
+      note('New episodes are added by themselves every few hours${isComputer ? '' : ' on Wi-Fi'} while the app is open. The podcast\'s host sees this $thisDevice\'s address, or Tor\'s exit if Go through Tor is on. It can also match each download to this station, because an episode is set on the air soon after it is fetched.'),
       for (final f in mine)
         Row(children: [
           Expanded(child: Text(f['url'], maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(11, color: boneFaint))),

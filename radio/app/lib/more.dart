@@ -629,16 +629,38 @@ Future<void> tapeIt(BuildContext context) async {
   await ship.invokeMethod('share_file', {'path': name, 'mime': 'audio/ogg'});
 }
 
+/// Null when Go through Tor is off, 'down' when it is on and its tunnel does not answer,
+/// otherwise the tunnel's host:port.
+Future<String?> torTunnel() async {
+  final r = await Native.callAway({'cmd': 'tor'});
+  final url = (r is Map ? r['url'] : null)?.toString() ?? '';
+  if (url.isEmpty) return null;
+  final u = Uri.tryParse(url);
+  if (u == null || u.host.isEmpty) return 'down';
+  final port = u.hasPort ? u.port : 8118;
+  try {
+    (await Socket.connect(u.host, port, timeout: const Duration(seconds: 3))).destroy();
+    return '${u.host}:$port';
+  } catch (_) {
+    return 'down';
+  }
+}
+
 /// One fetch from the open web, made by this phone itself: a plain client name rather than
 /// the toolkit's own, timeouts on connecting and on every gap, a cap on size, and a file
 /// that only takes its name once whole. The path, or null.
+/// Only https is fetched. With Go through Tor set, every fetch goes by way of Tor's HTTP tunnel,
+/// and none is made if the tunnel does not answer.
 Future<String?> fetchOut(String url, {int maxBytes = 30000000}) async {
   final uri = Uri.tryParse(url.trim());
-  if (uri == null || !(uri.scheme == 'https' || uri.scheme == 'http') || uri.host.isEmpty) return null;
+  if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) return null;
+  final tor = await torTunnel();
+  if (tor == 'down') return null;
   final client = HttpClient()
     ..connectionTimeout = const Duration(seconds: 20)
     ..idleTimeout = const Duration(seconds: 15)
     ..userAgent = 'Mozilla/5.0';
+  if (tor != null) client.findProxy = (_) => 'PROXY $tor';
   final dir = await scratchDir();
   final stem = '${dir.path}/out-${DateTime.now().microsecondsSinceEpoch}';
   final part = File('$stem.part');
