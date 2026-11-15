@@ -41,7 +41,7 @@ use wasm_bindgen::prelude::*;
 mod net;
 /// Rules with no network in them, tested on their own: `rustc --test browser/src/pure.rs`.
 mod pure;
-use pure::{chunk_at, quarter_stamp};
+use pure::{chunk_at, quarter_stamp, release_cut as cut_of};
 use net::{ALPN, Announce, Gossip, MAX_FRAME, Request, Response, Sketch};
 
 /// The same relays the app uses: number0's, and the crew's own.
@@ -152,6 +152,34 @@ struct Mine {
     /// no sound to carry sails at once, rather than with the next card minutes later.
     wrote: u64,
     sailed: u64,
+    /// How many of the log's entries have been let go to a stem: the entries of a keeper wait in
+    /// the tab for their stamp (see `released`), so the stamp says when they left.
+    cut: usize,
+}
+
+/// Puts entries kept from an earlier visit (a JSON list of hex, as `held_export` wrote it) back
+/// on the log, each only if it still follows the log's end and checks out. Returns how many.
+fn take_back(a: &mut Archive, json: &str) -> u64 {
+    let Ok(list) = serde_json::from_str::<Vec<String>>(json) else { return 0 };
+    let mut n = 0;
+    for h in list {
+        let Some(bytes) = (h.len() % 2 == 0).then(|| (0..h.len()).step_by(2).map(|i| u8::from_str_radix(&h[i..i + 2], 16).ok()).collect::<Option<Vec<u8>>>()).flatten() else { break };
+        let Ok(e) = pyrate_core::SignedEntry::from_bytes(&bytes) else { break };
+        if e.verify().is_err() || a.append(e).is_err() {
+            // One already there (the entry did leave after all) or one the log has moved past.
+            continue;
+        }
+        n += 1;
+    }
+    n
+}
+
+/// How many of a log's first entries may leave the tab at `now`: all up to the last one whose
+/// stamp has come, or that is the live air (a show starting inside the wait takes the entries
+/// before it along, as the chain needs them; its stamp already sorts after theirs).
+fn released(a: &Archive, now: u64) -> usize {
+    let es = a.entries();
+    cut_of(es.len(), |i| (es[i].entry.at_ms, matches!(es[i].entry.body().inner(), Body::Live { .. } | Body::LiveEnd)), now)
 }
 
 /// Chunks to a stem's cargo, and bytes at most: well inside a node's frame.
@@ -1985,7 +2013,7 @@ impl Ship {
         let (kinds, mature) = log.details().unwrap_or_default();
         Some(
             net::Card {
-                station: *id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof,
+                station: *id, head: released(log, now) as u64, name, about, port, live, at_ms: now, pow, since, proof,
                 cover: art.and_then(|a| a.0).map(|a| a.hash), accent: art.map(|a| a.2), kinds, mature, tip, explicit: log.explicit(),
                 tracks: Some(log.library().map(|l| l.len() as u32).unwrap_or(0)),
                 named: log.named_since(),
@@ -2037,7 +2065,11 @@ impl Ship {
             let me = *self.ep.id().as_bytes();
             self.log.lock().unwrap().get(&id).map(|l| l.carriers.iter().filter(|(n, _)| **n != me).map(|(_, (h, _))| *h).max().unwrap_or(0)).unwrap_or(0)
         };
-        let entries: Vec<Vec<u8>> = self.archives.lock().unwrap().get(&id).map(|a| a.entries().iter().skip(landed as usize).take(64).filter_map(|e| e.to_bytes().ok()).collect()).unwrap_or_default();
+        let (entries, cut, held): (Vec<Vec<u8>>, usize, bool) = self.archives.lock().unwrap().get(&id).map(|a| {
+            let cut = released(a, raw_now());
+            let es: Vec<Vec<u8>> = a.entries().iter().take(cut).skip(landed as usize).take(64).filter_map(|e| e.to_bytes().ok()).collect();
+            (es, cut, cut < a.entries().len())
+        }).unwrap_or_default();
         // The keeper's writes this cargo carries: every one so far, since its entries were just read.
         let (chunks, batch, wrote): (Vec<(Hash, Vec<u8>)>, Vec<Hash>, u64) = {
             let mine = self.mine.lock().unwrap();
@@ -2079,7 +2111,10 @@ impl Ship {
                             self.relayed.lock().unwrap().insert(x);
                             let mut mine = self.mine.lock().unwrap();
                             if let Some(m) = mine.get_mut(&id) {
-                                m.sailed = m.sailed.max(wrote);
+                                if !held {
+                                    m.sailed = m.sailed.max(wrote);
+                                }
+                                m.cut = m.cut.max(cut);
                                 m.unsent.retain(|h| !batch.contains(h));
                                 if m.unsent.is_empty() && !batch.is_empty() {
                                     m.passed = raw_now();
@@ -2130,7 +2165,10 @@ impl Ship {
                 if !b.is_empty() {
                     let mut mine = self.mine.lock().unwrap();
                     if let Some(m) = mine.get_mut(&id) {
-                        m.sailed = m.sailed.max(wrote);
+                        if !held {
+                            m.sailed = m.sailed.max(wrote);
+                        }
+                        m.cut = m.cut.max(cut);
                         m.unsent.retain(|h| !batch.contains(h));
                         if m.unsent.is_empty() && !batch.is_empty() {
                             m.passed = raw_now();
@@ -2163,16 +2201,19 @@ impl Ship {
                 let ids: Vec<StationId> = me.mine.lock().unwrap().keys().copied().collect();
                 let mut busy = false;
                 for id in ids {
-                    let (pending, passed) = me.mine.lock().unwrap().get(&id).map(|m| (!m.unsent.is_empty() || m.wrote > m.sailed, m.passed)).unwrap_or((false, 0));
                     let now = raw_now();
+                    // An entry waiting for its stamp does not make the cargo pending: it goes the
+                    // moment its stamp comes, and not before.
+                    let due = me.archives.lock().unwrap().get(&id).map(|a| released(a, now)).unwrap_or(0);
+                    let (pending, passed) = me.mine.lock().unwrap().get(&id).map(|m| (!m.unsent.is_empty() || (m.wrote > m.sailed && due > m.cut), m.passed)).unwrap_or((false, 0));
                     if !pending && passed > 0 && now.saturating_sub(passed) > 15 * 60_000 {
                         if let Some(m) = me.mine.lock().unwrap().get_mut(&id) {
                             m.unsent = m.chunks.keys().copied().collect();
                             m.passed = now;
                         }
                     }
-                    let due = *gap.entry(id).or_insert_with(|| 8 * 60_000 + (js_sys::Math::random() * 240_000.0) as u64);
-                    if pending || now.saturating_sub(*last_card.get(&id).unwrap_or(&0)) > due {
+                    let overdue = *gap.entry(id).or_insert_with(|| 8 * 60_000 + (js_sys::Math::random() * 240_000.0) as u64);
+                    if pending || now.saturating_sub(*last_card.get(&id).unwrap_or(&0)) > overdue {
                         if me.sail(id).await {
                             last_card.insert(id, now);
                             gap.insert(id, 8 * 60_000 + (js_sys::Math::random() * 240_000.0) as u64);
@@ -3601,24 +3642,61 @@ impl Radio {
         w(&mut a, now + 4, Body::Listing { link_only: true })?;
         self.ship.archives.lock().unwrap().insert(id, a);
         let seed = hex(&deputy.seed());
-        self.ship.mine.lock().unwrap().insert(id, Mine { key: deputy, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0, wrote: 0, sailed: 0 });
+        self.ship.mine.lock().unwrap().insert(id, Mine { key: deputy, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0, wrote: 0, sailed: 0, cut: 0 });
         Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "words": phrase, "deputy": seed }).to_string())
     }
 
     /// Takes back a station this browser keeps, from its deputy's seed. Resolves once its log is
     /// aboard from the network, to whether this deputy still speaks for it.
-    pub fn adopt(&self, id: &str, deputy: &str) -> Result<js_sys::Promise, JsValue> {
+    ///
+    /// `held` is what `held_export` gave for this station on an earlier visit, as JSON: the
+    /// entries that were still waiting for their stamp when the tab closed. They go back on the
+    /// log before the check, and sail as soon as their stamp has come.
+    pub fn adopt(&self, id: &str, deputy: &str, held: Option<String>) -> Result<js_sys::Promise, JsValue> {
         let st = StationId(unhex32(id).map_err(js)?);
         let key = pyrate_core::StationKey::from_seed(unhex32(deputy).map_err(js)?);
         let s = self.ship.clone();
         Ok(wasm_bindgen_futures::future_to_promise(async move {
             let _ = timeout(Duration::from_secs(40), s.sync(st)).await;
+            // A station raised in this tab and closed before its stamp has no log on the
+            // network yet: its first entries are among the held ones.
+            let back = held.as_deref().map(|j| {
+                let mut all = s.archives.lock().unwrap();
+                let had = all.contains_key(&st);
+                let n = take_back(all.entry(st).or_insert_with(|| Archive::new(st)), j);
+                if n == 0 && !had {
+                    all.remove(&st);
+                }
+                n
+            }).unwrap_or(0);
             let ok = s.archives.lock().unwrap().get(&st).is_some_and(|a| a.deputies().contains(&key.id().0) && !a.is_struck());
             if ok {
-                s.mine.lock().unwrap().entry(st).or_insert(Mine { key, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0, wrote: 0, sailed: 0 });
+                s.mine.lock().unwrap().entry(st).or_insert(Mine { key, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0, wrote: back, sailed: 0, cut: 0 });
+                if back > 0 {
+                    s.clocks.lock().unwrap().remove(&st);
+                    s.sail_on();
+                }
             }
             Ok(JsValue::from_bool(ok))
         }))
+    }
+
+    /// The entries this tab has signed that are still waiting for their stamp, as JSON keyed by
+    /// station: the page keeps them sealed and hands them back to `adopt` on the next visit, so
+    /// a tab closed in the wait loses nothing. `{}` when nothing waits.
+    pub fn held_export(&self) -> String {
+        let now = raw_now();
+        let mine: Vec<StationId> = self.ship.mine.lock().unwrap().keys().copied().collect();
+        let archives = self.ship.archives.lock().unwrap();
+        let mut out = serde_json::Map::new();
+        for id in mine {
+            let Some(a) = archives.get(&id) else { continue };
+            let es: Vec<String> = a.entries().iter().skip(released(a, now)).filter_map(|e| e.to_bytes().ok()).map(|b| hex(&b)).collect();
+            if !es.is_empty() {
+                out.insert(id.to_hex(), json!(es));
+            }
+        }
+        Value::Object(out).to_string()
     }
 
     /// Takes a station back from its 24 words on a new browser: its log comes aboard, then the
@@ -3648,7 +3726,7 @@ impl Radio {
                 a.write(&master, at, Body::Deputy { key: deputy.id().0, label: "phone".into() }).map_err(|e| js(anyhow!("{e}")))?;
             }
             let seed = hex(&deputy.seed());
-            s.mine.lock().unwrap().insert(id, Mine { key: deputy, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0, wrote: 1, sailed: 0 });
+            s.mine.lock().unwrap().insert(id, Mine { key: deputy, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0, wrote: 1, sailed: 0, cut: 0 });
             Ok(JsValue::from_str(&json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "deputy": seed }).to_string()))
         }))
     }
@@ -4324,7 +4402,7 @@ impl Radio {
             let landed = log.get(id).map(|l| l.carriers.iter().filter(|(n, (_, seen))| **n != me && now.saturating_sub(*seen) < 10 * 60_000).map(|(_, (h, _))| *h).max().unwrap_or(0)).unwrap_or(0);
             let carriers = log.get(id).map(|l| l.carriers.iter().filter(|(n, (_, seen))| **n != me && now.saturating_sub(*seen) < 10 * 60_000).count()).unwrap_or(0);
             json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "name": shown(&name), "entries": len, "tracks": tracks, "landed": landed, "carriers": carriers,
-                    "unsent": m.unsent.len(), "chunks": m.chunks.len(), "pow": m.pow.is_some(), "listable": m.pow.is_some_and(|p| net::pow_bits(id, p) >= net::LIST_BITS),
+                    "unsent": m.unsent.len(), "held": a.map(|a| a.entries().len() - released(a, raw_now())).unwrap_or(0), "let_go": m.cut, "chunks": m.chunks.len(), "pow": m.pow.is_some(), "listable": m.pow.is_some_and(|p| net::pow_bits(id, p) >= net::LIST_BITS),
                     "link_only": a.is_some_and(|a| a.link_only()), "dial_at": a.and_then(|a| a.entries().first()).map(|e| e.entry.at_ms + net::list_age_ms()) })
         }).collect();
         json!(v).to_string()
