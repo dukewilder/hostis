@@ -384,7 +384,13 @@ pub const QUARTER_MS: u64 = 15 * 60_000;
 /// after `now`, and later than `last`, the entry before it. The cargo waits until then, so the
 /// date says nothing of the minute the keeper signed it.
 pub fn quarter_stamp(now: u64, last: Option<u64>) -> u64 {
-    let q = (now / QUARTER_MS + 1) * QUARTER_MS;
+    stamp_after(now, last, QUARTER_MS)
+}
+
+/// As [`quarter_stamp`], on a grain of `grain` milliseconds (a test network's is shorter).
+pub fn stamp_after(now: u64, last: Option<u64>, grain: u64) -> u64 {
+    let grain = grain.max(1);
+    let q = (now / grain + 1) * grain;
     last.map_or(q, |l| q.max(l + 1))
 }
 
@@ -793,6 +799,7 @@ mod quarters {
         assert_eq!(quarter_stamp(now, None), 101 * q, "the next quarter hour");
         assert_eq!(quarter_stamp(101 * q, None), 102 * q, "after now, never at it");
         assert_eq!(quarter_stamp(now, Some(101 * q)), 101 * q + 1, "a second entry in the same quarter comes just after the first");
+        assert_eq!(stamp_after(65_000, None, 20_000), 80_000);
         // A recording signed now waits; a live show begun before its quarter hour is dated after
         // it, so the log keeps its order, and taking the live chunk out takes the recording too.
         let key = StationKey::generate().unwrap();
