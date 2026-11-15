@@ -45,6 +45,10 @@ DynamicLibrary _open() {
 }
 
 class Native {
+  /// Tests answer the node's calls themselves, so the screens can be run with no library loaded.
+  /// Null in the app.
+  static dynamic Function(Map<String, dynamic> req)? stub;
+
   static final DynamicLibrary _lib = _open();
   static final _StartD _start = _lib.lookupFunction<_StartC, _StartD>('pyrate_start');
   static final _CallD _call = _lib.lookupFunction<_CallC, _CallD>('pyrate_call');
@@ -77,6 +81,8 @@ class Native {
   }
 
   static dynamic call(Map<String, dynamic> req) {
+    final answer = stub;
+    if (answer != null) return answer(req);
     final p = jsonEncode(req).toNativeUtf8();
     try {
       final r = _call(p);
@@ -91,6 +97,7 @@ class Native {
   /// A picture the node holds, decoded by the node in memory-safe code and handed over as
   /// raw pixels, so the phone's own image decoder never sees a stranger's file.
   static Future<ui.Image?> art(String hash) async {
+    if (stub != null) return null;
     final f = _lib.lookupFunction<Pointer<Uint8> Function(Pointer<Utf8>, Pointer<Size>), Pointer<Uint8> Function(Pointer<Utf8>, Pointer<Size>)>('pyrate_art');
     final freeBytes = _lib.lookupFunction<Void Function(Pointer<Uint8>, Size), void Function(Pointer<Uint8>, int)>('pyrate_free_bytes');
     final h = hash.toNativeUtf8();
@@ -113,7 +120,10 @@ class Native {
   }
 
   /// For calls that work hard (raising colours does its proof of work).
-  static Future<dynamic> callAway(Map<String, dynamic> req) => Isolate.run(() => Native.call(req));
+  static Future<dynamic> callAway(Map<String, dynamic> req) {
+    final answer = stub;
+    return answer != null ? Future.value(answer(req)) : Isolate.run(() => Native.call(req));
+  }
 }
 
 // ---------------------------------------------------------------------------------------

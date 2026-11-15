@@ -433,8 +433,8 @@ class _LogPageState extends State<LogPage> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      Flexible(child: Text(s['name'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: pica(18, color: tuned ? bone : boneDim, spacing: 0.02))),
+                    Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 2, children: [
+                      Text(s['name'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: pica(18, color: tuned ? bone : boneDim, spacing: 0.02)),
                       if (live) ...[const SizedBox(width: 8), tag('ON AIR', bloodBright)],
                       if (s['kept'] == true) ...[const SizedBox(width: 8), tag('KEPT', boneDim)],
                       if (s['pocket'] == true) ...[const SizedBox(width: 8), tag('PRIVATE', boneFaint)],
