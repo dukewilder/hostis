@@ -23,6 +23,20 @@ use serde_json::{Value, json};
 
 use crate::{Inner, describe_track, hex, now_ms, say, unhex};
 
+/// A recording for a hail, made as a keeper's talk is: mains hum out and encoded afresh as Ogg
+/// Opus, so nothing a phone's recorder wrote into the file goes with it.
+pub(crate) fn hail_audio(path: &std::path::Path) -> Result<Vec<u8>> {
+    let got = pyrate_core::ingest::ingest_voiced(path, pyrate_core::audio::Profile::Talk, 0.0).context("that recording would not read")?;
+    let chunks: Vec<Vec<u8>> = got.chunks.into_iter().map(|(_, b)| b).collect();
+    pyrate_core::tape::ogg_opus(&chunks, got.channels, "", "").map_err(|e| anyhow!("{e}"))
+}
+
+/// Whether a line an exit is asked to say for a keeper is one: signed by the station itself or
+/// one of its co-hosts, and good.
+pub(crate) fn keeper_line(s: &Signed, st: &StationId, deputies: &[[u8; 32]], now: u64) -> bool {
+    (s.line.from == st.0 || deputies.contains(&s.line.from)) && chat::check(s, st, now)
+}
+
 /// A listener's voice in a room lasts a week.
 const WEEK_MS: u64 = 7 * 86_400_000;
 
@@ -312,7 +326,7 @@ impl Inner {
         }
         let Ok(s) = postcard::from_bytes::<Signed>(&raw) else { return false };
         let deputies = self.store.lock().unwrap().logs.get(&st).map(|a| a.deputies()).unwrap_or_default();
-        if !(s.line.from == st.0 || deputies.contains(&s.line.from)) || !chat::check(&s, &st, now_ms()) {
+        if !keeper_line(&s, &st, &deputies, now_ms()) {
             return false;
         }
         if self.chat_join(st).await.is_err() {
@@ -426,10 +440,7 @@ impl Inner {
                         // The recording goes the way a keeper's talk goes, mains hum out and
                         // encoded afresh, so the keeper hears the voice and nothing a phone's
                         // recorder wrote into the file.
-                        let path = std::path::PathBuf::from(req["path"].as_str().context("path")?);
-                        let got = pyrate_core::ingest::ingest_voiced(&path, pyrate_core::audio::Profile::Talk, 0.0).context("that recording would not read")?;
-                        let chunks: Vec<Vec<u8>> = got.chunks.into_iter().map(|(_, b)| b).collect();
-                        let audio = pyrate_core::tape::ogg_opus(&chunks, got.channels, "", "").map_err(|e| anyhow!("{e}"))?;
+                        let audio = hail_audio(std::path::Path::new(req["path"].as_str().context("path")?))?;
                         let mut to = vec![st.0];
                         if let Some(a) = self.store.lock().unwrap().logs.get(&st) {
                             to.extend(a.deputies());
@@ -499,5 +510,54 @@ impl Inner {
                 say(&format!("chatter: {e}"));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_exit_says_only_a_keepers_own_line() {
+        let key = StationKey::generate().unwrap();
+        let st = key.id();
+        let now = 1_763_200_000_000;
+        let theirs = chat::speak(&key, &st, "", now, Say::Text("on the air at nine".into()));
+        assert!(keeper_line(&theirs, &st, &[], now), "signed by the station");
+        let listener = chat::voice_week(&[3; 32], &st, 2900);
+        let not = chat::speak(&listener, &st, "", now, Say::Text("me too".into()));
+        assert!(!keeper_line(&not, &st, &[], now), "a listener's line is not passed as the keeper's");
+        assert!(keeper_line(&not, &st, &[listener.id().0], now), "a co-host's is");
+    }
+
+    #[test]
+    fn a_hail_is_encoded_afresh_and_keeps_nothing_of_its_file() {
+        // A second of 300 Hz at 48 kHz in a WAV whose trailing bytes say what a recorder might.
+        let n = 48_000u32;
+        let mut wav = Vec::new();
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36 + n * 2).to_le_bytes());
+        wav.extend_from_slice(b"WAVEfmt ");
+        wav.extend_from_slice(&[16, 0, 0, 0, 1, 0, 1, 0]);
+        wav.extend_from_slice(&48_000u32.to_le_bytes());
+        wav.extend_from_slice(&96_000u32.to_le_bytes());
+        wav.extend_from_slice(&[2, 0, 16, 0]);
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&(n * 2).to_le_bytes());
+        for i in 0..n {
+            let v = ((i as f64 * 2.0 * std::f64::consts::PI * 300.0 / 48_000.0).sin() * 8_000.0) as i16;
+            wav.extend_from_slice(&v.to_le_bytes());
+        }
+        wav.extend_from_slice(b"LIST\x10\0\0\0INFOISFTSM-A536B");
+        let dir = std::env::temp_dir().join(format!("pyrate-hail-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("hail.wav");
+        std::fs::write(&path, &wav).unwrap();
+        let out = hail_audio(&path).unwrap();
+        assert!(out.starts_with(b"OggS"), "Ogg Opus, the talk path's own");
+        assert!(!out.windows(8).any(|w| w == b"SM-A536B"), "nothing the recorder wrote");
+        std::fs::write(&path, b"not a recording").unwrap();
+        assert!(hail_audio(&path).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

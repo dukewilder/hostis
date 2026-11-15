@@ -176,6 +176,12 @@ pub fn doors_from(text: &str) -> Vec<EndpointId> {
 
 pub static DOOR_RELAYS: Mutex<Vec<(EndpointId, String)>> = Mutex::new(Vec::new());
 
+/// Whether a keeper's own station, after `misses` stems no one took, goes on the air from the
+/// device: only after three, never in strict mode, and only with the owner's leave for it.
+fn may_go_direct(misses: u32, strict: bool, own_leave: bool) -> bool {
+    misses >= 3 && !strict && own_leave
+}
+
 /// The date on a phone's own card: the hour it was signed in, and later than the card before
 /// it (`before`) by at least a millisecond, so the network takes it as the newer.
 fn card_hour(now: u64, before: Option<u64>) -> u64 {
@@ -233,6 +239,28 @@ mod seed_kind_tests {
         assert!(super::id_fresh(made, made + 24 * 3_600_000));
         assert!(!super::id_fresh(made, made + 24 * 3_600_000 + 1), "a day on, a new one");
         assert!(!super::id_fresh(made, made - 1), "one from the future is never taken");
+    }
+
+    #[test]
+    fn an_own_station_goes_direct_only_with_its_own_leave() {
+        assert!(!super::may_go_direct(3, false, false), "leave to listen directly is not leave to broadcast");
+        assert!(super::may_go_direct(3, false, true));
+        assert!(!super::may_go_direct(2, false, true), "three stems first");
+        assert!(!super::may_go_direct(9, true, true), "never in strict mode");
+    }
+
+    #[test]
+    fn number0_stands_in_only_when_switched_on() {
+        let dir = std::env::temp_dir().join(format!("pyrate-n0-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let hold = super::hold::Hold::new(&[6; 32]);
+        if std::env::var_os("PYRATE_NUMBER0").is_none() {
+            assert!(!super::number0_on(&hold, &dir), "off by default");
+        }
+        hold.write_note(&dir, "number0", b"1").unwrap();
+        assert!(super::number0_on(&hold, &dir));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -1654,7 +1682,7 @@ impl Inner {
                         *e += 1;
                         *e
                     };
-                    if misses < 3 || self.strict.load(std::sync::atomic::Ordering::Relaxed) || !flag_on(&self.hold, &self.cfg.dir, "direct-own") {
+                    if !may_go_direct(misses, self.strict.load(std::sync::atomic::Ordering::Relaxed), flag_on(&self.hold, &self.cfg.dir, "direct-own")) {
                         continue;
                     }
                     self.direct.lock().unwrap().insert(id);

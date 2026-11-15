@@ -152,6 +152,18 @@ pub(crate) const GUARD_AGE_MS: u64 = 7 * 86_400_000;
 /// one silent for four has most likely gone, and a route through it would only time out.
 pub(crate) const CREW_FRESH_MS: u64 = 4 * 60_000;
 
+/// Whether a radio first met at `first_seen` may be a guard at `now`: a week under one id.
+pub(crate) fn is_veteran(first_seen: Option<u64>, now: u64) -> bool {
+    first_seen.is_some_and(|t| now.saturating_sub(t) >= GUARD_AGE_MS)
+}
+
+/// The harbours a route passes over once one of them holds a role on it: all of them while any
+/// radio besides them and `not` is known, none when there is no other.
+pub(crate) fn harbours_to_skip(harbours: &[EndpointId], nodes: &[EndpointId], not: &[EndpointId]) -> Vec<EndpointId> {
+    let others = nodes.iter().any(|n| !harbours.contains(n) && !not.contains(n));
+    if others { harbours.to_vec() } else { vec![] }
+}
+
 /// One three-hop request, built by the requester: what goes to the first hop, and the ciphers
 /// that open the answer, outermost first. `exit` is a radio's id and `ask` what it is asked; for
 /// a deck, `lead` is the deck's lead and `intro` the radio it is sealed to, and the request goes
@@ -302,14 +314,13 @@ impl Inner {
     pub(crate) fn veteran(&self) -> impl Fn(&EndpointId) -> bool + '_ {
         let seen = self.first_seen.lock().unwrap().clone();
         let now = now_ms();
-        move |n: &EndpointId| seen.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) >= GUARD_AGE_MS)
+        move |n: &EndpointId| is_veteran(seen.get(n.as_bytes()).copied(), now)
     }
 
     /// The bootstrap harbours, all run by one operator, count as one radio: no route takes two
     /// of its roles from them while any other radio is known. With no other, the route goes.
     pub(crate) fn harbours_besides(&self, nodes: &[EndpointId], not: &[EndpointId]) -> Vec<EndpointId> {
-        let others = nodes.iter().any(|n| !self.doors.contains(n) && !not.contains(n));
-        if others { self.doors.clone() } else { vec![] }
+        harbours_to_skip(&self.doors, nodes, not)
     }
 
     /// The middle of a three-hop route: a radio of the crew heard from lately, drawn at random,
@@ -1223,6 +1234,21 @@ impl Inner {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_guard_is_a_radio_known_a_week_and_the_harbours_are_one_operator() {
+        let now = 30 * 86_400_000;
+        assert!(!super::is_veteran(None, now), "never met");
+        assert!(!super::is_veteran(Some(now - 6 * 86_400_000), now), "six days is not a week");
+        assert!(super::is_veteran(Some(now - super::GUARD_AGE_MS), now));
+        let id = |b: u8| iroh::SecretKey::from_bytes(&[b; 32]).public();
+        let (h1, h2, other) = (id(1), id(2), id(3));
+        let harbours = [h1, h2];
+        // A harbour as guard: every harbour is passed over for the exit while another radio is known.
+        assert_eq!(super::harbours_to_skip(&harbours, &[h1, h2, other], &[h1]), vec![h1, h2]);
+        // With only harbours known, the route goes all the same.
+        assert!(super::harbours_to_skip(&harbours, &[h1, h2], &[h1]).is_empty());
+    }
+
     use super::*;
     use pyrate_core::StationKey;
 
