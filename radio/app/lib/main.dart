@@ -550,17 +550,7 @@ class Tuner extends ChangeNotifier {
     playing = true;
     _acts++;
     busySince = DateTime.now().millisecondsSinceEpoch;
-    if (!firstTuneDone && isComputer && (pref('autostart') == null || pref('keep_running') == null)) {
-      // After the first listen a computer starts with itself and keeps the radio running when
-      // its window closes, which is how the radio stays up for everyone; said once, calmly,
-      // and undone in Settings.
-      if (pref('autostart') == null) {
-        pref('autostart', true);
-        unawaited(Autostart.set(true));
-      }
-      if (pref('keep_running') == null) unawaited(Tray.it.set(true));
-      say('This computer will now start the radio when it starts and keep it running in ${Tray.place} when you close the window, so the stations stay up. You can change either in Settings.');
-    }
+    if (isComputer && pref('autostart') == null) unawaited(_askStartWithComputer());
     firstTuneDone = true;
     pref('first_tune', true);
     // A station tuned before its card came is kept on the dial as it stands.
@@ -579,6 +569,39 @@ class Tuner extends ChangeNotifier {
     _service.invokeMethod('start', {'title': name}).catchError((_) {});
     face(id);
     notifyListeners();
+  }
+
+  bool _asking = false;
+
+  /// Once, on a computer: start with it, and keep running in the tray with the window closed,
+  /// or not. Nothing is written to the computer's start-up list unless the owner says yes.
+  Future<void> _askStartWithComputer() async {
+    if (_asking) return;
+    _asking = true;
+    await Future.delayed(const Duration(seconds: 2));
+    final c = navKey.currentContext;
+    if (c == null || !c.mounted) {
+      _asking = false;
+      return;
+    }
+    final yes = await showDialog<bool>(
+      context: c,
+      barrierDismissible: false,
+      builder: (c) => AlertDialog(
+        backgroundColor: panel,
+        shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+        title: Text('Start with this computer?', style: serif(22)),
+        content: Text('The radio can start when this computer does and keep running in ${Tray.place} when you close the window, so the stations stay up for everyone. Anyone who uses this computer would see the icon. You can change it in Settings.', style: serif(15, color: boneFaint, italic: true)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text('NOT NOW', style: carved(12, color: boneFaint))),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: Text('YES', style: carved(12))),
+        ],
+      ),
+    );
+    pref('autostart', yes == true);
+    await Autostart.set(yes == true);
+    await Tray.it.set(yes == true);
+    _asking = false;
   }
 
   /// While true the dial is being turned by the app, not by a hand, and turning it tunes nothing.
@@ -688,6 +711,7 @@ class _PyrateAppState extends State<PyrateApp> {
     return MaterialApp(
       title: 'Pyrate Radio',
       scaffoldMessengerKey: messenger,
+      navigatorKey: navKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
@@ -1470,8 +1494,8 @@ class _ColoursPageState extends State<ColoursPage> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(color: black, border: Border.all(color: boneGhost, width: 0.5)),
                     // Numbered, as they must be written and read back: in order, one to twenty-four.
-                    child: SelectionArea(
-                      child: LayoutBuilder(builder: (c, box) {
+                    // Plain text, not selectable: a selected word can be copied to the clipboard.
+                    child: LayoutBuilder(builder: (c, box) {
                         final words = (r['words'] as String).split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
                         final cols = box.maxWidth >= 360 ? 4 : 3;
                         final rows = (words.length / cols).ceil();
@@ -1489,8 +1513,7 @@ class _ColoursPageState extends State<ColoursPage> {
                                   ]),
                                 ),
                         ]);
-                      }),
-                    ),
+                    }),
                   ),
                   if (withPass) Padding(
                     padding: const EdgeInsets.only(top: 10),

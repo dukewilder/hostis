@@ -35,10 +35,9 @@ class MainActivity : FlutterActivity() {
             }
         }
         val u = i.data ?: return
-        val id = when (u.scheme) {
-            "pyrate" -> u.lastPathSegment
-            else -> u.fragment ?: u.getQueryParameter("s")
-        }
+        // The app's own scheme names the station in its path (pyrate://station/<id>, or whatever
+        // scheme this build was given); a web link carries it after the #.
+        val id = if (u.scheme != "https" && u.host == "station") u.lastPathSegment else u.fragment ?: u.getQueryParameter("s")
         if (id != null && id.matches(Regex("[0-9a-f]{64}"))) pendingLink = id
         // A flock's or a pocket's link: joined only once the owner says yes on the dial.
         u.fragment?.takeIf { it.startsWith("flock=") || it.startsWith("pocket=") }?.let { pendingLink = it }

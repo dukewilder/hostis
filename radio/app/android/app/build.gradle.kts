@@ -21,6 +21,15 @@ android {
         applicationId = (project.findProperty("PYRATE_APP_ID") as String?) ?: "black.hostis.pyrate"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // The same property renames what a blocked network or a flatmate could read: the
+        // launcher label, the link scheme and the web host the app answers for. PYRATE_APP_LABEL,
+        // PYRATE_LINK_SCHEME and PYRATE_LINK_HOST set each; with a new app id and none of these
+        // the label is "Radio", the scheme the id's last word and no web link opens the app.
+        val renamed = project.findProperty("PYRATE_APP_ID") != null
+        manifestPlaceholders["appLabel"] = (project.findProperty("PYRATE_APP_LABEL") as String?) ?: if (renamed) "Radio" else "Pyrate Radio"
+        manifestPlaceholders["linkScheme"] = (project.findProperty("PYRATE_LINK_SCHEME") as String?)
+            ?: if (renamed) applicationId!!.substringAfterLast('.').lowercase().ifEmpty { "radio" } else "pyrate"
+        manifestPlaceholders["linkHost"] = (project.findProperty("PYRATE_LINK_HOST") as String?) ?: if (renamed) "example.invalid" else "hostis.black"
         minSdk = 28
         targetSdk = flutter.targetSdkVersion
         ndk { abiFilters += listOf("arm64-v8a") }

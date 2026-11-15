@@ -7,8 +7,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
-/// The port the player is shared on, the same on every computer so a link stays good.
-const playerPort = 47824;
+import 'native.dart';
 
 class OpenPlayer {
   static Map<String, Uint8List>? _files;
@@ -38,12 +37,16 @@ class OpenPlayer {
       return null;
     }
     if (_server != null) return null;
+    // Through Tor, nothing on this computer answers the local network.
+    if (((Native.call({'cmd': 'tor'}) as Map?)?['url'] ?? '').toString().isNotEmpty) return 'it stays off while the radio goes through Tor';
     final f = await files();
     if (f == null) return 'this build carries no player';
     try {
-      _server = await HttpServer.bind(InternetAddress.anyIPv4, playerPort);
+      // A port the computer picks, new each session, so no fixed number names this radio
+      // to someone scanning the network. The link and the code carry it.
+      _server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
     } catch (_) {
-      return 'port $playerPort is in use';
+      return 'no port could be opened';
     }
     _server!.listen((r) => _answer(r, f), onError: (_) {});
     return null;
@@ -94,7 +97,7 @@ class OpenPlayer {
                     : 5;
     found.sort((a, b) => rank(a).compareTo(rank(b)));
     final ip = found.where((a) => rank(a) < 9).firstOrNull;
-    return ip == null ? null : 'http://$ip:$playerPort/';
+    return ip == null || _server == null ? null : 'http://$ip:${_server?.port ?? 0}/';
   }
 
   /// Writes the player into a folder of its own inside [dir], with a short README. The number of

@@ -89,6 +89,9 @@ class Autostart {
   }
 }
 
+/// The app's navigator, so a question can be put from outside a widget.
+final navKey = GlobalKey<NavigatorState>();
+
 /// The app's messenger, so the shell can say a word on any screen.
 final messenger = GlobalKey<ScaffoldMessengerState>();
 
@@ -160,7 +163,9 @@ class Desktop {
         return _open(a['path']?.toString() ?? '');
       case 'share_text':
         // A computer has no share sheet: the text goes to the clipboard, ready to paste.
-        return _copy(a['text']?.toString() ?? '');
+        // An invitation carries a key: it leaves the clipboard like any secret.
+        final t = a['text']?.toString() ?? '';
+        return _copy(t, secret: t.contains('pocket=') || t.contains('flock='));
       case 'copy_secret':
         return _copy(a['text']?.toString() ?? '', secret: true);
       case 'signer':
@@ -241,8 +246,14 @@ class Desktop {
       String? w;
       if (Platform.isWindows) w = 'dpapi:${base64Encode(Dpapi.protect(utf8.encode(k)))}';
       if (Platform.isMacOS) {
-        final r = await Process.run('security', ['add-generic-password', '-U', '-a', _kcAccount, '-s', _kcService, '-w', k]);
-        if (r.exitCode == 0) w = 'keychain:$_kcAccount';
+        // The command goes in on stdin, so the key is never in an argument list another
+        // process could read.
+        final p = await Process.start('security', ['-i']);
+        p.stdin.writeln('add-generic-password -U -a $_kcAccount -s "$_kcService" -w $k');
+        await p.stdin.close();
+        unawaited(p.stdout.drain());
+        unawaited(p.stderr.drain());
+        if (await p.exitCode == 0) w = 'keychain:$_kcAccount';
       }
       // Linux: the desktop's Secret Service keyring (GNOME Keyring, KWallet), where one runs.
       if (Platform.isLinux) {
