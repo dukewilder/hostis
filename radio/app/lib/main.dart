@@ -266,7 +266,7 @@ class Tuner extends ChangeNotifier {
       _refresh();
     });
     // Ballast fills only on Wi-Fi while charging, so the fleet never costs the owner.
-    _ballast = Timer.periodic(const Duration(seconds: 60), (_) => _checkBallast());
+    _ballast = Timer.periodic(const Duration(seconds: 60), (_) => checkBallast());
     // A computer carries a modest share for the fleet, 2 GB, unless its owner offers more.
     if (isComputer) Native.call({'cmd': 'ballast_size', 'gb': carryGb()});
     // The open player, shared on this network again if its owner left it on.
@@ -277,7 +277,7 @@ class Tuner extends ChangeNotifier {
       Native.call({'cmd': 'ballast_size', 'gb': gb});
       _service.invokeMethod('lantern', {'on': true, 'gb': gb}).catchError((_) {});
     }
-    _checkBallast();
+    checkBallast();
     // HOSTIS's stations stand on the dial from the first frame, until the Log has them.
     stations = [for (final id in harbour) {'id': id, 'name': harbourName[id] ?? '', 'call_sign': '', 'placeholder': true}];
     // A radio left playing comes back on where it was, the moment the app opens: the node is
@@ -338,18 +338,61 @@ class Tuner extends ChangeNotifier {
     await Feeds.refresh();
   }
 
-  Future<void> _checkBallast() async {
+  /// What the node last said of the door: open or shut, and a plain reason when shut.
+  Map<String, dynamic> doorState = {};
+
+  /// A door's owner turned it off, or never will: on unless the owner said no.
+  static bool get doorWanted => pref('door') != false;
+
+  Future<void> checkBallast() async {
     final c = await _service.invokeMethod<Map>('conditions').catchError((_) => <dynamic, dynamic>{}) ?? {};
     final unmetered = c['unmetered'] == true;
     // "Keep only what I play": no ballast, and no serving of others' sealed chunks.
     final mine = pref('carry_mine_only') == true && pref('lantern') != true;
     final r = Native.call({'cmd': 'ballast_ok', 'value': !mine && unmetered && c['charging'] == true, 'unmetered': !mine && unmetered});
-    // A door for browsers: a computer with carrying on, or a phone on Wi-Fi while it charges.
-    // The node asks the router for a port and stays shut if none is given.
-    final door = pref('crew') != false && !mine && (isComputer || (unmetered && c['charging'] == true));
-    Native.call({'cmd': 'door', 'on': door, 'app': true, 'links': pref('door_links') == true});
+    // A door for browsers: on unless its owner turned it off, with carrying on, never through
+    // Tor, on a computer, or on a phone on Wi-Fi while it charges. The node asks the router
+    // for a port and stays shut if none is given.
+    final tor = ((Native.call({'cmd': 'tor'}) as Map?)?['url'] ?? '').toString().isNotEmpty;
+    final door = doorWanted && !tor && pref('crew') != false && !mine && (isComputer || (unmetered && c['charging'] == true));
+    final d = Native.call({'cmd': 'door', 'on': door, 'app': true, 'links': pref('door_links') == true});
+    if (d is Map) {
+      doorState = d.cast<String, dynamic>();
+      // The first time a door really opens, its owner is told, once, and may turn it off.
+      if (door && d['open'] == true && pref('door_notice') != true) unawaited(_doorNotice());
+    }
     if (r is Map && r['carrying'] is int) carrying = r['carrying'];
     if (r is Map && r['carried_bytes'] is int) carriedBytes = r['carried_bytes'];
+  }
+
+  bool _noticing = false;
+
+  Future<void> _doorNotice() async {
+    final c = navKey.currentContext;
+    if (_noticing || c == null || !c.mounted) return;
+    _noticing = true;
+    final off = await showDialog<bool>(
+      context: c,
+      barrierDismissible: false,
+      builder: (c) => AlertDialog(
+        backgroundColor: panel,
+        shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+        title: Text('Browsers can come in here', style: serif(22)),
+        content: Text('This device now lets browsers in. Browsers on iPhones and on blocked networks reach the radio through listeners\' devices like this one. While it does, this device\'s internet address is listed as a way in. Behind a VPN, only the VPN\'s address is ever listed.', style: serif(15, color: boneFaint, italic: true)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, true), child: Text('TURN IT OFF', style: carved(12, color: boneFaint))),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text('KEEP IT ON', style: carved(12))),
+        ],
+      ),
+    );
+    pref('door_notice', true);
+    _noticing = false;
+    if (off == true) {
+      pref('door', false);
+      Native.call({'cmd': 'door', 'on': false});
+      doorState = {'open': false};
+      notifyListeners();
+    }
   }
 
   /// Fades out and stops after [d]; null cancels.
@@ -1657,17 +1700,56 @@ class _ColoursPageState extends State<ColoursPage> {
   Future<void> add(String station) async {
     final picked = await FilePicker.platform.pickFiles(type: FileType.audio, allowMultiple: true);
     if (picked == null) return;
-    for (final f in picked.files) {
-      if (f.path == null) continue;
+    // A file's name often holds the time and place it was recorded, and a title is public for
+    // good. Each is shown for editing before anything is signed; a name that looks like a
+    // recorder's stamp (a clock time or a date) starts as "Segment" and a number instead.
+    final files = [for (final f in picked.files) if (f.path != null) f];
+    final proposals = <TextEditingController>[];
+    final by = <TextEditingController>[];
+    bool stamped(String t) => RegExp(r'\d{1,2}[:.\-]\d{2}|\d{6,}|\b[AP]M\b', caseSensitive: false).hasMatch(t);
+    for (final f in files) {
       final stem = f.name.replaceAll(RegExp(r'\.[^.]+$'), '');
       final parts = stem.split(' - ');
-      // One at a time, and the picker's copy goes once each is set.
+      final t = parts.length > 1 ? parts.sublist(1).join(' - ') : stem;
+      proposals.add(TextEditingController(text: stamped(t) ? 'Segment ${nextSegment()}' : t));
+      by.add(TextEditingController(text: parts.length > 1 && !stamped(parts.first) ? parts.first : ''));
+    }
+    if (!mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: panel,
+        shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+        title: Text('Name what you add', style: serif(22)),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            note('Titles are public for good. Take out anything that gives a time or a place.'),
+            for (var i = 0; i < files.length; i++) ...[
+              TextField(enableIMEPersonalizedLearning: false, controller: proposals[i], maxLength: 80, style: serif(16), decoration: field('Title')),
+              TextField(enableIMEPersonalizedLearning: false, controller: by[i], maxLength: 80, style: serif(15), decoration: field('By (optional)')),
+            ],
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text('CANCEL', style: carved(12, color: boneFaint))),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: Text('ADD', style: carved(12))),
+        ],
+      ),
+    );
+    for (var i = 0; i < files.length; i++) {
+      if (ok != true) {
+        unawaited(dropCopy(files[i].path));
+        continue;
+      }
+      final title = proposals[i].text.trim();
+      // One at a time, and the picker's copy goes once each is set. With Disguise on, an upload
+      // takes the talk path, which is where the voice is disguised and the hum taken out.
       setTrack({
         'station': station,
-        'path': f.path,
-        'title': parts.length > 1 ? parts.sublist(1).join(' - ') : stem,
-        'by': parts.length > 1 ? parts.first : '',
-        'talk': talk,
+        'path': files[i].path,
+        'title': title.isEmpty ? 'Segment ${nextSegment()}' : title,
+        'by': by[i].text.trim(),
+        'talk': talk || disguiseOn(),
       });
     }
   }
@@ -1819,7 +1901,7 @@ class _ColoursPageState extends State<ColoursPage> {
       const SizedBox(height: 30),
       heading('ADD RECORDINGS'),
       note('Music, shows or readings from your files. Name a file "Artist - Title" and both show.'),
-      setting('Spoken word', talk, (v) => setState(() => talk = v), sub: 'For talk and readings. Smaller files, so they reach listeners sooner. Leave it off for music.'),
+      setting('Spoken word', talk || disguiseOn(), (v) => setState(() => talk = v), enabled: !disguiseOn(), sub: disguiseOn() ? 'On while Disguise my voice is on. Talk is filtered for mains hum and the voice is lowered.' : 'For talk and readings. Smaller files, so they reach listeners sooner, and mains hum is filtered out of the voice. Leave it off for music.'),
       Row(children: [button('CHOOSE FILES', () => add(id))]),
       for (final j in jobs)
         Padding(

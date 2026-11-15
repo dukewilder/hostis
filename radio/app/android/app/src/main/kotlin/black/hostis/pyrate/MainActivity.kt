@@ -127,6 +127,17 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                     window.decorView.postDelayed({ finishAndRemoveTask(); android.os.Process.killProcess(android.os.Process.myPid()) }, 300)
                 }
+                // The radio starts again, as a switch such as Go through Tor needs.
+                "restart" -> {
+                    try { stopService(Intent(this, PlaybackService::class.java)) } catch (e: Exception) {}
+                    val again = packageManager.getLaunchIntentForPackage(packageName)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    if (again != null) {
+                        val pi = android.app.PendingIntent.getActivity(this, 7, again, android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_CANCEL_CURRENT)
+                        (getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager).set(android.app.AlarmManager.RTC, System.currentTimeMillis() + 500, pi)
+                    }
+                    result.success(null)
+                    window.decorView.postDelayed({ finishAndRemoveTask(); android.os.Process.killProcess(android.os.Process.myPid()) }, 200)
+                }
                 "build_code" -> {
                     val info = packageManager.getPackageInfo(packageName, 0)
                     result.success(if (Build.VERSION.SDK_INT >= 28) info.longVersionCode.toInt() else @Suppress("DEPRECATION") info.versionCode)

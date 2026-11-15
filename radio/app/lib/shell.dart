@@ -137,6 +137,9 @@ class Desktop {
       case 'scuttle':
         await _scuttle();
         return null;
+      case 'restart':
+        await _restart();
+        return null;
       case 'build_code':
         // A computer takes its updates from the site, never through the app.
         return 0;
@@ -308,6 +311,19 @@ class Desktop {
     }
     if (Platform.isMacOS) await Process.run('security', ['delete-generic-password', '-a', _kcAccount, '-s', _kcService]).catchError((_) => ProcessResult(0, 0, '', ''));
     if (Platform.isLinux) await Process.run('secret-tool', ['clear', 'service', 'pyrate-radio', 'account', _kcAccount]).catchError((_) => ProcessResult(0, 0, '', ''));
+    Timer(const Duration(milliseconds: 300), () => exit(0));
+  }
+
+  /// The app starts again a moment after this one ends.
+  static Future<void> _restart() async {
+    try {
+      final exe = Platform.resolvedExecutable;
+      if (Platform.isWindows) {
+        await Process.start('cmd', ['/c', 'ping -n 3 127.0.0.1 >nul & start "" "$exe"'], mode: ProcessStartMode.detached);
+      } else {
+        await Process.start('sh', ['-c', 'sleep 2; exec "\$0"', exe], mode: ProcessStartMode.detached);
+      }
+    } catch (_) {}
     Timer(const Duration(milliseconds: 300), () => exit(0));
   }
 

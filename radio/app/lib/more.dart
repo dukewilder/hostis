@@ -631,6 +631,20 @@ Future<void> tapeIt(BuildContext context) async {
 
 /// Null when Go through Tor is off, 'down' when it is on and its tunnel does not answer,
 /// otherwise the tunnel's host:port.
+/// The number an untitled take is given: Segment 1, Segment 2. Never a clock time, which would
+/// tell the zone the keeper is in.
+int nextSegment() {
+  final n = ((pref('segments') as num?)?.toInt() ?? 0) + 1;
+  pref('segments', n);
+  return n;
+}
+
+/// Whether Disguise my voice is on. Older builds kept a number of semitones; any nonzero value counts.
+bool disguiseOn() {
+  final v = pref('disguise');
+  return v == true || (v is num && v != 0);
+}
+
 Future<String?> torTunnel() async {
   final r = await Native.callAway({'cmd': 'tor'});
   final url = (r is Map ? r['url'] : null)?.toString() ?? '';
@@ -776,16 +790,15 @@ void shareStation(Map s) {
 }
 
 /// Tips go from the listener's own wallet to the station. The app moves no money.
-/// The wallet link for a tip address, with a note where the kind of address carries one:
-/// a Bitcoin payment's message, a Monero payment's description. A Lightning address takes
-/// its note in the wallet's own comment box.
+/// The wallet link for a tip address. A note never travels with a Bitcoin or Monero tip (the
+/// wallet keeps it and no one else sees it), so the app offers one for a Lightning address
+/// alone, which takes its note in the wallet's own comment box.
 String tipUri(String addr, String note) {
   final a = addr.trim();
-  final n = Uri.encodeComponent(note.trim());
   if (a.startsWith('lightning:') || a.startsWith('bitcoin:') || a.startsWith('monero:')) return a;
   if (a.contains('@') || a.toLowerCase().startsWith('lnurl') || a.toLowerCase().startsWith('lno')) return 'lightning:$a';
-  if ((a.startsWith('4') || a.startsWith('8')) && (a.length == 95 || a.length == 106)) return 'monero:$a${n.isEmpty ? '' : '?tx_description=$n'}';
-  return 'bitcoin:$a${n.isEmpty ? '' : '?message=$n'}';
+  if ((a.startsWith('4') || a.startsWith('8')) && (a.length == 95 || a.length == 106)) return 'monero:$a';
+  return 'bitcoin:$a';
 }
 
 /// Tips go from the listener's own wallet to the station, with a note if they like. The app
@@ -804,6 +817,7 @@ class _TipSheetState extends State<TipSheet> {
   final memo = TextEditingController();
 
   bool get lightning => tipUri(widget.addr, '').startsWith('lightning:');
+  bool get bitcoin => tipUri(widget.addr, '').startsWith('bitcoin:');
   @override
   void dispose() {
     memo.dispose();
@@ -818,7 +832,8 @@ class _TipSheetState extends State<TipSheet> {
           note('It goes from your own wallet straight to the station. Pyrate Radio moves no money and sees none of it.'),
           const SizedBox(height: 10),
           SelectableText(widget.addr, style: mono(11, color: boneDim)),
-          TextField(enableIMEPersonalizedLearning: false, controller: memo, maxLength: 140, style: serif(16), decoration: pyrateField(lightning ? 'A note for the keeper (paste it in your wallet\'s comment)' : 'A note for the keeper')),
+          if (bitcoin) Padding(padding: const EdgeInsets.only(top: 6), child: note('A Bitcoin tip is public. Anyone can look up the payment.')),
+          if (lightning) TextField(enableIMEPersonalizedLearning: false, controller: memo, maxLength: 140, style: serif(16), decoration: pyrateField('A note for the keeper (paste it in your wallet\'s comment)')),
           Wrap(spacing: 6, runSpacing: 6, children: [
             pyrateButton('OPEN MY WALLET', () async {
               if (lightning && memo.text.trim().isNotEmpty) await copySecret(memo.text.trim());
@@ -1047,7 +1062,7 @@ class _RecordPanelState extends State<RecordPanel> {
             setTrack({
               'station': widget.station,
               'path': path,
-              'title': title.text.trim().isEmpty ? 'Segment, ${clockTime(DateTime.now().millisecondsSinceEpoch)}' : title.text.trim(),
+              'title': title.text.trim().isEmpty ? 'Segment ${nextSegment()}' : title.text.trim(),
               'talk': true,
             });
             setState(() {
@@ -1122,8 +1137,9 @@ class _DetailsPanelState extends State<DetailsPanel> {
       setting('Explicit', explicit, (v) => setState(() => explicit = v), sub: 'Sexual or graphic material. Only listeners who choose to see explicit stations will.'),
       TextField(enableIMEPersonalizedLearning: false, controller: port, style: serif(16), decoration: pyrateField('Town or city (optional)')),
       note('Everyone can see it. Leave it empty, or pick a city that is not yours.'),
-      TextField(enableIMEPersonalizedLearning: false, controller: tip, style: mono(12, color: bone), decoration: pyrateField('Tips: a Lightning, Bitcoin or Monero address')),
+      TextField(enableIMEPersonalizedLearning: false, controller: tip, onChanged: (_) => setState(() {}), style: mono(12, color: bone), decoration: pyrateField('Tips: a Lightning, Bitcoin or Monero address')),
       note('Anyone can look up Bitcoin payments. Monero keeps them private.'),
+      if (tipUri(tip.text, '').startsWith('lightning:') && tip.text.trim().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: note('A Lightning address names your account with that provider.')),
       const SizedBox(height: 12),
       Row(children: [
         pyrateButton('SAVE', () {
@@ -1207,9 +1223,9 @@ class _HandsPanelState extends State<HandsPanel> {
         title: Text('ADD A CO-HOST', style: carved(13)),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            note('Ask your co-host to open My Station on their phone, press BE A CO-HOST and send you the code it shows.'),
+            note('Ask your co-host to open My Station on their phone, press BE A CO-HOST and send you the code it shows. The name you give stays on this device. It is not published.'),
             TextField(enableIMEPersonalizedLearning: false, controller: code, style: mono(12, color: bone), decoration: pyrateField('Their code')),
-            TextField(enableIMEPersonalizedLearning: false, controller: label, style: serif(16), decoration: pyrateField('Their name, for your own record')),
+            TextField(enableIMEPersonalizedLearning: false, controller: label, style: serif(16), decoration: pyrateField('Their name, kept on this device only')),
             TextField(controller: words, style: mono(12, color: bone), maxLines: 3, decoration: pyrateField('Your 24 words'),
                 enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false, keyboardType: TextInputType.visiblePassword),
             TextField(controller: wpass, obscureText: true, style: mono(12, color: bone), decoration: pyrateField('Passphrase, if you set one'),
@@ -1402,8 +1418,14 @@ class _RotaEditorState extends State<RotaEditor> {
 // The ship's papers: settings that belong to this phone alone
 
 /// A setting in plain words: a switch, what it does, and one line more when that helps.
-Widget setting(String title, bool value, ValueChanged<bool> onChanged, {String? sub}) => InkWell(
-      onTap: () => onChanged(!value),
+Widget setting(String title, bool value, ValueChanged<bool> onChanged, {String? sub, bool enabled = true}) => Semantics(
+    toggled: value,
+    enabled: enabled,
+    label: sub == null ? title : '$title. $sub',
+    onTap: enabled ? () => onChanged(!value) : null,
+    excludeSemantics: true,
+    child: InkWell(
+      onTap: enabled ? () => onChanged(!value) : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1414,16 +1436,20 @@ Widget setting(String title, bool value, ValueChanged<bool> onChanged, {String? 
             ]),
           ),
           const SizedBox(width: 12),
-          Switch(value: value, onChanged: onChanged, activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel),
+          Switch(value: value, onChanged: enabled ? onChanged : null, activeThumbColor: bone, activeTrackColor: boneGhost, inactiveThumbColor: boneFaint, inactiveTrackColor: panel),
         ]),
       ),
-    );
+    ));
 
 /// A row that does something when tapped, with a line saying what.
-Widget action(String title, VoidCallback onTap, {String? sub, Color color = bone}) => InkWell(
+Widget action(String title, VoidCallback onTap, {String? sub, Color color = bone}) => Semantics(
+    button: true,
+    label: sub == null ? title : '$title. $sub',
+    excludeSemantics: true,
+    child: InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 14),
         child: Row(children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1434,7 +1460,7 @@ Widget action(String title, VoidCallback onTap, {String? sub, Color color = bone
           const Icon(Icons.chevron_right, size: 20, color: boneFaint),
         ]),
       ),
-    );
+    ));
 
 /// A group of settings under a carved heading, set off from the next by a hairline.
 Widget section(String title, List<Widget> children) => Padding(
@@ -1486,6 +1512,9 @@ class _SettingsPageState extends State<SettingsPage> {
   Map? playerQr;
   String? playerMsg;
   String tor = '';
+  String? torMsg;
+  bool torRestart = false;
+  bool number0 = false;
   String? gridMsg;
   String? sig;
   Map? canary;
@@ -1506,10 +1535,11 @@ class _SettingsPageState extends State<SettingsPage> {
     sharePlayer = OpenPlayer.sharing;
     if (sharePlayer) OpenPlayer.lanUrl().then(showPlayerUrl);
     tor = ((Native.call({'cmd': 'tor'}) as Map?)?['url'] ?? '').toString();
+    number0 = (Native.call({'cmd': 'number0'}) as Map?)?['value'] == true;
     ship.invokeMethod<bool>('plain_get').then((v) => setState(() => plain = v == true)).catchError((_) {});
     ship.invokeMethod<bool>('plain_lock_get').then((v) => setState(() => plainLock = v == true)).catchError((_) {});
     signer().then((v) { if (mounted) setState(() => sig = v); });
-    disguise = ((pref('disguise') as num?) ?? 0) != 0;
+    disguise = disguiseOn();
     final p = Native.call({'cmd': 'papers'});
     if (p is Map && p['canary'] is Map) canary = p['canary'] as Map;
     ship.invokeMethod<String>('wake_get').then((v) => setState(() => wake = jsonDecode(v ?? '{}'))).catchError((_) {});
@@ -1601,6 +1631,67 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
+  bool get doorOn => Tuner.doorWanted && tor.isEmpty;
+
+  /// Go through Tor on or off. It takes hold at the next start, so Restart now is offered.
+  Future<void> setTor(bool v) async {
+    final r = await Native.callAway({'cmd': 'tor', 'url': v ? 'http://127.0.0.1:8118' : ''});
+    if (!mounted) return;
+    setState(() {
+      tor = (r is Map ? r['url'] ?? '' : '').toString();
+      final bad = r is Map && r['error'] != null;
+      torRestart = !bad;
+      torMsg = bad
+          ? 'Not set. ${r['error']}.'
+          : v
+              ? 'Restart the radio and every connection goes through Tor.'
+              : 'Restart the radio and it connects as usual.';
+    });
+    if (v) {
+      Native.call({'cmd': 'door', 'on': false});
+      widget.radio.doorState = {'open': false};
+    }
+  }
+
+  Future<void> restartNow() async {
+    await ship.invokeMethod('restart').catchError((_) {});
+  }
+
+  /// One press for someone who needs the lot: a PIN, a blank lock screen, the plain icon, no
+  /// door for browsers, and an offer of Tor.
+  Future<void> keepMeSafe() async {
+    if (!pinSet) await setPin();
+    if (Platform.isAndroid) {
+      await ship.invokeMethod('plain_lock_set', {'value': true}).catchError((_) {});
+      await ship.invokeMethod('plain_set', {'value': true}).catchError((_) {});
+    }
+    pref('door', false);
+    Native.call({'cmd': 'door', 'on': false});
+    widget.radio.doorState = {'open': false};
+    if (!mounted) return;
+    setState(() {
+      plain = Platform.isAndroid ? true : plain;
+      plainLock = Platform.isAndroid ? true : plainLock;
+    });
+    if (tor.isEmpty) {
+      final yes = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          backgroundColor: panel,
+          shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
+          title: Text('Go through Tor too?', style: serif(22)),
+          content: Text('Nobody on the network would learn this device\'s address. ${Platform.isAndroid ? 'It needs the Orbot app running.' : 'It needs Tor running on this computer, with its HTTP port on 8118.'}', style: serif(15, color: boneFaint, italic: true)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: Text('NOT NOW', style: carved(12, color: boneFaint))),
+            TextButton(onPressed: () => Navigator.pop(c, true), child: Text('GO THROUGH TOR', style: carved(12))),
+          ],
+        ),
+      );
+      if (yes == true) await setTor(true);
+    }
+    if (mounted) toast(context, 'Done. The settings above show what changed.');
+  }
+
   Future<void> setSharePlayer(bool v) async {
     final why = await OpenPlayer.share(v);
     pref('share_player', v && why == null);
@@ -1649,6 +1740,56 @@ class _SettingsPageState extends State<SettingsPage> {
     final carried = widget.radio.carriedBytes;
     return ListView(padding: const EdgeInsets.fromLTRB(24, 26, 24, 40), children: [
       masthead('Settings'),
+      section('PRIVACY AND SAFETY', [
+        const SizedBox(height: 8),
+        pyrateButton('KEEP ME SAFE', keepMeSafe),
+        const SizedBox(height: 6),
+        note('One press. It asks for a PIN, hides the lock screen and the icon, turns browsers coming in through this $thisDevice off, and offers Tor.'),
+        setting('Lock with a PIN', pinSet, (v) {
+          if (v) {
+            setPin();
+          } else {
+            Native.call({'cmd': 'pin_set'});
+            setState(() => pinSet = duressSet = false);
+          }
+        }, sub: 'Asked for before your station and these settings open.'),
+        if (pinSet)
+          setting('Emergency PIN', duressSet, (v) {
+            if (v) {
+              setPin(duress: true);
+            } else {
+              Native.call({'cmd': 'pin_set', 'duress': true});
+              setState(() => duressSet = false);
+            }
+          }, sub: 'A second PIN to give if you are forced to unlock the radio. It wipes the radio from this $thisDevice.'),
+        if (Platform.isAndroid) ...[
+          setting('Hide from the lock screen', plainLock, (v) {
+            ship.invokeMethod('plain_lock_set', {'value': v});
+            setState(() => plainLock = v);
+          }, sub: 'The lock screen says only "Radio", and recent apps show nothing.'),
+          setting('Plain icon', plain, (v) {
+            ship.invokeMethod('plain_set', {'value': v});
+            setState(() => plain = v);
+          }, sub: 'Shows as "Radio" with an ordinary icon.'),
+        ],
+        setting('Go through Tor', tor.isNotEmpty, setTor,
+            sub: '${Platform.isAndroid ? 'Needs the Orbot app running.' : 'Needs Tor running on this computer, with its HTTP port on 8118.'} Nobody on the network learns this device\'s address. Podcast feeds and linked pictures go through Tor too.'),
+        if (torMsg != null) ...[
+          Padding(padding: const EdgeInsets.only(top: 4, bottom: 8), child: note(torMsg!)),
+          if (torRestart) Align(alignment: Alignment.centerLeft, child: pyrateButton('RESTART NOW', restartNow)),
+        ],
+        setting('Disguise my voice', disguise, (v) {
+          pref('disguise', v);
+          setState(() => disguise = v);
+        }, sub: 'Lowers your voice to stop a casual ear when you go live, record or upload. It does not beat a voice matcher.'),
+        action('Clear what I have listened to', () async {
+          final r = await Native.callAway({'cmd': 'clear_hold'});
+          if (!context.mounted) return;
+          final n = r is Map ? (r['cleared'] as num?)?.toInt() : null;
+          toast(context, r is Map && r['error'] != null ? 'Not cleared. ${r['error']}' : (n == null || n == 0 ? 'Nothing to clear.' : 'Cleared.'));
+        }, sub: 'Removes the sound saved from stations you played. Your own station is kept.'),
+        action('Wipe the radio from this $thisDevice', scuttle, sub: 'For a $thisDevice about to be taken. Everything it keeps becomes unreadable at once.', color: bloodBright),
+      ]),
       section('LISTENING', [
         setting('A soft hiss while tuning in', pref('hiss') != false, (v) {
           Native.call({'cmd': 'hiss', 'value': v});
@@ -1706,6 +1847,21 @@ class _SettingsPageState extends State<SettingsPage> {
           Native.call({'cmd': 'crew', 'on': v});
           setState(() => crewOn = v);
         }, sub: 'While you listen, this $thisDevice passes on what it plays and other listeners\' requests, through three hops, so no one can tell who hears what. It stops passing on what it plays when you stop playing.${Platform.isAndroid ? ' A phone does this only on Wi-Fi.' : ''}'),
+        setting('Let browsers in through this device', doorOn, (v) async {
+          pref('door', v);
+          await widget.radio.checkBallast();
+          if (mounted) setState(() {});
+        }, enabled: tor.isEmpty,
+            sub: tor.isNotEmpty
+                ? 'Off while going through Tor.'
+                : 'Browsers on iPhones and on blocked networks reach the radio through listeners\' devices. While this is on, this device\'s internet address is listed publicly as a way in. Behind a VPN that forwards a port, the VPN\'s address is listed instead.'),
+        if (tor.isEmpty && doorOn)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: note(widget.radio.doorState['open'] == true
+                ? 'Open. Browsers can reach the radio through this device.'
+                : (widget.radio.doorState['why'] ?? 'Shut for now. It opens on ${isComputer ? 'this computer' : 'Wi-Fi while the phone charges'} when the router allows it.').toString()),
+          ),
         setting('Let shared links name this radio', pref('door_links') == true, (v) {
           pref('door_links', v);
           Native.call({'cmd': 'door', 'links': v});
@@ -1733,46 +1889,6 @@ class _SettingsPageState extends State<SettingsPage> {
               }),
           ]),
         if (Platform.isAndroid) const DrawerLantern(),
-      ]),
-      section('PRIVACY AND SAFETY', [
-        setting('Lock with a PIN', pinSet, (v) {
-          if (v) {
-            setPin();
-          } else {
-            Native.call({'cmd': 'pin_set'});
-            setState(() => pinSet = duressSet = false);
-          }
-        }, sub: 'Asked for before your station and these settings open.'),
-        if (pinSet)
-          setting('Emergency PIN', duressSet, (v) {
-            if (v) {
-              setPin(duress: true);
-            } else {
-              Native.call({'cmd': 'pin_set', 'duress': true});
-              setState(() => duressSet = false);
-            }
-          }, sub: 'A second PIN to give if you are forced to unlock the radio. It wipes the radio from this $thisDevice.'),
-        setting('Disguise my voice', disguise, (v) {
-          pref('disguise', v ? -4 : 0);
-          setState(() => disguise = v);
-        }, sub: 'Lower and harder to recognise, when you go live or record.'),
-        if (Platform.isAndroid) ...[
-          setting('Plain icon', plain, (v) {
-            ship.invokeMethod('plain_set', {'value': v});
-            setState(() => plain = v);
-          }, sub: 'Shows as "Radio" with an ordinary icon.'),
-          setting('Hide from the lock screen', plainLock, (v) {
-            ship.invokeMethod('plain_lock_set', {'value': v});
-            setState(() => plainLock = v);
-          }, sub: 'The lock screen says only "Radio", and recent apps show nothing.'),
-        ],
-        action('Clear what I have listened to', () async {
-          final r = await Native.callAway({'cmd': 'clear_hold'});
-          if (!context.mounted) return;
-          final n = r is Map ? (r['cleared'] as num?)?.toInt() : null;
-          toast(context, r is Map && r['error'] != null ? 'Not cleared: ${r['error']}' : (n == null || n == 0 ? 'Nothing to clear.' : 'Cleared.'));
-        }, sub: 'Removes the sound saved from stations you played. Your own station is kept.'),
-        action('Wipe the radio from this $thisDevice', scuttle, sub: 'For a $thisDevice about to be taken. Everything it keeps becomes unreadable at once.', color: bloodBright),
       ]),
       section('SHARING', [
         // Handing the app over is a phone's: the computer copy comes from the site.
@@ -1817,18 +1933,10 @@ class _SettingsPageState extends State<SettingsPage> {
       ]),
       section('ADVANCED', [
         fold('Connections', sub: 'For when the internet is watched or cut', [
-          setting('Go through Tor', tor.isNotEmpty, (v) async {
-            final r = await Native.callAway({'cmd': 'tor', 'url': v ? 'http://127.0.0.1:8118' : ''});
-            if (!mounted) return;
-            setState(() {
-              tor = (r is Map ? r['url'] ?? '' : '').toString();
-              gridMsg = r is Map && r['error'] != null
-                  ? 'Not set: ${r['error']}.'
-                  : v
-                      ? 'From the next time the radio starts, every connection goes through Tor.'
-                      : 'From the next time the radio starts, it connects as usual.';
-            });
-          }, sub: '${Platform.isAndroid ? 'Needs the Orbot app running.' : 'Needs Tor running on this computer, with its HTTP port on 8118.'} Nobody on the network learns this device\'s address.'),
+          setting('Use number0\'s relays when ours fail', number0, (v) {
+            final r = Native.call({'cmd': 'number0', 'value': v});
+            setState(() => number0 = (r as Map?)?['value'] == true);
+          }, sub: 'number0 runs iroh\'s public relays. It would see this device\'s address.'),
           setting('Find radios on this Wi-Fi', lan, (v) {
             final r = Native.call({'cmd': 'lan', 'value': v});
             setState(() {

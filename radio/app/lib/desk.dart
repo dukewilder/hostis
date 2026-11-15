@@ -198,8 +198,8 @@ class _LiveDeskState extends State<LiveDesk> with WidgetsBindingObserver {
 
   void _disguise() {
     final on = d['disguise'] == true;
-    pref('disguise', on ? 0 : -4);
-    _set({'cmd': 'desk_set', 'disguise': on ? 0 : -4});
+    pref('disguise', !on);
+    _set({'cmd': 'desk_set', 'disguise': !on});
   }
 
   Future<void> _addMusic() async {
@@ -421,6 +421,7 @@ class _LiveDeskState extends State<LiveDesk> with WidgetsBindingObserver {
             button: true,
             toggled: d['disguise'] == true,
             label: 'Disguise my voice',
+            hint: 'Lowers your voice to stop a casual ear. It does not beat a voice matcher.',
             child: InkWell(
               onTap: _disguise,
               child: Container(
@@ -433,6 +434,7 @@ class _LiveDeskState extends State<LiveDesk> with WidgetsBindingObserver {
             ),
           ),
         ]),
+        Padding(padding: const EdgeInsets.only(top: 6), child: Text('DISGUISE lowers your voice to stop a casual ear. It does not beat a voice matcher.', style: serif(13, color: boneFaint, italic: true))),
         if (err != null && !on && (live || checking)) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_plain(err.startsWith('no microphone') ? err : 'no microphone: $err'), style: serif(13, color: boneDim, italic: true))),
       ]),
     );
