@@ -1,3 +1,4 @@
+# Waiting for a rented server: put its "STUN:" line from tools/vps/install.sh below, one per line.
 # HOSTIS's own STUN servers, one per line, as stun:<name>:3478. tools/vps/install.sh prints the
 # line for each server it sets up. Only HOSTIS's: build.py refuses the well-known public ones,
 # and a tab never asks any server not listed here. Empty, a tab links directly only where the
