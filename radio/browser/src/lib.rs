@@ -3330,6 +3330,9 @@ impl Radio {
             }
             ids.push(id);
         }
+        // A harbour kept from an older build without its relay is the same harbour.
+        let mut seen = HashSet::new();
+        ids.retain(|id| seen.insert(*id));
         let harbour = ids;
         let token_key = unhex32(&token_key).map_err(js)?;
         let custom: Vec<iroh::RelayUrl> = relays.split(',').filter_map(|r| r.trim().parse().ok()).collect();
