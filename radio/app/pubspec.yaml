@@ -1,7 +1,7 @@
 name: pyrate
 description: "Pyrate Radio. Every install a station, a carrier and a relay. No rights reserved."
 publish_to: 'none'
-version: 0.9.17+39
+version: 0.9.18+40
 
 environment:
   sdk: ^3.9.0
