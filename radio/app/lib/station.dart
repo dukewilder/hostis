@@ -612,7 +612,7 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
     p['zone_name'] = clock ? DateTime.now().timeZoneName : '';
     final r = await Native.callAway({'cmd': 'programme_set', 'station': widget.station, 'programme': p});
     if (!mounted) return;
-    setState(() => saved = r is Map && r['error'] != null ? r['error'] : 'Set. Every listener\'s clock follows it within a minute.');
+    setState(() => saved = r is Map && r['error'] != null ? r['error'] : 'Set. Every listener\'s clock follows it within a quarter of an hour.');
   }
 
   @override
@@ -1307,6 +1307,15 @@ class _PosterSheetState extends State<PosterSheet> {
 // Chatter: talk in the station's room, cheer what is on, ask for a recording. Lines pass
 // between the people in the room; the radio writes none of them to disk.
 
+/// The file extension a hail is kept under while it plays: the node writes Ogg, and a player
+/// on a computer picks the program by the extension.
+String hailExtension(String path, String mime) {
+  if (mime.contains('ogg')) return '.ogg';
+  final dot = path.lastIndexOf('.');
+  final sep = path.lastIndexOf(Platform.pathSeparator);
+  return dot > sep ? path.substring(dot) : '.ogg';
+}
+
 class ChatterPanel extends StatefulWidget {
   final String station;
   final bool own;
@@ -1325,6 +1334,19 @@ class _ChatterPanelState extends State<ChatterPanel> {
   Timer? hailStop;
   final List<String> hailsOpened = [];
   bool hailing = false;
+  bool voiceKept = false;
+
+  /// Whether this room's voice is kept: otherwise it is new each week.
+  void readVoice() {
+    final v = Native.call({'cmd': 'chat_voice', 'station': widget.station});
+    if (v is Map && mounted) setState(() => voiceKept = v['kept'] == true);
+  }
+
+  Widget voiceSwitch() => setting('Keep my voice here', voiceKept, (v) {
+        final r = Native.call({'cmd': 'chat_voice', 'station': widget.station, 'keep': v});
+        setState(() => voiceKept = r is Map ? r['kept'] == true : voiceKept);
+        read();
+      }, sub: 'Your voice in this chat is new each week unless you keep it. If you keep it, people here can tell it is you from week to week.');
 
   /// A hail: up to twenty seconds of the listener's voice, sealed so only the keeper hears it.
   Future<void> hail() async {
@@ -1354,6 +1376,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
   @override
   void initState() {
     super.initState();
+    readVoice();
     read();
     tick = Timer.periodic(const Duration(seconds: 2), (_) => read());
   }
@@ -1409,7 +1432,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
   }
 
   Future<void> send(String kind, {String text = '', String? track, String? path}) async {
-    final r = await Native.callAway({'cmd': 'chat_send', 'station': widget.station, 'kind': kind, 'text': text, if (track != null) 'track': track, if (path != null) 'path': path, 'mime': 'audio/mp4', 'name': name.text.trim()});
+    final r = await Native.callAway({'cmd': 'chat_send', 'station': widget.station, 'kind': kind, 'text': text, if (track != null) 'track': track, if (path != null) 'path': path, 'mime': 'audio/ogg', 'name': name.text.trim()});
     if (r is Map && r['error'] != null && mounted) setState(() => err = r['error']);
     read();
   }
@@ -1442,12 +1465,24 @@ class _ChatterPanelState extends State<ChatterPanel> {
     if (track != null) send('request', text: note2.text.trim(), track: track);
   }
 
+  String get _joinNote => 'Chat with whoever else is listening, cheer what is on, or ask for a song. Nothing is saved, though anyone in the chat can copy what they read. People in the chat can tell this $thisDevice is there, and see its address unless the radio goes through Tor. Just listening shows nobody anything. Your voice here is new each week unless you keep it.';
+
   @override
   Widget build(BuildContext context) {
     final r = room;
     if (r == null || r['joined'] != true) {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        note('Chat with whoever else is listening, cheer what is on, or ask for a song. Nothing is saved, though anyone in the chat can copy what they read. People in the chat can tell this $thisDevice is there, and see its address unless the radio goes through Tor. Just listening shows nobody anything.'),
+        if (widget.own) ...[
+          note('This is the note listeners get before they join.'),
+          const SizedBox(height: 6),
+        ],
+        note(_joinNote),
+        if (widget.own) ...[
+          const SizedBox(height: 6),
+          note('Your lines go out two hops away, so nobody in the room can tell which device keeps the station.'),
+        ],
+        const SizedBox(height: 6),
+        voiceSwitch(),
         const SizedBox(height: 10),
         pyrateButton(joining ? 'JOINING' : 'JOIN THE CHAT', joining
             ? null
@@ -1523,19 +1558,20 @@ class _ChatterPanelState extends State<ChatterPanel> {
                     final r = await Native.callAway({'cmd': 'chat_hail_open', 'station': widget.station, 'id': l['id']});
                     if (r is Map && r['path'] != null) {
                       var path = r['path'].toString();
+                      final mime = (r['mime'] ?? 'audio/ogg').toString();
                       if (isComputer) {
                         // The node writes the opened message beside its own files, outside the
                         // seal. It is moved into the scratch folder and removed when this sheet closes.
                         try {
                           final d = Directory('${(await scratchDir()).path}${Platform.pathSeparator}share')..createSync(recursive: true);
-                          final to = '${d.path}${Platform.pathSeparator}hail-${DateTime.now().millisecondsSinceEpoch}${path.contains('.') ? path.substring(path.lastIndexOf('.')) : ''}';
+                          final to = '${d.path}${Platform.pathSeparator}hail-${DateTime.now().millisecondsSinceEpoch}${hailExtension(path, mime)}';
                           await File(path).copy(to);
                           await File(path).delete();
                           path = to;
                           hailsOpened.add(to);
                         } catch (_) {}
                       }
-                      await ship.invokeMethod('play_file', {'path': path});
+                      await ship.invokeMethod('play_file', {'path': path, 'mime': mime});
                     } else if (context.mounted) {
                       toast(context, (r is Map ? r['error'] : null) ?? 'That message would not open.');
                     }
@@ -1567,6 +1603,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
       ]),
       TextField(enableIMEPersonalizedLearning: false, controller: name, maxLength: 32, style: serif(15), decoration: pyrateField('Your name in the chat'), onChanged: (v) => pref('chat_name', v.trim())),
       if (err != null) note(err!),
+      voiceSwitch(),
       Wrap(spacing: 6, runSpacing: 6, children: [
         pyrateButton('LEAVE THE CHAT', () async {
           await Native.callAway({'cmd': 'chat_leave', 'station': widget.station});
