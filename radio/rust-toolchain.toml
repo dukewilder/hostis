@@ -2,4 +2,4 @@
 # See tools/repro.sh and the Reproducible builds section of RELEASES.md.
 [toolchain]
 channel = "1.97.0"
-targets = ["wasm32-unknown-unknown"]
+targets = ["wasm32-unknown-unknown", "aarch64-linux-android"]
