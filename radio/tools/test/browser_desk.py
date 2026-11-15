@@ -34,8 +34,8 @@ def tone(name, f, secs, amp=0.3):
     return path
 MUSIC = tone("Test Band - Middle C.wav", 523.25, 70)
 PAD = tone("Ident.wav", 880, 3)
-# The station's own schedule, which comes back after the show: one recording, a 660 Hz tone.
-REC = tone("Closing Theme.wav", 660, 20)
+# The station's own schedule, which comes back after the show: one recording, a 1.1 kHz tone.
+REC = tone("Closing Theme.wav", 1100, 20)
 
 # Every device the keeper's tab opens, and every connection any of its sound makes to its speakers.
 HOOKS = """
@@ -218,7 +218,7 @@ try:
         # t_back is when the listener's set named the recording, already on the listener's clock.
         S, R = seg(at("end", -3.5), at("end", -0.5)), seg(T["end"] + t_back + 1.0 - t0 if t_back else at("end", 3.0), len(x) / sr)
         check(len(S) > sr and band(S, top(A)) > 0.1 * band(A, top(A)), f"the last words before the end are heard ({band(S, top(A)):.4f} against {band(A, top(A)):.4f})")
-        check(len(R) > sr and abs(top(R) - 660) < 10, f"and the station's own recording after them ({top(R) if len(R) > sr else 0:.0f} Hz over {len(R) / sr:.1f} s)")
+        check(len(R) > sr and abs(top(R) - 1100) < 10, f"and the station's own recording after them ({top(R) if len(R) > sr else 0:.0f} Hz over {len(R) / sr:.1f} s)")
     check(not csp, "nothing is refused by the page's own policy: %s" % csp[:3])
     check(not errs, "no page errors: %s" % errs[:3])
 finally:
