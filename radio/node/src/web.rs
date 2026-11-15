@@ -203,8 +203,9 @@ static NODE: std::sync::OnceLock<std::sync::Weak<Inner>> = std::sync::OnceLock::
 /// The doors this node knows, as signed notes in hex, freshest first.
 fn doors_hex(n: usize) -> Vec<String> {
     let Some(inner) = NODE.get().and_then(|w| w.upgrade()) else { return vec![] };
-    let mut list = inner.notes.lock().unwrap().doors(crate::now_ms(), n);
-    let own = inner.door.lock().unwrap().clone();
+    // Kept doors only: a web page or a build never carries a listener's app door.
+    let mut list = inner.notes.lock().unwrap().doors_kept(crate::now_ms(), n);
+    let own = inner.door.lock().unwrap().clone().filter(|d| !d.app);
     if let Some(g) = own.and_then(|d| d.note(&inner.secret, crate::now_ms())).and_then(|g| postcard::to_stdvec(&g).ok()) {
         list.retain(|x| *x != g);
         list.insert(0, g);

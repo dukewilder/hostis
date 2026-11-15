@@ -91,5 +91,26 @@ fn main() -> anyhow::Result<()> {
         }
     }
     check(out, "with a second node in reach, the broadcasting phone's station goes out two hops away");
+
+    // A door names the address it was given. A radio in the open opens one at a test address;
+    // a radio running dark (through Tor) opens none and names nothing, even when told to.
+    let door_at = |n: &Node, port: u16| {
+        n.call(&json!({ "cmd": "door", "on": true, "app": true, "addr": format!("203.0.113.7:{port}") }));
+        for _ in 0..20 {
+            std::thread::sleep(Duration::from_millis(250));
+            if n.call(&json!({ "cmd": "door" }))["open"] == true {
+                return true;
+            }
+        }
+        false
+    };
+    let open = Node::start(cfg("open", true))?;
+    check(door_at(&open, 41001), "a radio in the open opens a door at the address it is given");
+    // SAFETY: set before the dark node starts; every other node here has already read it.
+    unsafe { std::env::set_var("PYRATE_DARK", "1") };
+    let dark = Node::start(cfg("dark", true))?;
+    check(!door_at(&dark, 41002), "a radio running dark is never a door");
+    let own = dark.call(&json!({ "cmd": "doors" }))["doors"].as_array().map(|d| d.len()).unwrap_or(0);
+    check(own == 0, "a radio running dark names no door of its own");
     Ok(())
 }

@@ -3538,7 +3538,8 @@ impl Node {
             // `addr` names the outside address where the keeper knows it; else the router is asked.
             "door" => {
                 match req["on"].as_bool() {
-                    Some(true) if inner.door.lock().unwrap().is_none() => {
+                    // Never while running dark: see `door_open`.
+                    Some(true) if inner.door.lock().unwrap().is_none() && !inner.dark => {
                         let public = req["addr"].as_str().and_then(|a| a.parse().ok());
                         let app = req["app"].as_bool().unwrap_or(true);
                         let links = req["links"].as_bool().unwrap_or(false);
@@ -3561,14 +3562,15 @@ impl Node {
                         "browsers": d.clients(), "sessions": d.sessions.load(std::sync::atomic::Ordering::Relaxed), "opened": d.opened.load(std::sync::atomic::Ordering::Relaxed),
                         "served": d.served.load(std::sync::atomic::Ordering::Relaxed), "stun": d.stun.load(std::sync::atomic::Ordering::Relaxed),
                         "mapped_by": mapped_by }),
-                    None => json!({ "open": false }),
+                    None => json!({ "open": false, "dark": inner.dark }),
                 })
             }
             // The doors this node knows, as signed notes (hex), freshest first: for a build to bake
             // into the player, and for a Lantern or app serving the player to hand to it.
             "doors" => {
-                let mut list: Vec<String> = inner.notes.lock().unwrap().doors(now_ms(), req["n"].as_u64().unwrap_or(8).min(32) as usize).iter().map(|b| hex(b)).collect();
-                let own = inner.door.lock().unwrap().clone().and_then(|d| d.note(&inner.secret, now_ms())).and_then(|g| postcard::to_stdvec(&g).ok());
+                // Kept doors only: a build or a served player never carries a listener's app door.
+                let mut list: Vec<String> = inner.notes.lock().unwrap().doors_kept(now_ms(), req["n"].as_u64().unwrap_or(8).min(32) as usize).iter().map(|b| hex(b)).collect();
+                let own = inner.door.lock().unwrap().clone().filter(|d| !d.app).and_then(|d| d.note(&inner.secret, now_ms())).and_then(|g| postcard::to_stdvec(&g).ok());
                 if let Some(o) = own {
                     list.retain(|x| *x != hex(&o));
                     list.insert(0, hex(&o));

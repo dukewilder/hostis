@@ -693,6 +693,19 @@ impl Notes {
         d.into_iter().take(n).map(|x| x.1.clone()).collect()
     }
 
+    /// The same, leaving out listeners' app doors: only doors kept by their keepers as doors
+    /// (Lanterns, servers). Anything handed to the open web or baked into a build is drawn from
+    /// these, so no listener's home address is published beyond the gossip, where it lapses.
+    pub fn doors_kept(&self, now: u64, n: usize) -> Vec<Vec<u8>> {
+        let mut d: Vec<&(u64, Vec<u8>)> = self
+            .doors
+            .values()
+            .filter(|(t, raw)| now.saturating_sub(*t) < DOOR_FRESH_MS && matches!(postcard::from_bytes::<Gossip>(raw), Ok(Gossip::Door { app: false, .. })))
+            .collect();
+        d.sort_by(|a, b| b.0.cmp(&a.0));
+        d.into_iter().take(n).map(|x| x.1.clone()).collect()
+    }
+
     pub fn keep(&mut self, g: &Gossip, raw: &[u8], now: u64) {
         if raw.len() > 1024 {
             return;
@@ -1420,6 +1433,20 @@ mod card_limit_tests {
         // A door at a house's private address, or long silent, is no door.
         assert!(Gossip::door(&[5; 32], "192.168.1.4:40000", [9; 32], now, true, false, now).door_checked(now).is_none());
         assert!(g.door_checked(now + DOOR_FRESH_MS + 1).is_none());
+    }
+
+    #[test]
+    fn a_listeners_app_door_is_never_handed_to_the_web_or_a_build() {
+        LOCAL_RELAYS_OK.store(false, std::sync::atomic::Ordering::Relaxed);
+        let now = 1_800_000_000_000;
+        let app = Gossip::door(&[5; 32], "1.2.3.4:40000", [9; 32], now - 60_000, true, false, now);
+        let kept = Gossip::door(&[6; 32], "5.6.7.8:40000", [8; 32], now - 60_000, false, false, now);
+        let mut n = Notes::default();
+        for g in [&app, &kept] {
+            n.keep(g, &postcard::to_stdvec(g).unwrap(), now);
+        }
+        assert_eq!(n.doors(now, 16).len(), 2, "both are heard and passed on in the gossip");
+        assert_eq!(n.doors_kept(now, 16), vec![postcard::to_stdvec(&kept).unwrap()], "only the kept door is published");
     }
 
     #[test]

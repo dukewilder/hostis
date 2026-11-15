@@ -232,6 +232,12 @@ impl Inner {
     /// the keeper or the test network, or else asked of the home router (see `portmap`). With
     /// no public address the door stays shut: a door nobody can reach is announced nowhere.
     pub async fn door_open(self: &Arc<Self>, public: Option<SocketAddr>, app: bool, link: bool) -> anyhow::Result<Arc<Door>> {
+        // A radio running dark (through Tor) is never a door: a door's note carries the address
+        // the router gives it, and that is the address Tor is there to hide. Nothing is bound,
+        // no router is asked, and nothing is announced.
+        if self.dark {
+            anyhow::bail!("running dark, so this radio is not a door");
+        }
         if let Some(d) = self.door.lock().unwrap().clone() {
             return Ok(d);
         }
