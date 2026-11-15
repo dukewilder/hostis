@@ -111,6 +111,17 @@ class ShellChannel {
   }
 }
 
+/// What the node said the last time the microphone would not start, on a computer.
+String? micError;
+
+/// Why the microphone would not start, in a plain sentence.
+String micFailure() {
+  final e = (micError ?? '').toLowerCase();
+  if (e.contains('permission') || e.contains('denied') || e.contains('not allowed') || e.contains('access')) return 'The microphone is blocked in this computer\'s privacy settings.';
+  if (e.contains('no microphone') || e.contains('no input') || e.contains('not found') || e.contains('no device')) return 'No microphone was found on this $thisDevice.';
+  return 'The microphone would not start. Another app may have it.';
+}
+
 class Desktop {
   static String? _link;
   static bool _linkTaken = false;
@@ -141,8 +152,9 @@ class Desktop {
         await _restart();
         return null;
       case 'build_code':
-        // A computer takes its updates from the site, never through the app.
-        return 0;
+        // A computer takes its updates from the site, never through the app. The build's own
+        // code (set when it is built) lets it say when a newer one is signed.
+        return const int.fromEnvironment('PYRATE_CODE');
       case 'conditions':
         // A computer is plugged in and on a fixed line or Wi-Fi more often than not.
         return {'charging': true, 'unmetered': true};
@@ -156,6 +168,7 @@ class Desktop {
         final dir = await scratchDir();
         final path = '${dir.path}${Platform.pathSeparator}rec-${DateTime.now().millisecondsSinceEpoch}.wav';
         final r = Native.call({'cmd': 'rec_start', 'path': path});
+        micError = r is Map ? r['error']?.toString() : null;
         return r is Map && r['path'] != null ? path : null;
       case 'record_stop':
         final r = Native.call({'cmd': 'rec_stop'});

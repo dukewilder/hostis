@@ -506,7 +506,7 @@ class _LiveDeskState extends State<LiveDesk> with WidgetsBindingObserver {
         ]),
         _fader('deck_gain', k['gain'], 'Deck level'),
         if (list.isEmpty)
-          InkWell(
+          Tappable(
             onTap: _addMusic,
             child: Container(
               height: 64,
@@ -534,7 +534,7 @@ class _LiveDeskState extends State<LiveDesk> with WidgetsBindingObserver {
     final bad = x['bad'] == true;
     final by = (x['by'] as String?) ?? '';
     final len = (x['len_ms'] as num?)?.toInt();
-    return InkWell(
+    return Tappable(
       onTap: bad ? null : () => _set({'cmd': 'deck_play', 'at': i}),
       child: Container(
         constraints: const BoxConstraints(minHeight: 44),

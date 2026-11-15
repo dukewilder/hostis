@@ -28,7 +28,7 @@ Widget pyrateButton(String label, VoidCallback? onTap, {Color color = bone}) => 
         shape: const RoundedRectangleBorder(),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
       ),
-      child: Text(label, style: carved(11, color: onTap == null ? boneGhost : color, spacing: 0.22)),
+      child: Text(label, style: carved(11, color: onTap == null ? boneFaint : color, spacing: 0.22)),
     );
 
 InputDecoration pyrateField(String label) => InputDecoration(
@@ -253,7 +253,7 @@ class _LogPageState extends State<LogPage> {
 
   Widget chip(String label, bool on, VoidCallback onTap) => Padding(
         padding: const EdgeInsets.only(right: 8, bottom: 8),
-        child: InkWell(
+        child: Tappable(
           onTap: onTap,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -415,7 +415,7 @@ class _LogPageState extends State<LogPage> {
           final live = s['live'] == true;
           final tuned = radio.tuned == id && radio.playing;
           final on = nowOn[id] as Map?;
-          return InkWell(
+          return Tappable(
             onTap: () {
               radio.tune(id);
               widget.onTune();
@@ -599,7 +599,7 @@ class _WatchBillState extends State<WatchBill> {
                     },
                   )
                 else
-                  const SizedBox(width: 48, child: Center(child: Text('NOW', style: TextStyle(fontFamily: 'Cinzel', fontSize: 9, color: bone, letterSpacing: 2)))),
+                  const SizedBox(width: 56, child: Center(child: Text('NOW', style: TextStyle(fontFamily: 'Cinzel', fontSize: 12, color: bone, letterSpacing: 2)))),
               ]);
             }),
           ],
@@ -1018,7 +1018,7 @@ class _RecordPanelState extends State<RecordPanel> {
       if (!await askMic(context)) return;
       final p = await ship.invokeMethod<String>('record_start').catchError((_) => null);
       if (p == null) {
-        if (mounted) toast(context, 'The microphone would not start. Another app may have it.');
+        if (mounted) toast(context, micFailure());
         return;
       }
       setState(() {
@@ -1123,7 +1123,7 @@ class _DetailsPanelState extends State<DetailsPanel> {
       const SizedBox(height: 10),
       Wrap(spacing: 8, runSpacing: 8, children: [
         for (final k in stationKinds)
-          InkWell(
+          Tappable(
             onTap: () => setState(() => kinds.contains(k) ? kinds.remove(k) : kinds.add(k)),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1372,7 +1372,7 @@ class _RotaEditorState extends State<RotaEditor> {
       const SizedBox(height: 10),
       for (final (i, b) in blocks.indexed)
         Row(children: [
-          SizedBox(width: 110, child: Text('${hm(b['start_min'])} to ${hm(b['end_min'])}', style: mono(12))),
+          SizedBox(width: 110 * MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0), child: Text('${hm(b['start_min'])} to ${hm(b['end_min'])}', style: mono(12))),
           Expanded(
             child: Text(
               (b['tracks'] as List).isEmpty ? 'the whole library' : (b['tracks'] as List).map((h) => titleOf(h as String)).join(', '),
@@ -1381,7 +1381,7 @@ class _RotaEditorState extends State<RotaEditor> {
               style: serif(14, color: boneDim, italic: true),
             ),
           ),
-          IconButton(icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () => setState(() => blocks.removeAt(i))),
+          IconButton(tooltip: 'Remove', icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () => setState(() => blocks.removeAt(i))),
         ]),
       Row(children: [pyrateButton('ADD A BLOCK', addBlock)]),
       const SizedBox(height: 14),
@@ -1424,7 +1424,7 @@ Widget setting(String title, bool value, ValueChanged<bool> onChanged, {String? 
     label: sub == null ? title : '$title. $sub',
     onTap: enabled ? () => onChanged(!value) : null,
     excludeSemantics: true,
-    child: InkWell(
+    child: Tappable(
       onTap: enabled ? () => onChanged(!value) : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
@@ -1642,7 +1642,7 @@ class _SettingsPageState extends State<SettingsPage> {
       final bad = r is Map && r['error'] != null;
       torRestart = !bad;
       torMsg = bad
-          ? 'Not set. ${r['error']}.'
+          ? 'Not set. ${r['error']}'
           : v
               ? 'Restart the radio and every connection goes through Tor.'
               : 'Restart the radio and it connects as usual.';
@@ -1698,7 +1698,7 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) return;
     setState(() {
       sharePlayer = OpenPlayer.sharing;
-      playerMsg = why == null ? null : 'Not shared: $why.';
+      playerMsg = why == null ? null : 'Not shared. $why';
       if (!sharePlayer) playerUrl = playerQr = null;
     });
     if (sharePlayer) showPlayerUrl(await OpenPlayer.lanUrl());
@@ -1712,7 +1712,7 @@ class _SettingsPageState extends State<SettingsPage> {
       final n = await OpenPlayer.save(dir);
       said = n == null ? 'This build carries no player.' : 'Saved to the folder "Pyrate Radio player".';
     } catch (e) {
-      said = 'Not saved: that folder cannot be written to.';
+      said = 'Not saved. That folder cannot be written to.';
     }
     if (mounted) toast(context, said);
   }
@@ -1927,7 +1927,7 @@ class _SettingsPageState extends State<SettingsPage> {
             await Native.callAway({'cmd': 'keep', 'station': r['station'], 'value': true});
             if (context.mounted) toast(context, 'The station is on your dial.');
           } else {
-            toast(context, 'That file would not open: ${r is Map ? r['error'] : 'not a station file'}.');
+            toast(context, 'That file would not open. ${r is Map ? r['error'] : 'It is not a station file'}.');
           }
         }, sub: 'A station someone sent you as a file plays with no connection.'),
       ]),

@@ -323,7 +323,7 @@ class _StationPageState extends State<StationPage> {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    SizedBox(width: 92, child: Text('${clockTime(start)}–${clockTime(end)}', style: mono(11, color: onNow ? bone : boneFaint, weight: onNow ? FontWeight.w700 : FontWeight.w400))),
+                    SizedBox(width: 92 * MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 2.0), child: Text('${clockTime(start)}–${clockTime(end)}', style: mono(11, color: onNow ? bone : boneFaint, weight: onNow ? FontWeight.w700 : FontWeight.w400))),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Row(children: [
@@ -345,7 +345,6 @@ class _StationPageState extends State<StationPage> {
                     ),
                     if (!onNow && start > now)
                       IconButton(
-                        visualDensity: VisualDensity.compact,
                         tooltip: ringing ? 'Silence the bell' : 'Ring a bell when it starts',
                         icon: Icon(ringing ? Icons.notifications_active : Icons.notifications_none, size: 20, color: ringing ? bone : boneFaint),
                         onPressed: () async {
@@ -428,7 +427,7 @@ class TrackPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(children: [
         for (final t in library)
-          InkWell(
+          Tappable(
             onTap: () {
               final h = t['track'] as String;
               final next = [...picked];
@@ -525,7 +524,7 @@ class _ShowEditorState extends State<ShowEditor> {
 
 Widget chip(String label, bool on, VoidCallback onTap) => Padding(
       padding: const EdgeInsets.only(right: 8, bottom: 8),
-      child: InkWell(
+      child: Tappable(
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -696,7 +695,7 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
               onChanged: (v) => setState(() => h['len_min'] = (v.round()) * 60),
             ),
           ),
-          if (hours.length > 1) IconButton(icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () => setState(() => hours.removeAt(i))),
+          if (hours.length > 1) IconButton(tooltip: 'Remove', icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () => setState(() => hours.removeAt(i))),
         ]),
         note('${daysLabel((h['days'] as num).toInt())} from ${hhmm((h['start_min'] as num).toInt())} for ${lengthLabel((h['len_min'] as num).toInt())}, then quiet until the next.'),
       ],
@@ -712,7 +711,7 @@ class _ProgrammeEditorState extends State<ProgrammeEditor> {
             if (sl['live'] == true) Padding(padding: const EdgeInsets.only(left: 8), child: Text('LIVE', style: carved(11, color: bloodBright, spacing: 0.3))),
           ]),
           subtitle: Text('${daysLabel((sl['span']['days'] as num).toInt())} · ${hhmm((sl['span']['start_min'] as num).toInt())} · ${lengthLabel((sl['span']['len_min'] as num).toInt())}', style: mono(11, color: boneFaint)),
-          trailing: IconButton(icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () => setState(() => slots.removeAt(i))),
+          trailing: IconButton(tooltip: 'Remove', icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () => setState(() => slots.removeAt(i))),
           onTap: () async {
             final r = await pyrateSheet<Map<String, dynamic>>(context, SlotEditor(slot: Map<String, dynamic>.from(sl), library: library, hands: hands));
             if (r != null && mounted) setState(() => slots[i] = r);
@@ -854,7 +853,7 @@ class _SlotEditorState extends State<SlotEditor> {
 // ---------------------------------------------------------------------------------------
 // The shapes a new station can start in
 
-/// How a new station starts. Chosen when the colours go up; all of it can change later.
+/// How a new station starts. Chosen when the station starts; all of it can change later.
 class StartShape {
   String kind = 'shuffle';
   int start = 18 * 60;
@@ -1089,7 +1088,7 @@ class _FeedsPanelState extends State<FeedsPanel> {
       for (final f in mine)
         Row(children: [
           Expanded(child: Text(f['url'], maxLines: 1, overflow: TextOverflow.ellipsis, style: mono(11, color: boneFaint))),
-          IconButton(icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () async {
+          IconButton(tooltip: 'Remove', icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () async {
             await Feeds.remove(f['url']);
             if (mounted) setState(() {});
           }),
@@ -1227,11 +1226,11 @@ class _PosterSheetState extends State<PosterSheet> {
       path = '${dir.path}/$name';
     }
     if (!mounted) return;
-    setState(() => msg = 'Packing the station: its log, its sound and its art.');
+    setState(() => msg = 'Packing the station with its log, sound and art.');
     final r = await Native.callAway({'cmd': 'pack_export', 'station': widget.station['id'], 'path': path});
     if (!mounted) return;
     if (r is! Map || r['error'] != null) {
-      setState(() => msg = 'Not packed: ${r is Map ? r['error'] : 'try again'}');
+      setState(() => msg = 'Not packed. ${r is Map ? r['error'] : 'Try again'}');
       return;
     }
     setState(() => msg = (r['missing'] as num? ?? 0) > 0 ? '${r['missing']} pieces could not be found yet, so the file plays with gaps. The rest is in it.' : isComputer ? 'Saved.' : null);
@@ -1333,7 +1332,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
       if (!await askMic(context)) return;
       final p = await ship.invokeMethod<String>('record_start', {'bitrate': 24000}).catchError((_) => null);
       if (p == null) {
-        if (mounted) setState(() => err = 'The microphone would not start. Another app may have it.');
+        if (mounted) setState(() => err = micFailure());
         return;
       }
       setState(() => hailing = true);

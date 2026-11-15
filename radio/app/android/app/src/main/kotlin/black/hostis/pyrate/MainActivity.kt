@@ -90,13 +90,15 @@ class MainActivity : FlutterActivity() {
         takeLink(intent)
         initNative(applicationContext)
         setStartMuted(intent?.getBooleanExtra("mute", false) == true)
-        if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "pyrate/service").setMethodCallHandler { call, result ->
             when (call.method) {
+                // Asked for once the first station is playing, after a line saying why, never over the first frame.
+                "notify_ask" -> {
+                    if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+                    }
+                    result.success(null)
+                }
                 "start" -> {
                     val i = Intent(this, PlaybackService::class.java)
                         .putExtra("key", Bells.bellKey(this))

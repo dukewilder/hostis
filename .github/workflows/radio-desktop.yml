@@ -38,7 +38,9 @@ jobs:
       # The open player rides in the app, for sharing on a Wi-Fi and saving to a folder: the one
       # this app names, fetched from IPFS and checked block by block.
       - run: python tools/open_player.py --tar app/assets/player/open-player.tar --need
-      - run: flutter build windows --release
+      # The build's own version code, so the app can tell when a newer one is signed.
+      - shell: bash
+        run: flutter build windows --release --dart-define=PYRATE_CODE=$(sed -n 's/^version: .*+\([0-9]*\)$/\1/p' pubspec.yaml)
         working-directory: radio/app
       - name: Pack
         shell: pwsh
@@ -66,7 +68,9 @@ jobs:
       # The open player rides in the app, for sharing on a Wi-Fi and saving to a folder: the one
       # this app names, fetched from IPFS and checked block by block.
       - run: python3 tools/open_player.py --tar app/assets/player/open-player.tar --need
-      - run: flutter build macos --release
+      # The build's own version code, so the app can tell when a newer one is signed.
+      - shell: bash
+        run: flutter build macos --release --dart-define=PYRATE_CODE=$(sed -n 's/^version: .*+\([0-9]*\)$/\1/p' pubspec.yaml)
         working-directory: radio/app
       - name: Pack
         run: |
@@ -92,7 +96,9 @@ jobs:
       # The open player rides in the app, for sharing on a Wi-Fi and saving to a folder: the one
       # this app names, fetched from IPFS and checked block by block.
       - run: python3 tools/open_player.py --tar app/assets/player/open-player.tar --need
-      - run: flutter build linux --release
+      # The build's own version code, so the app can tell when a newer one is signed.
+      - shell: bash
+        run: flutter build linux --release --dart-define=PYRATE_CODE=$(sed -n 's/^version: .*+\([0-9]*\)$/\1/p' pubspec.yaml)
         working-directory: radio/app
       - name: Pack
         run: |

@@ -34,18 +34,20 @@ const red = Color(0xFFC52828);
 const line = Color(0x24EDE4CE);
 const lineSoft = Color(0x12EDE4CE);
 
+// Nothing is set smaller than 14 for sentences or 12 for capitals and figures, so text stays
+// readable at the system's own size and grows with it.
 TextStyle carved(double size, {Color color = bone, double spacing = 0.3}) =>
-    TextStyle(fontFamily: 'Cinzel', fontSize: size, color: color, letterSpacing: size * spacing, height: 1.2);
+    TextStyle(fontFamily: 'Cinzel', fontSize: size < 12 ? 12 : size, color: color, letterSpacing: size * spacing, height: 1.2);
 TextStyle serif(double size, {Color color = bone, bool italic = false}) =>
-    TextStyle(fontFamily: 'Fell', fontSize: size, color: color, fontStyle: italic ? FontStyle.italic : FontStyle.normal, height: 1.35);
+    TextStyle(fontFamily: 'Fell', fontSize: size < 14 ? 14 : size, color: color, fontStyle: italic ? FontStyle.italic : FontStyle.normal, height: 1.35);
 /// IM Fell DW Pica SC, the face of every HOSTIS masthead and title.
 TextStyle pica(double size, {Color color = bone, double spacing = 0.04}) =>
     TextStyle(fontFamily: 'Pica', fontSize: size, color: color, letterSpacing: size * spacing, height: 1.12);
 /// A mono caption in capitals, the way the site labels its controls and readings.
 TextStyle caps(double size, {Color color = boneFaint, double spacing = 0.2}) =>
-    TextStyle(fontFamily: 'Mono', fontSize: size, color: color, letterSpacing: size * spacing);
+    TextStyle(fontFamily: 'Mono', fontSize: size < 12 ? 12 : size, color: color, letterSpacing: (size < 12 ? 12 : size) * spacing);
 TextStyle mono(double size, {Color color = boneFaint, FontWeight weight = FontWeight.w400}) =>
-    TextStyle(fontFamily: 'Mono', fontSize: size, color: color, letterSpacing: size * 0.05, fontWeight: weight);
+    TextStyle(fontFamily: 'Mono', fontSize: size < 12 ? 12 : size, color: color, letterSpacing: size * 0.05, fontWeight: weight);
 
 const _service = ShellChannel();
 
@@ -122,13 +124,25 @@ class LeadButton extends StatelessWidget {
           child: ExcludeSemantics(
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               if (glyph != null) ...[Text(glyph!, style: TextStyle(fontFamily: 'Skull', fontSize: 13, height: 1, color: !on ? boneGhost : quiet ? bone : bloodBright)), const SizedBox(width: 12)],
-              Text(label, style: pica(18, color: on ? bone : boneGhost, spacing: 0.06)),
+              Text(label, style: pica(18, color: on ? bone : boneFaint, spacing: 0.06)),
             ]),
           ),
         ),
       ),
     );
   }
+}
+
+/// A tap target that TalkBack and other readers announce as a button, with what is inside it as
+/// its label (or [label], where an icon stands alone).
+class Tappable extends StatelessWidget {
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final Widget child;
+  final String? label;
+  const Tappable({super.key, required this.onTap, required this.child, this.label, this.onLongPress});
+  @override
+  Widget build(BuildContext context) => Semantics(button: true, enabled: onTap != null, label: label, child: InkWell(onTap: onTap, onLongPress: onLongPress, child: child));
 }
 
 /// False when the node would not start: the dial says so rather than search for ever.
@@ -315,9 +329,11 @@ class Tuner extends ChangeNotifier {
     if (c['unmetered'] != true && !now) return;
     final code = await buildCode();
     if (code == 0) return;
-    final r = await Native.callAway({'cmd': 'update', 'code': code, 'now': now});
-    if (r is Map && (r['available'] == true || r['coming'] is Map)) {
-      update = r.cast<String, dynamic>();
+    // A computer only asks whether a newer version is signed in the Releases log: nothing is
+    // fetched or installed.
+    final r = await Native.callAway({'cmd': 'update', 'code': code, 'now': isComputer ? false : now, if (isComputer) 'peek': true});
+    if (r is Map && (r['available'] == true || r['coming'] is Map || r['newer'] == true)) {
+      update = isComputer ? {'newer': true} : r.cast<String, dynamic>();
       notifyListeners();
     }
   }
@@ -594,6 +610,14 @@ class Tuner extends ChangeNotifier {
     _acts++;
     busySince = DateTime.now().millisecondsSinceEpoch;
     if (isComputer && pref('autostart') == null) unawaited(_askStartWithComputer());
+    if (!firstTuneDone && !isComputer && pref('notify_asked') != true) {
+      pref('notify_asked', true);
+      // After the first sound has begun: a line on why, then the phone's own question.
+      Future.delayed(const Duration(seconds: 6), () {
+        say('Allow notifications so the lock screen and your headphones can stop the radio.');
+        Future.delayed(const Duration(seconds: 3), () => _service.invokeMethod('notify_ask').catchError((_) {}));
+      });
+    }
     firstTuneDone = true;
     pref('first_tune', true);
     // A station tuned before its card came is kept on the dial as it stands.
@@ -819,8 +843,8 @@ class _PyrateAppState extends State<PyrateApp> {
               if (tab != 0 && radio.tuned != null) MiniPlayer(radio: radio, onOpen: () => setState(() => tab = 0)),
               Container(
                 decoration: const BoxDecoration(border: Border(top: BorderSide(color: line, width: 1))),
-                height: 64,
-                child: Row(children: [
+                constraints: const BoxConstraints(minHeight: 64),
+                child: IntrinsicHeight(child: Row(children: [
                   for (final (i, label, icon) in [(0, 'Radio', Icons.radio_outlined), (1, 'Stations', Icons.format_list_bulleted), (2, 'Broadcast', Icons.podcasts), (3, 'Settings', Icons.tune)])
                     Expanded(
                       child: Semantics(
@@ -839,13 +863,13 @@ class _PyrateAppState extends State<PyrateApp> {
                             child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                               Icon(icon, size: 22, color: tab == i ? bone : boneFaint),
                               const SizedBox(height: 4),
-                              Text(label.toUpperCase(), style: caps(11, color: tab == i ? bone : boneFaint, spacing: 0.12)),
+                              FittedBox(fit: BoxFit.scaleDown, child: Text(label.toUpperCase(), style: caps(11, color: tab == i ? bone : boneFaint, spacing: 0.12))),
                             ]),
                           ),
                         ),
                       ),
                     ),
-                ]),
+                ])),
               ),
             ]),
           ),
@@ -883,7 +907,7 @@ class MiniPlayer extends StatelessWidget {
       decoration: const BoxDecoration(color: panel, border: Border(top: BorderSide(color: line, width: 1))),
       child: Row(children: [
         Expanded(
-          child: InkWell(
+          child: Tappable(
             onTap: onOpen,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
@@ -1013,8 +1037,8 @@ class Dial extends StatelessWidget {
             TextButton(onPressed: radio.declineInvite, child: Text('NO', style: carved(11, color: boneFaint))),
           ]),
         ),
-      if (up != null && up['coming'] is Map)
-        InkWell(
+      if (up != null && !isComputer && up['coming'] is Map)
+        Tappable(
           onTap: () => radio.takeUpdateNow(),
           child: Container(
             width: double.infinity,
@@ -1023,8 +1047,21 @@ class Dial extends StatelessWidget {
             child: Text('${up['coming']['version']} ARRIVES ${shortDate((up['coming']['from_ms'] as num).toInt())} · TAP TO TAKE IT NOW', textAlign: TextAlign.center, style: carved(11, color: boneDim, spacing: 0.2)),
           ),
         ),
-      if (up != null && up['available'] == true)
-        InkWell(
+      if (up != null && isComputer && up['newer'] == true)
+        Semantics(
+          button: true,
+          child: InkWell(
+            onTap: () => _service.invokeMethod('open_uri', {'uri': 'https://hostis.black/pyrateradio/'}).catchError((_) {}),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+              decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: boneFaint, width: 1))),
+              child: Text('A newer version is signed. Take it from hostis.black.', textAlign: TextAlign.center, style: serif(15, color: boneDim)),
+            ),
+          ),
+        ),
+      if (up != null && !isComputer && up['available'] == true)
+        Tappable(
           onTap: () => _service.invokeMethod('install', {'path': up['path']}).catchError((_) {}),
           child: Container(
             width: double.infinity,
@@ -1143,7 +1180,7 @@ class _StationMore extends StatelessWidget {
   const _StationMore({required this.radio, required this.s, required this.tuned});
   @override
   Widget build(BuildContext context) {
-    Widget row(String label, String? about, VoidCallback act) => InkWell(
+    Widget row(String label, String? about, VoidCallback act) => Tappable(
           onTap: () {
             Navigator.pop(context);
             act();
@@ -1284,7 +1321,7 @@ class _StationFace extends StatelessWidget {
               Text('ON AIR', style: caps(11, color: bloodBright, spacing: 0.3)),
             ]),
           ),
-        GestureDetector(
+        Tappable(
           onTap: () => openPage(context, s, radio),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Flexible(child: Text((s['name'] ?? '').toString().isEmpty && s['placeholder'] == true ? 'By its link' : s['name'] ?? '', textAlign: TextAlign.center, style: pica(32, spacing: 0.03))),
@@ -1327,7 +1364,7 @@ class _StationFace extends StatelessWidget {
           Text(s['about'], textAlign: TextAlign.center, maxLines: 3, overflow: TextOverflow.ellipsis,
               style: serif(16, color: boneFaint, italic: true)),
         const SizedBox(height: 22),
-        SizedBox(height: 118, child: _readout(isTuned, state, now, title, by, pos, dur, accent, byLink: s['placeholder'] == true && radio.linked.contains(id))),
+        ConstrainedBox(constraints: const BoxConstraints(minHeight: 118), child: _readout(isTuned, state, now, title, by, pos, dur, accent, byLink: s['placeholder'] == true && radio.linked.contains(id))),
         if (s['placeholder'] != true) Text('${s['aboard'] ?? 0} LISTENING', style: caps(11, color: boneFaint, spacing: 0.2)),
       ]),
       ))));
@@ -1602,14 +1639,14 @@ class _ColoursPageState extends State<ColoursPage> {
       try {
         await shape.apply(r['id']);
       } catch (e) {
-        shaped = 'The station is up, but its first settings did not take: $e';
+        shaped = 'The station is up, but its first settings did not take. $e';
       }
     }
     if (!mounted) return;
     setState(() {
       raising = false;
       if (r is Map && r['error'] != null) error = r['error'];
-      if (r is Map && r['pocket_error'] != null) error = 'The station is private, but its topic did not open yet: ${r['pocket_error']}';
+      if (r is Map && r['pocket_error'] != null) error = 'The station is private, but its topic did not open yet. ${r['pocket_error']}';
       if (shaped != null) error = shaped;
     });
   }
@@ -1619,7 +1656,7 @@ class _ColoursPageState extends State<ColoursPage> {
   Future<void> _setArt(String station, String kind, String path) async {
     setState(() => artNote = 'Redrawing the picture');
     final r = await Native.callAway({'cmd': 'art_set', 'station': station, 'kind': kind, 'path': path});
-    if (mounted) setState(() => artNote = r is Map && r['error'] != null ? 'That picture would not take: ${r['error']}' : null);
+    if (mounted) setState(() => artNote = r is Map && r['error'] != null ? 'That picture would not take. ${r['error']}' : null);
   }
 
   Future<void> pickArt(String station, String kind) async {
@@ -1769,7 +1806,7 @@ class _ColoursPageState extends State<ColoursPage> {
       // The form stays, with its progress, until the words have been shown: the new station
       // turns up in the node a moment before them.
       if (mine == null || raising) ...[
-        masthead('Start a station'),
+        masthead('Broadcast', sub: 'Start a station of your own.'),
         const SizedBox(height: 10),
         note('Give it a name, add some recordings, and it plays day and night, carried by everyone who listens.'),
         const SizedBox(height: 18),
@@ -1782,15 +1819,15 @@ class _ColoursPageState extends State<ColoursPage> {
         // so it is no surprise; the keeper puts it on the dial from Broadcast once it is made.
         if (!pocket)
           IgnorePointer(child: Opacity(opacity: 0.75, child: setting('Keep it off the dial', true, (_) {}, sub: 'Every new station starts heard only by its link. Put it on the dial once it is made.'))),
-        fold('More options', sub: 'Invite-only, and an extra passphrase', [
-          setting('Invite-only', pocket, (v) => setState(() => pocket = v), sub: 'Left out of Stations. Only people you send an invitation can find it or hear it, and they can see each other\'s devices.'),
-          const SizedBox(height: 10),
-          note('A passphrase adds a lock to your 24 words. Someone who sees the words still cannot open the station. Forget the passphrase and the station is gone for good.'),
-          TextField(controller: pass, obscureText: true, style: mono(13, color: bone), decoration: field('Passphrase (optional)'),
-              enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
+        const SizedBox(height: 6),
+        note('A passphrase adds a lock to your 24 words, for the day someone finds or sees them. They still cannot open the station without it. Forget it and the station is gone for good. It cannot be added later.'),
+        TextField(controller: pass, obscureText: true, style: mono(13, color: bone), decoration: field('Passphrase (optional)'),
+            enableSuggestions: false, autocorrect: false, enableIMEPersonalizedLearning: false),
+        fold('More options', sub: 'Invite-only', [
+          setting('Invite-only', pocket, (v) => setState(() => pocket = v), sub: 'Left out of Stations. Only people you send an invitation can find it or hear it, and they can see each other\'s devices. It cannot be changed later.'),
         ]),
         const SizedBox(height: 14),
-        Row(children: [LeadButton(label: raising ? 'Raising' : 'Raise colours', onPressed: raising ? null : raise)]),
+        Row(children: [LeadButton(label: raising ? 'Starting' : 'Start the station', onPressed: raising ? null : raise)]),
         // Raising takes a few seconds: a key is made, and the work done that lets a station
         // on the air at all. It is said, so nobody wonders whether the press took.
         if (raising) ...[
@@ -1802,7 +1839,7 @@ class _ColoursPageState extends State<ColoursPage> {
               : 'Making the station\'s key and doing the work that lets it on the air. A few seconds.'),
         ],
         const SizedBox(height: 8),
-        note('You can change all of this later.'),
+        note('Everything but the passphrase and invite-only can change later.'),
         if (error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(error!, style: serif(14, color: bone, italic: true))),
         const SizedBox(height: 30),
         fold('Bring back a station', sub: 'Have your 24 words? Move your station to this $thisDevice.', [
@@ -1824,8 +1861,11 @@ class _ColoursPageState extends State<ColoursPage> {
           if (restoreMsg != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(restoreMsg!, style: serif(14, color: bone, italic: true))),
         ]),
         fold('Co-host someone else\'s station', sub: 'Broadcast for a friend\'s station from this $thisDevice.', [const HandsPanel()]),
-      ] else
+      ] else ...[
+        masthead('Broadcast'),
+        const SizedBox(height: 16),
         ..._station(mine),
+      ],
     ]);
   }
 
@@ -1909,7 +1949,7 @@ class _ColoursPageState extends State<ColoursPage> {
           child: Row(children: [
             Expanded(child: Text(j['state'] ?? '', style: serif(14, color: boneDim, italic: true))),
             if (!(j['state'] as String).startsWith('Setting'))
-              IconButton(icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () => Native.call({'cmd': 'clear_job', 'job': j['id']})),
+              IconButton(tooltip: 'Remove', icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () => Native.call({'cmd': 'clear_job', 'job': j['id']})),
           ]),
         ),
       if (library.isNotEmpty) ...[
@@ -2001,7 +2041,7 @@ class _ColoursPageState extends State<ColoursPage> {
       if (ok == true) {
         final r = await Native.callAway({'cmd': 'strike', 'station': id, 'phrase': phrase, 'passphrase': pp});
         if (!context.mounted) return;
-        toast(context, r is Map && r['error'] != null ? 'Not ended: ${r['error']}' : 'The station has ended.');
+        toast(context, r is Map && r['error'] != null ? 'Not ended. ${r['error']}' : 'The station has ended.');
       }
           }, color: bloodBright),
         ]),
@@ -2033,7 +2073,7 @@ class _DrawerLanternState extends State<DrawerLantern> {
 
   Widget sizeChip(int n) => Padding(
         padding: const EdgeInsets.only(right: 8, bottom: 8),
-        child: InkWell(
+        child: Tappable(
           onTap: () => setState(() {
             gb = n;
             apply();

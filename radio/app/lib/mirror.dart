@@ -38,15 +38,15 @@ class OpenPlayer {
     }
     if (_server != null) return null;
     // Through Tor, nothing on this computer answers the local network.
-    if (((Native.call({'cmd': 'tor'}) as Map?)?['url'] ?? '').toString().isNotEmpty) return 'it stays off while the radio goes through Tor';
+    if (((Native.call({'cmd': 'tor'}) as Map?)?['url'] ?? '').toString().isNotEmpty) return 'It stays off while the radio goes through Tor.';
     final f = await files();
-    if (f == null) return 'this build carries no player';
+    if (f == null) return 'This build carries no player.';
     try {
       // A port the computer picks, new each session, so no fixed number names this radio
       // to someone scanning the network. The link and the code carry it.
       _server = await HttpServer.bind(InternetAddress.anyIPv4, 0);
     } catch (_) {
-      return 'no port could be opened';
+      return 'No port could be opened.';
     }
     _server!.listen((r) => _answer(r, f), onError: (_) {});
     return null;
