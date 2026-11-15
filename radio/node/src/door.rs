@@ -74,6 +74,40 @@ pub const WHY_MOVED: &str = "This device's address on the network changed, so th
 pub const WHY_LOST: &str = "The router stopped holding the port, so the door closed.";
 pub const WHY_NO_SOCKET: &str = "The door's port could not be opened on this device.";
 
+/// The frame id when `f` is the last part of a message, the part whose going frees its slot.
+fn last_part(f: &[u8]) -> Option<u32> {
+    (f.len() >= 5 && f[4] == 1).then(|| u32::from_be_bytes([f[0], f[1], f[2], f[3]]))
+}
+
+/// Whether a plain STUN request from `ip` is answered now: five in any ten seconds at most, so
+/// the port is no one's reflector. `seen` remembers who asked lately.
+fn stun_ok(seen: &mut HashMap<IpAddr, (Instant, u32)>, ip: IpAddr, now: Instant) -> bool {
+    if seen.len() > 4096 {
+        seen.retain(|_, (t, _)| now.duration_since(*t) < Duration::from_secs(10));
+    }
+    let e = seen.entry(ip).or_insert((now, 0));
+    if now.duration_since(e.0) >= Duration::from_secs(10) {
+        *e = (now, 0);
+    }
+    if e.1 >= STUN_PER_IP {
+        return false;
+    }
+    e.1 += 1;
+    true
+}
+
+/// Whether a new browser is let in: room on the door, room for one more from its address, and
+/// not too many new ones this second.
+fn admit(total: usize, same_ip: usize, this_second: usize) -> bool {
+    total < MAX_SESSIONS && same_ip < SESSIONS_PER_IP && this_second < 8
+}
+
+/// Whether a tab's request is answered now: only once the tab has said who it is, with a slot
+/// free, an id not already waiting, and the cards at most once in ten seconds.
+fn may_ask(said_hello: bool, asks: usize, waiting: bool, cards: bool, cards_at: Option<Instant>, now: Instant) -> bool {
+    said_hello && asks < ASKS_PER_TAB && !waiting && !(cards && cards_at.is_some_and(|t| now.duration_since(t) < CARDS_EVERY))
+}
+
 /// A mapped port is a door only at the address the network already sees this device at. An
 /// address the network has not given is never taken as the same.
 pub fn address_rule(mapped: IpAddr, observed: Option<Ipv4Addr>) -> Result<(), &'static str> {
@@ -136,8 +170,7 @@ impl Session {
             }
             let f = self.out.pop_front().unwrap_or_default();
             self.out_bytes = self.out_bytes.saturating_sub(f.len());
-            if f.len() >= 5 && f[4] == 1 {
-                let id = u32::from_be_bytes([f[0], f[1], f[2], f[3]]);
+            if let Some(id) = last_part(&f) {
                 if self.counted.remove(&id) {
                     self.asks = self.asks.saturating_sub(1);
                 }
@@ -588,17 +621,9 @@ async fn run(inner: Weak<Inner>, door: Arc<Door>, sock: UdpSocket, cert: DtlsCer
                         touched.push(from);
                     }
                 } else if let Some(out) = stun_answer(pkt, from) {
-                    if stun_from.len() > 4096 {
-                        stun_from.retain(|_, (t, _)| t.elapsed() < Duration::from_secs(10));
-                    }
-                    let e = stun_from.entry(from.ip()).or_insert((Instant::now(), 0));
-                    if e.0.elapsed() >= Duration::from_secs(10) {
-                        *e = (Instant::now(), 0);
-                    }
-                    if e.1 >= STUN_PER_IP {
+                    if !stun_ok(&mut stun_from, from.ip(), Instant::now()) {
                         continue;
                     }
-                    e.1 += 1;
                     door.stun.fetch_add(1, Ordering::Relaxed);
                     let _ = sock.try_send_to(&out, from);
                 } else if let Some((ufrag, theirs)) = direct_ufrag(pkt) {
@@ -606,7 +631,7 @@ async fn run(inner: Weak<Inner>, door: Arc<Door>, sock: UdpSocket, cert: DtlsCer
                     // door's share at once.
                     opened_recent.retain(|t| t.elapsed() < Duration::from_secs(1));
                     let same_ip = sessions.keys().filter(|a| a.ip() == from.ip()).count();
-                    if sessions.len() >= MAX_SESSIONS || same_ip >= SESSIONS_PER_IP || opened_recent.len() >= 8 || !inner.crew.load(Ordering::Relaxed) {
+                    if !admit(sessions.len(), same_ip, opened_recent.len()) || !inner.crew.load(Ordering::Relaxed) {
                         continue;
                     }
                     opened_recent.push_back(Instant::now());
@@ -769,8 +794,7 @@ fn drive(inner: &Arc<Inner>, door: &Arc<Door>, sock: &UdpSocket, at: SocketAddr,
                         // own task, at most eight waiting at a time per tab (a slot frees once
                         // its answer has gone), and the cards at most once in ten seconds.
                         let cards = matches!(postcard::from_bytes::<Request>(&msg), Ok(Request::Cards));
-                        let too_soon = cards && s.cards_at.is_some_and(|t| t.elapsed() < CARDS_EVERY);
-                        if s.peer.is_none() || s.asks >= ASKS_PER_TAB || too_soon || s.counted.contains(&id) {
+                        if !may_ask(s.peer.is_some(), s.asks, s.counted.contains(&id), cards, s.cards_at, Instant::now()) {
                             if !s.queue(frame(id, &postcard::to_stdvec(&Response::Hop(vec![])).unwrap_or_default())) {
                                 break;
                             }
@@ -822,6 +846,44 @@ pub fn tab_id(id: &EndpointId) -> [u8; 32] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_door_holds_each_browser_to_its_share() {
+        let now = Instant::now();
+        // STUN: five answers to one address in ten seconds, others unaffected, then five more.
+        let mut seen = HashMap::new();
+        let (a, b): (IpAddr, IpAddr) = ("198.51.100.1".parse().unwrap(), "198.51.100.2".parse().unwrap());
+        assert!((0..5).all(|_| stun_ok(&mut seen, a, now)));
+        assert!(!stun_ok(&mut seen, a, now), "the sixth in ten seconds goes unanswered");
+        assert!(stun_ok(&mut seen, b, now), "another address has its own five");
+        assert!(stun_ok(&mut seen, a, now + Duration::from_secs(10)), "and ten seconds on, again");
+        // Four browsers from one address, sixty-four in all, eight new in a second.
+        assert!(admit(10, 3, 0) && !admit(10, 4, 0), "a fifth from one address waits");
+        assert!(!admit(MAX_SESSIONS, 0, 0) && !admit(10, 0, 8));
+        // A request only after the hello, with a slot free, and the cards once in ten seconds.
+        assert!(!may_ask(false, 0, false, false, None, now), "nothing before the hello");
+        assert!(may_ask(true, 0, false, false, None, now));
+        assert!(!may_ask(true, ASKS_PER_TAB, false, false, None, now), "eight waiting at most");
+        assert!(!may_ask(true, 0, true, false, None, now), "an id already waiting is not taken twice");
+        assert!(!may_ask(true, 0, false, true, Some(now), now + Duration::from_secs(9)), "the cards once in ten seconds");
+        assert!(may_ask(true, 0, false, true, Some(now), now + CARDS_EVERY));
+        // A slot frees as the last part of its answer goes.
+        let parts = frame(7, &vec![1u8; PART * 2 + 10]);
+        assert_eq!(parts.iter().map(|f| last_part(f)).collect::<Vec<_>>(), vec![None, None, Some(7)]);
+    }
+
+    #[test]
+    fn a_browser_that_never_reads_is_let_go() {
+        let rtc = RtcConfig::new().build(Instant::now());
+        let mut s = Session {
+            rtc, ch: None, peer: None, parts: HashMap::new(), out: VecDeque::new(), waiting: HashMap::new(), next: 1,
+            asks: 0, counted: HashSet::new(), out_bytes: 0, cards_at: None, born: Instant::now(), wake: Instant::now(),
+        };
+        let mb = vec![0u8; 1 << 20];
+        assert!((0..4).all(|i| s.queue(frame(i, &mb[..(1 << 20) - 4096]))), "four MiB may wait");
+        assert!(!s.queue(frame(9, &mb)), "past that the browser is let go");
+        assert!(!s.rtc.is_alive());
+    }
 
     #[test]
     fn a_door_opens_only_where_the_network_sees_this_device() {

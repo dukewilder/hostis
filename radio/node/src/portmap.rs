@@ -188,10 +188,7 @@ async fn give_back(via: &Via, port: u16) {
             let _ = gw.remove_port(igd_next::PortMappingProtocol::UDP, *ext_port).await;
         }
         Via::Pmp { gw, .. } => {
-            let mut req = vec![0, 1, 0, 0];
-            req.extend_from_slice(&port.to_be_bytes());
-            req.extend_from_slice(&[0, 0, 0, 0, 0, 0]);
-            let _ = ask(*gw, 5351, &req, 16).await;
+            let _ = ask(*gw, 5351, &pmp_map(port, 0, 0), 16).await;
         }
         Via::Pcp { gw, me, nonce, ext } => {
             let _ = ask(*gw, 5351, &pcp_map(*me, port, Some(*ext), nonce, 0), 60).await;
@@ -282,6 +279,16 @@ fn pcp_lifetime(r: &[u8]) -> u32 {
     u32::from_be_bytes([r[4], r[5], r[6], r[7]])
 }
 
+/// A NAT-PMP UDP mapping request (RFC 6886 3.3): the inside port, the outside port wished for,
+/// and the lifetime asked (0 with an outside port of 0 gives the mapping back).
+fn pmp_map(port: u16, ext: u16, lifetime: u32) -> Vec<u8> {
+    let mut req = vec![0, 1, 0, 0];
+    req.extend_from_slice(&port.to_be_bytes());
+    req.extend_from_slice(&ext.to_be_bytes());
+    req.extend_from_slice(&lifetime.to_be_bytes());
+    req
+}
+
 /// NAT-PMP (RFC 6886): the outside address, then a UDP mapping, `ext` the outside port wished for.
 async fn nat_pmp(gw: Ipv4Addr, port: u16, ext: u16) -> Option<Granted> {
     let r = ask(gw, 5351, &[0, 0], 12).await?;
@@ -289,11 +296,7 @@ async fn nat_pmp(gw: Ipv4Addr, port: u16, ext: u16) -> Option<Granted> {
         return None;
     }
     let ip = Ipv4Addr::new(r[8], r[9], r[10], r[11]);
-    let mut req = vec![0, 1, 0, 0];
-    req.extend_from_slice(&port.to_be_bytes());
-    req.extend_from_slice(&ext.to_be_bytes());
-    req.extend_from_slice(&LEASE.to_be_bytes());
-    let r = ask(gw, 5351, &req, 16).await?;
+    let r = ask(gw, 5351, &pmp_map(port, ext, LEASE), 16).await?;
     if r[0] != 0 || r[1] != 129 || r[2..4] != [0, 0] {
         return None;
     }
@@ -365,6 +368,23 @@ mod tests {
         assert_eq!(renew_after(3600), Duration::from_secs(1800));
         assert_eq!(renew_after(7), Duration::from_secs(3));
         assert_eq!(renew_after(1), Duration::from_secs(2), "never a busy loop");
+    }
+
+    #[test]
+    fn a_closed_door_gives_its_port_back() {
+        // NAT-PMP: the same inside port, no outside port, no lifetime.
+        let give = pmp_map(41_000, 0, 0);
+        assert_eq!(give, [0, 1, 0, 0, 0xa0, 0x28, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(&pmp_map(41_000, 41_000, LEASE)[8..], &LEASE.to_be_bytes());
+        // PCP: the mapping's own nonce and outside address, with no lifetime.
+        let nonce = [9u8; 12];
+        let ext: SocketAddr = "198.51.100.20:41000".parse().unwrap();
+        let back = pcp_map("192.168.1.20".parse().unwrap(), 41_000, Some(ext), &nonce, 0);
+        assert_eq!(back.len(), 60);
+        assert_eq!(&back[4..8], &[0, 0, 0, 0], "no lifetime");
+        assert_eq!(&back[24..36], &nonce, "the nonce it was made under");
+        assert_eq!(&back[42..44], &41_000u16.to_be_bytes());
+        assert_eq!(&back[56..60], &[198, 51, 100, 20]);
     }
 
     #[test]
