@@ -1061,7 +1061,7 @@ function paint() {
   const waited = busySince ? Date.now() - busySince : 0;
   const looking = unfound();
   $('hint').hidden = !looking && waited < 10000;
-  $('hint').textContent = looking ? 'Looking for this station. A new one takes a minute or two to reach the network.' : lost() ? 'It may come back on the air. Try another station meanwhile.' : waited > 45000 && stage === 'finding' ? 'No radio carrying this station has answered yet. Keep waiting, or try another station.' : stage === 'connecting' ? 'Still connecting. Some networks block the radio; another network, or the app, may get through.' : 'Still tuning in. The first station takes longest.';
+  $('hint').textContent = looking ? 'Looking for this station. A new one can take up to a quarter of an hour to reach the network.' : lost() ? 'It may come back on the air. Try another station meanwhile.' : waited > 45000 && stage === 'finding' ? 'No radio carrying this station has answered yet. Keep waiting, or try another station.' : stage === 'connecting' ? 'Still connecting. Some networks block the radio; another network, or the app, may get through.' : 'Still tuning in. The first station takes longest.';
   // The picture: the recording's own if it has one, the station's otherwise.
   const want = (track && p.art) || cur.cover || null, c = cur.id;
   if (want !== artWant) { artWant = want; if (!want) art(null); else pic(c, want).then(u => { if (cur?.id === c && artWant === want) { if (u) art(u); else artWant = undefined } }) }
@@ -1800,22 +1800,23 @@ function studioStatus() {
   if (!radio || !mineCur) return;
   const k = JSON.parse(radio.mine()).find(m => m.id === mineCur);
   const el = $('st-status'); if (!k) { el.textContent = adopted.has(mineCur) ? '' : 'Looking for the station on the network'; return }
-  // A new station reaches other radios a minute or so after it is raised: the stem's wait, so
-  // nobody can tell from the moment it appears when or where it was sent.
+  // A new station reaches other radios within a quarter of an hour of being raised: the entry
+  // waits for the next quarter hour, so nobody can tell from the moment it appears when or where it was sent.
   const on = k.carriers > 0, settled = on && !airing && !k.unsent && k.pow;
   el.classList.toggle('on', !!settled);
   el.textContent = !k.pow ? 'Getting your station ready · a few seconds'
     : airing ? 'Adding a recording'
     : k.unsent ? 'Sending · ' + Math.round(100 * (k.chunks - k.unsent) / k.chunks) + '%'
     : k.held ? 'Held until the next quarter hour, then sent'
-    : !on ? 'Reaching the network · about a minute'
+    : !on ? 'Reaching the network · within a quarter of an hour'
     : !k.tracks ? 'On the network · add a recording to start it playing'
     : 'On the network · ' + k.tracks + (k.tracks === 1 ? ' recording' : ' recordings') + ' · ' + k.carriers + (k.carriers === 1 ? ' radio helping' : ' radios helping');
   $('st-born').hidden = bornFor !== mineCur || k.tracks > 0;
   if (!$('st-born').hidden) $('st-bfreq').textContent = fqs(mineCur);
   dialNote(k);
 }
-// Where the station stands with the dial. A new one plays by its link at once and joins the
+// Where the station stands with the dial. A new one plays by its link once it has reached the
+// network, within a quarter of an hour, and joins the
 // dial a day after it first went on the air, once this browser has done its share of work;
 // its keeper can keep it to its link for good.
 let bornFor = null;
@@ -1829,8 +1830,8 @@ function dialNote(k) {
   if (document.activeElement !== $('st-linkonly')) $('st-linkonly').checked = !!k.link_only;
   const work = !k.link_only && !k.listable && !!k.dial_at && Date.now() >= k.dial_at;
   $('st-dialnote').textContent = k.link_only ? 'Off the dial. It plays by its link. Untick below to put it on the dial; it joins ' + (k.dial_at && Date.now() < k.dial_at ? whenSay(k.dial_at) : 'soon after') + '.'
-    : k.dial_at && Date.now() < k.dial_at ? 'Plays by its link now, and joins the dial ' + whenSay(k.dial_at) + '.'
-    : !k.dial_at ? 'Plays by its link now, and joins the dial tomorrow.'
+    : k.dial_at && Date.now() < k.dial_at ? 'Plays by its link once it has reached the network, within a quarter of an hour, and joins the dial ' + whenSay(k.dial_at) + '.'
+    : !k.dial_at ? 'Plays by its link once it has reached the network, within a quarter of an hour, and joins the dial tomorrow.'
     : work ? 'Still finishing its work to join the dial. Keep this page open.'
     : 'On the dial at ' + fqs(k.id) + '.';
   $('st-work').hidden = !work;
@@ -1952,8 +1953,8 @@ $('st-another').onclick = () => { mineCur = null; $('st-name').value = $('st-abo
 $('st-kinds').oninput = () => { $('st-kindnote').hidden = $('st-kinds').value.split(',').filter(k => k.trim()).length <= 5 };
 
 // ---- Your station: what it says of itself, changed from the tab ---------------------------
-// Each fold writes one entry to the station's log, the same entry the app writes, and it sails
-// at once. Listeners see it once a carrier shows it, which takes up to two minutes.
+// Each fold writes one entry to the station's log, the same entry the app writes, and it waits for
+// the next quarter hour. Listeners see it once a carrier shows it, which can take up to a quarter of an hour.
 let ysInfo = null, ysFor = null, ysNoteT = 0;
 function ysSay(t) { $('ys-note').textContent = t || ''; clearTimeout(ysNoteT); if (t) ysNoteT = setTimeout(() => { $('ys-note').textContent = '' }, 9000) }
 const errText = e => { const t = String(e?.message || e || ''); return t.charAt(0).toUpperCase() + t.slice(1) + (/[.!?]$/.test(t) ? '' : '.') };
@@ -2043,7 +2044,7 @@ function ysSave(what, b) {
     else if (what === 'details') radio.details_set(id, $('ys-kinds').value, $('ys-mature').checked, $('ys-explicit').checked);
     else if (what === 'sched') radio.programme_set(id, JSON.stringify(ysProgramme()));
     else if (what === 'notice') { radio.notice_post(id, $('ys-notice').value, 0); $('ys-notice').value = '' }
-    ysSay(what === 'notice' ? 'Posted. Listeners see it within two minutes.' : 'Saved. Listeners see it within two minutes.');
+    ysSay(what === 'notice' ? 'Posted. Listeners see it within a quarter of an hour.' : 'Saved. Listeners see it within a quarter of an hour.');
     ysLoad(true); studioShow();
   } catch (e) { ysSay(errText(e)) }
   b.disabled = false;
@@ -2063,14 +2064,14 @@ async function ysArt(kind, f) {
     g.drawImage(img, (iw - sw) / 2, (ih - sh) / 2, sw, sh, 0, 0, w, h);
     const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95));
     radio.art_set(mineCur, kind, new Uint8Array(await blob.arrayBuffer()));
-    ysSay('Saved. Listeners see it within two minutes.'); ysLoad(true);
+    ysSay('Saved. Listeners see it within a quarter of an hour.'); ysLoad(true);
   } catch (e) { console.warn(e); ysSay(e instanceof DOMException || e?.type === 'error' ? 'That picture would not open.' : errText(e)) }
   finally { img?.close?.(); if (url) URL.revokeObjectURL(url) }
 }
 $('ys').addEventListener('click', e => {
   const s = e.target.closest('[data-save]'), d = e.target.closest('[data-down]'), o = e.target.closest('[data-out]');
   if (s) ysSave(s.dataset.save, s);
-  else if (d) { try { radio.notice_remove(mineCur, d.dataset.down); ysSay('Taken down. Listeners see it within two minutes.'); ysLoad(true) } catch (err) { ysSay(errText(err)) } }
+  else if (d) { try { radio.notice_remove(mineCur, d.dataset.down); ysSay('Taken down. Listeners see it within a quarter of an hour.'); ysLoad(true) } catch (err) { ysSay(errText(err)) } }
   else if (o) {
     const t = ysInfo?.library.find(x => x.track === o.dataset.out);
     if (!confirm('Take ‘' + (t?.title || 'this recording') + '’ out of the library? Listeners stop hearing it.')) return;

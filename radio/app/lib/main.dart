@@ -586,7 +586,7 @@ class Tuner extends ChangeNotifier {
       });
     } else {
       // Tuned at once: the radio looks for the station, by its link, for as long as it stays
-      // tuned, and a new one turns up a minute or two after it is raised.
+      // tuned, and a new one turns up within a quarter of an hour of being raised.
       linked.add(id);
       tune(id);
     }
@@ -1248,7 +1248,7 @@ class _StationFace extends StatelessWidget {
       'off air' => (offAirLabel((now?['back_at'] as num?)?.toInt()), false),
       'stalled' => ('Signal lost. Tuning in again', true),
       'tuning' => ('Tuning in', true),
-      _ => (byLink ? 'Looking for this station. A new one takes a minute or two to reach the network.' : 'Finding the station', true),
+      _ => (byLink ? 'Looking for this station. A new one can take up to a quarter of an hour to reach the network.' : 'Finding the station', true),
     };
     if (line != null) {
       final waited = radio.busySince == 0 ? 0 : DateTime.now().millisecondsSinceEpoch - radio.busySince;
@@ -1496,15 +1496,15 @@ class _ColoursPageState extends State<ColoursPage> {
           Text('${(mine['name'] ?? 'Your station').toString()} is live now. Anyone with its link can listen.', style: serif(17)),
           const SizedBox(height: 8),
         ],
-        // Another radio carries it about a minute after it is raised: the stem waits on purpose,
-        // so nobody watching can tell the station began here.
+        // Another radio carries it within a quarter of an hour of its being raised: the entry waits for
+        // the next quarter hour on purpose, so nobody watching can tell the station began here.
         Row(children: [
           if (carriers > 0)
             const Icon(Icons.check, size: 14, color: boneDim)
           else
             const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 1, color: boneFaint)),
           const SizedBox(width: 9),
-          Text(carriers > 0 ? 'On the network' : 'Reaching the network, about a minute', style: serif(14, color: carriers > 0 ? boneDim : boneFaint, italic: true)),
+          Text(carriers > 0 ? 'On the network' : 'Reaching the network, within a quarter of an hour', style: serif(14, color: carriers > 0 ? boneDim : boneFaint, italic: true)),
         ]),
         const SizedBox(height: 8),
         Text('${freqLabel(id)} on the dial  ${(mine['call_sign'] ?? '').toString()}', style: mono(12, color: boneDim)),
@@ -1870,7 +1870,7 @@ class _ColoursPageState extends State<ColoursPage> {
             const SizedBox(height: 12),
             const SizedBox(width: 200, child: LinearProgressIndicator(minHeight: 1, color: red, backgroundColor: boneGhost)),
             const SizedBox(height: 8),
-            note('Looking for your station on the network. ${DateTime.now().difference(restoring!).inSeconds} s. It can take a minute or two.'),
+            note('Looking for your station on the network. ${DateTime.now().difference(restoring!).inSeconds} s. It can take up to a quarter of an hour.'),
           ],
           if (restoreMsg != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(restoreMsg!, style: serif(14, color: bone, italic: true))),
         ]),
