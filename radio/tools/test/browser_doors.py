@@ -3,8 +3,9 @@ Bring up the network with tools/test/doors_up.sh first (no relay runs at all), a
 wasm (PYRATE_LIST_AGE_MS=60000 PYRATE_DOOR_AGE_MS=30000). This builds two copies of the player:
 one carrying door D1 (port 8093), one carrying none (8094). Then:
   1. four tabs on the first copy join through a door from its built-in list, play and carry;
-  2. a tab on the bare copy, opened from a link whose fragment carries D2 and D1, joins through
-     those doors, and draws its guard only from a door two sources name;
+  2. a tab on the bare copy, opened from a link whose fragment carries D2 and D1, dials neither:
+     a door a link names is dialled only once a second source names it, so a crafted link cannot
+     make a tab reach an address of the link's choosing;
   3. a shared link carries at most two doors, none of them a carrier of its station.
 Prints PASS or FAIL for each check, first Listen for every tab, and exits non-zero on failure."""
 import base64, json, os, shutil, socket, subprocess, sys, time
@@ -137,12 +138,10 @@ with sync_playwright() as p:
     # 2. A tab from a link alone: a copy with no doors built in, every site down but the doors.
     link = f"http://127.0.0.1:8094/index.html#{GANG}~{code(d2_addr, d2_fp)}.{code(d1_addr, d1_fp)}"
     ctx, pg = tab(b, link, errors)
-    f = listen(pg, "link tab")
+    time.sleep(30)
     s = pg.evaluate("window.pyrate.doors()") or {}
-    check(f is not None, f"a tab opened from a link's doors alone plays (first sound {f and round(f, 2)} s)")
     check("~" not in pg.evaluate("location.hash"), "the link's doors left the address bar")
-    check(s.get("first_hop") and s.get("first_hop") == d1_id and s.get("through") == d1_addr,
-          f"its guard is D1, which the link and D2's cards both name, not D2, which only the link named (through {s.get('through')}, {s.get('trusted')} trusted of {s.get('known')})")
+    check(not s.get("through") and pg.evaluate("window.pyrate.rtc().length") == 0, f"a tab with a link's doors alone dials none of them (through {s.get('through')})")
     ctx.close()
     b.close()
 

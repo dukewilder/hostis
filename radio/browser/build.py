@@ -52,7 +52,7 @@ import json
 # A station whose key is still to be made (an empty id) waits in the list, in its place, and is left out.
 harbour_stations = json.dumps([h for h in json.load(open(os.environ.get("PYRATE_HARBOUR_STATIONS") or f"{R}/browser/harbour.json", encoding="utf-8")) if re.fullmatch(r"[0-9a-f]{64}", h["id"])], ensure_ascii=False)
 # Each value goes in as a JSON string, so nothing in it can close the quote it sits in.
-for k in ["'{{HARBOUR}}'", "'{{RELAYS}}'", "'{{HARBOUR_STATIONS}}'", "'{{SCOPE}}'", "'{{OPEN_PLAYERS}}'", "'{{STUN}}'", "'{{DOORS}}'"]:
+for k in ["'{{HARBOUR}}'", "'{{RELAYS}}'", "'{{HARBOUR_STATIONS}}'", "'{{SCOPE}}'", "'{{OPEN_PLAYERS}}'", "'{{STUN}}'", "'{{DOORS}}'", "'{{ONION}}'"]:
     assert js.count(k) == 1, k
 # Lanterns that serve the open player at /listen/ on names of their own (tools/vps/install.sh
 # prints each one's address), one per line in browser/mirrors.txt. Every copy names them all,
@@ -101,7 +101,11 @@ def door_list():
     return out[:16]
 DOORS = door_list()
 mirrors_html = "".join(f'<li><a href="{u}" target="_blank" rel="noopener noreferrer">{u[8:].rstrip("/")}</a></li>' for u in MIRRORS)
-base_js = js.replace("'{{HARBOUR}}'", json.dumps(harbour)).replace("'{{RELAYS}}'", json.dumps(os.environ.get("PYRATE_RELAYS", ""))).replace("'{{HARBOUR_STATIONS}}'", harbour_stations).replace("'{{STUN}}'", json.dumps(STUN)).replace("'{{DOORS}}'", json.dumps(DOORS))
+# The onion copy, when there is one (browser/onion.txt, an http:// address ending .onion/): the
+# bearings name the same. Offered to Tor Browser listeners.
+ONION = open(f"{R}/browser/onion.txt").read().strip() if os.path.exists(f"{R}/browser/onion.txt") else ""
+assert not ONION or re.fullmatch(r"https?://[a-z2-7]{56}\.onion/[^\s'\"<>]*", ONION), "onion.txt holds one onion address"
+base_js = js.replace("'{{HARBOUR}}'", json.dumps(harbour)).replace("'{{RELAYS}}'", json.dumps(os.environ.get("PYRATE_RELAYS", ""))).replace("'{{HARBOUR_STATIONS}}'", harbour_stations).replace("'{{STUN}}'", json.dumps(STUN)).replace("'{{DOORS}}'", json.dumps(DOORS)).replace("'{{ONION}}'", json.dumps(ONION))
 
 def build(scope, dist, open_players):
     out_js = base_js.replace("'{{SCOPE}}'", json.dumps(scope)).replace("'{{OPEN_PLAYERS}}'", json.dumps(open_players))

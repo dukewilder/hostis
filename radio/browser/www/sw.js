@@ -3,7 +3,9 @@
 // remembers. It takes a new copy only when two of the three release keys have signed it, the
 // same rule as the app's updates, and every file it keeps matches the signed list byte for byte.
 // A copy with fewer signatures (an unsigned build, a hostile mirror's) is never taken: the radio
-// goes on playing the copy it has. No rights reserved.
+// goes on playing the copy it has. The page registers it only at an address that is the copy's
+// own fingerprint (a CID gateway's subdomain): whoever serves an address can replace this file
+// itself, so the rule holds only as far as the gateway in front of it. No rights reserved.
 const KEYS = '{{RELEASE_KEYS}}';
 const META = 'pyrate-meta';
 // A Lantern or app serving the player adds its doors to the page in one line; the signed list

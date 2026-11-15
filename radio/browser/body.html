@@ -138,7 +138,7 @@
 <p class="centre"><button id="st-raise" class="lead-btn"><span class="fc-lead">Raise colours</span><span class="fc-sub">all but the passphrase can change later</span></button></p>
 <p id="st-note" class="fine" role="status"></p>
 <details class="fold"><summary>Bring back a station with its 24 words</summary><div><textarea id="st-words" spellcheck="false" autocomplete="off" aria-label="The station's 24 words"></textarea><label class="field"><span>Passphrase, if you set one</span><input id="st-rpass" type="password" autocomplete="off"></label><p class="centre"><button id="st-restore" class="btn">Bring it back</button></p></div></details>
-<details class="fold"><summary>How private is broadcasting from a browser?</summary><div><p>Your station passes through other people's radios before it reaches anyone, so no listener can trace it to this tab. The relay this page connects through can see your address, though never what you send. Open this page in Tor Browser to hide your address from the relay too. The app on a phone is more private still.</p></div></details>
+<details class="fold"><summary>How private is broadcasting from a browser?</summary><div><p>Your station passes through other people's radios before it reaches anyone, so a listener cannot trace it to this tab. The relay this page connects through can see your address, though never what you send, and so can a door or first hop this tab links to directly; turn off Direct links in Settings to keep to the relay. Your first hop or your internet provider can still match the size and time of an upload with what appears on the station, and the app's Through Tor closes that gap. Tor Browser hides your address from the relay too, at its Standard level for this page, since Safer turns off what the radio runs on. The app on a phone is more private still.</p></div></details>
 </div>
 <div id="st-show" class="st-show" hidden>
 <p class="boxhead">Write these down</p>
@@ -201,6 +201,7 @@
 </div>
 <label class="drop" id="st-drop"><input type="file" id="st-files" multiple accept="audio/*,video/mp4,video/webm,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.webm"><span class="drop-lead">Drop recordings here</span><span class="drop-sub">or click to choose them</span></label>
 <div class="st-opts"><label><input type="checkbox" id="st-talk"><span>Spoken word</span></label><label><input type="checkbox" id="st-disguise"><span>Disguise my voice</span></label></div>
+<p class="fine" id="st-optnote">Spoken word goes out in mono with the mains hum taken out. Disguise my voice lowers your voice by a shift your station keeps, and sends every upload as spoken word. It stops a casual ear, not a voice matcher.</p>
 <div id="st-queue" class="st-queue"></div>
 <p class="fine">Keep this tab open until they finish sending.</p>
 <div id="desk" class="desk" role="region" aria-label="Live desk">
@@ -273,20 +274,25 @@
 <label class="open-only"><input type="checkbox" id="sw-empty"><span>Show stations with nothing to play yet</span></label>
 <label><input type="checkbox" id="sw-art"><span>Show station pictures</span></label>
 <label><input type="checkbox" id="sw-crew"><span>Carry the radio while you listen</span></label>
+<label><input type="checkbox" id="sw-directlinks"><span>Direct links<small>This browser may link straight to a door or to its first hop when the relays are slow. A direct link goes around this browser&#8217;s proxy and shows this device&#8217;s address to the door or first hop.</small></span></label>
+<label><input type="checkbox" id="sw-plain"><span>Keep names plain<small>The tab and the lock screen say only Radio, with no station name or picture.</small></span></label>
 </div>
-<p id="crewnote" class="fine">Your browser passes on what it plays and other listeners&#8217; requests, through three hops, so no one can tell who hears what. What you play is held only while you listen. A computer also carries a few quiet stations drawn by lot, and keeps them between visits, up to 500 MB, until you forget this browser. It never keeps what you played. Your first hop may connect to you directly and see your address, as with Tor; it never sees what you hear. In turn, a listener whose first hop this browser is may see its address.</p>
+<p id="crewnote" class="fine">Your browser passes on what it plays and other listeners&#8217; requests, through three hops, so no single radio on the way learns both who you are and what you hear. While the network is young, HOSTIS&#8217;s first radios may carry both hops of a new browser&#8217;s route. What you play is held only while you listen. A computer also carries a few quiet stations drawn by lot, and keeps them between visits, up to 500 MB, until you forget this browser. It never keeps what you played. Your first hop may connect to you directly and see your address, as with Tor; it never sees what you hear. In turn, a listener whose first hop this browser is may see its address.</p>
 <p id="stockuse" class="fine" hidden></p>
 <div class="open-only">
 <p class="fine">Each station says for itself whether it is mature or explicit. Hide any station that gets it wrong.</p>
 <p class="centre"><button id="mlist" class="btn">Hidden stations</button></p>
 <div id="mbox" hidden><div id="mrows" class="mrows"></div><p class="fine">Copy this list to share it, or paste in a list someone shared with you.</p><textarea id="mtext" spellcheck="false" aria-label="Hidden stations"></textarea><div class="row-btns"><button id="mtake" class="btn">Hide these</button><button id="mclear" class="btn quiet">Show every station again</button></div><div id="mnote" class="fine"></div></div>
-<details class="fold"><summary>Advanced</summary><div>
-<div class="switches"><label><input type="checkbox" id="sw-direct"><span>Connect straight to quiet stations</span></label></div>
-<p>A station few people carry starts sooner. The radios carrying it can then see this connection, which the usual two steps keep from them.</p>
-</div></details>
 </div>
+<details class="fold"><summary>Advanced</summary><div>
+<div class="open-only"><div class="switches"><label><input type="checkbox" id="sw-direct"><span>Connect straight to quiet stations</span></label></div>
+<p>A station few people carry starts sooner. The radios carrying it can then see this connection, which the usual two steps keep from them.</p></div>
+<div class="switches"><label><input type="checkbox" id="sw-n0"><span>Use number0&#8217;s relays when ours fail</span></label></div>
+<p>number0 makes the networking the radio is built on and runs relays of its own. With this on, a tab that cannot reach HOSTIS&#8217;s relay within fifteen seconds goes through theirs, and number0 sees this device&#8217;s address.</p>
+<p id="n0note" class="fine" hidden>This takes effect the next time the page opens.</p>
+</div></details>
 <details class="fold mirrorbox"><summary>Other copies of the player</summary><div><p class="fine">The same player, served from elsewhere, for when this address is out of reach.</p><ul class="mirrors">{{MIRRORS}}</ul></div></details>
-<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your settings, kept and hidden stations, the list of stations last on the air, your name and mutes in the chat, any invitations you opened, and the key of any station you started here (never its 24 words). The key and invitations are locked under a key the browser keeps to itself.<span class="harbour-only"> On this page it also keeps the schedules of all of HOSTIS&#8217;s stations alike, so the next visit starts sooner.</span> While it carries the radio, a computer also keeps up to 500 MB of stations it does not play, and the radios that answered it quickly. The kept stations are passed on to other listeners who ask. Nothing else is sent anywhere.</p></div></details>
+<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your kept and hidden stations, your name and mutes in the chat, any invitations you opened, the doors it went through and the key of any station you started here (never its 24 words) are locked under a key the browser keeps to itself. That key lives in the browser&#8217;s profile, so a copy of the profile can open them. Your settings and the list of stations last on the air are kept as they are.<span class="harbour-only"> On this page it also keeps the schedules of all of HOSTIS&#8217;s stations alike, so the next visit starts sooner.</span> While it carries the radio, a computer also keeps up to 500 MB of stations it does not play, filed under names only this browser can make, and the radios that answered it quickly. The kept stations are passed on to other listeners who ask. Nothing else is sent anywhere.</p><p>A copy of the player installed from a checked address moves to a new version only when two of the three release keys have signed its list of files. Whoever serves an address can still replace the part of the page that does the checking.</p></div></details>
 <p class="centre"><button id="forget" class="btn quiet">Forget this browser</button></p>
 <footer>
 <p class="f-contact">Email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>

@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio } from './pkg/pyrate_browser.js';
+import init, { Radio, plain_title, plain_by } from './pkg/pyrate_browser.js';
 
 const HARBOUR = '{{HARBOUR}}';
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -29,9 +29,21 @@ const inSet = s => !HOSTIS_ONLY || isHarbour(s.id);
 // or a test build's own. Other gateways serve whatever they are given, unchecked.
 const checked = u => /\.inbrowser\.link\//.test(u) || /^http:\/\/(127\.0\.0\.1|localhost)[:/]/.test(u);
 // `secret`: the link carries an invitation or a flock, so it goes only to a checked copy.
+// A copy answers when its own files come back. A gateway that checks in the browser answers any
+// address with a page of its own, so an IPFS copy is asked for its file list through a gateway
+// that serves the raw bytes; a Lantern's copy answers for itself.
+function alive(u, ms) {
+  const t = AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined;
+  if (/\.ip[fn]s\.|\/ip[fn]s\//.test(u)) return fetch(u.replace('.inbrowser.link/', '.dweb.link/') + 'player.manifest', { cache: 'no-store', signal: t })
+    .then(r => r.ok ? r.text() : Promise.reject(r.status)).then(x => x.startsWith('pyrate-player/v1') ? u : Promise.reject('not the player'));
+  return fetch(u + 'favicon.png', { mode: 'no-cors', cache: 'no-store', signal: t }).then(() => u);
+}
 async function openPlayer(secret) {
-  const list = secret ? OPEN_PLAYERS.filter(checked) : OPEN_PLAYERS;
-  const ping = (u, ms) => fetch(u + 'favicon.png', { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(ms) }).then(() => u);
+  // Tor Browser turns off the service worker a checking gateway runs on, so it goes to a copy
+  // served whole, where the link allows one.
+  const all = secret ? OPEN_PLAYERS.filter(checked) : OPEN_PLAYERS;
+  const list = !secret && torLikely() && all.some(u => !/\.inbrowser\.link\//.test(u)) ? all.filter(u => !/\.inbrowser\.link\//.test(u)) : all;
+  const ping = alive;
   try { return await ping(list[0], 4000) } catch (e) { }
   try { return await Promise.any(list.slice(1).map(u => ping(u, 3500))) } catch (e) { return list[0] }
 }
@@ -46,6 +58,15 @@ function handOff() {
   return true;
 }
 const RELAYS = '{{RELAYS}}';
+// The onion copy the bearings name (browser/onion.txt), or empty.
+const ONION = '{{ONION}}';
+// Tor Browser, as near as a page can tell: an onion address, or Firefox's face with the clock
+// held at UTC, as Tor Browser holds it.
+function torLikely() {
+  if (/\.onion$/.test(location.hostname)) return true;
+  let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '' } catch (e) { }
+  return /Firefox\//.test(navigator.userAgent) && new Date().getTimezoneOffset() === 0 && /^(UTC|Etc\/UTC|Atlantic\/Reykjavik)$/.test(tz);
+}
 // Doors (node/src/door.rs): listeners' apps a tab reaches with no relay. This copy carries the
 // doors known when it was built (signed notes), and a Lantern or app serving it may add its own
 // in a meta tag. A link may carry two more after its station: `#<station>~<door>.<door>`.
@@ -81,20 +102,24 @@ const pics = new Map();
 // nothing past the visit, and offers the player's own address instead.
 const SHARED = /^\/ip[fn]s\//.test(location.pathname);
 const passing = new Map();
+// Once the listener forgets this browser, the page writes nothing more until it is opened afresh.
+let forgotten = false;
 function store(k, v) {
+  if (forgotten && v !== undefined) return;
   if (SHARED) { if (v === undefined) return passing.get(k) ?? null; passing.set(k, v); return }
   try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v) } catch (e) { return null }
 }
 
 // Secrets this browser keeps (a station's deputy key, pocket invitations, the counting key) are
 // sealed under a key the browser itself holds in IndexedDB and will never hand to a script as
-// bytes. A copy of the profile's files, or anything reading its storage, finds only sealed
-// text. Code running in this page could still ask the browser to open them, as it could ask
-// for anything on the page.
+// bytes. Anything reading the page's storage finds only sealed text. The browser keeps that
+// key's bytes in the profile's own files, though, so a copied profile or a backup of it opens
+// them all; the counting key steps forward each day for that reason. Code running in this page
+// could still ask the browser to open them, as it could ask for anything on the page.
 const b64 = u => btoa(String.fromCharCode(...u)), unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 let devKey = null;
 function deviceKey() {
-  if (SHARED || !window.indexedDB || !crypto.subtle) return Promise.resolve(null);
+  if (forgotten || SHARED || !window.indexedDB || !crypto.subtle) return Promise.resolve(null);
   return devKey ??= new Promise(done => {
     const rq = indexedDB.open('pyrate', 1);
     rq.onupgradeneeded = () => rq.result.createObjectStore('keys');
@@ -113,6 +138,30 @@ function deviceKey() {
     };
   });
 }
+// A second key of the same kind, for HMAC: the kept ballast is filed under names only this
+// browser can make, so its disk does not show which chunks, and so which stations, it carried.
+let macKey = null;
+function stockMacKey() {
+  if (forgotten || SHARED || !window.indexedDB || !crypto.subtle) return Promise.resolve(null);
+  return macKey ??= new Promise(done => {
+    const rq = indexedDB.open('pyrate', 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore('keys');
+    rq.onerror = () => done(null);
+    rq.onsuccess = () => {
+      const db = rq.result, get = db.transaction('keys').objectStore('keys').get('stock');
+      get.onerror = () => done(null);
+      get.onsuccess = async () => {
+        if (get.result) return done(get.result);
+        try {
+          const k = await crypto.subtle.generateKey({ name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+          const put = db.transaction('keys', 'readwrite').objectStore('keys').put(k, 'stock');
+          put.onsuccess = () => done(k); put.onerror = () => done(null);
+        } catch (e) { done(null) }
+      };
+    };
+  });
+}
+async function stockName(name) { const k = await stockMacKey(); return k ? bhex(new Uint8Array(await crypto.subtle.sign('HMAC', k, hexb(name)))) : null }
 // With no device key there is nothing to seal under, and nothing is sealed: the caller keeps
 // the secret for the tab's life only, never in lasting storage in the clear.
 async function dseal(text) {
@@ -130,6 +179,7 @@ async function dopen(text) {
 }
 let unsealable = false;
 async function keepSealed(k, text) {
+  if (forgotten) return;
   const sealedText = SHARED ? text : await dseal(text);
   if (sealedText !== null) { store(k, sealedText); return }
   try { sessionStorage.setItem(k, text) } catch (e) { }
@@ -138,6 +188,16 @@ async function keepSealed(k, text) {
 }
 // A secret kept for the tab alone, when this browser could not seal it.
 const keptAnywhere = k => store(k) ?? (() => { try { return sessionStorage.getItem(k) } catch (e) { return null } })();
+// Small things this browser keeps that say something of its listener (hidden stations, the chat
+// name and mutes, the doors and guards it went through, the radios that answered it) are sealed
+// too, opened once at boot and held here; an older build's plain copy is sealed when read.
+const SEALED = ['pyrate.maroon', 'pyrate.name', 'pyrate.mutes', 'pyrate.doors', 'pyrate.guards', 'pyrate.peers'];
+const sealedMem = new Map();
+function sget(k) { if (sealedMem.has(k)) return sealedMem.get(k); const v = keptAnywhere(k); return v && v.startsWith('{"d":1') ? null : v }
+function sset(k, v) { if (sealedMem.get(k) === v) return; sealedMem.set(k, v); keepSealed(k, v) }
+async function sealedIn() {
+  for (const k of SEALED) { const raw = keptAnywhere(k); if (raw == null) continue; const v = await dopen(raw); sealedMem.set(k, v); if (v !== null && v === raw && !SHARED) keepSealed(k, v) }
+}
 function tabOnlyNote() {
   const n = document.getElementById('st-locknote'); if (!n) return;
   n.textContent = 'This browser cannot lock keys away, so your station\u2019s key is kept only until this tab closes. Your 24 words bring it back.';
@@ -154,7 +214,7 @@ function rememberHarbours() {
   try { store('pyrate.harbours', JSON.stringify(union)) } catch (e) {}
   // With the switch on, the radios that answered quickly last time are tried beside the doors.
   // The guards kept from last time come too, so the first hop is drawn from them again.
-  let peers = []; if (crewOn()) try { peers = JSON.parse(store('pyrate.guards') || '[]').filter(door).slice(0, 3).concat(JSON.parse(store('pyrate.peers') || '[]').filter(door).slice(0, 20)) } catch (e) {}
+  let peers = []; if (crewOn()) try { peers = JSON.parse(sget('pyrate.guards') || '[]').filter(door).slice(0, 3).concat(JSON.parse(sget('pyrate.peers') || '[]').filter(door).slice(0, 20)) } catch (e) {}
   return [...new Set(union.concat(peers))].join(',');
 }
 
@@ -165,6 +225,14 @@ function rememberHarbours() {
 const PHONE = (() => { try { return matchMedia('(pointer: coarse)').matches || /Mobi|Android|iPhone|iPad/.test(navigator.userAgent) } catch (e) { return false } })();
 const STOCK_MAX = 500e6;
 function crewOn() { return store('pyrate.crew') !== '0' }
+// "Direct links": on unless the listener turns it off. A direct link (to a door, or to this
+// tab's first hop) goes around the browser's proxy and shows this device's address to the
+// radio at the other end.
+function directLinks() { return store('pyrate.directlinks') !== '0' }
+// "Use number0's relays when ours fail": off unless the listener turns it on.
+function n0On() { return store('pyrate.n0') === '1' }
+// "Keep names plain": station names stay out of the tab's title and off the lock screen.
+function plainOn() { return store('pyrate.plain') === '1' }
 function cellular() { try { return navigator.connection?.type === 'cellular' } catch (e) { return false } }
 function crewSet() { radio?.set_crew(crewOn(), PHONE || cellular()) }
 function keepsStock() { return crewOn() && !PHONE && !cellular() }
@@ -173,6 +241,18 @@ function carriedLine(s) {
   try { if (radio) n = radio.carried_by(s.id) } catch (e) { }
   return n ? 'Carried by ' + n + (n === 1 ? ' radio now' : ' radios now') : '';
 }
+// How many are listening, damped so the figure does not leap with each count, and shown only
+// from two: below that, how many radios carry the station says more.
+const damped = new Map();
+function aboardOf(s) {
+  if (!s || typeof s.aboard !== 'number' || s.cached) return null;
+  const d = damped.get(s.id), now = Date.now();
+  if (!d) { damped.set(s.id, { v: s.aboard, at: now }); return s.aboard }
+  if (now - d.at > 15000 && d.v !== s.aboard) { d.v = Math.round(d.v * 0.6 + s.aboard * 0.4) || (s.aboard ? 1 : 0); if (Math.abs(d.v - s.aboard) === 1) d.v = s.aboard; d.at = now }
+  return d.v;
+}
+function carriers(s) { let n = s?.carriers || 0; try { if (radio && s) n = radio.carried_by(s.id) } catch (e) { } return n }
+function aboardLine(s) { const n = aboardOf(s); return n !== null && n >= 2 ? n + ' listening' : carriedLine(s) }
 function mb(n) { return n >= 1e6 ? Math.round(n / 1e6) + ' MB' : Math.max(1, Math.round(n / 1e3)) + ' KB' }
 function carryingLine() {
   const el = $('carrying'); if (!el) return;
@@ -205,8 +285,9 @@ async function ballastList() { try { return JSON.parse(await dopen(store('pyrate
 globalThis.pyrateStockGet = async name => {
   if (!keepsStock()) return null;
   try {
+    const at = await stockName(name); if (!at) return null;
     const db = await stockDb();
-    const v = await new Promise((ok, no) => { const r = db.transaction('stock').objectStore('stock').get(name); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error) });
+    const v = await new Promise((ok, no) => { const r = db.transaction('stock').objectStore('stock').get(at); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error) });
     db.close();
     return v ? await bopen(new Uint8Array(v)) : null;
   } catch (e) { return null }
@@ -218,8 +299,11 @@ async function stockIn() {
     const idx = await new Promise((ok, no) => { const out = [], c = db.transaction('stockidx').objectStore('stockidx').openCursor(); c.onsuccess = () => { const x = c.result; if (!x) return ok(out); out.push([x.key, x.value]); x.continue() }; c.onerror = () => no(c.error) });
     db.close();
     stockBytes = idx.reduce((a, x) => a + (x[1].n || 0), 0);
-    const open = [];
-    for (const [name, v] of idx) { const o = v.s && await bopen(new Uint8Array(v.s)); if (o) { const w = jdec(o); open.push([name, w.st, w.h]) } }
+    // Each entry is filed under its HMAC and carries its sealed name; one filed under the bare
+    // name by an older build goes.
+    const open = [], old = [];
+    for (const [at, v] of idx) { const o = v.s && await bopen(new Uint8Array(v.s)); const w = o && jdec(o); if (w && /^[0-9a-f]{64}$/.test(w.n || '')) open.push([w.n, w.st, w.h]); else old.push(at) }
+    if (old.length) { const db2 = await stockDb(); await new Promise(ok => { const t = db2.transaction(['stock', 'stockidx'], 'readwrite'); for (const at of old) { t.objectStore('stock').delete(at); t.objectStore('stockidx').delete(at) } t.oncomplete = ok; t.onerror = ok }); db2.close(); stockBytes = idx.filter(x => !old.includes(x[0])).reduce((a, x) => a + (x[1].n || 0), 0) }
     const parts = [varint(open.length)];
     for (const [name, st, h] of open) parts.push([...hexb(st), ...hexb(name), ...hexb(h)]);
     radio.stock_index(Uint8Array.from(parts.flat()));
@@ -227,7 +311,7 @@ async function stockIn() {
 }
 // Ballast that came aboard goes into the store, oldest out first past 500 MB, with its logs.
 async function stockOut() {
-  if (!radio || !keepsStock()) return;
+  if (forgotten || !radio || !keepsStock()) return;
   const b = radio.stock_take(); if (!b.length) return;
   const items = []; let [n, i] = unvarint(b, 0);
   for (; n > 0; n--) { const st = bhex(b.subarray(i, i + 32)), name = bhex(b.subarray(i + 32, i + 64)), h = bhex(b.subarray(i + 64, i + 96)); let len; [len, i] = unvarint(b, i + 96); items.push([st, name, h, b.slice(i, i + len)]); i += len }
@@ -237,9 +321,9 @@ async function stockOut() {
     const logs = [];
     for (const [i, id] of bal.filter(id => radio.has_log(id)).entries()) { const l = radio.log_export(id), u = new Uint8Array(32 + l.length); u.set(hexb(id)); u.set(l, 32); logs.push(['b' + i, await bseal(u)]) }
     const sealed = [];
-    for (const [st, name, h, c] of items) sealed.push([name, await bseal(c), await bseal(jenc({ st, h })), c.length]);
+    for (const [st, name, h, c] of items) sealed.push([await stockName(name), await bseal(c), await bseal(jenc({ st, h, n: name })), c.length]);
     const db = await stockDb();
-    await new Promise((ok, no) => { const t = db.transaction(['stock', 'stockidx', 'logs'], 'readwrite'); for (const [name, c, w, n] of sealed) { if (!c || !w) continue; t.objectStore('stock').put(c.buffer, name); t.objectStore('stockidx').put({ s: w.buffer, n, at: Date.now() }, name); stockBytes += n } for (const [k, u] of logs) if (u) t.objectStore('logs').put(u.buffer, k); t.oncomplete = ok; t.onerror = () => no(t.error) });
+    await new Promise((ok, no) => { const t = db.transaction(['stock', 'stockidx', 'logs'], 'readwrite'); for (const [name, c, w, n] of sealed) { if (!name || !c || !w) continue; t.objectStore('stock').put(c.buffer, name); t.objectStore('stockidx').put({ s: w.buffer, n, at: Date.now() }, name); stockBytes += n } for (const [k, u] of logs) if (u) t.objectStore('logs').put(u.buffer, k); t.oncomplete = ok; t.onerror = () => no(t.error) });
     if (stockBytes > STOCK_MAX) {
       const idx = await new Promise((ok, no) => { const out = [], c = db.transaction('stockidx').objectStore('stockidx').openCursor(); c.onsuccess = () => { const x = c.result; if (!x) return ok(out); out.push([x.key, x.value]); x.continue() }; c.onerror = () => no(c.error) });
       idx.sort((a, b) => a[1].at - b[1].at);
@@ -298,16 +382,6 @@ globalThis.pyrateRtcOffer = async peer => {
   return pc.localDescription.sdp;
 };
 globalThis.pyrateRtcAnswer = async (peer, sdp) => { const p = rtcPeers.get(peer); if (!p || !sdp) return rtcClose(peer); try { await p.pc.setRemoteDescription({ type: 'answer', sdp }) } catch (e) { rtcClose(peer) } };
-globalThis.pyrateRtcAccept = async (peer, sdp) => {
-  if (typeof RTCPeerConnection === 'undefined' || !crewOn()) return '';
-  // A guard keeps a few such links at a time, the oldest let go first.
-  const serving = [...rtcPeers].filter(([, p]) => p.role === 'serve'); if (serving.length >= 8) rtcClose(serving[0][0]);
-  rtcClose(peer);
-  const pc = rtcPc(), p = { pc, ch: null, ready: false, pend: new Map(), next: 1, role: 'serve' };
-  rtcPeers.set(peer, p); pc.ondatachannel = e => rtcWire(peer, p, e.channel);
-  try { await pc.setRemoteDescription({ type: 'offer', sdp }); await pc.setLocalDescription(await pc.createAnswer()); await rtcGathered(pc) } catch (e) { rtcClose(peer); return '' }
-  return pc.localDescription.sdp;
-};
 globalThis.pyrateRtcAsk = (peer, bytes) => {
   const p = rtcPeers.get(peer); if (!p || !p.ready || p.role !== 'ask') return Promise.reject('no link');
   const id = p.next++;
@@ -409,10 +483,12 @@ globalThis.pyrateDoorAsk = bytes => {
 };
 globalThis.pyrateDoorCtl = bytes => { if (door?.ready) rtcSend(door, 0, bytes) };
 // Which door to go through: one this tab may draw as its guard, open long enough, first. When no
-// relay has answered for a few seconds, any door this tab knows, and then a link's doors, are
-// tried for the cards they hold; none of those is a guard until a second source names it.
+// relay has answered for a few seconds, any other door this tab knows is tried for the cards it
+// holds. A door a link names is dialled only once a second source (this copy, an earlier visit,
+// the page's server or the network's notes) names it too, so a crafted link cannot make a tab
+// dial an address of the link's choosing.
 async function doorsDial() {
-  if (!radio) return;
+  if (forgotten || !radio || !directLinks()) return;
   let known = []; try { known = JSON.parse(radio.doors(12)) } catch (e) { }
   // Through a door that may not be a guard (a hint) while one that may is known: over to it.
   if (door) {
@@ -425,8 +501,7 @@ async function doorsDial() {
   if (quiet && !doorQuietSince) doorQuietSince = Date.now();
   const late = quiet && Date.now() - doorQuietSince > 4000;
   const tries = known.filter(d => d.trusted && d.aged).map(d => [d, 2])
-    .concat(late ? known.filter(d => !(d.trusted && d.aged)).map(d => [d, 2]) : [])
-    .concat(late ? LINK_DOORS.filter(l => !known.some(d => d.fp === l.fp)).map(d => [d, 3]) : []);
+    .concat(late ? known.filter(d => !(d.trusted && d.aged)).map(d => [d, 2]) : []);
   for (const [d, src] of tries) {
     if (doorTried.has(d.addr + d.fp) && tries.length > 1) continue;
     doorTried.add(d.addr + d.fp);
@@ -435,16 +510,16 @@ async function doorsDial() {
   if (doorTried.size >= tries.length) doorTried.clear();
 }
 // The doors this tab trusted this visit, for the next: never one it knew only as a hint.
-function doorsKeep() { try { const l = JSON.parse(radio.doors(16)).filter(d => d.trusted).slice(0, 8).map(d => d.note); if (l.length) store('pyrate.doors', JSON.stringify(l)) } catch (e) { } }
+function doorsKeep() { try { const l = JSON.parse(radio.doors(16)).filter(d => d.trusted).slice(0, 8).map(d => d.note); if (l.length) sset('pyrate.doors', JSON.stringify(l)) } catch (e) { } }
 function doorsIn() {
   try { if (LINK_DOORS.length) radio.doors_hint(JSON.stringify(LINK_DOORS)) } catch (e) { }
   try { if (Array.isArray(DOORS) && DOORS.length) radio.doors_add(DOORS.join(','), 1) } catch (e) { }
-  try { const r = JSON.parse(store('pyrate.doors') || '[]'); if (Array.isArray(r) && r.length) radio.doors_add(r.filter(x => typeof x === 'string').join(','), 2) } catch (e) { }
+  try { const r = JSON.parse(sget('pyrate.doors') || '[]'); if (Array.isArray(r) && r.length) radio.doors_add(r.filter(x => typeof x === 'string').join(','), 2) } catch (e) { }
   try { if (SERVED_DOORS.length) radio.doors_add(SERVED_DOORS.join(','), 4) } catch (e) { }
 }
 function stockLine() { const el = $('stockuse'); if (el) { el.hidden = !keepsStock(); el.textContent = 'Kept for the crew: ' + mb(stockBytes) + ' of 500 MB' } }
-function marooned() { try { return new Set(JSON.parse(store('pyrate.maroon') || '[]')) } catch (e) { return new Set() } }
-function setMarooned(s) { store('pyrate.maroon', JSON.stringify([...s])) }
+function marooned() { try { return new Set(JSON.parse(sget('pyrate.maroon') || '[]')) } catch (e) { return new Set() } }
+function setMarooned(s) { sset('pyrate.maroon', JSON.stringify([...s])) }
 // The listener's own switches. Explicit stays off and art stays on until they say otherwise.
 const sw = { mature: () => store('pyrate.hide_mature') === '1', explicit: () => store('pyrate.show_explicit') === '1', art: () => store('pyrate.hide_art') !== '1', hiss: () => store('pyrate.hiss') !== '0', empty: () => store('pyrate.show_empty') === '1' };
 // A station that says it has no recordings and is not live has nothing to play yet: it stays
@@ -779,8 +854,11 @@ function lamps(live) { $('lamp').classList.toggle('on', !!live); $('air').classL
 // The meter follows the sound, with a needle's weight.
 // It rests once nothing plays and the needle has fallen, and wakes when the radio does.
 let vuAngle = -48, vuOn = false;
+// Under reduced motion the page scrolls at once and the meter stands still.
+const stillness = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches } catch (e) { return false } };
+const glide = () => stillness() ? 'auto' : 'smooth';
 function vu() {
-  if (vuOn || !meter) return;
+  if (vuOn || !meter || stillness()) return;
   vuOn = true;
   const buf = new Float32Array(meter.fftSize);
   const step = () => {
@@ -996,8 +1074,13 @@ function paint() {
   mini(line ?? (track ? [p.title, p.by].filter(Boolean).join(' · ') : live ? 'Live' : ''));
   if ('mediaSession' in navigator) {
     if (playing && (on || stage)) {
-      const m = navigator.mediaSession.metadata, title = track && on ? p.title || cur.name : cur.name, by = track && on ? p.by || '' : line || '';
-      if (!m || m.title !== title || m.artist !== by) pic(c, want).then(u => { u = u || baked(c); if (cur?.id === c) navigator.mediaSession.metadata = new MediaMetadata({ title, artist: by, album: cur.name, artwork: u ? [{ src: u, sizes: '512x512', type: 'image/jpeg' }] : [] }) });
+      // A pocket, or any station while the listener keeps names plain, goes to the lock screen,
+      // the car and the headset as "Radio" with no picture.
+      if (isPocket(cur) || plainOn()) { const m = navigator.mediaSession.metadata; if (!m || m.title !== 'Radio' || m.artist) navigator.mediaSession.metadata = new MediaMetadata({ title: 'Radio', artist: '', album: '', artwork: [] }) }
+      else {
+        const m = navigator.mediaSession.metadata, title = track && on ? p.title || cur.name : cur.name, by = track && on ? p.by || '' : line || '';
+        if (!m || m.title !== title || m.artist !== by) pic(c, want).then(u => { u = u || baked(c); if (cur?.id === c && !isPocket(cur) && !plainOn()) navigator.mediaSession.metadata = new MediaMetadata({ title, artist: by, album: cur.name, artwork: u ? [{ src: u, sizes: '512x512', type: 'image/jpeg' }] : [] }) });
+      }
     }
     navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
   }
@@ -1031,7 +1114,7 @@ function pageHead() {
   if (!cur) return;
   $('pname').textContent = cur.name || cur.call_sign || 'A station';
   $('pabout').textContent = cur.about || '';
-  $('pmeta').textContent = [cur.call_sign, fqs(cur.id) + ' on the dial', (cur.kinds || []).join(', '), cur.port, cur.aboard !== undefined && !cur.cached ? cur.aboard + ' listening' : '', carriedLine(cur)].filter(Boolean).join('  ·  ');
+  $('pmeta').textContent = [cur.call_sign, fqs(cur.id) + ' on the dial', (cur.kinds || []).join(', '), cur.port, aboardOf(cur) >= 2 ? aboardOf(cur) + ' listening' : '', carriedLine(cur)].filter(Boolean).join('  ·  ');
   $('key').textContent = 'Key  ' + cur.id.match(/.{1,4}/g).join(' ');
   // What a listener may want to know before staying: a newer station with an older one's name,
   // nothing to play yet, or a keeper long gone (the station plays on from those who carry it).
@@ -1086,7 +1169,7 @@ async function show(s) {
   // On hostis.black the chatter is in the open player: this station's room, one tap away.
   if (SCOPE === 'harbour') $('chatopen').href = OPEN_PLAYERS[0] + '#' + s.id;
   $('name').textContent = s.name || s.call_sign || 'A station';
-  $('cs').textContent = (s.call_sign || '') + (s.provisional ? '  unconfirmed' : '') + (s.aboard !== undefined ? '  ' + s.aboard + ' listening' : '');
+  $('cs').textContent = (s.call_sign || '') + (s.provisional ? '  unconfirmed' : '') + (aboardLine(s) ? '  ' + aboardLine(s) : '');
   $('cs').title = s.provisional ? 'Signed by a co-host. Shown as unconfirmed until this player has the station\'s own log.' : '';
   lamps(s.live); needle(s.id); $('tip').hidden = !s.tip;
   $('keep').hidden = HOSTIS_ONLY || !!s.pocket; $('keep').setAttribute('aria-pressed', keptSet.has(s.id)); $('keep').querySelector('span').textContent = keptSet.has(s.id) ? 'Kept' : 'Keep';
@@ -1150,8 +1233,9 @@ function power() {
   $('go').querySelector('.lbl').textContent = playing ? 'Stop' : 'Listen';
   $('mini-go').setAttribute('aria-label', playing ? 'Stop' : 'Listen');
   $('clip').hidden = !(playing && heard() && soundy && clipType()) || isPocket(cur);
-  // The tab says what it is playing, so a listener with many tabs can find the radio.
-  if (!EMBED && cur) document.title = (playing ? '▶︎ ' : '') + (cur.name || cur.call_sign || 'A station') + ' · Pyrate Radio';
+  // The tab says whether it is playing, so a listener with many tabs can find the radio, and
+  // never which station: browsers keep titles in their history and sync them.
+  if (!EMBED) document.title = (playing ? '▶︎ ' : '') + (plainOn() ? 'Radio' : 'Pyrate Radio');
 }
 
 // A row's cover is fetched only once the row comes into view.
@@ -1203,7 +1287,7 @@ function rows() {
     // What a station says of itself, as hairline tags: the open air in bright red, the rest in bone.
     for (const [t, c] of [[s.live && 'On air', 'lv'], [keptSet.has(s.id) && 'Kept', 'kp'], [s.mixed && !isHarbour(s.id) && 'False colours?', ''], [s.twin && !isHarbour(s.id) && 'Same name as an older station', ''], [s.pocket && 'Private', ''], [s.explicit ? 'Explicit' : s.mature && 'Mature', ''], [empty(s) && 'Nothing to play yet', '']]) if (t) { const g = document.createElement('span'); g.className = 'tag ' + c; g.textContent = t; nm.append(g) }
     r.querySelector('.about').textContent = s.about || ''; r.querySelector('.cs').textContent = s.call_sign + '  ' + fqs(s.id);
-    r.querySelector('.count').innerHTML = s.aboard !== undefined && !s.cached ? s.aboard + '<small>listening</small>' : '';
+    { const n = aboardOf(s), c = carriers(s); r.querySelector('.count').innerHTML = n !== null && n >= 2 ? n + '<small>listening</small>' : c ? c + '<small>carrying</small>' : '' }
     const on = cur?.id === s.id;
     r.classList.toggle('on', on); r.classList.toggle('playing', on && playing); r.setAttribute('aria-current', on);
     r.setAttribute('aria-label', (s.name || s.call_sign) + (s.live ? ', on air' : '') + (on && playing ? ', playing' : ''));
@@ -1283,7 +1367,7 @@ function refresh() {
   $('signal').textContent = (flocking ? 'Playing in step with the host · ' : '') + (n ? 'Connected · ' + on + (on === 1 ? ' station' : ' stations') + ' on the air' : Date.now() - bootAt > 30000 ? 'Still connecting' : 'Connecting');
   $('flockleave').hidden = !flocking;
   rows(); warmUp();
-  if (cur) { const u = stations.find(x => x.id === cur.id); if (u && !u.cached) { const pic0 = cur.cover, ban0 = cur.banner, name0 = cur.name; cur = u; if (u.cover !== pic0 || u.banner !== ban0 || u.name !== name0) show(u); else { $('cs').textContent = u.call_sign + (u.aboard !== undefined ? '  ' + u.aboard + ' listening' : ''); $('tip').hidden = !u.tip; pageHead() } } }
+  if (cur) { const u = stations.find(x => x.id === cur.id); if (u && !u.cached) { const pic0 = cur.cover, ban0 = cur.banner, name0 = cur.name; cur = u; if (u.cover !== pic0 || u.banner !== ban0 || u.name !== name0) show(u); else { $('cs').textContent = u.call_sign + (aboardLine(u) ? '  ' + aboardLine(u) : ''); $('tip').hidden = !u.tip; pageHead() } } }
   else opening();
   moveOn();
 }
@@ -1448,14 +1532,14 @@ function view(c) { $('chart').hidden = !c; $('rows').hidden = c; $('vchart').cla
 $('vlist').onclick = () => view(false); $('vchart').onclick = () => view(true);
 
 // ---- Chatter: talk in the station's room, kept on no disk by the radio --------------------------------
-const myName = () => store('pyrate.name') || '';
+const myName = () => sget('pyrate.name') || '';
 let chatKey = '';
 function chatter() {
   if (!cur || !radio) return;
   const c = JSON.parse(radio.chat_read(cur.id));
   $('chatjoin').hidden = c.joined; $('chatroom').hidden = !c.joined;
   if (!c.joined) return;
-  let mutes; try { mutes = new Set(JSON.parse(store('pyrate.mutes') || '[]')) } catch (e) { mutes = new Set() }
+  let mutes; try { mutes = new Set(JSON.parse(sget('pyrate.mutes') || '[]')) } catch (e) { mutes = new Set() }
   $('chatwho').textContent = 'You speak here as ' + (myName() || c.voice) + '. ' + (c.neighbours ? c.neighbours + ' others here.' : 'Looking for others.');
   const box = $('lines'), atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
   const shown = c.lines.filter(l => !mutes.has(l.voice));
@@ -1468,13 +1552,13 @@ function chatter() {
   box.innerHTML = shown.map(l => '<div class="line' + (l.keeper ? ' keeper' : '') + (l.mine ? ' mine' : '') + '"><button class="who" data-v="' + esc(l.voice) + '" title="' + esc(l.voice) + '">' + esc(l.name || l.voice) + (l.keeper ? ' (the station)' : '') + '</button>' + mark(l) + '<small>' + hm(l.at_ms) + '</small><div class="said">' +
     (l.kind === 'cheer' ? '<span class="cheer">Cheers to what is on</span>' : l.kind === 'request' ? '<span class="req">Asks for ' + esc(l.title || 'a recording') + '</span>' + (l.text ? ', <em>' + esc(l.text) + '</em>' : '') : esc(l.text)) + '</div></div>').join('') || '<p class="fine">Nobody has said anything yet.</p>';
   if (atEnd) box.scrollTop = box.scrollHeight;
-  box.querySelectorAll('.who').forEach(w => w.onclick = () => { if (!w.closest('.mine') && confirm('Mute ' + w.textContent + '? Only you stop hearing them, in this browser.')) { mutes.add(w.dataset.v); store('pyrate.mutes', JSON.stringify([...mutes])); chatKey = ''; chatter() } });
+  box.querySelectorAll('.who').forEach(w => w.onclick = () => { if (!w.closest('.mine') && confirm('Mute ' + w.textContent + '? Only you stop hearing them, in this browser.')) { mutes.add(w.dataset.v); sset('pyrate.mutes', JSON.stringify([...mutes])); chatKey = ''; chatter() } });
 }
 const speak = (kind, text, track) => radio.chat_send(cur.id, kind, text || '', track || '', myName()).then(chatter, e => { $('chatwho').textContent = String(e) });
 $('chatgo').onclick = async () => { $('chatgo').textContent = 'Joining'; try { await radio.chat_join(cur.id) } catch (e) { $('chatgo').textContent = 'Join the chat'; return } chatter() };
 $('say').onsubmit = e => { e.preventDefault(); const t = $('sayt').value.trim(); if (!t) return; $('sayt').value = ''; speak('text', t) };
 $('cheer').onclick = () => speak('cheer');
-$('myname').value = myName(); $('myname').onchange = () => { store('pyrate.name', $('myname').value.trim()); chatter() };
+$('myname').value = myName(); $('myname').onchange = () => { sset('pyrate.name', $('myname').value.trim()); chatter() };
 $('askfor').onclick = () => {
   const lib = JSON.parse(radio.library(cur.id));
   $('asktrack').innerHTML = lib.map(t => '<option value="' + t.track + '">' + esc(t.title) + (t.by ? ', ' + esc(t.by) : '') + '</option>').join('');
@@ -1561,7 +1645,7 @@ async function clipIt() {
     const file = new File([blob], name, { type: blob.type });
     $('clipshare').hidden = !(navigator.canShare && navigator.canShare({ files: [file] }));
     $('clipshare').onclick = () => navigator.share({ files: [file], title: st.name, text: 'On Pyrate Radio: ' + url }).catch(() => { });
-    $('clipbox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    $('clipbox').scrollIntoView({ behavior: glide(), block: 'nearest' });
   };
   $('clip').disabled = true; $('clip').textContent = 'Clipping';
   rec.start(500); requestAnimationFrame(draw);
@@ -1584,7 +1668,7 @@ $('tip').onclick = () => {
   $('tiphow').textContent = ln ? 'Your wallet asks for the note in its own comment box: copy it there.' : 'Your wallet carries the note with the payment.';
   const upd = () => { $('tipgo').href = tipUri(a, $('tipnote').value) }; $('tipnote').oninput = upd; upd();
   $('tipcopy').onclick = async () => { try { await navigator.clipboard.writeText(a); $('tipcopy').textContent = 'Copied' } catch (e) { prompt('The address', a) } };
-  $('tipbox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  $('tipbox').scrollIntoView({ behavior: glide(), block: 'nearest' });
 };
 $('tipclose').onclick = () => { $('tipbox').hidden = true; $('tipcopy').textContent = 'Copy the address' };
 
@@ -1593,7 +1677,7 @@ $('pass').onclick = () => {
   const url = shareUrl(cur), q = JSON.parse(radio.qr(url)), n = q.size;
   let d = ''; for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.bits[y * n + x] === '1') d += 'M' + (x + 4) + ' ' + (y + 4) + 'h1v1h-1z';
   $('qr').innerHTML = '<svg viewBox="0 0 ' + (n + 8) + ' ' + (n + 8) + '" role="img" aria-label="QR code for this station"><rect width="100%" height="100%" fill="#fbf8f1"/><path d="' + d + '" fill="#0a0a0a"/></svg>';
-  $('plink').textContent = url; $('passbox').hidden = false; $('passbox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  $('plink').textContent = url; $('passbox').hidden = false; $('passbox').scrollIntoView({ behavior: glide(), block: 'nearest' });
   $('pcopy').onclick = async () => { try { await navigator.clipboard.writeText(url); $('pcopy').textContent = 'Copied' } catch (e) { prompt('The link', url) } };
   $('pshare').hidden = !navigator.share; $('pshare').onclick = () => navigator.share({ title: cur.name, text: 'Tune in to ' + cur.name + ' on Pyrate Radio', url }).catch(() => { });
 };
@@ -1625,7 +1709,13 @@ $('mtake').onclick = () => {
 };
 $('sw-crew').checked = crewOn();
 $('sw-crew').onchange = () => { store('pyrate.crew', $('sw-crew').checked ? '1' : '0'); crewSet(); carryingLine(); stockLine(); if (!crewOn()) rtcCloseAll() };
-if (PHONE) $('crewnote').textContent = 'Your phone passes on what it plays and other listeners\u2019 requests, through three hops, so no one can tell who hears what. It holds nothing once you stop. Your first hop may connect to you directly and see your address, as with Tor; it never sees what you hear.';
+if (PHONE) $('crewnote').textContent = 'Your phone passes on what it plays and other listeners\u2019 requests, through three hops, so no single radio on the way learns both who you are and what you hear. While the network is young, HOSTIS\u2019s first radios may carry both hops of a new browser\u2019s route. It holds nothing once you stop. Your first hop may connect to you directly and see your address, as with Tor; it never sees what you hear.';
+$('sw-directlinks').checked = directLinks();
+$('sw-directlinks').onchange = () => { store('pyrate.directlinks', $('sw-directlinks').checked ? '1' : '0'); radio?.set_direct_links(directLinks()); if (!directLinks()) { rtcCloseAll(); if (door) doorClose('direct links off') } else doorsDial() };
+$('sw-plain').checked = plainOn();
+$('sw-plain').onchange = () => { store('pyrate.plain', $('sw-plain').checked ? '1' : '0'); try { if ('mediaSession' in navigator) navigator.mediaSession.metadata = null } catch (e) { } power(); paint() };
+$('sw-n0').checked = n0On();
+$('sw-n0').onchange = () => { store('pyrate.n0', $('sw-n0').checked ? '1' : '0'); $('n0note').hidden = false };
 $('sw-direct').checked = store('pyrate.direct') === '1';
 $('sw-direct').onchange = () => { store('pyrate.direct', $('sw-direct').checked ? '1' : '0'); radio?.set_direct_ok($('sw-direct').checked) };
 for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-explicit', 'pyrate.show_explicit', '1'], ['sw-art', 'pyrate.hide_art', '0'], ['sw-empty', 'pyrate.show_empty', '1']]) {
@@ -1634,18 +1724,31 @@ for (const [id, key, on] of [['sw-mature', 'pyrate.hide_mature', '1'], ['sw-expl
     store(key, (el.checked ? on : (on === '1' ? '0' : '1'))); forgetPics(); rowsKey = '';
     // Pictures off takes the set's cover and banner and the mini player's at once; on brings them back.
     if (id === 'sw-art') { artWant = undefined; banAsk = null; art(null); $('banner').style.backgroundImage = '' }
+    if (id === 'sw-explicit') ballastSet();
     refresh(); if (cur) show(cur);
   };
 }
 // Other copies of the player: hidden when there are none (for browsers without :has).
 for (const u of document.querySelectorAll('.mirrors')) if (!u.children.length) u.closest('.mirrorbox').hidden = true;
-$('forget').onclick = () => {
+$('forget').onclick = async () => {
   if (!confirm('Forget everything this browser keeps for the radio? Pockets go too, unless you still have their invitations. A station raised here stays on the air, but this browser can speak for it again only from its 24 words.')) return;
+  forgotten = true;
+  try { if (playing) stop() } catch (e) { }
+  try { radio?.untune(); radio?.set_crew(false, false) } catch (e) { }
+  rtcCloseAll(); if (door) doorClose('forgotten');
   try { for (const k of Object.keys(localStorage)) if (k.startsWith('pyrate.')) localStorage.removeItem(k) } catch (e) { }
   try { for (const k of Object.keys(sessionStorage)) if (k.startsWith('pyrate.')) sessionStorage.removeItem(k) } catch (e) { }
   try { indexedDB.deleteDatabase('pyrate') } catch (e) { }
   try { indexedDB.deleteDatabase(LOGDB) } catch (e) { }
-  location.replace(location.pathname + location.search);
+  // The installed player and everything it kept go too.
+  try { for (const r of await navigator.serviceWorker?.getRegistrations?.() || []) await r.unregister() } catch (e) { }
+  try { for (const k of await caches.keys()) if (k.startsWith('pyrate')) await caches.delete(k) } catch (e) { }
+  sealedMem.clear();
+  // It stays stopped: a reload here would write a fresh key at once.
+  $('forget').disabled = true; $('forget').textContent = 'Forgotten';
+  const n = document.createElement('p'); n.className = 'fine centre'; n.setAttribute('role', 'status');
+  n.textContent = 'This browser has forgotten the radio. Close the tab, or open the page again to start afresh.';
+  $('forget').closest('p').after(n);
 };
 $('mclear').onclick = () => { setMarooned(new Set()); hiddenBox(); $('mnote').textContent = 'Every station is back in your list.'; refresh() };
 
@@ -1808,7 +1911,7 @@ $('st-raise').onclick = async () => {
   $('st-wordlist').innerHTML = r.words.split(/\s+/).map(w => '<li>' + esc(w) + '</li>').join('');
   $('st-written').checked = false; $('st-done').disabled = true;
   $('st-new').hidden = true; $('st-show').hidden = false; stNote('');
-  $('st-show').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  $('st-show').scrollIntoView({ behavior: glide(), block: 'center' });
 };
 $('st-written').onchange = () => { $('st-done').disabled = !$('st-written').checked };
 // The words written down, the raising ends on the station itself: its place on the dial, its link,
@@ -1972,30 +2075,17 @@ function encode(kind, data = {}, transfer = []) {
   if (!enc) { enc = new Worker('encode-worker.js'); enc.onmessage = e => { const p = encWait.get(e.data.id); encWait.delete(e.data.id); e.data.error ? p?.rej(new Error(e.data.error)) : p?.res(e.data) }; enc.onerror = e => { for (const p of encWait.values()) p.rej(new Error('the encoder would not start')); encWait.clear() } }
   return new Promise((res, rej) => { const id = ++encSeq; encWait.set(id, { res, rej }); enc.postMessage({ id, kind, ...data }, transfer) });
 }
-// A title and a name from a file's own name: "Artist - Title.mp3" reads as both.
-// As the app's plain_title: a recorder's date and time, and its own words around them, never
-// become a title. A bare date stays, since a keeper may mean it.
-const DEVICE = new Set(['vid', 'img', 'aud', 'rec', 'pxl', 'voice', 'recording', 'audio', 'video', 'sound', 'new', 'memo', 'screen', 'record']);
-function plainTitle(s) {
-  const t = s.split(/[\s_]+/).filter(Boolean), keep = t.map(() => true);
-  const stampy = x => /^[0-9.:hms-]+$/.test(x) && (x.match(/\d/g) || []).length >= 2;
-  let cut = false;
-  for (let i = 0; i < t.length;) {
-    if (!stampy(t[i])) { i++; continue }
-    let j = i, d = 0; while (j < t.length && stampy(t[j])) { d += t[j].match(/\d/g).length; j++ }
-    if (d >= 12) { for (let k = i; k < j; k++) keep[k] = false; cut = true }
-    i = j;
-  }
-  if (!cut) return { text: s.trim(), cut };
-  t.forEach((x, k) => { if (keep[k] && DEVICE.has(x.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase())) keep[k] = false });
-  const out = t.filter((_, k) => keep[k]).join(' ').replace(/^[\s.-]+|[\s.-]+$/g, '');
-  return { text: out || 'Untitled', cut };
-}
+// A title and a name from a file's own name: "Artist - Title.mp3" reads as both. Both are
+// cleaned by the app's own rules (core plain_title and plain_by, in the wasm): a recorder's date
+// and time, its own name for a take and a computer's name never become a title. A bare date
+// stays, since a keeper may mean it. The keeper sees both and can change them before signing.
 function titled(f) {
-  const p = plainTitle(f.name.replace(/\.[a-z0-9]{1,5}$/i, '')), base = p.text.replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
-  const m = base.match(/^(.{1,80}?)\s+[-–—]\s+(.+)$/);
-  return m ? { title: m[2], by: m[1], cut: p.cut } : { title: base, by: '', cut: p.cut };
+  const p = JSON.parse(plain_title(f.name.replace(/\.[a-z0-9]{1,5}$/i, ''))), base = p.text.replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
+  const m = base.match(/^(.{1,80}?)\s+[-\u2013\u2014]\s+(.+)$/);
+  return m ? { title: m[2], by: plain_by(m[1]), cut: p.cut } : { title: base, by: '', cut: p.cut };
 }
+// How far a disguised voice goes down: the station's own shift, drawn from its key.
+function semis() { if (!disguised()) return 0; try { return radio.disguise_semitones(mineCur) } catch (e) { return -4.75 } }
 const BLOCK = 48000 * 4;
 function block(chans, at, n, ch, gain = 1) {
   const out = new Float32Array(n * ch), L = chans[0], R = chans[1] || chans[0];
@@ -2007,7 +2097,8 @@ function block(chans, at, n, ch, gain = 1) {
 }
 async function airFile(f, row) {
   const st = (t, p) => { row.querySelector('.qs').textContent = t; if (p !== undefined) row.querySelector('.bar i').style.width = Math.round(p * 100) + '%' };
-  const talk = $('st-talk').checked, ch = talk ? 1 : 2, bitrate = talk ? 24000 : 64000;
+  // A disguised upload is spoken word: the shift and the hum filter run only on the talk path.
+  const talk = $('st-talk').checked || disguised(), ch = talk ? 1 : 2, bitrate = talk ? 24000 : 64000;
   try {
     st('Reading', 0);
     const raw = await f.arrayBuffer();
@@ -2022,7 +2113,7 @@ async function airFile(f, row) {
     for (let i = 0; i < frames; i += BLOCK) { radio.level_feed(block(chans, i, Math.min(BLOCK, frames - i), ch)); if ((i / BLOCK) % 8 === 7) await sleep(0) }
     const lv = JSON.parse(radio.level_end());
     st('Encoding', 0.2);
-    await encode('begin', { channels: ch, bitrate, talk, disguise: $('st-disguise').checked ? -4 : 0 });
+    await encode('begin', { channels: ch, bitrate, talk, disguise: semis() });
     for (let i = lv.start; i < lv.end; i += BLOCK) {
       const fb = block(chans, i, Math.min(BLOCK, lv.end - i), ch, lv.gain), pcm = new Int16Array(fb.length);
       for (let j = 0; j < fb.length; j++) pcm[j] = Math.max(-1, Math.min(1, fb[j])) * 32767;
@@ -2030,16 +2121,30 @@ async function airFile(f, row) {
       st('Encoding', 0.2 + 0.7 * (i - lv.start) / Math.max(1, lv.end - lv.start));
     }
     const done = await encode('end');
-    st('Signing', 0.95);
-    const t = titled(f);
-    radio.add_track(mineCur, t.title, t.by, $('st-source').value, ch, bitrate, done.out);
-    st('On the clock', 1); row.classList.add('done'); ysLoad();
+    // Nothing is signed until the keeper has seen the title and the name and says so.
+    const station = mineCur;
+    st('Check the title, then sign', 0.95);
+    const go = row.querySelector('.qgo'); go.hidden = false;
+    go.onclick = () => {
+      const title = row.querySelector('.qt-in').value.trim() || 'Untitled', by = row.querySelector('.qb-in').value.trim();
+      try {
+        radio.add_track(station, title, by, $('st-source').value, ch, bitrate, done.out);
+        go.hidden = true; row.querySelectorAll('input').forEach(x => x.disabled = true);
+        st('On the clock', 1); row.classList.add('done'); ysLoad(); studioStatus();
+      } catch (e) { st('Not set: ' + errText(e)); row.classList.add('bad') }
+    };
   } catch (e) { st('Not set: ' + (e.message || e)); row.classList.add('bad') }
 }
 async function airFiles(list) {
   if (!mineCur || !adopted.has(mineCur)) return;
   const files = [...list].filter(f => f.size > 0);
-  const rows = files.map(f => { const r = document.createElement('div'); r.className = 'qi'; r.innerHTML = '<span class="qt"></span><span class="bar"><i></i></span><span class="qs">Waiting</span>'; const tf = titled(f); r.querySelector('.qt').textContent = tf.title; if (tf.cut) r.title = 'The date and time the file was made are left out of its title.'; $('st-queue').prepend(r); return r });
+  const rows = files.map(f => {
+    const r = document.createElement('div'); r.className = 'qi';
+    r.innerHTML = '<span class="qt"><input class="qt-in" maxlength="120" aria-label="Title" autocomplete="off"><input class="qb-in" maxlength="120" aria-label="By" placeholder="By" autocomplete="off"></span><span class="bar"><i></i></span><span class="qs">Waiting</span><button class="btn quiet qgo" hidden>Sign</button>';
+    const tf = titled(f); r.querySelector('.qt-in').value = tf.title; r.querySelector('.qb-in').value = tf.by;
+    if (tf.cut) r.title = 'What the recorder wrote into the file name (a time, a date, a device) is left out of its title.';
+    $('st-queue').prepend(r); return r;
+  });
   for (const [i, f] of files.entries()) { airing++; try { await airFile(f, rows[i]) } finally { airing-- } }
   studioStatus();
 }
@@ -2085,7 +2190,7 @@ function deskUp() {
     air.connect(ac.createMediaStreamDestination());
     dk.mon = gn(); air.connect(dk.mon);
     dk.duck = gn(); dk.duck.connect(master);
-    dk.voice = new AudioWorkletNode(ac, 'pyrate-voice', { outputChannelCount: [1], channelCount: 1, channelCountMode: 'explicit', processorOptions: { semis: disguised() ? -4 : 0 } });
+    dk.voice = new AudioWorkletNode(ac, 'pyrate-voice', { outputChannelCount: [1], channelCount: 1, channelCountMode: 'explicit', processorOptions: { semis: semis() } });
     dk.micS = strip('dk-mic-f', master, dk.micOpen ? 1 : 0); dk.voice.connect(dk.micS.f);
     dk.deckS = strip('dk-deck-f', dk.duck); ac.createMediaElementSource(dk.el).connect(dk.deckS.f);
     dk.padS = strip('dk-pads-f', master);
@@ -2323,7 +2428,7 @@ const clock = s => (s >= 3600 ? Math.floor(s / 3600) + ':' + String(Math.floor(s
 function deskTick() {
   $('st-livetime').textContent = live ? 'ON AIR ' + clock(Math.floor((Date.now() - live.t0) / 1000)) : '';
   const st = live && stations.find(x => x.id === live.id);
-  $('dk-aboard').textContent = st && typeof st.aboard === 'number' && !st.cached ? st.aboard + ' listening' : '';
+  $('dk-aboard').textContent = st && aboardOf(st) >= 2 ? aboardOf(st) + ' listening' : '';
 }
 let nowWas = '';
 function deckClock() {
@@ -2394,7 +2499,9 @@ $('dk-check').onclick = async () => {
   deskPaint();
 };
 $('dk-mic').onclick = () => micSet(!dk.micOpen);
-const disguiseSay = () => { $('dk-disguise').setAttribute('aria-pressed', disguised()); dk.voice?.port.postMessage({ semis: disguised() ? -4 : 0 }) };
+const disguiseSay = () => { $('dk-disguise').setAttribute('aria-pressed', disguised()); dk.voice?.port.postMessage({ semis: semis() }); talkSay() };
+// With the disguise on, every upload is spoken word, and the switch says so.
+const talkSay = () => { const d = disguised(); if (d) $('st-talk').checked = true; $('st-talk').disabled = d };
 $('st-disguise').addEventListener('change', disguiseSay);
 $('dk-disguise').onclick = () => { $('st-disguise').checked = !disguised(); disguiseSay() };
 for (const [k, s] of [['mic', 'micS'], ['deck', 'deckS'], ['pads', 'padS'], ['two', 'twoS']]) {
@@ -2482,7 +2589,7 @@ async function logsIn() {
 }
 // Written a little after the logs grow, at most every thirty seconds.
 async function logsOut() {
-  if (!radio || document.hidden && logsMark) return;
+  if (forgotten || !radio || document.hidden && logsMark) return;
   const mark = radio.log_sizes(); if (mark === logsMark) return;
   try {
     const logs = HARBOUR_STATIONS.filter(h => radio.has_log(h.id)).map(h => [h.id, radio.log_export(h.id)]);
@@ -2491,6 +2598,31 @@ async function logsOut() {
     db.close(); logsMark = mark;
   } catch (e) { }
 }
+// The counting key steps forward each day, one way, as the phone's does, and only today's is
+// kept: a key taken from this browser recomputes no token of an earlier day.
+const today = () => Math.floor(Date.now() / 86400e3);
+async function stepKey(k) { return bhex(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('pyrate/token-step/v1 ' + k)))) }
+async function tokenKey() {
+  let k = null, day = today();
+  try {
+    const t = JSON.parse(await dopen(keptAnywhere('pyrate.token') || '') || 'null');
+    const from = t && (Number.isInteger(t.day) ? t.day : Math.floor((t.at || 0) / 86400e3));
+    if (t && /^[0-9a-f]{64}$/.test(t.k) && from <= day && day - from < 400) { k = t.k; for (let d = from; d < day; d++) k = await stepKey(k) }
+  } catch (e) { k = null }
+  if (!k) { const b = new Uint8Array(32); crypto.getRandomValues(b); k = bhex(b) }
+  keepSealed('pyrate.token', JSON.stringify({ k, day }));
+  return k;
+}
+// The chat voices come from a secret of their own, kept as the other secrets are, so the
+// counting key names no voice.
+async function chatSecret() {
+  let k = null; try { k = await dopen(keptAnywhere('pyrate.chatkey') || ''); if (!/^[0-9a-f]{64}$/.test(k || '')) k = null } catch (e) { }
+  if (!k) { const b = new Uint8Array(32); crypto.getRandomValues(b); k = bhex(b); keepSealed('pyrate.chatkey', k) }
+  return k;
+}
+// Ballast on hostis.black and in the embed comes from HOSTIS's stations alone, and never from
+// an explicit station unless the listener shows them.
+function ballastSet() { try { radio?.set_ballast(HOSTIS_ONLY || EMBED ? HARBOUR_STATIONS.map(h => h.id).join(',') : '', sw.explicit()) } catch (e) { } }
 async function boot() {
   if (handOff()) return;
   // An invitation's key leaves the address bar before anything else happens.
@@ -2498,30 +2630,44 @@ async function boot() {
   if (invite) history.replaceState(history.state, '', location.pathname);
   scale();
   $('signal').textContent = 'Connecting';
-  try { await init() } catch (e) { $('signal').textContent = 'This browser cannot run the radio. Try another browser, or the app.'; stop(); return }
+  try { await init() } catch (e) {
+    if (torLikely()) {
+      // Tor Browser's Safer level turns off WebAssembly, which the radio runs on.
+      $('signal').textContent = 'Tor Browser at its Safer level turns off what the radio runs on. Choose Standard for this site from the shield beside the address, then reload.';
+      if (ONION && !/\.onion$/.test(location.hostname)) { const a = document.createElement('a'); a.href = ONION; a.rel = 'noreferrer'; a.textContent = 'The onion copy'; $('hint').replaceChildren(a, document.createTextNode(' keeps the whole visit inside Tor.')); $('hint').hidden = false }
+    } else $('signal').textContent = 'This browser cannot run the radio. Try another browser, or the app.';
+    stop(); return
+  }
   // The sealed secrets come back before anything uses them.
+  await sealedIn(); $('myname').value = myName();
   try { pocketsMem = JSON.parse(await dopen(keptAnywhere('pyrate.pockets') || '[]') || '[]') } catch (e) { pocketsMem = [] }
   try { keptSet = new Set(JSON.parse(await dopen(keptAnywhere('pyrate.kept') || '[]') || '[]').filter(id => /^[0-9a-f]{64}$/.test(id))) } catch (e) { keptSet = new Set() }
   if (!sealed() && !tabKeys()) { const m = store('pyrate.mine'); if (m) { const t = await dopen(m); try { const l = validKeys(JSON.parse(t || '[]')); if (l.length) { mineMem = l; if (t === m) keepSealed('pyrate.mine', m) } } catch (e) { } } }
-  // The counting key is replaced every thirty days, so a key taken from this browser cannot
-  // tie its tokens back further than that.
-  let key = null;
-  try { const t = JSON.parse(await dopen(keptAnywhere('pyrate.token') || '') || 'null'); if (t && /^[0-9a-f]{64}$/.test(t.k) && Date.now() - t.at < 30 * 86400e3) key = t.k } catch (e) { }
-  if (!key) { const b = new Uint8Array(32); crypto.getRandomValues(b); key = [...b].map(x => x.toString(16).padStart(2, '0')).join(''); keepSealed('pyrate.token', JSON.stringify({ k: key, at: Date.now() })) }
+  const key = await tokenKey();
   // No relay answering is not the end: the set says so and tries again, more slowly each time.
   for (let tries = 0; !radio; tries++) {
-    try { radio = await Radio.start(rememberHarbours(), key, RELAYS) } catch (e) {
+    try { radio = await Radio.start(rememberHarbours(), key, RELAYS, n0On()) } catch (e) {
       console.warn(e);
       $('signal').textContent = 'Could not reach the network. Trying again. If it never connects, this network may block the radio; try another, or the app.';
       await sleep(Math.min(60000, 5000 * 2 ** tries));
     }
   }
   radio.set_direct_ok(store('pyrate.direct') === '1');
+  radio.set_direct_links(directLinks());
+  try { radio.set_chat_key(await chatSecret()) } catch (e) { }
+  ballastSet();
   crewSet();
   doorsIn(); doorsDial();
   // The installed player keeps this copy whole, and takes a new one only under two of the three
-  // release signatures (sw.js). Not inside another page.
-  if (!EMBED && 'serviceWorker' in navigator && (location.protocol === 'https:' || /^(127\.0\.0\.1|localhost)$/.test(location.hostname))) navigator.serviceWorker.register('sw.js').then(r => { navigator.serviceWorker.addEventListener('message', e => { if (e.data?.pyrate === 'copy') swCopy = e.data }); (r.active || r.installing || r.waiting)?.postMessage?.('check') }).catch(() => { });
+  // release signatures (sw.js): only at an address that is the fingerprint of the copy itself
+  // (a CID gateway's own subdomain), since whoever serves any other address can replace the
+  // worker, and never at a gateway shared with other sites. Elsewhere a worker an older build
+  // left is let go, with what it kept. Not inside another page. A test build may keep one on
+  // this machine.
+  const cidOrigin = /^b[a-z2-7]{50,}\.ipfs\.[a-z0-9.-]+$/.test(location.hostname);
+  const testOrigin = /^(127\.0\.0\.1|localhost)$/.test(location.hostname) && /127\.0\.0\.1|localhost/.test(RELAYS);
+  if ('serviceWorker' in navigator && !EMBED && !SHARED && (cidOrigin || testOrigin)) navigator.serviceWorker.register('sw.js').then(r => { navigator.serviceWorker.addEventListener('message', e => { if (e.data?.pyrate === 'copy') swCopy = e.data }); (r.active || r.installing || r.waiting)?.postMessage?.('check') }).catch(() => { });
+  else if ('serviceWorker' in navigator && !EMBED && !SHARED) navigator.serviceWorker.getRegistrations?.().then(async rs => { for (const r of rs) if (r.scope.startsWith(new URL('./', location.href).href)) await r.unregister(); for (const k of await caches.keys()) if (k.startsWith('pyrate')) await caches.delete(k) }).catch(() => { });
   setInterval(() => { doorsKeep(); doorsDial() }, 5000);
   // hostis.black's copy keeps HOSTIS's logs between visits: they come back before anything is
   // asked of the network, so a returning Listen needs only the newest entries and a chunk.
@@ -2530,8 +2676,8 @@ async function boot() {
   else if (keepsStock()) await logsIn();
   await stockIn(); stockLine();
   setInterval(stockOut, 20000);
-  if (crewOn()) try { radio.set_guards(store('pyrate.guards') || '[]') } catch (e) { }
-  setInterval(() => { carryingLine(); if (crewOn()) try { store('pyrate.peers', radio.quick_peers()); const g = radio.guards(); if (g !== '[]') store('pyrate.guards', g) } catch (e) { } }, 5000);
+  if (crewOn()) try { radio.set_guards(sget('pyrate.guards') || '[]') } catch (e) { }
+  setInterval(() => { carryingLine(); if (crewOn()) try { sset('pyrate.peers', radio.quick_peers()); const g = radio.guards(); if (g !== '[]') sset('pyrate.guards', g) } catch (e) { } }, 5000);
   try { navigator.connection?.addEventListener('change', crewSet) } catch (e) { }
   bootAt = Date.now();
   // The set's own station comes aboard first: its log and the piece on now.
