@@ -20,6 +20,17 @@ This makes three release keys as 24 words each (`release-key-1.txt` to `-3.txt`)
 
 A release with fewer than two good signatures is never published and never installed. Phones install only on the owner's tap, and Android asks again.
 
+**One folder, every signature.** The holders sign everything a release carries in one pass, over a folder, as `HOLDERS.md` walks them through:
+
+    release sign-all <words file, or - to type them> <1-3> <folder>
+    release check <folder>
+
+The folder holds what this release needs signed, which is the APK named `<code>-<version>.apk` (after its Android signature), `player.manifest` from `browser/www/dist-open/` (built with `PYRATE_PLAYER_CODE` set, so a rebuild makes the same list), `players.txt` from the site's `pyrateradio/ipfs/`, the computers' builds from `landing/desktop/`, and `bearings.json`. Each signature goes into a file beside its artifact (`<code>-<version>.sigs`, `player.sigs`, `players.sigs`, `<build>.zip.sigs`), and each holder's lines join any already there, so two holders sign the same folder in turn. A bearings file carries its signatures inside. Each kind signs a message of its own (`pyrate/release/v1`, `pyrate/players/v1`, `pyrate/desktop/v1`), so a signature over one never passes as another, and `sign-all` refuses words that are not the key number given.
+
+When the folder comes back, put `player.sigs` and `players.sigs` in `browser/signed/` and the builds' `.sigs` beside them in `landing/desktop/`. `browser/build.py` takes `player.sigs` into the open player when two of its signatures match the build, `tools/deploy_site.sh` carries `players.sigs` beside `players.txt`, and `landing/build.py` publishes the builds' signatures beside their checksums. The open player's address changes once its `player.sigs` is in, so a release that brings a new player sends `players.txt` round a second time.
+
+The open player's fixed name moves only to a list two release keys signed. `pin_player.sh` checks `players.sigs` with `tools/verify_players.py` before it names the newest player, and otherwise keeps the name on the last signed one. `tools/fetch_desktop.sh <release commit>` brings the computers' builds only from a run built from that commit.
+
 **What a Lantern carries** is its operator's choice: one station id per line in its `maroon.txt` and it will not list, play or carry that station. The file stays on the box and is published nowhere.
 
 **The Android signing key (once, offline).** Android accepts a new version only if it carries the same signature as the one installed.
