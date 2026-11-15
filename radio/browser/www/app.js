@@ -1024,9 +1024,10 @@ async function prepare(id) {
 }
 // A link to a station nobody carries: once the radio has had the network's cards for a while and
 // no radio speaks for it, the set says so within seconds, instead of tuning in for a minute.
-// A link to a station not found yet: a new one takes a minute or two to reach the network, so for
-// three minutes the set says so and goes on looking, with no talk of trouble.
-const unfound = () => !!cur && linkedIds.has(cur.id) && !stations.some(x => x.id === cur.id && !x.cached) && Date.now() - showAt < 180000;
+// A link to a station not found yet: a new one waits for the next quarter hour and then the stem
+// before it reaches the network, so for seventeen minutes the set says so and goes on looking,
+// with no talk of trouble.
+const unfound = () => !!cur && linkedIds.has(cur.id) && !stations.some(x => x.id === cur.id && !x.cached) && Date.now() - showAt < 17 * 60000;
 const lost = () => playing && stage === 'finding' && busySince > 0 && Date.now() - busySince > 12000 && Date.now() - bootAt > 10000 && !unfound() && !stations.some(s => s.id === cur?.id && !s.cached && s.carriers);
 // A station with no recordings yet, by its card or by its own log.
 const bare = () => !!cur && ((pageFor === cur.id && pageV?.tracks === 0) || (cur.tracks === 0 && !cur.cached));
