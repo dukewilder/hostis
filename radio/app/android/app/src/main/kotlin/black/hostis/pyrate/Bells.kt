@@ -90,16 +90,16 @@ object Bells {
     fun bells(c: Context): String = Hold.getS(c, "bells") ?: "[]"
 
     fun setWake(c: Context, on: Boolean, hour: Int, minute: Int, station: String?, name: String?) {
-        prefs(c).edit().putBoolean("wake_on", on).putInt("wake_h", hour).putInt("wake_m", minute).apply()
+        Hold.setFlag(c, "wake_on", on); Hold.setInt(c, "wake_h", hour); Hold.setInt(c, "wake_m", minute)
         Hold.putS(c, "wake_station", station)
         Hold.putS(c, "wake_name", name)
         rescheduleWake(c)
     }
 
     fun wake(c: Context): JSONObject = JSONObject()
-        .put("on", prefs(c).getBoolean("wake_on", false))
-        .put("hour", prefs(c).getInt("wake_h", 7))
-        .put("minute", prefs(c).getInt("wake_m", 0))
+        .put("on", Hold.flag(c, "wake_on"))
+        .put("hour", Hold.int(c, "wake_h", 7))
+        .put("minute", Hold.int(c, "wake_m", 0))
         .put("station", Hold.getS(c, "wake_station"))
         .put("name", Hold.getS(c, "wake_name"))
 
@@ -109,10 +109,10 @@ object Bells {
         val i = Intent(c, AlarmReceiver::class.java).setAction("wake").putExtra("station", Hold.getS(c, "wake_station"))
         val pi = pending(c, 9_000_001, i)
         alarms(c).cancel(pi)
-        if (!p.getBoolean("wake_on", false)) return
+        if (!Hold.flag(c, "wake_on")) return
         val cal = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, p.getInt("wake_h", 7))
-            set(Calendar.MINUTE, p.getInt("wake_m", 0))
+            set(Calendar.HOUR_OF_DAY, Hold.int(c, "wake_h", 7))
+            set(Calendar.MINUTE, Hold.int(c, "wake_m", 0))
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
             if (timeInMillis <= System.currentTimeMillis() + 5_000) add(Calendar.DAY_OF_YEAR, 1)
@@ -140,11 +140,10 @@ object Bells {
 
     /** A secret only this app holds, so a tap on its own bell can be told from a link sent by another app. */
     fun bellKey(c: Context): String {
-        val p = c.getSharedPreferences("pyrate", Context.MODE_PRIVATE)
-        p.getString("bell_key", null)?.let { return it }
+        Hold.getS(c, "bell_key")?.let { return it }
         val b = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
         val k = b.joinToString("") { "%02x".format(it) }
-        p.edit().putString("bell_key", k).apply()
+        Hold.putS(c, "bell_key", k)
         return k
     }
 
@@ -157,7 +156,7 @@ object Bells {
             Intent(c, MainActivity::class.java).setAction("tune").putExtra("station", station).putExtra("key", bellKey(c)).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         // In the plain disguise a bell says only that something is on.
-        val plain = c.getSharedPreferences("pyrate", Context.MODE_PRIVATE).getBoolean("plain_lock", false)
+        val plain = Hold.flag(c, "plain_lock")
         nm.notify(id, NotificationCompat.Builder(c, "bells")
             .setSmallIcon(R.drawable.ic_flag)
             .setContentTitle(if (plain) "Radio" else title)
@@ -174,7 +173,7 @@ class AlarmReceiver : BroadcastReceiver() {
         when (i.action) {
             "bell" -> Bells.ring(c, i.getStringExtra("title") ?: "", i.getStringExtra("station") ?: "", i.getStringExtra("name") ?: "", i.getIntExtra("id", 0))
             "wake" -> {
-                val s = Intent(c, PlaybackService::class.java).setAction("wake").putExtra("station", i.getStringExtra("station"))
+                val s = Intent(c, PlaybackService::class.java).setAction("wake").putExtra("station", i.getStringExtra("station")).putExtra("key", bellKey(c))
                 if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(s) else c.startService(s)
             }
         }
@@ -186,9 +185,8 @@ class BootReceiver : BroadcastReceiver() {
         if (i.action != Intent.ACTION_BOOT_COMPLETED) return
         Bells.restoreAll(c)
         // A drawer Lantern comes back on after a power cut, as it was left.
-        val p = c.getSharedPreferences("pyrate", Context.MODE_PRIVATE)
-        if (p.getBoolean("lantern_on", false)) {
-            try { LanternService.set(c, true, p.getInt("lantern_gb", 1)) } catch (e: Exception) {}
+        if (Hold.flag(c, "lantern_on")) {
+            try { LanternService.set(c, true, Hold.int(c, "lantern_gb", 1)) } catch (e: Exception) {}
         }
     }
 }

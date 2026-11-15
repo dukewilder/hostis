@@ -53,8 +53,8 @@ class LanternService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // A restart after the process died, or after a reboot, comes with no intent and no
         // screen: the size is read back, and the service starts the node itself.
-        val gb = intent?.getIntExtra("gb", -1)?.takeIf { it > 0 } ?: getSharedPreferences("pyrate", Context.MODE_PRIVATE).getInt("lantern_gb", 1)
-        val plain = getSharedPreferences("pyrate", Context.MODE_PRIVATE).getBoolean("plain_lock", false)
+        val gb = intent?.getIntExtra("gb", -1)?.takeIf { it > 0 } ?: Hold.int(this, "lantern_gb", 1)
+        val plain = Hold.flag(this, "plain_lock")
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("lantern", "Lantern", NotificationManager.IMPORTANCE_MIN))
         val open = PendingIntent.getActivity(this, 0, packageManager.getLaunchIntentForPackage(packageName), PendingIntent.FLAG_IMMUTABLE)
@@ -138,7 +138,7 @@ class LanternService : Service() {
 
     companion object {
         fun set(context: Context, on: Boolean, gb: Int) {
-            context.getSharedPreferences("pyrate", Context.MODE_PRIVATE).edit().putBoolean("lantern_on", on).putInt("lantern_gb", gb).apply()
+            Hold.setFlag(context, "lantern_on", on); Hold.setInt(context, "lantern_gb", gb)
             val i = Intent(context, LanternService::class.java).putExtra("gb", gb)
             if (on) {
                 if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(i) else context.startService(i)

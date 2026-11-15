@@ -42,7 +42,8 @@ object Hold {
      * sealed when next written.
      */
     fun getS(ctx: Context, key: String): String? {
-        val v = ctx.getSharedPreferences("pyrate", Context.MODE_PRIVATE).getString(key, null) ?: return null
+        // A flag written before sealing was a boolean or a number: read as text all the same.
+        val v = ctx.getSharedPreferences("pyrate", Context.MODE_PRIVATE).all[key]?.toString() ?: return null
         if (!v.startsWith("s1:")) return v
         return try {
             val b = android.util.Base64.decode(v.substring(3), android.util.Base64.NO_WRAP)
@@ -54,6 +55,12 @@ object Hold {
             null
         }
     }
+
+    /** A switch, sealed: what the phone's storage says of habits (a wake time, a disguise, a Lantern) is noise. */
+    fun flag(ctx: Context, key: String): Boolean = getS(ctx, key).let { it == "1" || it == "true" }
+    fun setFlag(ctx: Context, key: String, on: Boolean) = putS(ctx, key, if (on) "1" else "0")
+    fun int(ctx: Context, key: String, def: Int): Int = getS(ctx, key)?.toIntOrNull() ?: def
+    fun setInt(ctx: Context, key: String, v: Int) = putS(ctx, key, v.toString())
 
     fun putS(ctx: Context, key: String, value: String?) {
         val e = ctx.getSharedPreferences("pyrate", Context.MODE_PRIVATE).edit()

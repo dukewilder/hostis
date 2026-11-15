@@ -74,12 +74,15 @@ class MainActivity : FlutterActivity() {
         takeLink(intent)
     }
 
-    private fun quiet() = getSharedPreferences("pyrate", Context.MODE_PRIVATE).getBoolean("plain_lock", false)
+    private fun quiet() = Hold.flag(this, "plain_lock")
+
+    /** True while a broadcast is live: the screen is kept out of recents and screenshots whatever the switch says. */
+    private var onAir = false
 
     /** With the lock screen saying only "Radio", the recents screen shows nothing either. */
     private fun discreet() {
         val flag = android.view.WindowManager.LayoutParams.FLAG_SECURE
-        if (quiet()) window.addFlags(flag) else window.clearFlags(flag)
+        if (quiet() || onAir) window.addFlags(flag) else window.clearFlags(flag)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -97,6 +100,7 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "start" -> {
                     val i = Intent(this, PlaybackService::class.java)
+                        .putExtra("key", Bells.bellKey(this))
                         .putExtra("title", call.argument<String>("title") ?: "Pyrate Radio")
                     try {
                         if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
@@ -149,11 +153,14 @@ class MainActivity : FlutterActivity() {
                     // While the 24 words or a PIN are on screen: no screenshots, no recents
                     // thumbnail, no screen recording.
                     val flag = android.view.WindowManager.LayoutParams.FLAG_SECURE
-                    if (call.argument<Boolean>("on") == true) window.addFlags(flag) else if (!quiet()) window.clearFlags(flag)
+                    if (call.argument<Boolean>("on") == true) window.addFlags(flag) else if (!quiet() && !onAir) window.clearFlags(flag)
                     result.success(null)
                 }
                 "live" -> {
+                    onAir = call.argument<Boolean>("on") == true
+                    discreet()
                     val i = Intent(this, PlaybackService::class.java)
+                        .putExtra("key", Bells.bellKey(this))
                         .putExtra("title", "ON AIR")
                         .putExtra("live", call.argument<Boolean>("on") == true)
                     try {
@@ -176,7 +183,7 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "stop" -> {
-                    try { startService(Intent(this, PlaybackService::class.java).setAction("stop")) } catch (e: Exception) {
+                    try { startService(Intent(this, PlaybackService::class.java).setAction("stop").putExtra("key", Bells.bellKey(this))) } catch (e: Exception) {
                         stopService(Intent(this, PlaybackService::class.java))
                     }
                     result.success(null)
@@ -234,11 +241,11 @@ class MainActivity : FlutterActivity() {
                 "plain_set" -> { Ship.setPlain(this, call.argument<Boolean>("value") == true); result.success(null) }
                 "plain_get" -> result.success(Ship.isPlain(this))
                 "plain_lock_set" -> {
-                    getSharedPreferences("pyrate", Context.MODE_PRIVATE).edit().putBoolean("plain_lock", call.argument<Boolean>("value") == true).apply()
+                    Hold.setFlag(this, "plain_lock", call.argument<Boolean>("value") == true)
                     discreet()
                     result.success(null)
                 }
-                "plain_lock_get" -> result.success(getSharedPreferences("pyrate", Context.MODE_PRIVATE).getBoolean("plain_lock", false))
+                "plain_lock_get" -> result.success(Hold.flag(this, "plain_lock"))
                 "remember" -> {
                     Hold.putS(this, "last", call.argument<String>("station"))
                     result.success(null)

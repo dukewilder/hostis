@@ -164,7 +164,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         .build()
 
     /** The plain disguise: the lock screen says only "Radio". */
-    private val plain: Boolean get() = prefs().getBoolean("plain_lock", false)
+    private val plain: Boolean get() = Hold.flag(this, "plain_lock")
 
     /** What the lock screen, the car and the headphones show. */
     /** On the node's thread; what it changes on screen is handed to the main one. */
@@ -194,7 +194,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
             else -> "Finding the station"
         }
         val pic = now?.optString("art")?.ifEmpty { null } ?: cover
-        val plain = prefs().getBoolean("plain_lock", false)
+        val plain = Hold.flag(this, "plain_lock")
         val key = "$tuned|$title|$by|$pic|$plain"
         main.post {
             session.setPlaybackState(state(if (waiting) PlaybackStateCompat.STATE_BUFFERING else PlaybackStateCompat.STATE_PLAYING))
@@ -232,9 +232,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
             .setSmallIcon(R.drawable.ic_flag)
             .setContentIntent(open)
             .setOngoing(true)
-            // In the plain disguise the lock screen shows only "Radio", whatever is on.
-            .setVisibility(if (plain) NotificationCompat.VISIBILITY_PRIVATE else NotificationCompat.VISIBILITY_PUBLIC)
-            .apply { if (plain) setPublicVersion(NotificationCompat.Builder(this@PlaybackService, "air").setContentTitle("Radio").setSmallIcon(R.drawable.ic_flag).build()) }
+            // In the plain disguise, and whenever a broadcast is live, the lock screen shows only "Radio".
+            .setVisibility(if (plain || live) NotificationCompat.VISIBILITY_PRIVATE else NotificationCompat.VISIBILITY_PUBLIC)
+            .apply { if (plain || live) setPublicVersion(NotificationCompat.Builder(this@PlaybackService, "air").setContentTitle("Radio").setSmallIcon(R.drawable.ic_flag).build()) }
             .addAction(action(android.R.drawable.ic_media_previous, "Previous station", PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS))
             .addAction(action(android.R.drawable.ic_menu_close_clear_cancel, "Stop", PlaybackStateCompat.ACTION_STOP))
             .addAction(action(android.R.drawable.ic_media_next, "Next station", PlaybackStateCompat.ACTION_SKIP_TO_NEXT))
@@ -271,9 +271,23 @@ class PlaybackService : MediaBrowserServiceCompat() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Another app may start an exported service. Only this app's own intents carry its key;
+        // a media button comes from the system. Anything else is turned away, after the
+        // foreground promise a start call makes has been kept.
+        val media = intent?.action == Intent.ACTION_MEDIA_BUTTON
+        if (intent != null && !media && intent.getStringExtra("key") != Bells.bellKey(this)) {
+            if (!foreground) {
+                goForeground("Radio", "")
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                foreground = false
+                release()
+                stopSelf()
+            }
+            return START_NOT_STICKY
+        }
         androidx.media.session.MediaButtonReceiver.handleIntent(session, intent)
         when (intent?.action) {
-            "wake" -> wakeUp(intent.getStringExtra("station"))
+            "wake" -> if (Regex("^[0-9a-f]{64}$").matches(intent.getStringExtra("station") ?: "")) wakeUp(intent.getStringExtra("station")) else stopSelf()
             "stop" -> stopPlaying()
             else -> {
                 val ending = intent?.hasExtra("live") == true && !intent.getBooleanExtra("live", false)
