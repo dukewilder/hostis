@@ -137,6 +137,7 @@ impl Inner {
     /// let the way in go, and the next tick draws another.
     async fn deck_pull_loop(self: Arc<Self>, deck: [u8; 32]) {
         let mut fails = 0u64;
+        let mut last_intro: Option<[u8; 32]> = None;
         loop {
             let job = {
                 let mut d = self.deck.lock().unwrap();
@@ -146,6 +147,10 @@ impl Inner {
                 }
             };
             let Some((intro, cookie, note)) = job.filter(|_| self.deck_wanted().is_some()) else { break };
+            // A new way in starts with a clean slate.
+            if last_intro.replace(intro).is_some_and(|l| l != intro) {
+                fails = 0;
+            }
             match self.deck_pull(deck, intro, cookie, note.clone(), vec![]).await {
                 Ok(()) => fails = 0,
                 Err(e) => {
@@ -157,7 +162,7 @@ impl Inner {
                         tokio::time::sleep(Duration::from_secs(3)).await;
                         continue;
                     }
-                    // Each failed pull marks its middle; six in a row, with a new middle each
+                    // Six failed pulls in a row, a middle that did not answer passed over each
                     // time, and the way in is the likelier fault.
                     fails += 1;
                     if fails >= 6 {
@@ -195,8 +200,12 @@ impl Inner {
                 _ => None,
             };
             let Some(items) = items else {
-                // Most often a middle that has gone, slow or silent: the next pull draws another.
-                self.failed.lock().unwrap().insert(*middle.as_bytes(), now_ms());
+                // No answer at all is most often a middle that has gone: the next pull draws
+                // another. An empty one came back through the middle, so the way in is the
+                // likelier fault, and the loop counts it against the way in.
+                if !matches!(raw, Ok(Ok(_))) {
+                    self.failed.lock().unwrap().insert(*middle.as_bytes(), now_ms());
+                }
                 return Err(match raw {
                     Err(_) => anyhow!("slow pull"),
                     Ok(Err(e)) => e,
