@@ -108,6 +108,10 @@ pub struct Store {
     pub pinned: HashSet<StationId>,
     /// The chunks this node holds as its ballast share: kept through quota sweeps.
     pub ballast: HashSet<Hash>,
+    /// On a phone or computer, the grain its own entries are dated to, in milliseconds (a
+    /// quarter hour; 0 dates them to the millisecond, as a Lantern does). Their cargo waits for
+    /// the date (see `pyrate_core::archive::quarter_stamp`).
+    pub quarter: u64,
     /// What this node holds of logs it carries for others, in memory and on disk.
     pub budget: LogBudget,
     /// Carried stations whose logs outgrew `budget.per_station`, and when: no more is taken
@@ -116,6 +120,9 @@ pub struct Store {
     /// The chunks and pictures of this node's own stations, kept until one of their logs
     /// changes: a request for any chunk then costs a lookup, not a walk through every own log.
     own_named: Option<(Vec<([u8; 32], u64)>, HashSet<Hash>)>,
+    /// The sealed names a private node hands to anyone who asks: its ballast share, and the
+    /// chunks of the pockets it sits in. Kept until the share or a pocket's log changes.
+    shared_named: Option<(Vec<([u8; 32], u64)>, HashSet<Hash>)>,
     /// Carried stations let go to stay within budget, and when: not fetched again for six
     /// hours unless someone here listens to them.
     evicted: HashMap<StationId, u64>,
@@ -169,9 +176,11 @@ impl Store {
             keys: HashMap::new(),
             pinned: HashSet::new(),
             ballast: HashSet::new(),
+            quarter: 0,
             budget: LogBudget::PHONE,
             full: HashMap::new(),
             own_named: None,
+            shared_named: None,
             evicted: HashMap::new(),
             arrived: HashMap::new(),
             listened: HashMap::new(),
@@ -261,7 +270,7 @@ impl Store {
                     kept += 1;
                 }
             }
-            eprintln!("carried {} into the new log format: {kept} entries", id.call_sign());
+            crate::say(&format!("carried {} into the new log format: {kept} entries", id.call_sign()));
         }
         Ok(s)
     }
@@ -463,8 +472,13 @@ impl Store {
         let a = self.logs.entry(id).or_insert_with(|| Archive::new(id));
         // A deputy wraps what it writes, so carriers can check the deputy's signature.
         let body = if key.id() == id { body } else { Body::Deputed { by: key.id().0, body: Box::new(body) } };
+        let last = a.entries().last().map(|l| l.entry.at_ms);
         // Two entries in one millisecond would break the log's order; the second waits a tick.
-        let at_ms = a.entries().last().map_or(at_ms, |l| at_ms.max(l.entry.at_ms + 1));
+        let at_ms = if self.quarter > 0 && pyrate_core::archive::waits_for_quarter(&body) {
+            pyrate_core::archive::stamp_after(at_ms, last, self.quarter)
+        } else {
+            last.map_or(at_ms, |l| at_ms.max(l + 1))
+        };
         let e = pyrate_core::Entry { station: id, seq: a.len(), prev: a.head(), at_ms, body };
         let signed = SignedEntry::sign(key, e)?;
         self.put_entries(id, vec![signed.clone()])?;
@@ -481,6 +495,37 @@ impl Store {
             let _ = fs::remove_file(self.legacy_path(&h));
         }
         Ok(())
+    }
+
+    /// The ballast share, replaced whole.
+    pub fn set_ballast(&mut self, keep: HashSet<Hash>) {
+        self.ballast = keep;
+        self.shared_named = None;
+    }
+
+    /// Whether a private node may hand out the sealed chunk `name` to whoever asks. It may for its
+    /// ballast share, which anyone can work out from its id and so says nothing of what it
+    /// played, and for the chunks of its pockets, whose names no stranger can know.
+    pub fn shares_sealed(&mut self, name: &Hash, pockets: &[StationId]) -> bool {
+        let mut sig: Vec<([u8; 32], u64)> = pockets.iter().map(|id| (id.0, self.logs.get(id).map_or(0, |a| a.len()))).collect();
+        sig.sort_unstable();
+        if self.shared_named.as_ref().is_none_or(|(s, _)| *s != sig) {
+            let mut set: HashSet<Hash> = self.ballast.iter().map(pyrate_core::seal::name).collect();
+            for id in pockets {
+                set.extend(self.chunks_of(id).iter().map(pyrate_core::seal::name));
+            }
+            self.shared_named = Some((sig, set));
+        }
+        self.shared_named.as_ref().is_some_and(|(_, set)| set.contains(name))
+    }
+
+    /// Which of this node's own stations a chunk or picture belongs to, if any.
+    pub fn own_station_of(&mut self, h: &Hash) -> Option<StationId> {
+        if !self.is_own_named(h) {
+            return None;
+        }
+        let ids: Vec<StationId> = self.keys.keys().copied().collect();
+        ids.into_iter().find(|id| self.chunks_of(id).contains(h) || self.logs.get(id).is_some_and(|a| a.art_hashes().contains(h)))
     }
 
     /// Whether a chunk or picture belongs to one of this node's own stations.

@@ -7,7 +7,7 @@
 //!
 //! No rights reserved.
 
-use std::{collections::VecDeque, path::Path, sync::Arc};
+use std::{collections::VecDeque, sync::Arc};
 
 use anyhow::{Result, anyhow};
 use pyrate_core::{ArtRef, Body, Hash, StationId, art};
@@ -40,19 +40,6 @@ impl Shelf {
             self.bytes -= old.len();
         }
     }
-}
-
-/// A cover picture in the same folder as a recording, as music libraries keep them.
-pub fn folder_cover(track: &Path) -> Option<Vec<u8>> {
-    let dir = track.parent()?;
-    for name in ["cover", "folder", "front", "album", "Cover", "Folder", "Front", "Album"] {
-        for ext in ["jpg", "jpeg", "png", "webp"] {
-            if let Ok(b) = std::fs::read(dir.join(format!("{name}.{ext}"))) {
-                return Some(b);
-            }
-        }
-    }
-    None
 }
 
 impl Inner {

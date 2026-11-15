@@ -32,7 +32,13 @@ impl Inner {
                     let by = match &e.entry.body { Body::Deputed { by, .. } => hex(by), _ => st.to_hex() };
                     json!({ "track": hex(&h), "title": crate::shown(describe_track(a, &h).0), "added_ms": e.entry.at_ms, "added_by": by })
                 }).collect();
-                let hands: Vec<Value> = a.deputies().iter().map(|k| json!({ "key": hex(k), "label": a.entries().iter().find_map(|e| match e.entry.body() { Body::Deputy { key, label } if key == k => Some(label.clone()), _ => None }) })).collect();
+                // A co-host's name as the keeper noted it on this device, else whatever an older
+                // version signed into the log.
+                let noted = |k: &[u8; 32]| self.hold.read_note(&self.cfg.dir, &format!("deputy-label/{}", hex(k)), None).and_then(|b| String::from_utf8(b).ok());
+                let hands: Vec<Value> = a.deputies().iter().map(|k| {
+                    let signed = a.entries().iter().find_map(|e| match e.entry.body() { Body::Deputy { key, label } if key == k && !label.is_empty() => Some(label.clone()), _ => None });
+                    json!({ "key": hex(k), "label": noted(k).or(signed) })
+                }).collect();
                 Ok(json!({ "programme": a.programme().as_ref().map(programme_json), "library": lib, "hands": hands }))
             }
             "programme_set" => {

@@ -9,7 +9,7 @@ publish.workspace = true
 socket2 = { version = "0.6", features = ["all"] }
 zeroize = "1"
 pyrate-core = { path = "../core" }
-iroh = { version = "1.4", features = ["platform-verifier"] }
+iroh = { version = "1.4", features = ["platform-verifier", "unstable-net-report"] }
 # aws-lc-rs for the hybrid post-quantum key exchange (X25519 with ML-KEM-768), which ring lacks.
 rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", "prefer-post-quantum", "std", "tls12"] }
 iroh-gossip = "0.102"

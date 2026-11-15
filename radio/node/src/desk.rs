@@ -547,7 +547,9 @@ pub(crate) fn call(inner: &Arc<Inner>, cmd: &str, req: &Value) -> Result<Value> 
         }
         "desk_set" => {
             let wants_check = req["check"].as_bool() == Some(true);
-            let semis = if wants_check { Some(inner.disguise()) } else { None };
+            let on_air = inner.live.lock().unwrap().map(|(st, _)| st);
+            let semis = if wants_check { Some(inner.disguise(on_air.as_ref())) } else { None };
+            let shift = inner.recording_shift(on_air.as_ref());
             let mut sh = desk.sh.lock().unwrap();
             if let Some(b) = req["mic_open"].as_bool() {
                 sh.mic_open = b;
@@ -566,8 +568,10 @@ pub(crate) fn call(inner: &Arc<Inner>, cmd: &str, req: &Value) -> Result<Value> 
                 sh.mic_file = p.map(PathBuf::from);
                 sh.mic_tries += 1;
             }
-            if let Some(s) = req["disguise"].as_f64() {
-                sh.disguise = s.clamp(-12.0, 12.0);
+            // A yes or no: the shift itself comes from the recording key, so no caller can set
+            // a shift everyone shares.
+            if !req["disguise"].is_null() {
+                sh.disguise = if crate::switched_on(&req["disguise"]) { shift } else { 0.0 };
             }
             if let Some(d) = named(req, "two_dev") {
                 sh.two_dev = d;

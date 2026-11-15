@@ -176,6 +176,33 @@ pub fn doors_from(text: &str) -> Vec<EndpointId> {
 
 pub static DOOR_RELAYS: Mutex<Vec<(EndpointId, String)>> = Mutex::new(Vec::new());
 
+/// The date on a phone's own card: the hour it was signed in, and later than the card before
+/// it (`before`) by at least a millisecond, so the network takes it as the newer.
+fn card_hour(now: u64, before: Option<u64>) -> u64 {
+    let hour = now / 3_600_000 * 3_600_000;
+    before.map_or(hour, |b| hour.max(b + 1)).min(now)
+}
+
+/// Whether a node id made at `made` may still be used at `now`: for a day from when it was made.
+fn id_fresh(made: u64, now: u64) -> bool {
+    made <= now && now - made <= 24 * 3_600_000
+}
+
+/// Whether number0's relays and address server may be used. The owner's switch, kept sealed,
+/// says so, or PYRATE_NUMBER0 for a Lantern's operator; it is off by default.
+fn number0_on(hold: &hold::Hold, dir: &std::path::Path) -> bool {
+    std::env::var_os("PYRATE_NUMBER0").is_some_and(|v| v != "0") || hold.read_note(dir, "number0", None).is_some_and(|b| b == b"1")
+}
+
+/// Set once number0's relays have stood in for ours, so the app can say so.
+pub static NUMBER0_IN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// A yes or no from the app. Older apps sent the disguise as a shift in semitones, 0 for off,
+/// so any other number reads as yes; the shift itself always comes from the recording key.
+pub(crate) fn switched_on(v: &Value) -> bool {
+    v.as_bool().unwrap_or_else(|| v.as_f64().is_some_and(|n| n != 0.0))
+}
+
 /// A seed's kind field, with an optional rating after a slash: `music`, `talk`, `mono`, or any of
 /// them with `/mature` or `/explicit` after it (`talk/explicit`). Returns the base kind and the
 /// station's own word on itself: whether it calls itself mature, and whether explicit. The two
@@ -197,6 +224,35 @@ mod seed_kind_tests {
         assert_eq!(parse_kind("talk/explicit"), ("talk", false, true));
         assert_eq!(parse_kind("talk/EXPLICIT"), ("talk", false, true));
         assert_eq!(parse_kind("talk/nonsense"), ("talk", false, false));
+    }
+
+    #[test]
+    fn every_id_lasts_a_day_from_when_it_was_made() {
+        let made = 1_000_000_000_000;
+        assert!(super::id_fresh(made, made + 3_600_000), "a restart an hour on keeps it");
+        assert!(super::id_fresh(made, made + 24 * 3_600_000));
+        assert!(!super::id_fresh(made, made + 24 * 3_600_000 + 1), "a day on, a new one");
+        assert!(!super::id_fresh(made, made - 1), "one from the future is never taken");
+    }
+
+    #[test]
+    fn a_phones_card_is_dated_to_the_hour() {
+        let now = 1_763_200_000_000 + 1_234_567;
+        let hour = now / 3_600_000 * 3_600_000;
+        assert_eq!(super::card_hour(now, None), hour);
+        assert_eq!(super::card_hour(now, Some(hour - 5)), hour);
+        assert_eq!(super::card_hour(now, Some(hour)), hour + 1, "a change within the hour still comes later");
+        assert!(super::card_hour(now, Some(now + 10)) <= now, "never from the future");
+    }
+
+    #[test]
+    fn a_disguise_is_a_yes_or_no() {
+        use serde_json::json;
+        assert!(super::switched_on(&json!(true)));
+        assert!(!super::switched_on(&json!(false)));
+        assert!(super::switched_on(&json!(-4)), "an older app's shift reads as yes");
+        assert!(!super::switched_on(&json!(0)), "and its 0 as no");
+        assert!(!super::switched_on(&json!(null)));
     }
 }
 
@@ -445,6 +501,15 @@ pub struct Inner {
     pub(crate) deck: Mutex<Option<deck::Deck>>,
     /// This node's door for browsers, while open (see `door`).
     pub door: Mutex<Option<Arc<door::Door>>>,
+    /// Why the door is shut, as the app shows it; None while it is open.
+    door_why: Mutex<Option<String>>,
+    /// Counted up each time the owner closes the door, so an opening that was asking the router
+    /// meanwhile knows to give its port back.
+    door_asked: std::sync::atomic::AtomicU64,
+    door_opening: std::sync::atomic::AtomicBool,
+    /// When a router last gave an address the network does not see, and on which network
+    /// (gateway, the address seen): not asked again there for half an hour.
+    door_refused: Mutex<Option<(u64, (Option<std::net::Ipv4Addr>, std::net::IpAddr))>>,
     /// Crew radios behind a door (tabs), and the door each is reached through.
     pub(crate) door_of: Mutex<HashMap<[u8; 32], [u8; 32]>>,
     /// Middles drawn with none apart from the guard's relay, drawn all the same.
@@ -458,6 +523,19 @@ pub struct Node {
     pub rt: tokio::runtime::Runtime,
     pub inner: Arc<Inner>,
     _router: Router,
+}
+
+impl Drop for Node {
+    /// A node let go gives its router's port back, as a closed door does.
+    fn drop(&mut self) {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            return;
+        }
+        let inner = self.inner.clone();
+        self.rt.block_on(async move {
+            let _ = tokio::time::timeout(Duration::from_secs(3), inner.door_close_now()).await;
+        });
+    }
 }
 
 /// The largest request taken from a peer. A stem, the biggest, carries at most 64 chunks.
@@ -509,6 +587,7 @@ impl ProtocolHandler for Proto {
         // Four large answers at a time per connection: a crowd of identities each holds little
         // of the page budget, and an exit relaying for many listeners still keeps pages moving.
         let my_pages = Arc::new(tokio::sync::Semaphore::new(4));
+        let from = *conn.remote_id().as_bytes();
         while let Ok((mut send, mut recv)) = conn.accept_bi().await {
             let (inner, my_pages) = (inner.clone(), my_pages.clone());
             let Ok(slot) = mine.clone().acquire_owned().await else { break };
@@ -547,7 +626,7 @@ impl ProtocolHandler for Proto {
                         if matches!(other, Request::Log { .. } | Request::Chunk { .. } | Request::SealedChunk { .. }) {
                             inner.served_direct.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         }
-                        inner.serve(other)
+                        inner.serve_peer(other, &from)
                     }
                 };
                 // The answer goes out in pieces, each within five seconds, and the whole within a
@@ -585,6 +664,42 @@ impl std::fmt::Debug for Inner {
 }
 
 impl Inner {
+    /// What a peer asking straight is given. A Lantern answers as it always has. A private
+    /// node answers no question whose answer would say what it keeps or what it played: a
+    /// log only when it carries it as ballast, or keeps it and airs it directly; a chunk in
+    /// the clear only of an own station it airs directly or a pocket; a sealed chunk only
+    /// from its ballast share or a pocket; a room's last lines only to that room's members.
+    /// Anything else gets the answer a node with nothing gives.
+    fn serve_peer(&self, req: Request, from: &[u8; 32]) -> Response {
+        if !self.cfg.private || self.cfg.lantern {
+            return self.serve(req);
+        }
+        match &req {
+            Request::Log { station, .. } => {
+                let pinned = self.store.lock().unwrap().pinned.contains(station);
+                let shown = if self.is_own(station) { self.direct.lock().unwrap().contains(station) } else { pinned };
+                if !shown {
+                    return Response::Entries(vec![]);
+                }
+            }
+            Request::Chunk { hash } => {
+                let st = self.store.lock().unwrap().own_station_of(hash);
+                let shown = st.is_some_and(|st| self.is_pocket(&st) || self.direct.lock().unwrap().contains(&st));
+                let store = self.store.lock().unwrap();
+                return Response::Chunk(if shown { store.get_chunk(hash) } else { None });
+            }
+            Request::SealedChunk { name } => {
+                let pockets: Vec<StationId> = self.pockets.lock().unwrap().keys().copied().collect();
+                if !self.store.lock().unwrap().shares_sealed(name, &pockets) {
+                    return Response::Sealed(None);
+                }
+            }
+            Request::Chatter { station } if !self.in_room(station, from) => return Response::Chatter(vec![]),
+            _ => {}
+        }
+        self.serve(req)
+    }
+
     fn serve(&self, req: Request) -> Response {
         if let Request::PocketLog { tag, from } = &req {
             return Response::Entries(self.pocket_entries(tag, *from));
@@ -1440,7 +1555,17 @@ impl Inner {
             let freq = Some(self.freq_for(&id));
             let a = {
                 let s = self.store.lock().unwrap();
-                let Some(log) = s.logs.get(&id) else { continue };
+                let Some(full) = s.logs.get(&id) else { continue };
+                // The card tells only what has left: entries still waiting for their quarter hour
+                // are not on it, or the card would say when they were signed.
+                let due = full.due(now);
+                let view;
+                let log = if due < full.entries().len() {
+                    view = full.prefix(due);
+                    &view
+                } else {
+                    full
+                };
                 let Some(Body::Colours { name, about, port, .. }) = log.colours().cloned() else { continue };
                 if log.is_struck() {
                     continue;
@@ -1464,20 +1589,31 @@ impl Inner {
                 let named = log.named_since();
                 let link_only = log.link_only();
                 let card = net::Card { station: id, head: log.len(), name, about, port, live, at_ms: now, pow, since, proof, cover, accent, kinds, mature, tip, explicit, tracks, named, freq, link_only }.clipped();
-                // A card is signed afresh only when something on it changes, or every eight to
-                // twelve minutes: a card stamped every twenty seconds would tell the network, to
-                // the second, when its keeper's device is awake.
+                // A card is signed afresh only when something on it changes, or now and then: a
+                // card stamped every twenty seconds would tell the network, to the second, when
+                // its keeper's device is awake. A phone's or computer's card is signed again
+                // unchanged at most once a day, at a time drawn at random, and dated to the hour,
+                // so a run of its cards does not trace the hours the device is on; its carriers'
+                // notes keep it fresh in the Log meanwhile. A Lantern's is always on anyway.
                 let fp = {
                     let mut c = card.clone();
                     c.at_ms = 0;
                     blake3::hash(&postcard::to_stdvec(&c).unwrap_or_default()).as_bytes()[..8].try_into().map(u64::from_le_bytes).unwrap_or(0)
                 };
+                let quiet = self.cfg.private && !self.cfg.lantern;
+                let heard = self.log.lock().unwrap().get(&id).and_then(|l| l.announce.as_ref()).map(|a| a.at_ms);
                 let mut last = self.cards.lock().unwrap();
                 match last.get(&id) {
                     Some((f, due, a)) if *f == fp && now < *due => a.clone(),
-                    _ => {
+                    prev => {
+                        let mut card = card;
+                        if quiet {
+                            // Later than the last card, or no one would take the new one.
+                            let before = prev.map(|p| p.2.at_ms).into_iter().chain(heard).max();
+                            card.at_ms = card_hour(now, before);
+                        }
                         let a = card.sign(key);
-                        let due = now + 8 * 60_000 + rand::random::<u64>() % (4 * 60_000);
+                        let due = if quiet { now + 18 * 3_600_000 + rand::random::<u64>() % (6 * 3_600_000) } else { now + 8 * 60_000 + rand::random::<u64>() % (4 * 60_000) };
                         last.insert(id, (fp, due, a.clone()));
                         a
                     }
@@ -1488,26 +1624,42 @@ impl Inner {
                 self.pocket_card(id, a).await;
                 continue;
             }
-            if self.cfg.private && !self.direct.lock().unwrap().contains(&id) {
-                // Never show the network our own station first: send it down the stem.
+            if self.cfg.private {
+                // Never show the network our own station first: send it down the stem. A
+                // station on the air directly keeps trying the stem too, and goes back to it
+                // the moment one is taken.
+                let was_direct = self.direct.lock().unwrap().contains(&id);
                 if self.stem_push(id, Some(a.clone())).await {
                     self.stem_misses.lock().unwrap().remove(&id);
-                    continue;
+                    // Off the air from here once other radios carry it: a stem with nothing to
+                    // send says nothing about whether one would be taken.
+                    let carried = self.log.lock().unwrap().get(&id).is_some_and(|l| l.carriers.keys().any(|n| *n != me));
+                    if !was_direct || carried {
+                        if was_direct {
+                            self.direct.lock().unwrap().remove(&id);
+                            say("other radios carry the station: it is off the air from this device");
+                        }
+                        continue;
+                    }
                 }
-                // A station nobody can hear is worse than one heard from a known address.
-                // After three stems with no taker it goes on the air from here, and the
-                // owner is told.
-                let misses = {
-                    let mut m = self.stem_misses.lock().unwrap();
-                    let e = m.entry(id).or_insert(0);
-                    *e += 1;
-                    *e
-                };
-                if misses < 3 || self.strict.load(std::sync::atomic::Ordering::Relaxed) {
-                    continue;
+                if !self.direct.lock().unwrap().contains(&id) {
+                    // A station nobody can hear may be worse than one heard from a known
+                    // address, but only its keeper says so: after three stems with no taker it
+                    // goes on the air from here only when the owner has let it ("direct_ok" with
+                    // "own"), and the owner is told. Leave to listen directly is not leave to
+                    // broadcast from this device.
+                    let misses = {
+                        let mut m = self.stem_misses.lock().unwrap();
+                        let e = m.entry(id).or_insert(0);
+                        *e += 1;
+                        *e
+                    };
+                    if misses < 3 || self.strict.load(std::sync::atomic::Ordering::Relaxed) || !flag_on(&self.hold, &self.cfg.dir, "direct-own") {
+                        continue;
+                    }
+                    self.direct.lock().unwrap().insert(id);
+                    say("no node took the stem: the station is on the air directly from this device");
                 }
-                self.direct.lock().unwrap().insert(id);
-                say("no node took the stem: the station is on the air directly from this device");
             }
             self.on_gossip(Gossip::Station(a.clone()));
             self.broadcast(&Gossip::Station(a)).await;
@@ -1716,7 +1868,7 @@ impl Inner {
     /// Provisions for the voyage: on Wi-Fi, the next six hours of up to three kept stations
     /// come aboard ahead of time, sealed in the hold, so they play through a flight or a tunnel.
     async fn provision(self: &Arc<Self>) {
-        if self.cfg.dir.join("provisions-off").exists() {
+        if flag_on(&self.hold, &self.cfg.dir, "provisions-off") {
             return;
         }
         let kept: Vec<StationId> = self.chart().0.iter().filter_map(|h| StationId::from_hex(h).ok()).take(3).collect();
@@ -1830,16 +1982,45 @@ impl Inner {
         }
     }
 
-    /// How far the keeper asked for their voice to be shifted on air, in semitones (the
-    /// "disguise" setting; 0, the default, leaves it as it is).
-    pub(crate) fn disguise(&self) -> f64 {
-        self.prefs()["disguise"].as_f64().unwrap_or(0.0).clamp(-12.0, 12.0)
+    /// How far a voice recorded for `station` goes down, in semitones, with the "disguise"
+    /// setting on: drawn from the key this node signs that station with, so each keeper and
+    /// co-host has a shift of their own. 0 with the setting off.
+    pub(crate) fn disguise(&self, station: Option<&StationId>) -> f64 {
+        if !self.disguise_on() {
+            return 0.0;
+        }
+        self.recording_shift(station)
+    }
+
+    /// Whether the keeper asked for their voice disguised.
+    pub(crate) fn disguise_on(&self) -> bool {
+        switched_on(&self.prefs()["disguise"])
+    }
+
+    /// The shift for a voice recorded under `station`'s key, or the first station this node
+    /// keeps when none is named; 0 with no key to draw it from.
+    pub(crate) fn recording_shift(&self, station: Option<&StationId>) -> f64 {
+        let s = self.store.lock().unwrap();
+        let key = match station {
+            Some(st) => s.keys.get(st),
+            None => s.keys.iter().min_by_key(|(id, _)| id.0).map(|(_, k)| k),
+        };
+        key.map(|k| pyrate_core::voice::disguise_semitones(&k.seed())).unwrap_or(0.0)
     }
 
     /// Ingests a file and adds it to one of our stations' libraries. Talk loses its mains hum
     /// and takes the keeper's voice disguise; music goes as it is.
     pub fn add_track(&self, station: StationId, path: &std::path::Path, title: &str, by: &str, source: &str, profile: Profile) -> Result<Hash> {
-        let got = pyrate_core::ingest::ingest_voiced(path, profile, self.disguise())?;
+        self.add_track_as(station, path, title, by, source, profile, self.disguise_on())
+    }
+
+    /// As [`Inner::add_track`], with the disguise on or off as asked.
+    pub(crate) fn add_track_as(&self, station: StationId, path: &std::path::Path, title: &str, by: &str, source: &str, profile: Profile, disguised: bool) -> Result<Hash> {
+        let shift = if disguised { self.recording_shift(Some(&station)) } else { 0.0 };
+        let got = pyrate_core::ingest::ingest_voiced(path, profile, shift)?;
+        // A recorder's clock and a computer's name stay off the public entry, in either field.
+        let (title, by) = (pyrate_core::chat::plain_title(title).0, pyrate_core::chat::plain_by(by));
+        let (title, by) = (title.as_str(), by.as_str());
         let mut s = self.store.lock().unwrap();
         for (c, bytes) in &got.chunks {
             s.put_chunk(&c.hash, bytes)?;
@@ -1853,9 +2034,9 @@ impl Inner {
             chunks: got.chunks.iter().map(|(c, _)| *c).collect(),
         })?;
         let track = e.hash()?;
-        // The album cover inside the file, or a cover picture beside it in its folder.
-        let picture = got.picture.or_else(|| art::folder_cover(path));
-        if let Some(p) = picture.and_then(|raw| pyrate_core::art::prepare(&raw, pyrate_core::art::Kind::Track).ok()) {
+        // The album cover inside the file, and only that: a picture beside it in its folder may
+        // be anyone's photograph, and would go out unasked.
+        if let Some(p) = got.picture.and_then(|raw| pyrate_core::art::prepare(&raw, pyrate_core::art::Kind::Track).ok()) {
             let hash = *blake3::hash(&p.jpeg).as_bytes();
             s.put_chunk(&hash, &p.jpeg)?;
             s.write(station, now_ms(), Body::TrackArt { track, art: pyrate_core::ArtRef { hash, w: p.w, h: p.h } })?;
@@ -1894,7 +2075,7 @@ impl Inner {
         let (kept, marooned) = self.chart();
         let refused = self.refused();
         let now = now_ms();
-        let kept_art_only = self.cfg.dir.join("art-kept-only").exists();
+        let kept_art_only = flag_on(&self.hold, &self.cfg.dir, "art-kept-only");
         // Explicit stations stay out of the Log and off the dial until the listener asks for them.
         let prefs = self.prefs();
         let show_explicit = prefs["show_explicit"] == json!(true);
@@ -2082,7 +2263,7 @@ impl Inner {
         }
         // The microphone loses its mains hum, which would date and place the broadcast, and
         // takes the keeper's voice disguise if one is set.
-        let tries = self.desk.ready(file, self.disguise());
+        let tries = self.desk.ready(file, self.disguise(Some(&station)));
         let started = now_ms();
         *self.live.lock().unwrap() = Some((station, started));
         desk::kick(self);
@@ -2149,7 +2330,7 @@ impl Inner {
         {
             let mut s = self.store.lock().unwrap();
             s.pinned = pinned;
-            s.ballast = keep;
+            s.set_ballast(keep);
         }
         for (name, _) in mine {
             if !self.ballast_ok.load(std::sync::atomic::Ordering::Relaxed) {
@@ -2266,6 +2447,13 @@ impl Node {
     pub fn start(cfg: Config) -> Result<Self> {
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build()?;
         let mut store = Store::open_with(&cfg.dir, cfg.quota + if cfg.ballast == BALLAST_AUTO { 0 } else { cfg.ballast }, HOLD_KEY.lock().unwrap().take())?;
+        // A phone's or computer's own entries carry the quarter hour, not the keeper's minute.
+        // PYRATE_QUARTER_MS shortens the grain, for a test network.
+        store.quarter = if cfg.private && !cfg.lantern {
+            std::env::var("PYRATE_QUARTER_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(pyrate_core::archive::QUARTER_MS)
+        } else {
+            0
+        };
         if cfg.lantern {
             store.budget = store::LogBudget::LANTERN;
         }
@@ -2274,6 +2462,9 @@ impl Node {
             store.budget.per_station = store.budget.per_station.min(store.budget.total / 2);
         }
         let hold = store.hold.clone();
+        // Settings once kept as plain files beside the hold, whose names alone said what the
+        // owner chose, are taken in as sealed notes and the files go.
+        take_in_plain(&hold, &cfg.dir);
         let key_path = cfg.dir.join("node.key");
         // The counting key: listener tokens come from it. It steps forward one way every day
         // and the old one is gone, so a key taken from a seized device cannot work out the
@@ -2320,15 +2511,12 @@ impl Node {
             }
         }
         // A phone's address on the network is new every day, so no one can follow one phone
-        // from day to day by its id. Lanterns keep theirs: others start from them.
-        // A phone that keeps no station and no pocket has nothing anyone needs to reach it by,
-        // so it is new at every start, not only every day.
-        if !cfg.lantern {
-            let keeps = std::fs::read_dir(cfg.dir.join("keys")).map(|d| d.flatten().any(|e| e.path().extension().is_some_and(|x| x == "k2"))).unwrap_or(false)
-                || hold.read_note(&cfg.dir, "pockets", Some(&cfg.dir.join("keys").join("pockets"))).is_some_and(|b| !b.is_empty());
-            if !keeps || node_key.is_some_and(|(_, made)| now_ms().saturating_sub(made) > 24 * 3_600_000) {
-                node_key = None;
-            }
+        // from day to day by its id. Lanterns keep theirs: others start from them. One rule for
+        // every other node, restarts included: an id lasts 24 hours from when it was made. A
+        // rule that kept some ids across a restart and not others would mark the nodes that
+        // keep a station or sit in a pocket to anyone who saw them come back.
+        if !cfg.lantern && node_key.is_some_and(|(_, made)| !id_fresh(made, now_ms())) {
+            node_key = None;
         }
         let (secret, made) = match node_key {
             Some((b, made)) => (SecretKey::from_bytes(&b), made),
@@ -2397,10 +2585,15 @@ impl Node {
         let book2 = book.clone();
         let asked: Arc<std::collections::HashSet<EndpointId>> = Arc::new(cfg.bootstrap.iter().copied().collect());
         let lantern = cfg.lantern;
+        // number0's relays and its address server, behind the owner's switch: off unless the
+        // owner turns it on (or PYRATE_NUMBER0 asks, for a Lantern's operator).
+        let number0 = number0_on(&hold, &cfg.dir);
+        let door_relays: Vec<iroh::RelayUrl> = DOOR_RELAYS.lock().unwrap().iter().filter_map(|(_, r)| r.parse().ok()).collect();
         let (endpoint, router, gossip) = rt.block_on(async {
             // Home relays: a Lantern's own (PYRATE_RELAY_URL, its public address), the crew's, and
-            // those the first doors named, before number0's. With any of ours to try, number0's
-            // relays stand by and come in only if none of ours answers within fifteen seconds.
+            // those the first doors named. number0's come in only with the owner's switch on:
+            // then, with any of ours to try, they stand by and come in only if none of ours
+            // answers within fifteen seconds.
             let n0 = iroh::defaults::prod::default_relay_map();
             let mine = iroh::RelayMap::empty();
             let own_relay: Option<iroh::RelayUrl> = std::env::var("PYRATE_RELAY_URL").ok().and_then(|u| u.parse().ok());
@@ -2408,12 +2601,12 @@ impl Node {
             // which often cannot reach its own public address. It homes there and tells the
             // network the public one.
             let relay_local: Option<iroh::RelayUrl> = std::env::var("PYRATE_RELAY_LOCAL").ok().and_then(|u| u.parse().ok());
-            for url in CREW_RELAYS.iter().filter_map(|r| r.parse::<iroh::RelayUrl>().ok()).chain(ours.iter().cloned()).chain(relay_local.clone().or(own_relay.clone())) {
+            for url in CREW_RELAYS.iter().filter_map(|r| r.parse::<iroh::RelayUrl>().ok()).chain(ours.iter().cloned()).chain(door_relays.iter().cloned()).chain(relay_local.clone().or(own_relay.clone())) {
                 mine.insert(url.clone(), Arc::new(iroh::RelayConfig::from(url)));
             }
             let prefer_ours = !ours.is_empty() || own_relay.is_some();
-            let standby: Vec<iroh::RelayUrl> = if prefer_ours { n0.urls() } else { Vec::new() };
-            let relays = if prefer_ours {
+            let standby: Vec<iroh::RelayUrl> = if prefer_ours && number0 { n0.urls() } else { Vec::new() };
+            let relays = if prefer_ours || !number0 {
                 mine
             } else {
                 for url in mine.urls::<Vec<iroh::RelayUrl>>() {
@@ -2444,7 +2637,7 @@ impl Node {
                 .relay_mode(iroh::RelayMode::Custom(relays));
             if lantern {
                 b = b.address_lookup(iroh::address_lookup::PkarrResolver::n0_dns());
-            } else if !dark {
+            } else if !dark && number0 {
                 b = b.address_lookup(DoorsOnly(asked));
             }
             // A phone running dark looks nobody up: that lookup would leave from its own address,
@@ -2501,6 +2694,7 @@ impl Node {
                             let _ = ep2.insert_relay(url.clone(), Arc::new(iroh::RelayConfig::from(url))).await;
                         }
                         say("none of our own relays answered: number0's stand in");
+                        NUMBER0_IN.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
                 });
             }
@@ -2512,6 +2706,19 @@ impl Node {
 
         #[cfg(feature = "playback")]
         let queue: player::SharedQueue = Arc::new(Mutex::new(player::Queue { volume: 1.0, ..Default::default() }));
+        // When each radio was first met under its id, kept sealed from run to run: a guard is
+        // drawn only from radios known for a week.
+        let direct_ok = flag_on(&hold, &cfg.dir, "direct-ok");
+        let first_seen: HashMap<[u8; 32], u64> = hold
+            .read_note(&cfg.dir, "first-seen", None)
+            .and_then(|b| String::from_utf8(b).ok())
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|l| {
+                let (id, at) = l.split_once(' ')?;
+                Some((*id.parse::<EndpointId>().ok()?.as_bytes(), at.trim().parse::<u64>().ok().filter(|t| *t <= now_ms())?))
+            })
+            .collect();
         let inner = Arc::new(Inner {
             cfg: cfg.clone(),
             endpoint: endpoint.clone(),
@@ -2562,7 +2769,7 @@ impl Node {
             heard: Mutex::new(std::collections::VecDeque::new()),
             // Private routes fail closed unless the owner has said otherwise: a phone that cannot
             // find two hops waits rather than asking a carrier with its own address.
-            strict: std::sync::atomic::AtomicBool::new(!cfg.dir.join("direct-ok").exists()),
+            strict: std::sync::atomic::AtomicBool::new(!direct_ok),
             stem_misses: Mutex::new(HashMap::new()),
             stem_seen: Mutex::new(std::collections::VecDeque::new()),
             stems_in: Default::default(),
@@ -2581,11 +2788,15 @@ impl Node {
             relay_ok: std::sync::atomic::AtomicBool::new(!cfg.private),
             crew: std::sync::atomic::AtomicBool::new(std::env::var("PYRATE_CREW").map_or(true, |v| v != "0")),
             crew_radios: Mutex::new(HashMap::new()),
-            first_seen: Mutex::new(HashMap::new()),
+            first_seen: Mutex::new(first_seen),
             served_bytes: Default::default(),
             relayed_bytes: Default::default(),
             deck: Mutex::new(None),
             door: Mutex::new(None),
+            door_why: Mutex::new(Some(door::WHY_OFF.to_string())),
+            door_asked: std::sync::atomic::AtomicU64::new(0),
+            door_opening: std::sync::atomic::AtomicBool::new(false),
+            door_refused: Mutex::new(None),
             door_of: Mutex::new(HashMap::new()),
             routes_shared: Default::default(),
             pulls: Mutex::new(HashMap::new()),
@@ -2752,6 +2963,12 @@ impl Node {
                     let met = i2.met.lock().unwrap().clone();
                     let peers: Vec<String> = i2.known_nodes_pub().into_iter().take(24).map(|p| match met.get(&p) { Some(r) => format!("{p} {r}"), None => p.to_string() }).collect();
                     let _ = i2.hold.write_note(&i2.cfg.dir, "peers", peers.join("\n").as_bytes());
+                    // The oldest acquaintances are the ones worth keeping.
+                    let mut seen: Vec<([u8; 32], u64)> = i2.first_seen.lock().unwrap().iter().map(|(k, v)| (*k, *v)).collect();
+                    seen.sort_by_key(|(_, t)| *t);
+                    seen.truncate(2048);
+                    let text: Vec<String> = seen.iter().filter_map(|(k, t)| Some(format!("{} {t}", EndpointId::from_bytes(k).ok()?))).collect();
+                    let _ = i2.hold.write_note(&i2.cfg.dir, "first-seen", text.join("\n").as_bytes());
                 }
                 n += 1;
                 tokio::time::sleep(Duration::from_secs(10)).await;
@@ -2862,8 +3079,14 @@ impl Node {
         let mut a = s.logs.get(&station).cloned().unwrap_or_else(|| Archive::new(station));
         let before = a.len();
         let now = now_ms().max(a.entries().last().map(|e| e.entry.at_ms + 1).unwrap_or(0));
-        a.write(&master, now, Body::Deputy { key, label: label.chars().take(40).collect() })?;
+        // The name the keeper gave the co-host is for the keeper's own record: kept sealed on
+        // this device, by the co-host's key, and never signed into the public log, where it
+        // would ride on every card the co-host signs.
+        a.write(&master, now, Body::Deputy { key, label: String::new() })?;
         s.put_entries(station, a.entries()[before as usize..].to_vec())?;
+        drop(s);
+        let label: String = label.chars().take(40).collect();
+        self.inner.hold.write_note(&self.inner.cfg.dir, &format!("deputy-label/{}", hex(&key)), label.as_bytes())?;
         Ok(())
     }
 
@@ -2954,7 +3177,7 @@ impl Node {
         match cmd {
             "flock_host" | "flock_join" | "flock_leave" | "flock_trim" | "flock_status" => inner.flock_call(cmd, req),
             "pocket_invite" | "pocket_join" | "pocket_leave" => inner.pocket_call(cmd, req),
-            "chat_join" | "chat_leave" | "chat_read" | "chat_send" | "chat_hail_open" => {
+            "chat_join" | "chat_leave" | "chat_read" | "chat_send" | "chat_hail_open" | "chat_voice" => {
                 let st = station()?;
                 inner.chat_call(cmd, st, req)
             }
@@ -3287,70 +3510,67 @@ impl Node {
             "strict" | "direct_ok" => {
                 if let Some(v) = req["value"].as_bool() {
                     let on = if cmd == "strict" { v } else { !v };
-                    let p = inner.cfg.dir.join("direct-ok");
-                    if on { let _ = std::fs::remove_file(&p); } else { std::fs::write(&p, b"")?; }
+                    set_flag(&inner.hold, &inner.cfg.dir, "direct-ok", !on)?;
                     inner.strict.store(on, std::sync::atomic::Ordering::Relaxed);
                 }
+                // "own": whether, with no stem taken, the keeper's own station may go on the air
+                // from this device. Off by default, and apart from listening directly.
+                if let Some(o) = req["own"].as_bool() {
+                    set_flag(&inner.hold, &inner.cfg.dir, "direct-own", o)?;
+                }
                 let on = inner.strict.load(std::sync::atomic::Ordering::Relaxed);
-                Ok(json!({ "value": if cmd == "strict" { on } else { !on } }))
+                Ok(json!({ "value": if cmd == "strict" { on } else { !on }, "own": flag_on(&inner.hold, &inner.cfg.dir, "direct-own") }))
             }
             "provisions" => {
-                let p = inner.cfg.dir.join("provisions-off");
                 if let Some(on) = req["value"].as_bool() {
-                    if on { let _ = std::fs::remove_file(&p); } else { std::fs::write(&p, b"")?; }
+                    set_flag(&inner.hold, &inner.cfg.dir, "provisions-off", !on)?;
                 }
-                Ok(json!({ "value": !p.exists() }))
+                Ok(json!({ "value": !flag_on(&inner.hold, &inner.cfg.dir, "provisions-off") }))
             }
             "pin_set" => {
                 // With "duress": the second PIN, the one given up under force. It opens nothing:
                 // the app scuttles itself, closes, and opens next time as if newly installed.
+                // Both live in one sealed record of one size, the second a decoy when unset.
                 let duress = req["duress"].as_bool() == Some(true);
-                let p = inner.cfg.dir.join(if duress { "pin-duress" } else { "pin" });
+                let mut rec = PinRecord::read(&inner.hold, &inner.cfg.dir).unwrap_or_else(PinRecord::empty);
                 match req["pin"].as_str().filter(|s| s.len() >= 4) {
-                    Some(pin) => std::fs::write(&p, pin_hash(pin, &rand::random())?)?,
-                    None => {
-                        let _ = std::fs::remove_file(&p);
-                        // No PIN means no second PIN either.
-                        if !duress {
-                            let _ = std::fs::remove_file(inner.cfg.dir.join("pin-duress"));
-                        }
+                    Some(pin) if duress => {
+                        rec.duress = pin_hash(pin, &rand::random())?;
+                        rec.duress_set = true;
                     }
+                    Some(pin) => {
+                        rec.main = pin_hash(pin, &rand::random())?;
+                        rec.main_set = true;
+                    }
+                    None if duress => {
+                        rec.duress = pin_decoy();
+                        rec.duress_set = false;
+                    }
+                    // No PIN means no second PIN either.
+                    None => rec = PinRecord::empty(),
                 }
+                rec.write(&inner.hold, &inner.cfg.dir)?;
                 Ok(json!({ "ok": true }))
             }
             "pin_check" => {
-                let p = inner.cfg.dir.join("pin");
-                let Ok(b) = std::fs::read(&p) else { return Ok(json!({ "ok": true, "set": false })) };
+                let Some(mut rec) = PinRecord::read(&inner.hold, &inner.cfg.dir).filter(|r| r.main_set) else { return Ok(json!({ "ok": true, "set": false })) };
                 let pin = req["pin"].as_str().unwrap_or("");
-                let duress = std::fs::read(inner.cfg.dir.join("pin-duress")).ok().filter(|d| d.starts_with(PIN_V2) && d.len() == PIN_V2.len() + 48);
                 // Asking only whether a PIN is set costs nothing.
                 if pin.is_empty() {
-                    return Ok(json!({ "ok": false, "set": true, "duress_set": duress.is_some() }));
+                    return Ok(json!({ "ok": false, "set": true, "duress_set": rec.duress_set }));
                 }
-                // Both PINs are always worked out, so the time taken does not say which matched.
-                let forced = match &duress {
-                    Some(d) => pin_hash(pin, d[PIN_V2.len()..PIN_V2.len() + 16].try_into()?)? == *d,
-                    None => {
-                        let _ = pin_hash(pin, &[0u8; 16]);
-                        false
-                    }
-                };
+                // Both PINs are always worked out before any answer, so the time taken does not
+                // say which matched, or whether a second one is set.
+                let forced = pin_matches(&rec.duress, pin)?.0 && rec.duress_set;
+                let (ok, old) = pin_matches(&rec.main, pin)?;
                 if forced {
                     return Ok(json!({ "ok": false, "set": true, "duress": true }));
                 }
-                let ok = match b.strip_prefix(PIN_V2) {
-                    Some(rest) if rest.len() == 48 => pin_hash(pin, rest[..16].try_into()?)? == b,
-                    // A PIN from before, under a fast hash: checked once that way, and kept
-                    // under the slow one from then on.
-                    _ => {
-                        let (salt, want) = b.split_at(16.min(b.len()));
-                        let ok = blake3::keyed_hash(blake3::hash(salt).as_bytes(), pin.as_bytes()).as_bytes().as_slice() == want;
-                        if ok {
-                            std::fs::write(&p, pin_hash(pin, &rand::random())?)?;
-                        }
-                        ok
-                    }
-                };
+                // A PIN from before, under a fast hash: kept under the slow one from now on.
+                if ok && old {
+                    rec.main = pin_hash(pin, &rand::random())?;
+                    rec.write(&inner.hold, &inner.cfg.dir)?;
+                }
                 Ok(json!({ "ok": req["pin"].is_string() && ok, "set": true }))
             }
             "qr" => {
@@ -3386,13 +3606,10 @@ impl Node {
                 Ok(json!({ "ok": true }))
             }
             "art_kept_only" => {
-                let p = inner.cfg.dir.join("art-kept-only");
-                match req["value"].as_bool() {
-                    Some(true) => std::fs::write(&p, b"")?,
-                    Some(false) => { let _ = std::fs::remove_file(&p); }
-                    None => {}
+                if let Some(v) = req["value"].as_bool() {
+                    set_flag(&inner.hold, &inner.cfg.dir, "art-kept-only", v)?;
                 }
-                Ok(json!({ "value": p.exists() }))
+                Ok(json!({ "value": flag_on(&inner.hold, &inner.cfg.dir, "art-kept-only") }))
             }
             "clear_hold" => {
                 let tuned = inner.tuned.lock().unwrap().is_some();
@@ -3500,7 +3717,11 @@ impl Node {
                 let title = pyrate_core::chat::plain_title(&title).0;
                 let by = req["by"].as_str().unwrap_or("").to_string();
                 let source = req["source"].as_str().unwrap_or("").to_string();
-                let profile = if req["talk"].as_bool().unwrap_or(false) {
+                // A disguised voice goes through the talk path, hum filter and shift, whatever
+                // the upload was marked: music is never a way round the disguise. The upload's
+                // own word rules; without one, the keeper's setting does.
+                let disguised = if req["disguise"].is_null() { inner.disguise_on() } else { switched_on(&req["disguise"]) };
+                let profile = if req["talk"].as_bool().unwrap_or(false) || disguised {
                     Profile::Talk
                 } else if req["mono"].as_bool().unwrap_or(false) {
                     Profile::Mono
@@ -3511,7 +3732,7 @@ impl Node {
                 inner.jobs.lock().unwrap().insert(job, format!("Setting {title}"));
                 let i2 = inner.clone();
                 std::thread::spawn(move || {
-                    let r = i2.add_track(st, &path, &title, &by, &source, profile);
+                    let r = i2.add_track_as(st, &path, &title, &by, &source, profile, disguised);
                     let msg = match r {
                         Ok(_) => format!("On the clock: {title}"),
                         Err(e) => format!("Could not set {title}: {e}"),
@@ -3539,7 +3760,8 @@ impl Node {
             "door" => {
                 match req["on"].as_bool() {
                     // Never while running dark: see `door_open`.
-                    Some(true) if inner.door.lock().unwrap().is_none() && !inner.dark => {
+                    Some(true) if inner.dark => inner.door_why(door::WHY_DARK),
+                    Some(true) if inner.door.lock().unwrap().is_none() && !inner.door_opening.load(std::sync::atomic::Ordering::SeqCst) => {
                         let public = req["addr"].as_str().and_then(|a| a.parse().ok());
                         let app = req["app"].as_bool().unwrap_or(true);
                         let links = req["links"].as_bool().unwrap_or(false);
@@ -3562,8 +3784,34 @@ impl Node {
                         "browsers": d.clients(), "sessions": d.sessions.load(std::sync::atomic::Ordering::Relaxed), "opened": d.opened.load(std::sync::atomic::Ordering::Relaxed),
                         "served": d.served.load(std::sync::atomic::Ordering::Relaxed), "stun": d.stun.load(std::sync::atomic::Ordering::Relaxed),
                         "mapped_by": mapped_by }),
-                    None => json!({ "open": false, "dark": inner.dark }),
+                    None => json!({ "open": false, "dark": inner.dark, "why": inner.door_why.lock().unwrap().clone().unwrap_or_else(|| door::WHY_OFF.to_string()) }),
                 })
+            }
+            // number0's relays as a stand-in, and its address server for the first doors: the
+            // owner's switch, off by default. It takes effect from the next start, and at once
+            // when turned off.
+            "number0" => {
+                if let Some(on) = req["value"].as_bool() {
+                    inner.hold.write_note(&inner.cfg.dir, "number0", if on { b"1" } else { b"0" })?;
+                    if !on {
+                        let ep = inner.endpoint.clone();
+                        self.rt.block_on(async move {
+                            for url in iroh::defaults::prod::default_relay_map().urls::<Vec<iroh::RelayUrl>>() {
+                                if !CREW_RELAYS.iter().any(|c| c.trim_end_matches('/') == url.as_str().trim_end_matches('/')) {
+                                    let _ = ep.remove_relay(&url).await;
+                                }
+                            }
+                        });
+                        NUMBER0_IN.store(false, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+                Ok(json!({ "value": number0_on(&inner.hold, &inner.cfg.dir), "standing_in": NUMBER0_IN.load(std::sync::atomic::Ordering::Relaxed) }))
+            }
+            // Before the app quits: the door shut and the router's port given back.
+            "shutdown" => {
+                let i2 = inner.clone();
+                let _ = self.rt.block_on(async move { tokio::time::timeout(Duration::from_secs(5), i2.door_close_now()).await });
+                Ok(json!({ "ok": true }))
             }
             // The doors this node knows, as signed notes (hex), freshest first: for a build to bake
             // into the player, and for a Lantern or app serving the player to hand to it.
@@ -3604,6 +3852,7 @@ impl Node {
                     None => json!({ "canary": null }),
                 })
             }
+            "update" if req["peek"].as_bool() == Some(true) => Ok(self.rt.block_on(inner.peek_update(req["code"].as_u64().unwrap_or(0) as u32))),
             "update" => Ok(match self.rt.block_on(inner.check_update(req["code"].as_u64().unwrap_or(0) as u32, req["now"].as_bool() == Some(true))) {
                 Ok(v) => v,
                 Err(e) => json!({ "available": false, "why": e.to_string() }),
@@ -3717,6 +3966,114 @@ impl Node {
 /// file costs a seizer real time per guess rather than none, and a PIN shared with the lock
 /// screen does not fall out of it in a second.
 const PIN_V2: &[u8] = b"argon2id/v1\0";
+
+/// A PIN kept from before the slow hash: its salt and keyed hash under this mark.
+const PIN_V0: &[u8] = b"blake3/v0\0\0\0";
+/// One kept PIN: its mark, salt and hash.
+const PIN_SLOT: usize = 12 + 48;
+
+/// The owner's PIN and the emergency PIN, in one sealed note of one size whether or not either
+/// is set: a copy of the device shows neither how many PINs there are nor which is which. An
+/// unset emergency PIN is a decoy no PIN opens.
+struct PinRecord {
+    main_set: bool,
+    duress_set: bool,
+    main: Vec<u8>,
+    duress: Vec<u8>,
+}
+
+impl PinRecord {
+    fn empty() -> Self {
+        Self { main_set: false, duress_set: false, main: pin_decoy(), duress: pin_decoy() }
+    }
+
+    fn read(hold: &hold::Hold, dir: &std::path::Path) -> Option<Self> {
+        let b = hold.read_note(dir, "pin-record", None).filter(|b| b.len() == 1 + 2 * PIN_SLOT)?;
+        Some(Self { main_set: b[0] & 1 != 0, duress_set: b[0] & 2 != 0, main: b[1..1 + PIN_SLOT].to_vec(), duress: b[1 + PIN_SLOT..].to_vec() })
+    }
+
+    fn write(&self, hold: &hold::Hold, dir: &std::path::Path) -> Result<()> {
+        if !self.main_set {
+            hold.remove_note(dir, "pin-record");
+            return Ok(());
+        }
+        let slot = |s: &[u8]| if s.len() == PIN_SLOT { s.to_vec() } else { pin_decoy() };
+        let b = [vec![self.main_set as u8 | (self.duress_set as u8) << 1], slot(&self.main), slot(&self.duress)].concat();
+        hold.write_note(dir, "pin-record", &b)
+    }
+}
+
+/// A slot no PIN opens, the size and look of one that a PIN does.
+fn pin_decoy() -> Vec<u8> {
+    let (a, b): ([u8; 16], [u8; 32]) = (rand::random(), rand::random());
+    [PIN_V2, a.as_slice(), b.as_slice()].concat()
+}
+
+/// Whether `pin` opens a slot, and whether the slot is of the old, fast kind. The slow hash is
+/// always worked out once, whatever the slot holds.
+fn pin_matches(slot: &[u8], pin: &str) -> Result<(bool, bool)> {
+    if slot.len() != PIN_SLOT {
+        let _ = pin_hash(pin, &[0u8; 16]);
+        return Ok((false, false));
+    }
+    let salt: [u8; 16] = slot[12..28].try_into()?;
+    let slow = pin_hash(pin, &salt)?;
+    if slot.starts_with(PIN_V2) {
+        return Ok((slow == slot, false));
+    }
+    if slot.starts_with(PIN_V0) {
+        let want = &slot[28..];
+        return Ok((blake3::keyed_hash(blake3::hash(&salt).as_bytes(), pin.as_bytes()).as_bytes().as_slice() == want, true));
+    }
+    Ok((false, false))
+}
+
+/// A setting kept as a sealed note: on or off, the same size either way.
+pub(crate) fn flag_on(hold: &hold::Hold, dir: &std::path::Path, name: &str) -> bool {
+    hold.read_note(dir, name, None).is_some_and(|b| b == b"1")
+}
+
+pub(crate) fn set_flag(hold: &hold::Hold, dir: &std::path::Path, name: &str, on: bool) -> Result<()> {
+    hold.write_note(dir, name, if on { b"1" } else { b"0" })
+}
+
+/// Takes the plain files older versions kept beside the hold into sealed notes, and removes
+/// them: the PIN files (`pin`, `pin-duress`) into one PIN record, and the flags `direct-ok`,
+/// `provisions-off` and `art-kept-only`.
+fn take_in_plain(hold: &hold::Hold, dir: &std::path::Path) {
+    for name in ["direct-ok", "provisions-off", "art-kept-only"] {
+        let p = dir.join(name);
+        if p.exists() && set_flag(hold, dir, name, true).is_ok() {
+            let _ = std::fs::remove_file(&p);
+        }
+    }
+    let (pin, duress) = (std::fs::read(dir.join("pin")).ok(), std::fs::read(dir.join("pin-duress")).ok());
+    if pin.is_none() && duress.is_none() {
+        return;
+    }
+    let slot = |b: &[u8]| -> Option<Vec<u8>> {
+        if b.starts_with(PIN_V2) && b.len() == PIN_SLOT {
+            Some(b.to_vec())
+        } else if b.len() == 48 {
+            Some([PIN_V0, b].concat())
+        } else {
+            None
+        }
+    };
+    let mut rec = PinRecord::empty();
+    if let Some(m) = pin.as_deref().and_then(slot) {
+        rec.main = m;
+        rec.main_set = true;
+    }
+    if let Some(d) = duress.as_deref().filter(|d| d.starts_with(PIN_V2)).and_then(slot) {
+        rec.duress = d;
+        rec.duress_set = true;
+    }
+    if rec.write(hold, dir).is_ok() {
+        let _ = std::fs::remove_file(dir.join("pin"));
+        let _ = std::fs::remove_file(dir.join("pin-duress"));
+    }
+}
 
 fn pin_hash(pin: &str, salt: &[u8; 16]) -> Result<Vec<u8>> {
     let params = argon2::Params::new(32 * 1024, 3, 1, Some(32)).map_err(|e| anyhow!("{e}"))?;
@@ -4050,6 +4407,46 @@ mod pin_tests {
         assert_ne!(a, super::pin_hash("1235", &salt).unwrap());
         assert!(a.starts_with(super::PIN_V2) && a.len() == super::PIN_V2.len() + 48);
         println!("one guess costs {spent:?}");
+    }
+
+    #[test]
+    fn both_pins_live_in_one_sealed_record_of_one_size() {
+        use super::*;
+        let dir = std::env::temp_dir().join(format!("pyrate-pin-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let hold = hold::Hold::new(&[5; 32]);
+        // An older version's plain files: a PIN, an emergency PIN, and a flag.
+        std::fs::write(dir.join("pin"), pin_hash("1234", &[1; 16]).unwrap()).unwrap();
+        std::fs::write(dir.join("pin-duress"), pin_hash("9999", &[2; 16]).unwrap()).unwrap();
+        std::fs::write(dir.join("direct-ok"), b"").unwrap();
+        take_in_plain(&hold, &dir);
+        for f in ["pin", "pin-duress", "direct-ok"] {
+            assert!(!dir.join(f).exists(), "{f} is gone from the folder");
+        }
+        assert!(flag_on(&hold, &dir, "direct-ok"));
+        let rec = PinRecord::read(&hold, &dir).unwrap();
+        assert!(rec.main_set && rec.duress_set);
+        assert_eq!(pin_matches(&rec.main, "1234").unwrap(), (true, false));
+        assert_eq!(pin_matches(&rec.duress, "9999").unwrap(), (true, false));
+        let with = hold.read_note(&dir, "pin-record", None).unwrap().len();
+        // With the emergency PIN cleared, the record keeps its size, and its decoy opens to nothing.
+        let mut r = rec;
+        r.duress = pin_decoy();
+        r.duress_set = false;
+        r.write(&hold, &dir).unwrap();
+        assert_eq!(hold.read_note(&dir, "pin-record", None).unwrap().len(), with);
+        let r = PinRecord::read(&hold, &dir).unwrap();
+        assert!(!r.duress_set && !pin_matches(&r.duress, "9999").unwrap().0);
+        // A PIN from before the slow hash still opens, and says it wants the slow one.
+        let salt = [4u8; 16];
+        let old = [salt.as_slice(), blake3::keyed_hash(blake3::hash(&salt).as_bytes(), b"4321").as_bytes()].concat();
+        std::fs::write(dir.join("pin"), &old).unwrap();
+        take_in_plain(&hold, &dir);
+        let r = PinRecord::read(&hold, &dir).unwrap();
+        assert_eq!(pin_matches(&r.main, "4321").unwrap(), (true, true));
+        assert!(!pin_matches(&r.main, "4320").unwrap().0);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 
