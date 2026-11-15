@@ -99,7 +99,7 @@ fn out_stream<T: cpal::SizedSample + cpal::FromSample<f32>>(device: &cpal::Devic
     let mut phase = 0.0f64;
     let mut prev = [0f32; 2];
     let mut cur = [0f32; 2];
-    let err = |e| eprintln!("audio: {e}");
+    let err = |e| crate::say(&format!("audio: {e}"));
     Ok(device.build_output_stream(
         config,
         move |out: &mut [T], _| {
@@ -237,7 +237,7 @@ where
             prev = frame(frames - 1);
             pos -= frames as f64;
         },
-        |e| eprintln!("mic: {e}"),
+        |e| crate::say(&format!("mic: {e}")),
         None,
     )?)
 }

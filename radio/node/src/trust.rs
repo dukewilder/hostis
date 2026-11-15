@@ -120,6 +120,26 @@ impl Inner {
         (bearings, canary)
     }
 
+    /// Whether a release newer than `current`, signed by two of the three keys, is on the
+    /// network. Fetches nothing but the Releases log.
+    pub async fn peek_update(self: &Arc<Self>, current: u32) -> Value {
+        let Some(st) = self.release_station() else { return json!({ "newer": false }) };
+        let _ = self.sync_log(st).await;
+        let s = self.store.lock().unwrap();
+        let best = s.logs.get(&st).and_then(|a| {
+            a.entries().iter().filter_map(|e| match e.entry.body() {
+                Body::Release { version, code, sha256, size, sigs, .. }
+                    if *code > current && *size <= MAX_APK && release_trusted(&self.cfg.release_keys, *code, sha256, sigs) =>
+                    Some((version.clone(), *code)),
+                _ => None,
+            }).max_by_key(|r| r.1)
+        });
+        match best {
+            Some((version, _)) => json!({ "newer": true, "version": version }),
+            None => json!({ "newer": false }),
+        }
+    }
+
     pub async fn check_update(self: &Arc<Self>, current: u32, now_please: bool) -> Result<Value> {
         let st = self.release_station().ok_or_else(|| anyhow!("this build trusts no release keys yet"))?;
         let _ = self.sync_log(st).await;

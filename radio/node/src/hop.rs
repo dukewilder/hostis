@@ -104,12 +104,15 @@ pub(crate) enum Ask {
     /// the way in learns neither the listener's node nor its address, and the guard sees one
     /// more sealed forward to a middle.
     Pull { cookie: [u8; 32], note: Vec<u8>, answers: Vec<(u64, Vec<u8>)> },
+    /// A line a keeper speaks in its own station's room, for the exit to say there: from the
+    /// keeper's own endpoint, the station's signature would name the device it came from.
+    Line { station: StationId, line: Vec<u8> },
 }
 
 impl Ask {
     fn station(&self) -> Option<StationId> {
         match self {
-            Ask::Log { station, .. } | Ask::Chunk { station, .. } | Ask::Token { station, .. } | Ask::Sealed { station, .. } | Ask::Stem { station, .. } => Some(*station),
+            Ask::Log { station, .. } | Ask::Chunk { station, .. } | Ask::Token { station, .. } | Ask::Sealed { station, .. } | Ask::Stem { station, .. } | Ask::Line { station, .. } => Some(*station),
             Ask::Relay { .. } | Ask::Lead { .. } | Ask::Pull { .. } => None,
         }
     }
@@ -141,11 +144,25 @@ pub(crate) struct PullBox {
     parked: usize,
     wake: Arc<tokio::sync::Notify>,
 }
-/// How long a radio must have been known before it may be a first hop.
-pub(crate) const NEWCOMER_MS: u64 = 10 * 60_000;
+/// How long a radio must have been known under the same id before it may be a guard, a first
+/// hop kept for weeks. App radios take a new id every day, so a guard is a radio that keeps
+/// its id, and a crowd of new ones never wins a redraw.
+pub(crate) const GUARD_AGE_MS: u64 = 7 * 86_400_000;
 /// How long a radio's word that it is of the crew is believed: it says so every two minutes, so
 /// one silent for four has most likely gone, and a route through it would only time out.
 pub(crate) const CREW_FRESH_MS: u64 = 4 * 60_000;
+
+/// Whether a radio first met at `first_seen` may be a guard at `now`: a week under one id.
+pub(crate) fn is_veteran(first_seen: Option<u64>, now: u64) -> bool {
+    first_seen.is_some_and(|t| now.saturating_sub(t) >= GUARD_AGE_MS)
+}
+
+/// The harbours a route passes over once one of them holds a role on it: all of them while any
+/// radio besides them and `not` is known, none when there is no other.
+pub(crate) fn harbours_to_skip(harbours: &[EndpointId], nodes: &[EndpointId], not: &[EndpointId]) -> Vec<EndpointId> {
+    let others = nodes.iter().any(|n| !harbours.contains(n) && !not.contains(n));
+    if others { harbours.to_vec() } else { vec![] }
+}
 
 /// One three-hop request, built by the requester: what goes to the first hop, and the ciphers
 /// that open the answer, outermost first. `exit` is a radio's id and `ask` what it is asked; for
@@ -235,7 +252,7 @@ impl Inner {
         self.known_nodes()
     }
 
-    async fn hop(&self, node: EndpointId, hop: &Hop) -> Result<Vec<u8>> {
+    pub(crate) async fn hop(&self, node: EndpointId, hop: &Hop) -> Result<Vec<u8>> {
         let tab = *node.as_bytes();
         // A tab behind this node's own door: over its data channel, as a relay would carry it.
         let door = self.door.lock().unwrap().clone();
@@ -277,28 +294,33 @@ impl Inner {
         // Never a newcomer. A first hop and a middle that work together learn who hears what,
         // and radios are cheap to make: someone who brings up a crowd of them would otherwise
         // soon hold both ends of somebody's route. A radio is a first hop only once this node
-        // has known it for ten minutes, or met it in an earlier run; the middle is drawn from
-        // any radio of the crew outside the guards. So a crowd that arrives today holds a
-        // victim's middle now and then, and its first hop only after it has waited, and only
-        // when the guard this node keeps has gone.
-        let seasoned = self.seasoned();
-        let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.doors.contains(n) && seasoned(n) && !failed.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS)).copied().collect();
+        // has known it under the same id for a week; the middle is drawn from any radio of the
+        // crew outside the guards. So a crowd that arrives today holds a victim's middle now and
+        // then, and its first hop only after a week, and only when the guard this node keeps
+        // has gone.
+        // A guard is a radio known under the same id for a week; with none, a harbour.
+        let veteran = self.veteran();
+        let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.doors.contains(n) && veteran(n) && !failed.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS)).copied().collect();
         others.shuffle(&mut rand::thread_rng());
-        // A peer met in an earlier run before a newcomer: a crowd of nodes that appeared today
-        // cannot make one of their own a guard. Within each, one this node is talking to now
-        // before one only heard of, so a new guard answers from its first fetch.
-        others.sort_by_key(|n| (!self.cfg.bootstrap.contains(n), !self.live(n)));
-        let g = others.first().copied().or_else(|| known.iter().find(|n| seasoned(n)).copied())?;
+        // One this node is talking to now before one only heard of, so a new guard answers
+        // from its first fetch.
+        others.sort_by_key(|n| !self.live(n));
+        let g = others.first().copied().or_else(|| known.iter().find(|n| self.doors.contains(n)).copied())?;
         let _ = self.hold.write_note(&self.cfg.dir, "fetch-guard", g.to_string().as_bytes());
         Some(g)
     }
 
-    /// Whether a radio may be a first hop: a door or a peer met in an earlier run, or one this
-    /// node has known for ten minutes.
-    pub(crate) fn seasoned(&self) -> impl Fn(&EndpointId) -> bool + '_ {
+    /// Whether a radio may be a guard: one this node has known under the same id for a week.
+    pub(crate) fn veteran(&self) -> impl Fn(&EndpointId) -> bool + '_ {
         let seen = self.first_seen.lock().unwrap().clone();
         let now = now_ms();
-        move |n: &EndpointId| self.cfg.bootstrap.contains(n) || self.doors.contains(n) || seen.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) >= NEWCOMER_MS)
+        move |n: &EndpointId| is_veteran(seen.get(n.as_bytes()).copied(), now)
+    }
+
+    /// The bootstrap harbours, all run by one operator, count as one radio: no route takes two
+    /// of its roles from them while any other radio is known. With no other, the route goes.
+    pub(crate) fn harbours_besides(&self, nodes: &[EndpointId], not: &[EndpointId]) -> Vec<EndpointId> {
+        harbours_to_skip(&self.doors, nodes, not)
     }
 
     /// The middle of a three-hop route: a radio of the crew heard from lately, drawn at random,
@@ -360,6 +382,11 @@ impl Inner {
         let guard = self.fetch_guard(&nodes).ok_or_else(|| anyhow!("no guard"))?;
         if *guard.as_bytes() == note.intro {
             return Err(anyhow!("the guard leads to the deck"));
+        }
+        // A harbour as first hop and another as the way in would be one operator at both ends.
+        let intro = EndpointId::from_bytes(&note.intro).ok();
+        if self.doors.contains(&guard) && intro.is_some_and(|i| self.doors.contains(&i)) && !self.harbours_besides(&nodes, &[guard]).is_empty() {
+            return Err(anyhow!("the guard and the way in are both harbours"));
         }
         let middle = self.middle(&[*guard.as_bytes(), note.intro]).ok_or_else(|| anyhow!("no middle"))?;
         let (hop, ciphers) = three_hops(middle.as_bytes(), &pick, &postcard::to_stdvec(ask)?, Some((&note.intro, &note.lead)))?;
@@ -430,9 +457,14 @@ impl Inner {
             self.hold.remove_note(&self.cfg.dir, "fetch-guard");
             return Err(anyhow!("the guard did not answer"));
         }
-        let exit = match exit.filter(|e| *e != guard) {
+        // A harbour as guard and another as exit would be one operator at both ends.
+        let mut not = vec![guard];
+        if self.doors.contains(&guard) {
+            not.extend(self.harbours_besides(&nodes, &[guard]));
+        }
+        let exit = match exit.filter(|e| !not.contains(e)) {
             Some(e) => e,
-            None => *self.exits_for(&nodes, &[guard], 1, ask.station()).first().ok_or_else(|| anyhow!("no route"))?,
+            None => *self.exits_for(&nodes, &not, 1, ask.station()).first().ok_or_else(|| anyhow!("no route"))?,
         };
         let (sealed, c) = seal(exit.as_bytes(), ask)?;
         let blob = postcard::to_stdvec(&sealed)?;
@@ -697,6 +729,7 @@ impl Inner {
                         let took = Box::pin(self.on_stem(station, entries, chunks, announce)).await;
                         Response::Sealed(took.then(|| vec![1]))
                     }
+                    Ask::Line { station, line } => Response::Sealed(Box::pin(self.say_for_keeper(station, line)).await.then(|| vec![1])),
                     Ask::Relay { .. } | Ask::Lead { .. } | Ask::Pull { .. } => return vec![],
                 };
                 let out = postcard::to_stdvec(&resp).unwrap_or_default();
@@ -845,7 +878,7 @@ impl Inner {
 
     /// A requester's ask for a deck behind a door, handed to the deck's next pull: the deck's
     /// answer, or nothing within `PULL_ANSWER_MS`.
-    async fn pull_hand(&self, cookie: [u8; 32], blob: Vec<u8>) -> Vec<u8> {
+    pub(crate) async fn pull_hand(&self, cookie: [u8; 32], blob: Vec<u8>) -> Vec<u8> {
         let now = now_ms();
         let (tx, rx) = tokio::sync::oneshot::channel();
         let id = {
@@ -1037,14 +1070,15 @@ impl Inner {
         }
         // Prefer anyone but the well-known Lanterns: a guard everyone shares would hold every
         // broadcaster's address in one place, and that place could be compelled to hand it over.
+        // Only a radio known under the same id for a week, so a crowd of nodes that appeared
+        // lately cannot make one of their own a guard; with none, a harbour, and with no
+        // harbour either, no guard yet.
         let failed = self.failed.lock().unwrap().clone();
         let now = now_ms();
-        let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.doors.contains(n) && !failed.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS)).copied().collect();
+        let veteran = self.veteran();
+        let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.doors.contains(n) && veteran(n) && !failed.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS)).copied().collect();
         others.shuffle(&mut rand::thread_rng());
-        // A peer met in an earlier run before a newcomer: a crowd of nodes that appeared today
-        // cannot make one of their own a guard.
-        let veterans: Vec<EndpointId> = others.iter().filter(|n| self.cfg.bootstrap.contains(n)).copied().collect();
-        let g = veterans.first().copied().or_else(|| others.first().copied()).or_else(|| known.first().copied())?;
+        let g = others.first().copied().or_else(|| known.iter().find(|n| self.doors.contains(n)).copied())?;
         let _ = self.hold.write_note(&self.cfg.dir, "stem-guard", g.to_string().as_bytes());
         Some(g)
     }
@@ -1060,7 +1094,10 @@ impl Inner {
         let (entries, chunks) = {
             let s = self.store.lock().unwrap();
             let Some(a) = s.logs.get(&station) else { return true };
-            let fresh: Vec<&SignedEntry> = a.entries().iter().skip(landed as usize).take(32).collect();
+            // An entry dated to a quarter hour still to come waits for it (see
+            // `pyrate_core::archive::quarter_stamp`), unless live sound behind it cannot.
+            let due = a.due(now_ms());
+            let fresh: Vec<&SignedEntry> = a.entries().iter().take(due).skip(landed as usize).take(32).collect();
             let mut chunks = Vec::new();
             for e in &fresh {
                 let hashes: Vec<Hash> = match e.entry.body() {
@@ -1120,9 +1157,14 @@ impl Inner {
                 // Up to three second nodes a tick, each a different one: a node that declines
                 // (a phone that relays for nobody, a tab that has gone) costs a moment, not the
                 // six seconds to the next tick, and a live show does not fall behind.
-                let mut others: Vec<EndpointId> = self.known_nodes().into_iter().filter(|n| *n != g).collect();
+                // Never a harbour behind a harbour guard while another radio is known.
+                let known = self.known_nodes();
+                let skip = if self.doors.contains(&g) { self.harbours_besides(&known, &[g]) } else { vec![] };
+                let mut others: Vec<EndpointId> = known.into_iter().filter(|n| *n != g && !skip.contains(n)).collect();
                 others.shuffle(&mut rand::thread_rng());
                 let mut guard_answered = false;
+                // With no second node to try, the guard was never asked: it is kept.
+                let tried = others.len().min(3);
                 for x in others.into_iter().take(3) {
                     let ask = Ask::Stem { station, entries: entries.clone(), chunks: chunks.clone(), announce: announce.clone() };
                     let Ok((sealed, c)) = seal(x.as_bytes(), &ask) else { continue };
@@ -1150,7 +1192,7 @@ impl Inner {
                 }
                 // A guard that does not answer, or relays for nobody, twice in a row is let go:
                 // the next tick draws another, rather than waiting on it for good.
-                if !guard_answered || self.guard_misses.fetch_add(1, std::sync::atomic::Ordering::Relaxed) >= 1 {
+                if tried > 0 && (!guard_answered || self.guard_misses.fetch_add(1, std::sync::atomic::Ordering::Relaxed) >= 1) {
                     self.guard_misses.store(0, std::sync::atomic::Ordering::Relaxed);
                     self.failed.lock().unwrap().insert(*g.as_bytes(), now_ms());
                     self.hold.remove_note(&self.cfg.dir, "stem-guard");
@@ -1192,6 +1234,21 @@ impl Inner {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_guard_is_a_radio_known_a_week_and_the_harbours_are_one_operator() {
+        let now = 30 * 86_400_000;
+        assert!(!super::is_veteran(None, now), "never met");
+        assert!(!super::is_veteran(Some(now - 6 * 86_400_000), now), "six days is not a week");
+        assert!(super::is_veteran(Some(now - super::GUARD_AGE_MS), now));
+        let id = |b: u8| iroh::SecretKey::from_bytes(&[b; 32]).public();
+        let (h1, h2, other) = (id(1), id(2), id(3));
+        let harbours = [h1, h2];
+        // A harbour as guard: every harbour is passed over for the exit while another radio is known.
+        assert_eq!(super::harbours_to_skip(&harbours, &[h1, h2, other], &[h1]), vec![h1, h2]);
+        // With only harbours known, the route goes all the same.
+        assert!(super::harbours_to_skip(&harbours, &[h1, h2], &[h1]).is_empty());
+    }
+
     use super::*;
     use pyrate_core::StationKey;
 

@@ -13,7 +13,8 @@ use pyrate_core::{Body, StationId, audio::ChunkDecoder};
 use pyrate_node::{Config, Node};
 use serde_json::{Value, json};
 
-const MIC_HZ: f64 = 700.0;
+/// Above the hum comb, which takes out every harmonic of 50 and 60 Hz to 1 kHz.
+const MIC_HZ: f64 = 1_100.0;
 const DECK_HZ: f64 = 1500.0;
 const PAD_HZ: f64 = 3200.0;
 const TWO_HZ: f64 = 2400.0;
@@ -62,6 +63,12 @@ fn verdict(ok: bool) -> &'static str {
 }
 
 fn main() -> anyhow::Result<()> {
+    // A phone dates its entries to the quarter hour and its cargo waits for it; the test network
+    // waits twenty seconds instead.
+    if std::env::var_os("PYRATE_QUARTER_MS").is_none() {
+        // SAFETY: set before any node starts, while this process has one thread.
+        unsafe { std::env::set_var("PYRATE_QUARTER_MS", "20000") };
+    }
     let args: Vec<String> = std::env::args().collect();
     let boot = vec![args.get(1).expect("desk_test <bootstrap id> [work dir]").parse()?];
     let work = PathBuf::from(args.get(2).cloned().unwrap_or_else(|| "/tmp/desk-test".into()));

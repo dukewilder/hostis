@@ -1,29 +1,28 @@
 //! The deck of an app node: the station it plays, served to the crew while it plays, as a
-//! listener's tab serves its own. The deck has a key made for it alone and an endpoint of its
-//! own with no direct paths at all: it reaches the network only through its relay, and nobody
-//! can reach it any other way. So its way in, the one radio that may ask it anything, sees a
-//! relay and never this device's address. The node's own id is never named: the lead names the
-//! deck's key. Only with "Carry the radio while you listen" on, on a connection that may carry
-//! others' traffic (on a phone, Wi-Fi), never while the node runs dark, never for its own
-//! station or a pocket's. A phone passes on no more than it listens to; a computer six times.
+//! listener's tab serves its own. The deck has a key made for it alone and no endpoint at all.
+//! It pulls the asks waiting for it from its way in, as a tab behind a door does, along an
+//! ordinary three-hop route (this node's guard, a middle, the way in), and its note goes up in
+//! the same pulls for the way in to pass on. So no relay sees the deck's key beside this
+//! device's address, no gossip neighbour hears the note from this node, and the way in, the one
+//! radio that may ask the deck anything, sees a middle and never this device. The lead names a
+//! cookie, never a node. Only with "Carry the radio while you listen" on, on a connection that
+//! may carry others' traffic (on a phone, Wi-Fi), never while the node runs dark, never for its
+//! own station or a pocket's. A phone passes on no more than it listens to; a computer six times.
 use std::{
     collections::HashSet,
-    sync::{Arc, Weak, atomic::Ordering::Relaxed},
+    sync::{Arc, atomic::Ordering::Relaxed},
     time::Duration,
 };
 
-use iroh::{
-    Endpoint, EndpointId,
-    endpoint::{Connection, presets},
-    protocol::{AcceptError, ProtocolHandler, Router},
-};
+use anyhow::{Result, anyhow};
+use iroh::EndpointId;
 use pyrate_core::StationId;
 
 use crate::{
     Inner,
     hop::{Ask, Hop},
-    net::{ALPN, Gossip, Request, Response},
-    now_ms,
+    net::{Gossip, Request, Response},
+    now_ms, say,
 };
 
 /// Its own listening counted as at least 96 kbit/s, a minute of it.
@@ -35,52 +34,20 @@ pub(crate) struct Deck {
     pub(crate) station: StationId,
     seed: [u8; 32],
     pub(crate) id: [u8; 32],
-    ep: Endpoint,
-    _router: Router,
+    /// What the deck's lead names in place of a node: the way in hands the asks for it over in
+    /// the deck's pulls.
+    cookie: [u8; 32],
     pub(crate) intro: Option<[u8; 32]>,
     lead: Vec<u8>,
-    relay: String,
+    /// The deck's note, to go up in its next pull.
+    note: Vec<u8>,
+    pulling: bool,
     said: u64,
     /// The sealed names of the station's chunks this node holds: the deck serves only those.
     names: HashSet<[u8; 32]>,
     names_at: u64,
     /// Bytes passed on this minute, and the minute.
     minute: (u64, u64),
-}
-
-#[derive(Clone)]
-struct DeckProto {
-    inner: Weak<Inner>,
-    id: [u8; 32],
-}
-
-impl std::fmt::Debug for DeckProto {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("DeckProto")
-    }
-}
-
-impl ProtocolHandler for DeckProto {
-    async fn accept(&self, conn: Connection) -> Result<(), AcceptError> {
-        let from = *conn.remote_id().as_bytes();
-        // Two asks at a time on one connection at most: the way in has no reason for more.
-        let mut n = 0;
-        while let Ok((mut send, mut recv)) = conn.accept_bi().await {
-            n += 1;
-            if n > 4_096 {
-                break;
-            }
-            let Ok(Ok(bytes)) = tokio::time::timeout(Duration::from_secs(10), recv.read_to_end(1 << 20)).await else { continue };
-            let Some(inner) = self.inner.upgrade() else { break };
-            let out = match postcard::from_bytes::<Request>(&bytes) {
-                Ok(Request::Hop(b)) => inner.deck_answer(self.id, from, &b).await,
-                _ => vec![],
-            };
-            let _ = send.write_all(&postcard::to_stdvec(&Response::Hop(out)).unwrap_or_default()).await;
-            let _ = send.finish();
-        }
-        Ok(())
-    }
 }
 
 impl Inner {
@@ -113,38 +80,20 @@ impl Inner {
             let mut d = self.deck.lock().unwrap();
             if d.as_ref().is_some_and(|d| Some(d.station) != want) { d.take() } else { None }
         };
-        if let Some(old) = old {
-            old.ep.close().await;
-        }
+        drop(old);
         let Some(station) = want else { return };
         if self.deck.lock().unwrap().is_none() {
-            let Some(relay) = self.endpoint.addr().relay_urls().next().cloned() else { return };
             let seed: [u8; 32] = rand::random();
             let id = pyrate_core::StationKey::from_seed(seed).id().0;
-            // No IP transport at all: the deck is reached through its relay and nothing else,
-            // and it reaches nobody any other way, so no path ever shows its address.
-            let mut b = Endpoint::builder(presets::Minimal)
-                .crypto_provider(Arc::new(rustls::crypto::aws_lc_rs::default_provider()))
-                .secret_key(iroh::SecretKey::from_bytes(&seed))
-                .relay_mode(iroh::RelayMode::Custom(iroh::RelayMap::from_iter([relay.clone()])))
-                .clear_ip_transports();
-            // Through the same proxy as the node's own relay connections, where there is one.
-            if std::env::var_os("HTTPS_PROXY").is_some() && !crate::net::LOCAL_RELAYS_OK.load(Relaxed) {
-                b = b.proxy_from_env().ca_tls_config(iroh::tls::CaTlsConfig::system());
-            }
-            let ep = match b.bind().await {
-                Ok(ep) => ep,
-                Err(_) => return,
-            };
-            let router = Router::builder(ep.clone()).accept(ALPN, DeckProto { inner: Arc::downgrade(self), id }).spawn();
-            *self.deck.lock().unwrap() = Some(Deck { station, seed, id, ep, _router: router, intro: None, lead: vec![], relay: relay.to_string(), said: 0, names: HashSet::new(), names_at: 0, minute: (0, 0) });
+            let cookie: [u8; 32] = rand::random();
+            *self.deck.lock().unwrap() = Some(Deck { station, seed, id, cookie, intro: None, lead: vec![], note: vec![], pulling: false, said: 0, names: HashSet::new(), names_at: 0, minute: (0, 0) });
         }
         let now = now_ms();
         // The way in: a radio of the crew heard from lately, never this node or its guards.
-        let (intro, said, relay, id, seed) = {
+        let (intro, said, cookie, id, seed) = {
             let d = self.deck.lock().unwrap();
             let Some(d) = d.as_ref() else { return };
-            (d.intro, d.said, d.relay.clone(), d.id, d.seed)
+            (d.intro, d.said, d.cookie, d.id, d.seed)
         };
         let fresh = intro.is_some_and(|x| self.crew_radios.lock().unwrap().get(&x).is_some_and(|(_, t)| now.saturating_sub(*t) < crate::hop::CREW_FRESH_MS));
         let intro = if fresh { intro } else { self.middle(&[]).map(|m| *m.as_bytes()) };
@@ -153,7 +102,7 @@ impl Inner {
             self.deck_names(now);
             return;
         }
-        let lead = if fresh { self.deck.lock().unwrap().as_ref().map(|d| d.lead.clone()).unwrap_or_default() } else { pyrate_core::route::make_lead(&intro, &pyrate_core::route::Lead { to: id, relay }).unwrap_or_default() };
+        let lead = if fresh { self.deck.lock().unwrap().as_ref().map(|d| d.lead.clone()).unwrap_or_default() } else { pull_lead(&intro, &cookie).unwrap_or_default() };
         if lead.is_empty() {
             return;
         }
@@ -164,7 +113,116 @@ impl Inner {
         }
         self.deck_names(now);
         let head = self.store.lock().unwrap().logs.get(&station).map(|a| a.len()).unwrap_or(0);
-        self.broadcast(&Gossip::deck(&seed, station, head, intro, lead, now)).await;
+        // The note goes up in the deck's next pull, and its way in passes it on: from this
+        // node's own gossip endpoint, every neighbour would know this node plays the station.
+        let note = postcard::to_stdvec(&Gossip::deck(&seed, station, head, intro, lead, now)).unwrap_or_default();
+        let start = {
+            let mut d = self.deck.lock().unwrap();
+            match d.as_mut() {
+                Some(d) if d.id == id => {
+                    d.note = note;
+                    !std::mem::replace(&mut d.pulling, true)
+                }
+                _ => false,
+            }
+        };
+        if start {
+            let me = self.clone();
+            tokio::spawn(async move { me.deck_pull_loop(id).await });
+        }
+    }
+
+    /// The deck's pulls, one after another while it lasts: each brings back the asks waiting at
+    /// its way in, and each ask is answered in a pull of its own. Six pulls in a row that fail
+    /// let the way in go, and the next tick draws another.
+    async fn deck_pull_loop(self: Arc<Self>, deck: [u8; 32]) {
+        let mut fails = 0u64;
+        let mut last_intro: Option<[u8; 32]> = None;
+        loop {
+            let job = {
+                let mut d = self.deck.lock().unwrap();
+                match d.as_mut() {
+                    Some(d) if d.id == deck => d.intro.map(|i| (i, d.cookie, std::mem::take(&mut d.note))),
+                    _ => None,
+                }
+            };
+            let Some((intro, cookie, note)) = job.filter(|_| self.deck_wanted().is_some()) else { break };
+            // A new way in starts with a clean slate.
+            if last_intro.replace(intro).is_some_and(|l| l != intro) {
+                fails = 0;
+            }
+            match self.deck_pull(deck, intro, cookie, note.clone(), vec![]).await {
+                Ok(()) => fails = 0,
+                Err(e) => {
+                    if let Some(d) = self.deck.lock().unwrap().as_mut().filter(|d| d.id == deck && d.note.is_empty()) {
+                        d.note = note;
+                    }
+                    // No route to be had is no fault of the way in: wait for one.
+                    if e.to_string().starts_with("no ") {
+                        tokio::time::sleep(Duration::from_secs(3)).await;
+                        continue;
+                    }
+                    // Six failed pulls in a row, a middle that did not answer passed over each
+                    // time, and the way in is the likelier fault.
+                    fails += 1;
+                    if fails >= 6 {
+                        say(&format!("deck: six pulls failed ({e}); another way in next"));
+                        if let Some(d) = self.deck.lock().unwrap().as_mut().filter(|d| d.id == deck) {
+                            d.intro = None;
+                            d.said = 0;
+                        }
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(500 * fails)).await;
+                }
+            }
+        }
+        if let Some(d) = self.deck.lock().unwrap().as_mut().filter(|d| d.id == deck) {
+            d.pulling = false;
+        }
+    }
+
+    /// One pull, sealed to the way in and passed on by a middle after this node's guard. What it
+    /// brings back is answered, each ask in a pull of its own.
+    fn deck_pull(self: &Arc<Self>, deck: [u8; 32], intro: [u8; 32], cookie: [u8; 32], note: Vec<u8>, answers: Vec<(u64, Vec<u8>)>) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + '_>> {
+        Box::pin(async move {
+            let nodes = self.known_nodes_pub();
+            let guard = self.fetch_guard(&nodes).ok_or_else(|| anyhow!("no guard"))?;
+            if *guard.as_bytes() == intro {
+                return Err(anyhow!("no way in apart from the guard"));
+            }
+            let middle = self.middle(&[*guard.as_bytes(), intro]).ok_or_else(|| anyhow!("no middle"))?;
+            let ask = postcard::to_stdvec(&Ask::Pull { cookie, note, answers })?;
+            let (hop, ciphers) = crate::hop::three_hops(middle.as_bytes(), &intro, &ask, None)?;
+            let raw = tokio::time::timeout(Duration::from_secs(12), self.hop(guard, &hop)).await;
+            let items = match &raw {
+                Ok(Ok(raw)) => crate::hop::open_layers(&ciphers, raw).and_then(|p| postcard::from_bytes::<Vec<(u64, Vec<u8>)>>(&p).ok()),
+                _ => None,
+            };
+            let Some(items) = items else {
+                // No answer at all is most often a middle that has gone: the next pull draws
+                // another. An empty one came back through the middle, so the way in is the
+                // likelier fault, and the loop counts it against the way in.
+                if !matches!(raw, Ok(Ok(_))) {
+                    self.failed.lock().unwrap().insert(*middle.as_bytes(), now_ms());
+                }
+                return Err(match raw {
+                    Err(_) => anyhow!("slow pull"),
+                    Ok(Err(e)) => e,
+                    Ok(Ok(_)) => anyhow!("the pull came back empty"),
+                });
+            };
+            for (id, blob) in items.into_iter().take(16) {
+                let me = self.clone();
+                tokio::spawn(async move {
+                    let out = me.deck_answer(deck, intro, &blob).await;
+                    if !out.is_empty() {
+                        let _ = me.deck_pull(deck, intro, cookie, vec![], vec![(id, out)]).await;
+                    }
+                });
+            }
+            Ok(())
+        })
     }
 
     /// The sealed names of what this node holds of the deck's station, every half minute.
@@ -246,27 +304,22 @@ impl Inner {
     }
 
     /// For the deck test: as the way in of a deck of `station`, asks it for the first page of its
-    /// log through the lead, and says which paths the connection to it runs over.
+    /// log through the lead, and says which paths a connection of this radio's own to the deck
+    /// runs over (none: the deck takes its asks in its own pulls).
     pub(crate) async fn deck_probe(self: &Arc<Self>, station: StationId) -> Option<(usize, Vec<bool>)> {
         let me = *self.endpoint.id().as_bytes();
         let note = self.log.lock().unwrap().get(&station)?.decks.iter().find(|(_, n)| n.intro == me).map(|(d, n)| (*d, n.clone()))?;
         let lead = pyrate_core::route::open_lead(&self.secret, &me, &note.1.lead)?;
-        let to = EndpointId::from_bytes(&lead.to).ok()?;
-        let url: iroh::RelayUrl = lead.relay.parse().ok()?;
-        self.book.add_endpoint_info(iroh::EndpointAddr { id: to, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+        if lead.relay != pyrate_core::route::LEAD_PULL {
+            return None;
+        }
         let (eph, ct, c) = pyrate_core::route::seal_to(&note.0, &postcard::to_stdvec(&Ask::Log { station, from: 0 }).ok()?)?;
-        let raw = match self.ask(to, &Request::Hop(postcard::to_stdvec(&Hop::Sealed { eph, ct }).ok()?)).await.ok()? {
-            Response::Hop(b) => b,
-            _ => return None,
-        };
+        let raw = self.pull_hand(lead.to, postcard::to_stdvec(&Hop::Sealed { eph, ct }).ok()?).await;
         let n = match postcard::from_bytes::<Response>(&pyrate_core::route::open_answer(&c, &raw)?).ok()? {
             Response::Entries(l) => l.len(),
             _ => 0,
         };
-        // A path chosen later than the first answer would show here too: give it a moment.
-        tokio::time::sleep(Duration::from_secs(5)).await;
-        let conn = self.conns.lock().unwrap().get(&to).cloned()?;
-        let paths: Vec<bool> = conn.paths().iter().map(|p| p.is_relay()).collect();
+        let paths = EndpointId::from_bytes(&lead.to).ok().map(|to| self.paths_to(&to)).unwrap_or_default();
         Some((n, paths))
     }
 
@@ -274,7 +327,7 @@ impl Inner {
     pub(crate) fn deck_set_way_in(&self, intro: [u8; 32]) -> bool {
         let mut d = self.deck.lock().unwrap();
         let Some(d) = d.as_mut() else { return false };
-        let Some(lead) = pyrate_core::route::make_lead(&intro, &pyrate_core::route::Lead { to: d.id, relay: d.relay.clone() }) else { return false };
+        let Some(lead) = pull_lead(&intro, &d.cookie) else { return false };
         d.intro = Some(intro);
         d.lead = lead;
         d.said = 0;
@@ -286,4 +339,9 @@ impl Inner {
     pub(crate) fn paths_to(&self, peer: &EndpointId) -> Vec<bool> {
         self.conns.lock().unwrap().get(peer).map(|c| c.paths().iter().map(|p| p.is_relay()).collect()).unwrap_or_default()
     }
+}
+
+/// A deck's lead for its way in: the cookie it pulls under, never a node.
+fn pull_lead(intro: &[u8; 32], cookie: &[u8; 32]) -> Option<Vec<u8>> {
+    pyrate_core::route::make_lead(intro, &pyrate_core::route::Lead { to: *cookie, relay: pyrate_core::route::LEAD_PULL.into() })
 }

@@ -12,6 +12,12 @@ fn check(ok: bool, what: &str) {
 }
 
 fn main() -> anyhow::Result<()> {
+    // A phone dates its entries to the quarter hour and its cargo waits for it; the test network
+    // waits twenty seconds instead.
+    if std::env::var_os("PYRATE_QUARTER_MS").is_none() {
+        // SAFETY: set before any node starts, while this process has one thread.
+        unsafe { std::env::set_var("PYRATE_QUARTER_MS", "20000") };
+    }
     let args: Vec<String> = std::env::args().collect();
     let boot: Vec<iroh::EndpointId> = args.get(1).into_iter().filter_map(|b| b.parse().ok()).collect();
     let audio = args.get(2).cloned().unwrap_or_default();

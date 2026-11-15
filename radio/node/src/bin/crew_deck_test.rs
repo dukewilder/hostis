@@ -1,9 +1,10 @@
 //! crew_deck_test <bootstrap id> <station id>
 //! A phone's deck reached through its way in on the test network: the phone (on Wi-Fi) plays the
 //! station and opens a deck of it; the way in asks the deck for its log through the lead, and the
-//! connection it holds to the deck must run over the relay alone, never a direct path. Turning
-//! "Carry the radio while you listen" off closes the deck. Run with PYRATE_RELAYS set to the test
-//! relay, PYRATE_LAN_ANY=1 and PYRATE_NULL_AUDIO=1, after net_up.sh.
+//! deck takes the ask in one of its own pulls, through its guard and a middle, so the way in
+//! never connects to it. Turning "Carry the radio while you listen" off closes the deck. Run
+//! with PYRATE_RELAYS set to the test relay, PYRATE_LAN_ANY=1 and PYRATE_NULL_AUDIO=1, after
+//! net_up.sh.
 use std::{path::PathBuf, time::{Duration, Instant}};
 
 use pyrate_core::StationId;
@@ -74,7 +75,7 @@ fn main() -> anyhow::Result<()> {
     }
     let (entries, paths) = got.unwrap_or((0, vec![]));
     ok &= check(entries > 0, &format!("the way in reads the deck's log through the lead ({entries} entries, {:.0} s)", t.elapsed().as_secs_f64()));
-    ok &= check(!paths.is_empty() && paths.iter().all(|r| *r), &format!("the way in's connection to the deck runs over the relay alone ({} paths, {} direct)", paths.len(), paths.iter().filter(|r| !**r).count()));
+    ok &= check(paths.is_empty(), &format!("the way in hands the deck its asks in the deck's own pulls, and holds no connection to it ({} paths)", paths.len()));
     // Against that: the same radio's connection to the Lantern on this machine runs direct.
     let lantern = way.paths_to(&boot);
     println!("INFO the way in's connection to the Lantern: {} paths, {} direct", lantern.len(), lantern.iter().filter(|r| !**r).count());

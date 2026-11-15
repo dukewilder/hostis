@@ -23,6 +23,23 @@ use serde_json::{Value, json};
 
 use crate::{Inner, describe_track, hex, now_ms, say, unhex};
 
+/// A recording for a hail, made as a keeper's talk is: mains hum out and encoded afresh as Ogg
+/// Opus, so nothing a phone's recorder wrote into the file goes with it.
+pub(crate) fn hail_audio(path: &std::path::Path) -> Result<Vec<u8>> {
+    let got = pyrate_core::ingest::ingest_voiced(path, pyrate_core::audio::Profile::Talk, 0.0).context("that recording would not read")?;
+    let chunks: Vec<Vec<u8>> = got.chunks.into_iter().map(|(_, b)| b).collect();
+    pyrate_core::tape::ogg_opus(&chunks, got.channels, "", "").map_err(|e| anyhow!("{e}"))
+}
+
+/// Whether a line an exit is asked to say for a keeper is one: signed by the station itself or
+/// one of its co-hosts, and good.
+pub(crate) fn keeper_line(s: &Signed, st: &StationId, deputies: &[[u8; 32]], now: u64) -> bool {
+    (s.line.from == st.0 || deputies.contains(&s.line.from)) && chat::check(s, st, now)
+}
+
+/// A listener's voice in a room lasts a week.
+const WEEK_MS: u64 = 7 * 86_400_000;
+
 /// How many kept hails a Lantern holds before the oldest go.
 const KEPT_HAILS: usize = 500;
 
@@ -136,6 +153,8 @@ pub(crate) struct Room {
     seen: chat::Seen,
     task: tokio::task::JoinHandle<()>,
     neighbours: usize,
+    /// The room's gossip neighbours, the only peers a private node tells its last lines.
+    members: std::collections::HashSet<[u8; 32]>,
 }
 
 impl Drop for Room {
@@ -151,7 +170,32 @@ impl Inner {
         if let Some(k) = self.store.lock().unwrap().keys.get(st) {
             return (StationKey::from_seed(k.seed()), true);
         }
-        (chat::voice(&self.voice, st), false)
+        if self.voice_kept(st) {
+            return (chat::voice(&self.voice, st), false);
+        }
+        (chat::voice_week(&self.voice, st, now_ms() / WEEK_MS), false)
+    }
+
+    /// Stations where the owner chose to keep one voice from week to week.
+    fn voices_kept(&self) -> Vec<StationId> {
+        let b = self.hold.read_note(&self.cfg.dir, "voice-kept", None).unwrap_or_default();
+        String::from_utf8_lossy(&b).lines().filter_map(|l| StationId::from_hex(l.trim()).ok()).collect()
+    }
+
+    fn voice_kept(&self, st: &StationId) -> bool {
+        self.voices_kept().contains(st)
+    }
+
+    /// "Keep my voice here": the same voice in this room from week to week, so regulars know
+    /// it, at the price that anyone in the room can tie this device's visits together.
+    fn keep_voice(&self, st: &StationId, keep: bool) -> Result<()> {
+        let mut all = self.voices_kept();
+        all.retain(|s| s != st);
+        if keep {
+            all.push(*st);
+        }
+        let text: Vec<String> = all.iter().map(|s| s.to_hex()).collect();
+        self.hold.write_note(&self.cfg.dir, "voice-kept", text.join("\n").as_bytes())
     }
 
     /// Takes a line into a room if it is good and new. True if it was.
@@ -219,21 +263,23 @@ impl Inner {
                             me.hear(st, s);
                         }
                     }
-                    Ok(Event::NeighborUp(_)) => {
+                    Ok(Event::NeighborUp(n)) => {
                         if let Some(r) = me.chats.lock().unwrap().get_mut(&st) {
                             r.neighbours += 1;
+                            r.members.insert(*n.as_bytes());
                         }
                     }
-                    Ok(Event::NeighborDown(_)) => {
+                    Ok(Event::NeighborDown(n)) => {
                         if let Some(r) = me.chats.lock().unwrap().get_mut(&st) {
                             r.neighbours = r.neighbours.saturating_sub(1);
+                            r.members.remove(n.as_bytes());
                         }
                     }
                     _ => {}
                 }
             }
         });
-        self.chats.lock().unwrap().insert(st, Room { tx, lines: VecDeque::new(), seen: chat::Seen::default(), task, neighbours: 0 });
+        self.chats.lock().unwrap().insert(st, Room { tx, lines: VecDeque::new(), seen: chat::Seen::default(), task, neighbours: 0, members: Default::default() });
         // What was said before we came: a carrier that sat in the room holds the last lines.
         let me = self.clone();
         self.handle.spawn(async move {
@@ -264,6 +310,43 @@ impl Inner {
             }
         });
         Ok(())
+    }
+
+    /// Whether a peer is one of this node's neighbours in a station's room.
+    pub(crate) fn in_room(&self, st: &StationId, peer: &[u8; 32]) -> bool {
+        self.chats.lock().unwrap().get(st).is_some_and(|r| r.members.contains(peer))
+    }
+
+    /// Says a keeper's line in its room for it, as the exit of its two-hop route: only an open
+    /// room's line signed by the station or one of its co-hosts, and only once. This node joins
+    /// the room to say it, and stays as any listener would.
+    pub(crate) async fn say_for_keeper(self: &Arc<Self>, st: StationId, raw: Vec<u8>) -> bool {
+        if raw.len() > 128 * 1024 || self.is_pocket(&st) {
+            return false;
+        }
+        let Ok(s) = postcard::from_bytes::<Signed>(&raw) else { return false };
+        let deputies = self.store.lock().unwrap().logs.get(&st).map(|a| a.deputies()).unwrap_or_default();
+        if !keeper_line(&s, &st, &deputies, now_ms()) {
+            return false;
+        }
+        if self.chat_join(st).await.is_err() {
+            return false;
+        }
+        // A room just joined has no neighbours yet: a few seconds for one to come up.
+        for _ in 0..20 {
+            if self.chats.lock().unwrap().get(&st).is_some_and(|r| r.neighbours > 0) {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+        if !self.hear(st, s) {
+            return false;
+        }
+        let tx = self.chats.lock().unwrap().get(&st).map(|r| r.tx.clone());
+        match tx {
+            Some(tx) => tx.broadcast(raw.into()).await.is_ok(),
+            None => false,
+        }
     }
 
     /// The last lines a room holds, for a node that has just come in.
@@ -313,6 +396,14 @@ impl Inner {
                 self.handle.block_on(async move { me.chat_join(st).await })?;
                 Ok(json!({ "ok": true }))
             }
+            // A room's voice: new each week unless the owner keeps it there.
+            "chat_voice" => {
+                if let Some(k) = req["keep"].as_bool() {
+                    self.keep_voice(&st, k)?;
+                }
+                let (key, keeper) = self.speaker(&st);
+                Ok(json!({ "kept": self.voice_kept(&st), "voice": key.id().call_sign(), "keeper": keeper }))
+            }
             "chat_leave" => {
                 self.chats.lock().unwrap().remove(&st);
                 Ok(json!({ "ok": true }))
@@ -346,12 +437,15 @@ impl Inner {
                 let say = match req["kind"].as_str().unwrap_or("text") {
                     "cheer" => Say::Cheer,
                     "hail" => {
-                        let audio = std::fs::read(req["path"].as_str().context("path")?)?;
+                        // The recording goes the way a keeper's talk goes, mains hum out and
+                        // encoded afresh, so the keeper hears the voice and nothing a phone's
+                        // recorder wrote into the file.
+                        let audio = hail_audio(std::path::Path::new(req["path"].as_str().context("path")?))?;
                         let mut to = vec![st.0];
                         if let Some(a) = self.store.lock().unwrap().logs.get(&st) {
                             to.extend(a.deputies());
                         }
-                        chat::hail(&to, &audio, req["mime"].as_str().unwrap_or("audio/mp4")).context("a hail is twenty seconds at most")?
+                        chat::hail(&to, &audio, "audio/ogg").context("a hail is twenty seconds at most")?
                     }
                     "request" => Say::Request { track: unhex(req["track"].as_str().context("track")?)?, note: req["text"].as_str().unwrap_or("").into() },
                     _ => {
@@ -362,14 +456,29 @@ impl Inner {
                         Say::Text(t)
                     }
                 };
-                let (key, _) = self.speaker(&st);
+                let (key, keeper) = self.speaker(&st);
                 let name = req["name"].as_str().unwrap_or("").to_string();
                 let s = chat::speak(&key, &st, &name, now_ms(), say);
                 let mut bytes = postcard::to_allocvec(&s)?;
-                if let Some(k) = self.pocket_key(&st) {
+                let pocket = self.pocket_key(&st);
+                if let Some(k) = pocket {
                     bytes = pocket::seal(&k, &bytes);
                 }
                 let tx = self.chats.lock().unwrap().get(&st).map(|r| r.tx.clone()).context("join the chatter first")?;
+                // A keeper on a phone or computer speaks in its own open room through two hops:
+                // a line signed by the station, sent from the keeper's own endpoint, would show
+                // the room's members which device keeps it. With no route, the line waits unsaid.
+                if keeper && self.cfg.private && pocket.is_none() {
+                    let line = postcard::to_allocvec(&s)?;
+                    let me = self.clone();
+                    let raw = self.handle.block_on(async move { me.ask_privately(&crate::hop::Ask::Line { station: st, line }).await });
+                    let took = raw.ok().and_then(|r| postcard::from_bytes::<crate::net::Response>(&r).ok()).is_some_and(|r| matches!(r, crate::net::Response::Sealed(Some(_))));
+                    if !took {
+                        anyhow::bail!("no route two hops away took the line; try again in a moment");
+                    }
+                    self.hear(st, s);
+                    return Ok(json!({ "ok": true }));
+                }
                 self.hear(st, s);
                 self.handle.block_on(async move { tx.broadcast(bytes.into()).await }).map_err(|e| anyhow!("{e}"))?;
                 Ok(json!({ "ok": true }))
@@ -401,5 +510,54 @@ impl Inner {
                 say(&format!("chatter: {e}"));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_exit_says_only_a_keepers_own_line() {
+        let key = StationKey::generate().unwrap();
+        let st = key.id();
+        let now = 1_763_200_000_000;
+        let theirs = chat::speak(&key, &st, "", now, Say::Text("on the air at nine".into()));
+        assert!(keeper_line(&theirs, &st, &[], now), "signed by the station");
+        let listener = chat::voice_week(&[3; 32], &st, 2900);
+        let not = chat::speak(&listener, &st, "", now, Say::Text("me too".into()));
+        assert!(!keeper_line(&not, &st, &[], now), "a listener's line is not passed as the keeper's");
+        assert!(keeper_line(&not, &st, &[listener.id().0], now), "a co-host's is");
+    }
+
+    #[test]
+    fn a_hail_is_encoded_afresh_and_keeps_nothing_of_its_file() {
+        // A second of 300 Hz at 48 kHz in a WAV whose trailing bytes say what a recorder might.
+        let n = 48_000u32;
+        let mut wav = Vec::new();
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36 + n * 2).to_le_bytes());
+        wav.extend_from_slice(b"WAVEfmt ");
+        wav.extend_from_slice(&[16, 0, 0, 0, 1, 0, 1, 0]);
+        wav.extend_from_slice(&48_000u32.to_le_bytes());
+        wav.extend_from_slice(&96_000u32.to_le_bytes());
+        wav.extend_from_slice(&[2, 0, 16, 0]);
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&(n * 2).to_le_bytes());
+        for i in 0..n {
+            let v = ((i as f64 * 2.0 * std::f64::consts::PI * 300.0 / 48_000.0).sin() * 8_000.0) as i16;
+            wav.extend_from_slice(&v.to_le_bytes());
+        }
+        wav.extend_from_slice(b"LIST\x10\0\0\0INFOISFTSM-A536B");
+        let dir = std::env::temp_dir().join(format!("pyrate-hail-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("hail.wav");
+        std::fs::write(&path, &wav).unwrap();
+        let out = hail_audio(&path).unwrap();
+        assert!(out.starts_with(b"OggS"), "Ogg Opus, the talk path's own");
+        assert!(!out.windows(8).any(|w| w == b"SM-A536B"), "nothing the recorder wrote");
+        std::fs::write(&path, b"not a recording").unwrap();
+        assert!(hail_audio(&path).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
