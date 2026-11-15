@@ -1152,6 +1152,8 @@ impl Inner {
                 let mut others: Vec<EndpointId> = known.into_iter().filter(|n| *n != g && !skip.contains(n)).collect();
                 others.shuffle(&mut rand::thread_rng());
                 let mut guard_answered = false;
+                // With no second node to try, the guard was never asked: it is kept.
+                let tried = others.len().min(3);
                 for x in others.into_iter().take(3) {
                     let ask = Ask::Stem { station, entries: entries.clone(), chunks: chunks.clone(), announce: announce.clone() };
                     let Ok((sealed, c)) = seal(x.as_bytes(), &ask) else { continue };
@@ -1179,7 +1181,7 @@ impl Inner {
                 }
                 // A guard that does not answer, or relays for nobody, twice in a row is let go:
                 // the next tick draws another, rather than waiting on it for good.
-                if !guard_answered || self.guard_misses.fetch_add(1, std::sync::atomic::Ordering::Relaxed) >= 1 {
+                if tried > 0 && (!guard_answered || self.guard_misses.fetch_add(1, std::sync::atomic::Ordering::Relaxed) >= 1) {
                     self.guard_misses.store(0, std::sync::atomic::Ordering::Relaxed);
                     self.failed.lock().unwrap().insert(*g.as_bytes(), now_ms());
                     self.hold.remove_note(&self.cfg.dir, "stem-guard");
