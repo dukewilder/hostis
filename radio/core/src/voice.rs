@@ -3,13 +3,16 @@
 //! **Mains hum.** Every recording made near the grid carries its hum, at 50 or 60 Hz and their
 //! harmonics, and the grid's frequency wanders in a pattern that power companies log second by
 //! second. Matched against those logs, a recording's hum says when it was made and on which grid
-//! (electrical network frequency analysis). A comb of narrow notches at both grids' harmonics
-//! takes it out; a voice, being far wider than the notches, loses nothing a listener can hear.
+//! (electrical network frequency analysis). A comb of narrow notches at both grids' harmonics up
+//! to 1 kHz, each notched twice over, takes it out; a voice, being far wider than the notches,
+//! loses nothing a listener can hear.
 //!
-//! **The voice itself.** A keeper may ask for the voice to go out shifted: pitch and formants
-//! together, a few semitones down or up, so the timbre a voiceprint is drawn from is not the
-//! keeper's. A two-tap delay line whose taps sweep and cross-fade (the oldest pitch shifter
-//! there is) does it with no lookahead, so it can run on the live air.
+//! **The voice itself.** A keeper may ask for the voice to go out shifted, pitch and formants
+//! together, a few semitones down. The shift is drawn from the recording key, so it differs from
+//! one keeper to the next. It stops a casual ear from knowing the voice. It does not stop a voice
+//! matcher, which can search the few semitones back and compare what it finds. A two-tap delay
+//! line whose taps sweep and cross-fade (the oldest pitch shifter there is) does it with no
+//! lookahead, so it can run on the live air.
 //!
 //! Both work on 48 kHz mono 16-bit samples, the Talk profile's own. No rights reserved.
 
@@ -48,8 +51,20 @@ impl Biquad {
     }
 }
 
-/// The harmonics of 50 and 60 Hz up to 360 Hz, where a grid's hum carries most of its trace.
-const HUM: [f64; 12] = [50.0, 60.0, 100.0, 120.0, 150.0, 180.0, 200.0, 240.0, 250.0, 300.0, 350.0, 360.0];
+/// Every multiple of 50 Hz up to 1 kHz and of 60 Hz up to 960 Hz, each once and in order. These
+/// are the harmonics where either grid's hum leaves its trace, and the browser carries the same.
+pub const HUM: [f64; 33] = [
+    50.0, 60.0, 100.0, 120.0, 150.0, 180.0, 200.0, 240.0, 250.0, 300.0, 350.0, 360.0, 400.0, 420.0, 450.0, 480.0, 500.0,
+    540.0, 550.0, 600.0, 650.0, 660.0, 700.0, 720.0, 750.0, 780.0, 800.0, 840.0, 850.0, 900.0, 950.0, 960.0, 1000.0,
+];
+
+/// How far a disguised voice goes down, between 3.5 and 6 semitones. It is drawn from the signing
+/// key of whoever records (the station's own, or a co-host's), so each keeper's shift is their
+/// own and the same every time.
+pub fn disguise_semitones(secret: &[u8; 32]) -> f64 {
+    let k = blake3::derive_key("pyrate/disguise/v1", secret);
+    -(3.5 + 2.5 * (u16::from_le_bytes([k[0], k[1]]) as f64 / 65535.0))
+}
 
 /// Grain of the pitch shifter, in samples: 40 ms, short enough not to echo, long enough not
 /// to buzz.
@@ -67,7 +82,8 @@ pub struct Voice {
 impl Voice {
     /// `dehum` takes out mains hum; `semitones` shifts the voice (0 leaves it as it is).
     pub fn new(dehum: bool, semitones: f64) -> Self {
-        let notches = if dehum { HUM.iter().map(|f| Biquad::notch(*f, 30.0)).collect() } else { Vec::new() };
+        // Two notches at each harmonic, one after the other, so little is left off its centre.
+        let notches = if dehum { HUM.iter().flat_map(|f| [Biquad::notch(*f, 30.0), Biquad::notch(*f, 30.0)]).collect() } else { Vec::new() };
         Self { notches, ratio: 2f64.powf(semitones.clamp(-12.0, 12.0) / 12.0), line: vec![0.0; 4 * GRAIN as usize], at: 0, phase: 0.0 }
     }
 
@@ -152,18 +168,43 @@ mod tests {
 
     #[test]
     fn hum_goes_and_a_voice_stays() {
-        let n = 48_000;
+        // Two seconds, measured over the second: a narrow notch twice over takes a moment to settle.
+        let n = 96_000;
         let mut hum = tone(60.0, n);
-        let mut voice = tone(440.0, n);
+        let mut voice = tone(1_500.0, n);
         let mut v = Voice::new(true, 0.0);
         v.run(&mut hum);
         let mut v = Voice::new(true, 0.0);
         v.run(&mut voice);
-        assert!(rms(&hum[24_000..]) < 300.0, "60 Hz hum all but gone: {}", rms(&hum[24_000..]));
-        assert!(rms(&voice[24_000..]) > 6_500.0, "440 Hz untouched: {}", rms(&voice[24_000..]));
+        assert!(rms(&hum[48_000..]) < 300.0, "60 Hz hum all but gone: {}", rms(&hum[48_000..]));
+        assert!(rms(&voice[48_000..]) > 6_500.0, "1.5 kHz untouched: {}", rms(&voice[48_000..]));
         let mut hum50 = tone(150.0, n);
         Voice::new(true, 0.0).run(&mut hum50);
-        assert!(rms(&hum50[24_000..]) < 300.0, "and the European grid's third harmonic");
+        assert!(rms(&hum50[48_000..]) < 300.0, "and the European grid's third harmonic");
+    }
+
+    #[test]
+    fn the_comb_reaches_a_kilohertz() {
+        assert_eq!(HUM.len(), 33);
+        assert!(HUM.windows(2).all(|w| w[0] < w[1]), "ascending, each once");
+        for f in [420.0, 480.0] {
+            let mut t = tone(f, 48_000);
+            Voice::new(true, 0.0).run(&mut t);
+            assert!(rms(&t[24_000..]) < 100.0, "{f} Hz cut: {}", rms(&t[24_000..]));
+        }
+    }
+
+    #[test]
+    fn each_keeper_has_a_shift_of_their_own() {
+        let a = disguise_semitones(&[1u8; 32]);
+        let b = disguise_semitones(&[2u8; 32]);
+        assert_eq!(a, disguise_semitones(&[1u8; 32]), "the same key, the same shift");
+        assert_ne!(a, b);
+        for s in [a, b] {
+            assert!((-6.0..=-3.5).contains(&s), "{s}");
+        }
+        let k = blake3::derive_key("pyrate/disguise/v1", &[1u8; 32]);
+        assert_eq!(a, -(3.5 + 2.5 * (u16::from_le_bytes([k[0], k[1]]) as f64 / 65535.0)));
     }
 
     #[test]
