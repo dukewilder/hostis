@@ -1145,7 +1145,7 @@ class _DetailsPanelState extends State<DetailsPanel> {
         pyrateButton('SAVE', () {
           Native.call({'cmd': 'details_set', 'station': widget.station, 'kinds': kinds.toList(), 'mature': mature, 'explicit': explicit});
           final r = Native.call({'cmd': 'colours_set', 'station': widget.station, 'port': port.text, 'tip': tip.text});
-          setState(() => saved = r is Map && r['error'] != null ? r['error'] : 'Saved. Listeners see it within a minute.');
+          setState(() => saved = r is Map && r['error'] != null ? r['error'] : 'Saved. Listeners see it within a quarter of an hour.');
         }),
       ]),
       if (saved != null) Padding(padding: const EdgeInsets.only(top: 8), child: note(saved!)),
@@ -1498,6 +1498,12 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   bool strict = false;
+
+  @override
+  void dispose() {
+    number0Poll?.cancel();
+    super.dispose();
+  }
   bool provisions = true;
   bool plain = false;
   bool plainLock = false;
@@ -1515,6 +1521,9 @@ class _SettingsPageState extends State<SettingsPage> {
   String? torMsg;
   bool torRestart = false;
   bool number0 = false;
+  bool number0In = false;
+  bool directOwn = false;
+  Timer? number0Poll;
   String? gridMsg;
   String? sig;
   Map? canary;
@@ -1535,7 +1544,17 @@ class _SettingsPageState extends State<SettingsPage> {
     sharePlayer = OpenPlayer.sharing;
     if (sharePlayer) OpenPlayer.lanUrl().then(showPlayerUrl);
     tor = ((Native.call({'cmd': 'tor'}) as Map?)?['url'] ?? '').toString();
-    number0 = (Native.call({'cmd': 'number0'}) as Map?)?['value'] == true;
+    final n0 = Native.call({'cmd': 'number0'}) as Map?;
+    number0 = n0?['value'] == true;
+    number0In = number0 && n0?['standing_in'] == true;
+    directOwn = (Native.call({'cmd': 'direct_ok'}) as Map?)?['own'] == true;
+    // Whether number0's relays are standing in changes as the network does: looked at again now and then.
+    number0Poll = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!number0) return;
+      final r = Native.call({'cmd': 'number0'}) as Map?;
+      final on = r?['standing_in'] == true;
+      if (mounted && on != number0In) setState(() => number0In = on);
+    });
     ship.invokeMethod<bool>('plain_get').then((v) => setState(() => plain = v == true)).catchError((_) {});
     ship.invokeMethod<bool>('plain_lock_get').then((v) => setState(() => plainLock = v == true)).catchError((_) {});
     signer().then((v) { if (mounted) setState(() => sig = v); });
@@ -1935,8 +1954,11 @@ class _SettingsPageState extends State<SettingsPage> {
         fold('Connections', sub: 'For when the internet is watched or cut', [
           setting('Use number0\'s relays when ours fail', number0, (v) {
             final r = Native.call({'cmd': 'number0', 'value': v});
-            setState(() => number0 = (r as Map?)?['value'] == true);
-          }, sub: 'number0 runs iroh\'s public relays. It would see this device\'s address.'),
+            setState(() {
+              number0 = (r as Map?)?['value'] == true;
+              number0In = number0 && r?['standing_in'] == true;
+            });
+          }, sub: 'number0 runs iroh\'s public relays. It would see this device\'s address.${number0In ? ' Its relays are standing in for ours now.' : ''}'),
           setting('Find radios on this Wi-Fi', lan, (v) {
             final r = Native.call({'cmd': 'lan', 'value': v});
             setState(() {
@@ -1948,6 +1970,10 @@ class _SettingsPageState extends State<SettingsPage> {
             Native.call({'cmd': 'direct_ok', 'value': v});
             setState(() => strict = !v);
           }, sub: 'Off, the radio always goes through two other devices and waits when it cannot. On, it plays sooner on a quiet network, and the device it asks sees this $thisDevice\'s address.'),
+          setting('Also send my own station straight from this device', directOwn, (v) {
+            final r = Native.call({'cmd': 'direct_ok', 'own': v});
+            setState(() => directOwn = (r as Map?)?['own'] == true);
+          }, sub: 'Off, a station of yours goes out only through two other devices. On, it can go out from this $thisDevice with no one between, so anyone who connects can see that this $thisDevice carries it. Apart from the switch above.'),
           if (gridMsg != null) Padding(padding: const EdgeInsets.only(top: 6), child: note(gridMsg!)),
         ]),
         fold('About this copy', [
