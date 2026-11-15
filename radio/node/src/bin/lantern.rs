@@ -364,7 +364,8 @@ fn keep_programme(node: &Node, id: pyrate_core::StationId, folder: &str) {
         let stem = name.rsplit_once('.').filter(|(_, e)| e.len() <= 4).map(|(s, _)| s).unwrap_or(name);
         lib.as_array().into_iter().flatten().find(|t| {
             let (title, by) = (t["title"].as_str().unwrap_or(""), t["by"].as_str().unwrap_or(""));
-            title == name || title == stem || format!("{by} - {title}") == stem
+            let full = format!("{by} - {title}");
+            title == name || title == stem || full == name || full == stem
         }).and_then(|t| t["hash"].as_str().map(String::from))
     };
     for slot in v["slots"].as_array_mut().into_iter().flatten() {

@@ -11,18 +11,22 @@
   ]
  },
  {
-  "id": "",
+  "id": "35c35e1d5db3d53eb4ce8af62fc8be947a4c97432c711d2a14e3349c3376f583",
   "name": "Drift",
-  "call_sign": "",
+  "call_sign": "DASAJA·AD0E",
+  "art": "art/drift.jpg",
+  "banner_art": "art/drift-banner.jpg",
   "about": "Long ambient, drone and piano for work and sleep, from musicians who set it free under Creative Commons.",
   "kinds": [
    "music"
   ]
  },
  {
-  "id": "",
+  "id": "1131d666f877cc10aa5d23af0d1a5aef1a768a59b6e38dcbb69bbcc7d4f53d9a",
   "name": "Concert Hall",
-  "call_sign": "",
+  "call_sign": "ZAVASI·4874",
+  "art": "art/concert-hall.jpg",
+  "banner_art": "art/concert-hall-banner.jpg",
   "about": "Bach, Chopin, Beethoven and more, in modern recordings free for anyone to play.",
   "kinds": [
    "music"
@@ -94,9 +98,11 @@
   ]
  },
  {
-  "id": "",
+  "id": "0df7a7bc3b395c7f84fd9c6e4f518650b12fe3cf4ba10b65372d34ab72e4b820",
   "name": "Brass",
-  "call_sign": "",
+  "call_sign": "GAJUGE·C531",
+  "art": "art/brass.jpg",
+  "banner_art": "art/brass-banner.jpg",
   "about": "Sousa's marches to 1926 by the Marine Band, with the bands of the Navy, Army and Air Force.",
   "kinds": [
    "music"
