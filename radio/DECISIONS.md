@@ -623,3 +623,11 @@ At Dylan's word: the network held up by listeners alone, with no relay, Lantern 
 - **Routes stand apart.** A tab's exit and middle come from a relay home, /16 and introducer other than its guard's where one exists, and no one radio takes over a quarter of its last hundred; where none can be had the route goes all the same and is counted. A node's middle is never drawn from its guard's relay while another radio is there.
 - **The installed player is a whole copy.** A service worker keeps every file, wasm included, opens with no website at all, and takes a new copy only when two of the three release keys have signed its list of files, as for the app.
 - **What it costs.** With no relay at all, tabs play but carry nothing: decks and ways in stay relay-only, because a door knows its tab's address and would see the way in's asks arrive. A computer starts with itself after its first listen, said once and undone in Settings.
+
+## LIII. The fifth audit: no listener's address in the open, and a radio on Tor is never a door (15 November 2026)
+
+Four reviewers read 0.9.18 for what a stranger can learn about who broadcasts, who listens and where they live. Their notes are in audit-notes/2026-11-15/; Dylan's copy is the doc "The fifth Pyrate Radio audit".
+
+- **A radio running dark is never a door.** A door's note names the address the home router gives it, which is the address Tor is there to hide. `door_open` now refuses while dark, before any socket or router is touched (1bb060e).
+- **Only kept doors are published.** A Lantern's /doors.txt, the player it serves and every build carry doors with `app: false` alone. A listener's app door is heard in the gossip and lapses there; it is never written into a page or a pinned build (1bb060e).
+- **0.9.19 carries every critical and high finding.** First among them, a keeper's own device must stop answering clear requests for its own station, and listeners' devices must stop answering for what they played. Four choices wait on Dylan: doors off by default, how a new tab draws hops while HOSTIS runs the only harbours, number0 behind a switch, and hostis.black carrying HOSTIS's stations alone.
