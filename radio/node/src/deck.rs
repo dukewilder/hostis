@@ -189,11 +189,19 @@ impl Inner {
             let middle = self.middle(&[*guard.as_bytes(), intro]).ok_or_else(|| anyhow!("no middle"))?;
             let ask = postcard::to_stdvec(&Ask::Pull { cookie, note, answers })?;
             let (hop, ciphers) = crate::hop::three_hops(middle.as_bytes(), &intro, &ask, None)?;
-            let raw = tokio::time::timeout(Duration::from_secs(12), self.hop(guard, &hop)).await.map_err(|_| anyhow!("slow pull"))??;
-            let Some(items) = crate::hop::open_layers(&ciphers, &raw).and_then(|p| postcard::from_bytes::<Vec<(u64, Vec<u8>)>>(&p).ok()) else {
-                // Most often a middle that has gone: the next pull draws another.
+            let raw = tokio::time::timeout(Duration::from_secs(12), self.hop(guard, &hop)).await;
+            let items = match &raw {
+                Ok(Ok(raw)) => crate::hop::open_layers(&ciphers, raw).and_then(|p| postcard::from_bytes::<Vec<(u64, Vec<u8>)>>(&p).ok()),
+                _ => None,
+            };
+            let Some(items) = items else {
+                // Most often a middle that has gone, slow or silent: the next pull draws another.
                 self.failed.lock().unwrap().insert(*middle.as_bytes(), now_ms());
-                return Err(anyhow!("the pull came back empty"));
+                return Err(match raw {
+                    Err(_) => anyhow!("slow pull"),
+                    Ok(Err(e)) => e,
+                    Ok(Ok(_)) => anyhow!("the pull came back empty"),
+                });
             };
             for (id, blob) in items.into_iter().take(16) {
                 let me = self.clone();
