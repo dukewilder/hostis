@@ -15,7 +15,7 @@ button{background:none;border:0;color:inherit;padding:0;margin:0;cursor:pointer;
 .top .mh-title a{color:var(--ink)}.top .mh-title a:hover{color:var(--ink)}
 .top .mh-sub{font-size:clamp(14px,2.4vw,17px);margin-top:8px}
 .signalrow{display:flex;gap:.9rem;justify-content:center;align-items:center;flex-wrap:wrap;margin:16px 0 0;min-height:30px}
-.signal{font:400 11.5px var(--mono);letter-spacing:.2em;color:var(--faint);text-transform:uppercase}
+.signal{font:400 11.5px var(--mono);letter-spacing:.2em;color:var(--soft);text-transform:uppercase}
 .signal:not(:empty)::before{content:'';display:inline-block;width:5px;height:5px;background:var(--dim);transform:rotate(45deg);margin:0 .7rem .15rem 0;vertical-align:middle}
 .signalrow .btn{min-height:40px;padding:.3rem .9rem;font-size:.7rem}
 .mirrorbox:has(.mirrors:empty){display:none}
@@ -56,7 +56,7 @@ button{background:none;border:0;color:inherit;padding:0;margin:0;cursor:pointer;
 .freq{font:300 1.6rem var(--mono);letter-spacing:.04em;color:var(--ink);font-variant-numeric:tabular-nums}
 .freq:not(:empty)::after{content:'on the dial';font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin-left:.6rem;vertical-align:.35em}
 .ident .cs{font:400 .76rem var(--mono);letter-spacing:.14em;color:var(--dim);white-space:pre}
-.slot{font:400 11px var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--faint);min-height:1.2em;margin-top:1.4rem}
+.slot{font:400 11px var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--dim);min-height:1.2em;margin-top:1.4rem}
 .set .np{font-style:italic;font-size:1.5rem;line-height:1.3;min-height:1.4em;margin-top:.3rem;color:var(--bonedim)}
 .set .by{font:600 .74rem var(--carved);letter-spacing:.22em;text-transform:uppercase;color:var(--dim);min-height:1.2em;margin-top:.35rem}
 .prog{position:relative;height:1px;background:var(--line);margin-top:1.2rem;max-width:440px}
@@ -72,7 +72,7 @@ button{background:none;border:0;color:inherit;padding:0;margin:0;cursor:pointer;
 @keyframes breathe{50%{opacity:.45}}
 .set.tuning .np{color:var(--soft);font-style:normal;font:400 .95rem var(--mono);letter-spacing:.08em}
 .hint{font-style:italic;color:var(--dim);font-size:1rem;line-height:1.5;margin:.8rem 0 0;max-width:30rem}
-.time{font:400 .72rem var(--mono);letter-spacing:.08em;color:var(--faint);margin-top:.6rem;min-height:1em;font-variant-numeric:tabular-nums}
+.time{font:400 .72rem var(--mono);letter-spacing:.08em;color:var(--dim);margin-top:.6rem;min-height:1em;font-variant-numeric:tabular-nums}
 
 /* the dial: a mark for every station where its frequency falls, behind glass, and names only
    around the needle, each on a hairline down to its mark */
@@ -85,7 +85,7 @@ button{background:none;border:0;color:inherit;padding:0;margin:0;cursor:pointer;
 .scale i.major{height:13px;background:var(--dim)}
 .scale b{position:absolute;bottom:17px;transform:translateX(-50%);font:400 .68rem var(--mono);letter-spacing:.06em;color:var(--dim)}
 .names{position:absolute;left:0;right:0;top:9px;height:26px}
-.names button{position:absolute;top:0;padding:0;min-height:26px;font:400 .68rem var(--mono);letter-spacing:.14em;text-transform:uppercase;
+.names button{position:absolute;top:-9px;padding:9px 0;min-height:44px;font:400 .68rem var(--mono);letter-spacing:.14em;text-transform:uppercase;
   color:var(--faint);white-space:nowrap;max-width:9.5rem;overflow:hidden;text-overflow:ellipsis;line-height:26px;transition:color .15s}
 .names button:hover{color:var(--ink)}
 .names button.on{color:var(--ink)}
@@ -330,7 +330,7 @@ textarea{display:block;width:100%;min-height:9rem;padding:.7rem;margin:1rem 0 .6
   button.power{min-height:58px}
   .passbox{flex-direction:column;text-align:center}.passbox .row-btns{justify-content:center}
 }
-@media (prefers-reduced-motion:reduce){.needle,.prog div{transition:none}.lamp.on,.set.tuning .needle,.row.skel,.row.playing .count::before{animation:none}.prog.busy div{animation-duration:3s}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.needle,.prog div,.vu .vun{transition:none}.lamp.on,.set.tuning .needle,.row.skel,.row.playing .count::before{animation:none}.prog.busy div{animation-duration:3s}}
 
 /* inside another page, the set alone */
 html.embed,html.embed body{background:transparent;min-height:0}
@@ -367,7 +367,7 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 
 /* raising colours from the tab */
 .field{display:block;margin:0 0 1rem}
-.field>span{display:block;font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin-bottom:.35rem}
+.field>span{display:block;font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin-bottom:.35rem}
 .field input{width:100%}
 input[type=password]{background:var(--panel);color:var(--ink);border:1px solid rgba(237,228,206,.24);border-radius:0;font:400 1rem var(--serif);padding:0 .9rem;min-height:44px}
 .studio .switches{flex-direction:row;flex-wrap:wrap;gap:.6rem 1.6rem;justify-content:center;width:auto}
@@ -379,7 +379,7 @@ input[type=password]{background:var(--panel);color:var(--ink);border:1px solid r
 .st-card{display:flex;align-items:center;gap:.9rem;padding:.8rem;border:1px solid var(--line);background:var(--panel);margin:0 0 .6rem}
 .st-card .meta{flex:1;min-width:0}.st-card .name{font:400 1.2rem var(--sc);letter-spacing:.02em;color:var(--ink)}
 .st-card .cs{font:400 .7rem var(--mono);letter-spacing:.14em;color:var(--dim)}
-.st-status{font:400 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);text-align:center;margin:.4rem 0 1rem;min-height:1.2em}
+.st-status{font:400 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--soft);text-align:center;margin:.4rem 0 1rem;min-height:1.2em}
 .st-status .live{color:var(--redup)}
 .drop{display:flex;flex-direction:column;align-items:center;gap:.3rem;padding:1.6rem 1rem;border:1px dashed rgba(237,228,206,.3);background:rgba(237,228,206,.015);cursor:pointer;text-align:center;margin:0 0 1rem;transition:border-color .18s,background .18s}
 .drop:hover,.drop.over{border-color:var(--faint)}
@@ -389,6 +389,8 @@ input[type=password]{background:var(--panel);color:var(--ink);border:1px solid r
 .st-queue{margin:0 0 1rem}
 .qi{display:flex;align-items:baseline;gap:.8rem;padding:.55rem 0;border-bottom:1px solid var(--line-soft)}
 .qi .qt{flex:1;min-width:0;color:var(--bonedim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qi .qt{display:flex;flex-wrap:wrap;gap:.2rem .6rem}.qi .qt input{flex:1 1 9rem;min-width:0;min-height:44px;background:none;border:0;border-bottom:1px solid var(--line-soft);color:var(--bonedim);font:inherit;padding:0}
+.qi .qt input.qb-in{color:var(--dim)}.qi .qt input:disabled{border-color:transparent}.qi .qgo{flex:0 0 auto;min-height:44px}
 .qi .qs{font:400 .66rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);flex:0 0 auto}
 .qi.done .qs{color:var(--ink)}.qi.bad .qs{color:var(--redup)}
 .qi .bar{flex:0 0 70px;height:1px;background:var(--line);position:relative;align-self:center}.qi .bar i{position:absolute;inset:0 auto 0 0;background:var(--ink)}
@@ -594,7 +596,7 @@ input[type=time]{background:var(--panel);color:var(--ink);border:1px solid rgba(
 button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228,206,.05)}
 .sleeprow{cursor:default}
 #sleepbtns{display:flex;gap:2px}
-#sleepbtns button{min-width:36px;min-height:34px;padding:0 .35rem;background:none;border:1px solid var(--line);color:var(--dim);font:400 .72rem var(--mono);cursor:pointer}
+#sleepbtns button{min-width:44px;min-height:44px;padding:0 .35rem;background:none;border:1px solid var(--line);color:var(--dim);font:400 .72rem var(--mono);cursor:pointer}
 #sleepbtns button:hover{color:var(--ink);border-color:var(--faint)}
 #sleepbtns button[aria-pressed="true"]{color:var(--ink);border-color:var(--ink)}
 .played{list-style:none;margin:0;padding:.2rem .95rem .6rem;max-height:10rem;overflow-y:auto;border-top:1px solid var(--line)}

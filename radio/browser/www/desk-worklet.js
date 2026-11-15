@@ -3,7 +3,10 @@
 // comes out and a keeper who asks has the voice shifted. pyrate-air is the air itself: a limiter
 // that looks ahead, so the air never clips, and a tap that hands it to the encoder as it is made.
 // No rights reserved.
-const HUM = [50, 60, 100, 120, 150, 180, 200, 240, 250, 300, 350, 360], GRAIN = 1920;
+// Every harmonic of either grid up to 1 kHz (core voice.rs HUM: 33, ascending), each notched
+// twice in cascade, so neither the higher harmonics nor a notch's residue keep the grid's trace.
+const HUM = [50, 60, 100, 120, 150, 180, 200, 240, 250, 300, 350, 360, 400, 420, 450, 480, 500,
+  540, 550, 600, 650, 660, 700, 720, 750, 780, 800, 840, 850, 900, 950, 960, 1000], GRAIN = 1920;
 // The keeper's microphone comes in as one channel. A second microphone or an interface may bring
 // two: each loses its hum, and none of it is shifted.
 class Voice extends AudioWorkletProcessor {
@@ -15,7 +18,7 @@ class Voice extends AudioWorkletProcessor {
     this.port.onmessage = e => this.tune(e.data.semis ?? this.semis);
   }
   notches() {
-    return HUM.map(f => { const w = 2 * Math.PI * f / sampleRate, al = Math.sin(w) / 60, a0 = 1 + al;
+    return HUM.flatMap(f => [f, f]).map(f => { const w = 2 * Math.PI * f / sampleRate, al = Math.sin(w) / 60, a0 = 1 + al;
       return { b0: 1 / a0, b1: -2 * Math.cos(w) / a0, b2: 1 / a0, a1: -2 * Math.cos(w) / a0, a2: (1 - al) / a0, x1: 0, x2: 0, y1: 0, y2: 0 } });
   }
   tune(semis) { this.semis = semis; this.ratio = Math.pow(2, Math.max(-12, Math.min(12, semis || 0)) / 12); this.shift = Math.abs(this.ratio - 1) > 1e-6 }

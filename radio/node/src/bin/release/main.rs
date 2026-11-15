@@ -19,10 +19,20 @@
 //!
 //! release sign-apk <android-key.txt> <android-cert.der> <unsigned.apk> <signed.apk>
 //!     Signs an APK, offline.
+//!
+//! release sign-all <words file, or - to type them> <key number 1-3> <release folder or one file>
+//!     Signs everything a release carries in one go: the APK (named <code>-<version>.apk),
+//!     player.manifest, players.txt, the computers' builds and the bearings. Each signature goes
+//!     into a file beside its artifact, kept with any other holder's, so two holders sign the
+//!     same folder in turn.
+//!
+//! release check <release folder>
+//!     Says in plain words what in the folder is signed, and by how many keys.
 
 use std::path::PathBuf;
 
 mod apksign;
+mod sigs;
 
 use pyrate_core::{Archive, Body, StationKey, release_message};
 use pyrate_node::store::Store;
@@ -117,7 +127,55 @@ fn main() -> anyhow::Result<()> {
             std::fs::write(out, apksign::sign(&apk, &key, &cert)?)?;
             println!("Signed: {out}");
         }
-        _ => eprintln!("release init <folder> | sign <words> <1-3> <apk> <code> | genesis <words 1> <folder> | android-init <folder> | sign-apk <key> <cert> <in> <out> | canary [file] [text] | sign-paper <words> <1-3> <bearings.json|canary.json>"),
+        Some("sign-all") => {
+            let src = a.get(2).ok_or_else(|| anyhow::anyhow!("words file, or - to type the words"))?;
+            let n: u8 = a.get(3).and_then(|s| s.parse().ok()).filter(|n| (1..=3).contains(n)).ok_or_else(|| anyhow::anyhow!("key number 1-3"))?;
+            let target = PathBuf::from(a.get(4).cloned().unwrap_or_else(|| ".".into()));
+            let words = if src == "-" {
+                println!("Type the 24 words of release key {n}, with a space between each, then press Enter.");
+                let mut w = String::new();
+                std::io::stdin().read_line(&mut w)?;
+                w
+            } else {
+                std::fs::read_to_string(src)?
+            };
+            let key = StationKey::from_phrase(&words).map_err(|_| anyhow::anyhow!("those are not 24 good words: check them against your paper and try again"))?;
+            let keys = sigs::keys();
+            if keys.get(n as usize - 1).is_some_and(|k| *k != key.id().0) {
+                anyhow::bail!("those words are not release key {n}: check the number and the words against your paper");
+            }
+            let (folder, all) = if target.is_file() {
+                let folder = target.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+                let all: Vec<_> = sigs::artifacts(&folder).into_iter().filter(|x| x.path.file_name() == target.file_name()).collect();
+                (folder, all)
+            } else {
+                (target.clone(), sigs::artifacts(&target))
+            };
+            if all.is_empty() {
+                anyhow::bail!("there is nothing to sign in {}", target.display());
+            }
+            for x in &all {
+                match sigs::sign(&key, n - 1, x) {
+                    Ok(()) => println!("Signed {}.", x.name()),
+                    Err(why) => println!("Could not sign {}: it {why}.", x.name()),
+                }
+            }
+            println!();
+            for l in sigs::report(&keys, &folder).0 {
+                println!("{l}");
+            }
+        }
+        Some("check") => {
+            let folder = PathBuf::from(a.get(2).cloned().unwrap_or_else(|| ".".into()));
+            let (lines, ready) = sigs::report(&sigs::keys(), &folder);
+            for l in lines {
+                println!("{l}");
+            }
+            if !ready {
+                std::process::exit(1);
+            }
+        }
+        _ => eprintln!("release init <folder> | sign <words> <1-3> <apk> <code> | genesis <words 1> <folder> | android-init <folder> | sign-apk <key> <cert> <in> <out> | canary [file] [text] | sign-paper <words> <1-3> <bearings.json|canary.json> | sign-all <words or -> <1-3> <folder> | check <folder>"),
     }
     Ok(())
 }

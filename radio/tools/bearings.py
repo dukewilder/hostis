@@ -18,5 +18,6 @@ if os.path.exists(p):
         if l.strip():
             cid, name = l.split(maxsplit=1)
             files.append({"name": name.strip(), "cid": cid})
-doc = {"pyrate": "bearings", "at": int(time.time() * 1000), "doors": doors, "players": players, "ipns": ipns, "onion": "", "files": files}
+onion = open(f"{R}/browser/onion.txt").read().strip() if os.path.exists(f"{R}/browser/onion.txt") else ""
+doc = {"pyrate": "bearings", "at": int(time.time() * 1000), "doors": doors, "players": players, "ipns": ipns, "onion": onion, "files": files}
 print(json.dumps(doc, indent=1))

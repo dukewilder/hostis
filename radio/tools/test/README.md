@@ -25,3 +25,7 @@ serve it (`python3 -m http.server <port>`), then rebuild the public page with pl
 - `browser_scope.py <station id>`: hostis.black's copy plays only HOSTIS's stations, hands a stranger's station, an invitation or a flock straight to the open player, and shows no chatter.
 - `browser_raise.py <wav>`: a tab raises a station in the open player, puts the recording on it and sends it along the stem; a fresh tab finds and plays it after the first has closed. Needs a Lantern that carries every station (no `--carry-own`) on the test network.
 - `browser_live.py`: a tab goes live from a fake microphone; a second tab hears the station live.
+- `players_sigs.py <release binary>`: throwaway release keys sign `players.txt` with `release sign-all`; `verify_players.py` and `pin_player.sh` (with a stand-in ipfs) move the player's fixed name only for a list two keys signed, keep it on the last signed player otherwise, and refuse a shorter list.
+- `hum_comb.js` (node): the encoder's hum comb takes every harmonic of 50 and 60 Hz up to 1 kHz down by more than 40 dB and lets the tones between them through.
+- `rustc --edition 2021 --test browser/src/pure.rs -o /tmp/pure && /tmp/pure`: the tab's rules with no network in them (quarter-hour stamps, the held track's chunk).
+- `browser_fifth.py [port]`: with no network, a test copy names no station in its title, keeps hidden stations, the chat name and its keys sealed, cleans studio titles by the app's rules, never dials a door a link alone names, and lets go of its worker and caches on Forget and stays stopped.

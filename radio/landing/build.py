@@ -45,7 +45,14 @@ if os.path.isdir(D) and all(os.path.exists(f"{D}/{k[1]}") for k in kinds):
         sha_d = hashlib.sha256(open(f"{out}/{name}", "rb").read()).hexdigest()
         subprocess.run([sys.executable, f"{R}/tools/torrent.py", f"{out}/{name}", f"{out}/{name}.torrent", f"https://hostis.black/pyrateradio/{name}"], capture_output=True, text=True, check=True)
         links.append(f'<a href="{name}"><b>{label}</b><small>{how}</small></a>')
-        sums.append(f"{label.lower()} {sha_d} · <a href=\"{name}.torrent\">torrent</a><br>")
+        # The release keys' signatures over its SHA-256 (release sign-all), when the holders
+        # have sent them back: the file beside the zip in landing/desktop/.
+        signed = ""
+        got = [p for p in (f"{D}/{f}.sigs", f"{D}/{name}.sigs") if os.path.exists(p)]
+        if got:
+            shutil.copy(got[0], f"{out}/{name}.sigs")
+            signed = f' · <a href="{name}.sigs">signatures</a>'
+        sums.append(f"{label.lower()} {sha_d} · <a href=\"{name}.torrent\">torrent</a>{signed}<br>")
     desk = ('<h3 class="small">On a computer</h3>\n<div class="desk">' + "".join(links) + '</div>\n'
             '<p class="note">Version ' + appver + '. On a Mac, open it the first time with a right-click and Open. Computers take new versions from this page.</p>')
     desk_sums = "".join(sums)

@@ -39,6 +39,9 @@ use wasm_bindgen::prelude::*;
 #[path = "../../node/src/net.rs"]
 #[allow(dead_code)]
 mod net;
+/// Rules with no network in them, tested on their own: `rustc --test browser/src/pure.rs`.
+mod pure;
+use pure::{chunk_at, quarter_stamp};
 use net::{ALPN, Announce, Gossip, MAX_FRAME, Request, Response, Sketch};
 
 /// The same relays the app uses: number0's, and the crew's own.
@@ -470,6 +473,15 @@ struct Ship {
     neighbours: Mutex<HashSet<EndpointId>>,
     /// Keyed hashes from this make the hourly listener tokens. It never leaves the tab.
     token_key: [u8; 32],
+    /// The track each station's set has begun, with when it began and ends (ms): it plays out.
+    held: Mutex<HashMap<StationId, (Hash, u64, u64)>>,
+    /// The secret the tab's chat voices come from: the page's own, kept apart from the counting
+    /// key; a fresh one each visit until the page hands it over.
+    chat_key: Mutex<[u8; 32]>,
+    /// Where ballast may be drawn from: HOSTIS's stations alone on hostis.black and the embed
+    /// (None: the whole Log), and whether explicit stations may be (the listener shows them).
+    ballast_from: Mutex<Option<HashSet<StationId>>>,
+    ballast_explicit: std::sync::atomic::AtomicBool,
     tuned: Mutex<Option<StationId>>,
     tokens_sent: Mutex<HashMap<StationId, u64>>,
     syncing: Mutex<HashSet<StationId>>,
@@ -484,6 +496,8 @@ struct Ship {
     suspect: Mutex<HashMap<EndpointId, u64>>,
     /// Off unless the listener turns it on: carriers asked directly when two hops fail.
     direct_ok: std::sync::atomic::AtomicBool,
+    /// "Direct links": whether this tab may open a WebRTC link of its own to a door or its guard.
+    direct_links: std::sync::atomic::AtomicBool,
     /// Each station's clock, rebuilt only when its log grows: the player asks every second.
     clocks: Mutex<HashMap<StationId, (u64, Clock)>>,
     /// When each log was last played or synced, so the least used go first when trimming.
@@ -539,6 +553,7 @@ fn raw_now() -> u64 {
     js_sys::Date::now() as u64
 }
 
+
 impl Ship {
     /// The tab's clock, corrected by the median gap to the stations' own signed times,
     /// as the app does.
@@ -590,8 +605,10 @@ impl Ship {
 
     /// The tab's voice under a station's colours: from its own kept key, so the same voice
     /// comes back on the next visit from this browser.
+    /// The voice comes from a secret of its own (`set_chat_key`), apart from the counting key,
+    /// so a counting key taken from this browser names no voice in any room.
     fn voice(&self, st: &StationId) -> pyrate_core::StationKey {
-        let secret = *blake3::keyed_hash(&self.token_key, b"pyrate/chat/secret").as_bytes();
+        let secret = *blake3::keyed_hash(&self.chat_key.lock().unwrap(), b"pyrate/chat/secret").as_bytes();
         pyrate_core::chat::voice(&secret, st)
     }
 
@@ -903,6 +920,10 @@ impl Ship {
     /// by the same source.
     fn apart(&self, a: &EndpointId, b: &EndpointId) -> bool {
         if a == b {
+            return false;
+        }
+        // The harbours are all HOSTIS's: one operator, never two roles on one route.
+        if self.harbour.contains(a) && self.harbour.contains(b) {
             return false;
         }
         // A door sees all that the radios behind it send and get.
@@ -1831,7 +1852,11 @@ impl Ship {
                 match self.exits_for(&apart, &[first], 1, ask.station()).first() {
                     Some(e) => *e,
                     None => {
-                        let e = *self.exits_for(&nodes, &[first], 1, ask.station()).first().ok_or_else(|| anyhow!("no exit"))?;
+                        // Nothing apart: still never a harbour behind a harbour while another
+                        // radio is known; with none, the route goes anyway.
+                        let others: Vec<EndpointId> = nodes.iter().filter(|n| !self.harbour.contains(n)).copied().collect();
+                        let from = if self.harbour.contains(&first) && others.iter().any(|n| *n != first) { &others } else { &nodes };
+                        let e = *self.exits_for(from, &[first], 1, ask.station()).first().ok_or_else(|| anyhow!("no exit"))?;
                         let capped = !nodes.iter().any(|n| *n != first && self.under_cap(n));
                         let mut d = self.doors.lock().unwrap();
                         d.routes_shared += 1;
@@ -2179,7 +2204,7 @@ impl Ship {
         let h = {
             let mut archives = self.archives.lock().unwrap();
             let a = archives.get_mut(&st).ok_or_else(|| js(anyhow!("the station's log is not aboard yet")))?;
-            let at = raw_now().max(a.entries().last().map(|e| e.entry.at_ms + 1).unwrap_or(0));
+            let at = quarter_stamp(raw_now(), a.entries().last().map(|e| e.entry.at_ms));
             let body = if key.id() == st { body } else { Body::Deputed { by: key.id().0, body: Box::new(body) } };
             a.write(&key, at, body).map_err(|e| js(anyhow!("{e}")))?.hash().map_err(|e| js(anyhow!("{e}")))?
         };
@@ -2238,7 +2263,41 @@ impl Ship {
             }
         }
         let clock = &clocks.get(station).expect("just set").1;
-        let Some(np) = clock.now(at) else {
+        let np_now = clock.now(at);
+        // A track that has begun plays out. While a station's log is still coming aboard, each
+        // page of it can move the schedule, and the set would otherwise jump from song to song
+        // in its first seconds; the new schedule takes over when the held track ends.
+        {
+            let mut held = self.held.lock().unwrap();
+            if let Some((track, start, end)) = held.get(station).copied() {
+                let moved = np_now.as_ref().is_none_or(|np| np.track != track);
+                if at >= start && at < end && moved {
+                    if let Some((title, by, chunks, channels)) = Self::describe(a, &track) {
+                        let ds: Vec<u64> = chunks.iter().map(|c| c.duration_ms()).collect();
+                        if let Some((i, cs)) = chunk_at(&ds, at - start) {
+                            let art = a.track_art(&track).map(|r| hex(&r.hash));
+                            return json!({
+                                "kind": "track", "track": hex(&track), "title": shown(&title), "by": shown(&by), "art": art,
+                                "index": i, "chunk": hex(&chunks[i].hash), "chunk_ms": ds[i],
+                                "chunk_start": start + cs, "channels": channels,
+                                "position_ms": at - start, "duration_ms": end - start, "slot": np_now.as_ref().and_then(|n| n.slot.clone()),
+                                "next": chunks.get(i + 1).map(|c| hex(&c.hash)),
+                            });
+                        }
+                    }
+                }
+            }
+            match np_now.as_ref() {
+                Some(np) => {
+                    let start = at - np.offset_ms;
+                    held.insert(*station, (np.track, start, start + np.duration_ms));
+                }
+                None => {
+                    held.remove(station);
+                }
+            }
+        }
+        let Some(np) = np_now else {
             // Off the air until its next spell, or nothing yet to play.
             return match clock.next_on(at, at + 7 * 86_400_000).as_ref() {
                 Some(b) => json!({ "kind": "off air", "back_at": b.0 }),
@@ -2333,14 +2392,12 @@ extern "C" {
     /// its sealed name, or null. Missing on pages that keep none.
     #[wasm_bindgen(catch, js_name = pyrateStockGet)]
     fn stock_get(name: &str) -> Result<js_sys::Promise, JsValue>;
-    /// The direct link to the guard (app.js): an offer for `peer`, its answer taken, an offer
-    /// from `peer` answered, and one request over the link. Each fails at once where there is none.
+    /// The direct link to the guard (app.js): an offer for `peer`, its answer taken, and one
+    /// request over the link. Each fails at once where there is none.
     #[wasm_bindgen(catch, js_name = pyrateRtcOffer)]
     fn rtc_offer(peer: &str) -> Result<js_sys::Promise, JsValue>;
     #[wasm_bindgen(catch, js_name = pyrateRtcAnswer)]
     fn rtc_answer(peer: &str, sdp: &str) -> Result<js_sys::Promise, JsValue>;
-    #[wasm_bindgen(catch, js_name = pyrateRtcAccept)]
-    fn rtc_accept(peer: &str, sdp: &str) -> Result<js_sys::Promise, JsValue>;
     #[wasm_bindgen(catch, js_name = pyrateRtcAsk)]
     fn rtc_ask(peer: &str, bytes: &[u8]) -> Result<js_sys::Promise, JsValue>;
     /// The door's data channel (app.js): one request and its answer, and a control frame out.
@@ -2397,19 +2454,10 @@ impl Ship {
             },
             Hop::Sealed { eph, ct } => self.on_sealed(from, eph, ct).await,
             Hop::Stem { .. } => vec![],
-            // A requester that keeps this tab as its guard offers a direct link. Over it this
-            // tab will take forwards from that requester and nothing else (see `rtc_serve`).
-            Hop::Rtc { sdp } if sdp.len() <= 16 * 1024 => {
-                // A radio that may learn this tab's address is never a way in to its decks.
-                self.crew.lock().unwrap().rtc_clients.insert(from);
-                match rtc_accept(&from.to_string(), &sdp) {
-                    Ok(p) => match wasm_bindgen_futures::JsFuture::from(p).await {
-                        Ok(v) => v.as_string().unwrap_or_default().into_bytes(),
-                        Err(_) => vec![],
-                    },
-                    Err(_) => vec![],
-                }
-            }
+            // An offer of a direct link this tab did not ask for. A tab's id lasts one visit, so
+            // no requester keeps it as a guard, and answering would send UDP from this device's
+            // own address to wherever the sender chose. A tab only ever starts a direct link
+            // itself, to a door or a guard it drew.
             Hop::Rtc { .. } => vec![],
         };
         if out.is_empty() || !self.spend(out.len()) {
@@ -2726,6 +2774,8 @@ impl Ship {
             .filter(|(n, (_, at))| now.saturating_sub(*at) < CREW_FRESH_MS && **n != me && Some(**n) != first && !c.guards.contains(n) && !not.contains(n) && !away.contains(*n) && !c.rtc_clients.contains(*n))
             .map(|(n, _)| *n)
             .collect();
+        // The harbours count as one operator: a way in from them only when no other radio is
+        // known at all, whatever the first hop.
         let others: Vec<EndpointId> = pool.iter().filter(|n| !self.harbour.contains(n)).copied().collect();
         let from = if others.is_empty() { pool } else { others };
         (!from.is_empty()).then(|| from[pick(from.len())])
@@ -2885,12 +2935,16 @@ impl Ship {
             (c.stock.values().map(|x| x.0).collect(), c.played.clone())
         };
         let now = self.now();
+        let only = self.ballast_from.lock().unwrap().clone();
+        let explicit_ok = self.ballast_explicit.load(std::sync::atomic::Ordering::Relaxed);
         let mut cands: Vec<(bool, usize, [u8; 32], StationId)> = self
             .log
             .lock()
             .unwrap()
             .iter()
             .filter(|(id, l)| Some(**id) != tuned && !played.contains(id) && !pockets.contains(id) && !struck.contains(id) && l.announce.as_ref().is_some_and(|a| now.saturating_sub(a.at_ms) < 15 * 60_000))
+            // Within the page's scope, and never an explicit station the listener does not show.
+            .filter(|(id, l)| only.as_ref().is_none_or(|o| o.contains(id)) && (explicit_ok || !l.announce.as_ref().is_some_and(|a| a.explicit)))
             .map(|(id, l)| {
                 let mut h = blake3::Hasher::new_keyed(&self.token_key);
                 h.update(b"pyrate/tab-ballast/v1");
@@ -2955,7 +3009,7 @@ impl Ship {
         // keeps from an earlier visit, a radio known long enough to be one (rule A).
         let first = *self.first_hop.lock().unwrap();
         if let Some(f) = first {
-            let go = {
+            let go = self.direct_links.load(std::sync::atomic::Ordering::Relaxed) && {
                 let mut c = self.crew.lock().unwrap();
                 c.kept.contains(&f) && c.rtc_tried.insert(f)
             };
@@ -3227,6 +3281,20 @@ impl std::fmt::Debug for Ship {
 }
 
 /// The tab's node, as the page sees it.
+/// A title made from a file name, cleaned by the app's own rules (core plain_title): JSON
+/// {text, cut}, where cut says something was taken out.
+#[wasm_bindgen]
+pub fn plain_title(s: &str) -> String {
+    let (text, cut) = pyrate_core::chat::plain_title(s);
+    json!({ "text": text, "cut": cut }).to_string()
+}
+
+/// A recording's "by", cleaned as a title is (core plain_by).
+#[wasm_bindgen]
+pub fn plain_by(s: &str) -> String {
+    pyrate_core::chat::plain_by(s)
+}
+
 #[wasm_bindgen]
 pub struct Radio {
     ship: Arc<Ship>,
@@ -3243,7 +3311,10 @@ impl Radio {
     ///
     /// A harbour entry may name its relay, as `<id>@<relay url>`, so it is found without a
     /// lookup. `relays`, when not empty, replaces the usual relays: for a private network.
-    pub async fn start(harbour: String, token_key: String, relays: String) -> Result<Radio, JsValue> {
+    /// `n0` is "Use number0's relays when ours fail": on, number0's relays come in when none of
+    /// ours has answered within fifteen seconds, and number0's address server may be asked
+    /// about a harbour named without its relay. Off, number0 is never contacted.
+    pub async fn start(harbour: String, token_key: String, relays: String, n0: bool) -> Result<Radio, JsValue> {
         let book = iroh::address_lookup::MemoryLookup::new();
         let book2 = book.clone();
         let mut ids = Vec::new();
@@ -3259,20 +3330,18 @@ impl Radio {
             }
             ids.push(id);
         }
+        // A harbour kept from an older build without its relay is the same harbour.
+        let mut seen = HashSet::new();
+        ids.retain(|id| seen.insert(*id));
         let harbour = ids;
         let token_key = unhex32(&token_key).map_err(js)?;
         let custom: Vec<iroh::RelayUrl> = relays.split(',').filter_map(|r| r.trim().parse().ok()).collect();
         if custom.iter().any(|u| !net::relay_public(u.as_str())) {
             net::LOCAL_RELAYS_OK.store(true, std::sync::atomic::Ordering::Relaxed);
         }
+        let standby = custom.is_empty() && n0;
         let relays = if custom.is_empty() {
-            let m = iroh::defaults::prod::default_relay_map();
-            for r in CREW_RELAYS {
-                if let Ok(url) = r.parse::<iroh::RelayUrl>() {
-                    m.insert(url.clone(), Arc::new(iroh::RelayConfig::from(url)));
-                }
-            }
-            m
+            iroh::RelayMap::from_iter(CREW_RELAYS.iter().filter_map(|r| r.parse::<iroh::RelayUrl>().ok()))
         } else {
             iroh::RelayMap::from_iter(custom)
         };
@@ -3284,7 +3353,7 @@ impl Radio {
         // own book (harbours and carriers' signed notes). number0's server is asked only about
         // the harbours.
         // Only a harbour named without its relay is looked up at all.
-        let doors: Arc<HashSet<EndpointId>> = Arc::new(unplaced);
+        let doors: Arc<HashSet<EndpointId>> = Arc::new(if n0 { unplaced } else { HashSet::new() });
         let ep = Endpoint::builder(presets::Minimal)
             .secret_key(SecretKey::from_bytes(&seed))
             .relay_mode(iroh::RelayMode::Custom(relays))
@@ -3296,6 +3365,19 @@ impl Radio {
         let gossip = GossipNet::builder().max_message_size(128 * 1024).spawn(ep.clone());
         let proto = Proto(Arc::new(Mutex::new(None)));
         let router = Router::builder(ep.clone()).accept(ALPN, proto.clone()).accept(GOSSIP_ALPN, gossip.clone()).spawn();
+        if standby {
+            // number0's relays, only once ours have had fifteen seconds and none answered.
+            let ep2 = ep.clone();
+            spawn(async move {
+                sleep(Duration::from_secs(15)).await;
+                if ep2.addr().relay_urls().next().is_none() {
+                    say("our relays did not answer: number0's come in");
+                    for url in iroh::defaults::prod::default_relay_map().urls::<Vec<iroh::RelayUrl>>() {
+                        ep2.insert_relay(url.clone(), Arc::new(iroh::RelayConfig::from(url))).await;
+                    }
+                }
+            });
+        }
         let ship = Arc::new(Ship {
             ep,
             gossip: gossip.clone(),
@@ -3314,6 +3396,14 @@ impl Radio {
             conns: Mutex::new(HashMap::new()),
             neighbours: Mutex::new(HashSet::new()),
             token_key,
+            held: Mutex::new(HashMap::new()),
+            chat_key: Mutex::new({
+                let mut k = [0u8; 32];
+                let _ = getrandom::fill(&mut k);
+                k
+            }),
+            ballast_from: Mutex::new(None),
+            ballast_explicit: std::sync::atomic::AtomicBool::new(false),
             tuned: Mutex::new(None),
             tokens_sent: Mutex::new(HashMap::new()),
             syncing: Mutex::new(HashSet::new()),
@@ -3323,6 +3413,7 @@ impl Radio {
             first_hop: Mutex::new(None),
             suspect: Mutex::new(HashMap::new()),
             direct_ok: std::sync::atomic::AtomicBool::new(false),
+            direct_links: std::sync::atomic::AtomicBool::new(true),
             clocks: Mutex::new(HashMap::new()),
             touched: Mutex::new(HashMap::new()),
             struck: Mutex::new(HashSet::new()),
@@ -3491,14 +3582,14 @@ impl Radio {
         let (master, phrase) = pyrate_core::StationKey::generate_with(pass).map_err(|e| js(anyhow!("{e}")))?;
         let deputy = pyrate_core::StationKey::generate().map_err(|e| js(anyhow!("{e}")))?;
         let id = master.id();
-        let now = raw_now();
+        let now = quarter_stamp(raw_now(), None);
         let mut a = Archive::new(id);
         let kinds: Vec<String> = kinds.split(',').map(|k| k.trim().to_lowercase()).filter(|k| !k.is_empty()).take(5).collect();
         let w = |a: &mut Archive, at: u64, b: Body| a.write(&master, at, b).map(|_| ()).map_err(|e| js(anyhow!("{e}")));
         w(&mut a, now, Body::Colours { name: name.into(), about: about.trim().chars().take(140).collect(), port: None, tip: None })?;
-        // A plain label: what the deputy is written into a public log, so it says nothing of
-        // where the station was raised.
-        w(&mut a, now + 1, Body::Deputy { key: deputy.id().0, label: "deputy".into() })?;
+        // The label the app writes for its own deputy, so the public log says nothing of where
+        // the station was raised.
+        w(&mut a, now + 1, Body::Deputy { key: deputy.id().0, label: "phone".into() })?;
         if !kinds.is_empty() || mature {
             w(&mut a, now + 2, Body::Details { kinds, mature })?;
         }
@@ -3553,8 +3644,8 @@ impl Radio {
                 let Some(a) = archives.get_mut(&id).filter(|a| a.len() > 0) else {
                     return Err(js(anyhow!("the station's log could not be found yet; try again in a minute")));
                 };
-                let at = raw_now().max(a.entries().last().map(|e| e.entry.at_ms + 1).unwrap_or(0));
-                a.write(&master, at, Body::Deputy { key: deputy.id().0, label: "deputy".into() }).map_err(|e| js(anyhow!("{e}")))?;
+                let at = quarter_stamp(raw_now(), a.entries().last().map(|e| e.entry.at_ms));
+                a.write(&master, at, Body::Deputy { key: deputy.id().0, label: "phone".into() }).map_err(|e| js(anyhow!("{e}")))?;
             }
             let seed = hex(&deputy.seed());
             s.mine.lock().unwrap().insert(id, Mine { key: deputy, pow: None, chunks: HashMap::new(), unsent: VecDeque::new(), passed: 0, wrote: 1, sailed: 0 });
@@ -3603,6 +3694,38 @@ impl Radio {
     /// Whether carriers may be asked directly when two hops cannot be had.
     pub fn set_direct_ok(&self, on: bool) {
         self.ship.direct_ok.store(on, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// How many semitones a disguised voice goes down for recordings made here for `id`: drawn
+    /// from the key this browser records under (the station's own, or its deputy's), as the
+    /// app draws it, so each keeper's shift is their own and the same every time.
+    pub fn disguise_semitones(&self, id: &str) -> Result<f64, JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        let seed = self.ship.mine.lock().unwrap().get(&st).map(|m| m.key.seed()).ok_or_else(|| js(anyhow!("not a station this browser keeps")))?;
+        Ok(pyrate_core::voice::disguise_semitones(&seed))
+    }
+
+    /// The chat voices' own secret (64 hex), kept by the page apart from the counting key.
+    pub fn set_chat_key(&self, key: &str) {
+        if let Ok(k) = unhex32(key) {
+            *self.ship.chat_key.lock().unwrap() = k;
+        }
+    }
+
+    /// Where ballast comes from: station ids by commas (HOSTIS's own, on hostis.black and the
+    /// embed), or empty for the whole Log; and whether explicit stations may be carried. A
+    /// ballast station now outside it is let go at the next draw.
+    pub fn set_ballast(&self, only: &str, explicit: bool) {
+        let ids: HashSet<StationId> = only.split(',').filter_map(|h| unhex32(h.trim()).ok()).map(StationId).collect();
+        *self.ship.ballast_from.lock().unwrap() = (!only.trim().is_empty()).then_some(ids);
+        self.ship.ballast_explicit.store(explicit, std::sync::atomic::Ordering::Relaxed);
+        self.ship.crew.lock().unwrap().ballast_hour = 0;
+    }
+
+    /// "Direct links": off, this tab opens no WebRTC link of its own to its guard (the page
+    /// dials no door either).
+    pub fn set_direct_links(&self, on: bool) {
+        self.ship.direct_links.store(on, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// "Carry the radio while you listen", and whether this is a phone. Off closes every deck at
@@ -3820,6 +3943,9 @@ impl Radio {
     /// returning tab serves its stock at once. The bytes stay with the page until asked for.
     pub fn stock_index(&self, list: &[u8]) -> u32 {
         let Ok(items) = postcard::from_bytes::<Vec<(StationId, Hash, Hash)>>(list) else { return 0 };
+        // Stock kept on an earlier visit outside this page's scope is not served from it.
+        let only = self.ship.ballast_from.lock().unwrap().clone();
+        let items: Vec<(StationId, Hash, Hash)> = items.into_iter().filter(|(st, _, _)| only.as_ref().is_none_or(|o| o.contains(st))).collect();
         let mut c = self.ship.crew.lock().unwrap();
         let n = items.len();
         for (st, name, h) in items.into_iter().take(200_000) {
@@ -3954,7 +4080,7 @@ impl Radio {
         let track = {
             let mut archives = self.ship.archives.lock().unwrap();
             let a = archives.get_mut(&st).ok_or_else(|| js(anyhow!("the station's log is not aboard yet")))?;
-            let at = raw_now().max(a.entries().last().map(|e| e.entry.at_ms + 1).unwrap_or(0));
+            let at = quarter_stamp(raw_now(), a.entries().last().map(|e| e.entry.at_ms));
             let body = Body::Track {
                 title: title.trim().chars().take(120).collect(),
                 by: by.trim().chars().take(120).collect(),
@@ -4516,3 +4642,4 @@ impl Radio {
 pub(crate) fn shown<S: AsRef<str>>(s: S) -> String {
     pyrate_core::chat::shown(s.as_ref()).replace('\n', " ")
 }
+

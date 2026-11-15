@@ -8,7 +8,10 @@ set -e
 BASE=${BASE:-https://hostis.black/pyrateradio/ipfs}
 # curl if there is one, wget if not (the kubo image has only wget).
 get() { if command -v curl >/dev/null 2>&1; then curl -fsS -o "$2" "$1"; else wget -q -O "$2" "$1"; fi; }
-LIST=$(get "$BASE/players.txt" - )
+HERE=$(cd "$(dirname "$0")" && pwd)
+RAW=$(mktemp)
+get "$BASE/players.txt" "$RAW"
+LIST=$(cat "$RAW")
 for cid in $LIST; do
   case "$cid" in bafy*) ;; *) continue ;; esac
   if ipfs pin ls --type=recursive "$cid" >/dev/null 2>&1; then continue; fi
@@ -38,9 +41,34 @@ echo "$FILES" | while read -r cid name; do
 done
 # With IPNS_KEY set (the name of a key in this node, made once with `ipfs key gen pyrate-player`),
 # the newest player is also published under that key's fixed name, so its address, and with it
-# everything a browser keeps for the radio, stays the same from one release to the next.
+# everything a browser keeps for the radio, stays the same from one release to the next. Only a
+# list two of the three release keys signed (players.sigs, `release sign-all`) moves the name:
+# verify_players.py checks it here when this machine has Python, or the host checks it first and
+# passes what it found as SIGNED_CID (tools/dukewilder-rebuild.md). A list that fails, or one
+# shorter than the last one named, leaves the name on the last signed player.
 if [ -n "$IPNS_KEY" ]; then
-  newest=$(echo "$LIST" | grep '^bafy' | tail -1)
-  [ -n "$newest" ] && ipfs name publish --key="$IPNS_KEY" --lifetime=72h "/ipfs/$newest" >/dev/null && echo "named $newest"
+  STATE=${STATE:-${IPFS_PATH:-$HOME/.ipfs}/pyrate-named}
+  last=$(cat "$STATE" 2>/dev/null || true)
+  signed=${SIGNED_CID:-}
+  if [ -z "$signed" ] && command -v python3 >/dev/null 2>&1 && [ -f "$HERE/verify_players.py" ]; then
+    sigs=$(mktemp)
+    get "$BASE/players.sigs" "$sigs" 2>/dev/null && signed=$(python3 "$HERE/verify_players.py" "$RAW" "$sigs" || true)
+    rm -f "$sigs"
+  fi
+  name=""
+  if [ -n "$signed" ]; then
+    n=${signed%% *}; cid=${signed##* }
+    if ! echo "$LIST" | grep -qx "$cid"; then
+      echo "refused: $cid is not in players.txt"
+    elif [ -n "$last" ] && [ "$n" -lt "${last%% *}" ]; then
+      echo "refused: the signed list holds fewer players than the one last named"
+    else
+      name=$cid; echo "$n $cid" > "$STATE"
+    fi
+  else
+    echo "players.txt is not signed by two release keys"
+  fi
+  if [ -z "$name" ] && [ -n "$last" ]; then name=${last##* }; echo "the name stays on $name"; fi
+  [ -n "$name" ] && ipfs name publish --key="$IPNS_KEY" --lifetime=72h "/ipfs/$name" >/dev/null && echo "named $name"
 fi
-
+rm -f "$RAW"
