@@ -71,7 +71,9 @@ fn main() -> anyhow::Result<()> {
     let cfg = |d: &str, private: bool| Config { dir: work.join(d), quota: 1 << 30, lantern: false, bootstrap: vec![], public_dns: false, private, ballast: 0, carry_all: false, release_keys: vec![] };
     let k = Node::start(cfg("keeper", false))?;
     k.call(&json!({ "cmd": "lan", "value": true }));
-    let id = k.call(&json!({ "cmd": "raise", "name": "Watched", "about": "a test" }))["id"].as_str().unwrap().to_string();
+    let raised = k.call(&json!({ "cmd": "raise", "name": "Watched", "about": "a test" }));
+    let id = raised["id"].as_str().unwrap().to_string();
+    let words = raised["words"].clone();
     k.call(&json!({ "cmd": "add_track", "station": id, "path": a[2], "title": "Tone", "by": "Test" }));
     let l = Node::start(cfg("listener", true))?;
     l.call(&json!({ "cmd": "lan", "value": true }));
@@ -188,5 +190,60 @@ fn main() -> anyhow::Result<()> {
     check(!door_at(&dark, 41002), "a radio running dark is never a door");
     let own = dark.call(&json!({ "cmd": "doors" }))["doors"].as_array().map(|d| d.len()).unwrap_or(0);
     check(own == 0, "a radio running dark names no door of its own");
+    let why = dark.call(&json!({ "cmd": "door" }))["why"].clone();
+    check(why == "This radio runs through Tor, so it is never a door.", &format!("and its door says why it is shut ({why})"));
+    check(l.call(&json!({ "cmd": "door" }))["why"] == "The door is switched off.", "a radio never asked to be a door says its door is switched off");
+
+    // number0's relays and address server stand in only when the owner turns them on.
+    check(l.call(&json!({ "cmd": "number0" }))["value"] == false, "number0 stands in for nobody by default");
+    check(l.call(&json!({ "cmd": "number0", "value": true }))["value"] == true, "the owner can turn number0 on");
+    check(l.call(&json!({ "cmd": "number0", "value": false }))["value"] == false, "and off again");
+
+    // An update check that only peeks fetches nothing and says whether a newer release is out.
+    check(l.call(&json!({ "cmd": "update", "peek": true })) == json!({ "newer": false }), "a peek at the releases says there is nothing newer, downloading nothing");
+
+    // A room's voice is new each week unless the owner keeps it there.
+    let weekly = l.call(&json!({ "cmd": "chat_voice", "station": id }));
+    let kept = l.call(&json!({ "cmd": "chat_voice", "station": id, "keep": true }));
+    check(weekly["kept"] == false && kept["kept"] == true && weekly["voice"] != kept["voice"], &format!("a room's voice is the week's own until the owner keeps one ({} then {})", weekly["voice"], kept["voice"]));
+    l.call(&json!({ "cmd": "chat_voice", "station": id, "keep": false }));
+
+    // A co-host's name, typed "for your own record", stays on this device: the log signs none.
+    let watched = StationId::from_hex(&id)?;
+    let hand = pyrate_core::StationKey::generate()?.id();
+    let r = k.call(&json!({ "cmd": "hand_appoint", "station": id, "words": words, "code": hand.to_hex(), "label": "Jane Doe" }));
+    let signed = k.archive(&watched).and_then(|a| a.entries().iter().find_map(|e| match e.entry.body() {
+        Body::Deputy { key, label } if *key == hand.0 => Some(label.clone()),
+        _ => None,
+    }));
+    check(signed.as_deref() == Some(""), &format!("a co-host goes into the log with no name signed ({r} {signed:?})"));
+    let hands = k.call(&json!({ "cmd": "programme", "station": id }))["hands"].clone();
+    check(hands.as_array().is_some_and(|h| h.iter().any(|x| x["label"] == "Jane Doe")), &format!("and the keeper's device still shows the name it was given ({hands})"));
+
+    // An upload with the disguise on goes the talk way, whatever it was marked; a cover beside a
+    // recording in its folder never goes out with it.
+    let folder = work.join("upload");
+    std::fs::create_dir_all(&folder)?;
+    std::fs::copy(&a[2], folder.join("song.wav"))?;
+    std::fs::copy(concat!(env!("CARGO_MANIFEST_DIR"), "/../stations/shanties/station.jpg"), folder.join("cover.jpg"))?;
+    k.call(&json!({ "cmd": "add_track", "station": id, "path": folder.join("song.wav"), "title": "Disguised", "by": "Test", "disguise": true }));
+    let mut track = None;
+    for _ in 0..90 {
+        std::thread::sleep(Duration::from_secs(1));
+        track = k.archive(&watched).and_then(|a| {
+            a.entries().iter().find_map(|e| match e.entry.body() {
+                Body::Track { title, channels, bitrate, .. } if title == "Disguised" => Some((e.hash().ok()?, *channels, *bitrate)),
+                _ => None,
+            })
+        });
+        if track.is_some() {
+            break;
+        }
+    }
+    let talk = pyrate_core::audio::Profile::Talk;
+    check(track.is_some_and(|t| t.1 == talk.channels() && t.2 == talk.bitrate()), &format!("a disguised upload goes the talk way, hum filter and shift ({track:?})"));
+    std::thread::sleep(Duration::from_secs(2));
+    let art = track.and_then(|t| k.archive(&watched).and_then(|a| a.track_art(&t.0)));
+    check(track.is_some() && art.is_none(), "and the cover beside it in its folder stays off the air");
     Ok(())
 }
