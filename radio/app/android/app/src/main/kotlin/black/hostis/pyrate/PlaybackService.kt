@@ -68,6 +68,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
 
     override fun onCreate() {
         super.onCreate()
+        Native.serviceUp()
         work.post { Native.ensure(this) }
         audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         session = MediaSessionCompat(this, "pyrate").apply {
@@ -383,6 +384,7 @@ class PlaybackService : MediaBrowserServiceCompat() {
         try { unregisterReceiver(noisy) } catch (e: Exception) {}
         session.release()
         release()
+        Native.serviceDown()
         super.onDestroy()
     }
 

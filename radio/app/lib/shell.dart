@@ -300,6 +300,7 @@ class Desktop {
 
   /// The key is overwritten and gone, then the app ends: everything the node kept is noise.
   static Future<void> _scuttle() async {
+    await Native.shutdown();
     // What sits in the clear goes first: the scratch folder (takes, tapes, shares, picker
     // copies), any opened hail, then whatever of the node's folder can be removed. The key
     // goes after, so what is left is noise.
@@ -329,6 +330,7 @@ class Desktop {
 
   /// The app starts again a moment after this one ends.
   static Future<void> _restart() async {
+    await Native.shutdown();
     try {
       final exe = Platform.resolvedExecutable;
       if (Platform.isWindows) {

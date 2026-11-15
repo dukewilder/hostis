@@ -121,6 +121,11 @@ class LanternService : Service() {
         }.start()
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        Native.serviceUp()
+    }
+
     override fun onDestroy() {
         tick.removeCallbacks(every)
         power?.let { try { unregisterReceiver(it) } catch (e: Exception) {} }
@@ -133,6 +138,7 @@ class LanternService : Service() {
         wifi?.let { if (it.isHeld) it.release() }
         cpu = null
         wifi = null
+        Native.serviceDown()
         super.onDestroy()
     }
 

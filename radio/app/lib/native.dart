@@ -119,6 +119,14 @@ class Native {
     }
   }
 
+  /// Before the app quits: the node shuts its door and gives the router's port back. It is
+  /// run away from the screen and waited for a few seconds at most.
+  static Future<void> shutdown() async {
+    try {
+      await callAway({'cmd': 'shutdown'}).timeout(const Duration(seconds: 6));
+    } catch (_) {}
+  }
+
   /// For calls that work hard (raising colours does its proof of work).
   static Future<dynamic> callAway(Map<String, dynamic> req) {
     final answer = stub;

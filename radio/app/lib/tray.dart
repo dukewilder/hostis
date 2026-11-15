@@ -9,6 +9,7 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'more.dart' show pref;
+import 'native.dart';
 
 class Tray with TrayListener, WindowListener {
   Tray._();
@@ -92,6 +93,7 @@ class Tray with TrayListener, WindowListener {
   }
 
   Future<void> quit() async {
+    await Native.shutdown();
     await _down();
     await windowManager.setPreventClose(false);
     await windowManager.destroy();

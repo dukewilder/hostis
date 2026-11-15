@@ -35,6 +35,22 @@ object Native {
         }
     }
 
+    private val services = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /** A service that keeps the node busy has come up. */
+    fun serviceUp() { services.incrementAndGet() }
+
+    /** A service has gone. The last one to go has the node shut its door, so the router's port is given back. */
+    fun serviceDown() { if (services.decrementAndGet() <= 0) { services.set(0); shutdown() } }
+
+    /** Before the app ends: the door shut and the router's port given back. Waits a few seconds at most. */
+    fun shutdown() {
+        if (!started) return
+        val t = Thread { try { cmd("cmd" to "shutdown") } catch (e: Throwable) {} }
+        t.start()
+        try { t.join(4000) } catch (e: InterruptedException) {}
+    }
+
     fun cmd(vararg pairs: Pair<String, Any?>): JSONObject {
         val req = JSONObject()
         for ((k, v) in pairs) req.put(k, v)

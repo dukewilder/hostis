@@ -41,7 +41,13 @@ object Ship {
     private var player: android.media.MediaPlayer? = null
 
     /** Plays a file once, then removes it: how a keeper hears a hail. */
-    fun playOnce(path: String) {
+    fun playOnce(path: String, mime: String = "audio/ogg") {
+        // A hail is Ogg: a player picks the format by the file's name, so a file not named for it is renamed.
+        var path = path
+        if (mime.contains("ogg") && !path.endsWith(".ogg")) {
+            val to = java.io.File(path.substringBeforeLast('.', path) + ".ogg")
+            if (java.io.File(path).renameTo(to)) path = to.path
+        }
         player?.release()
         player = android.media.MediaPlayer().apply {
             setDataSource(path)

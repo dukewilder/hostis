@@ -125,6 +125,7 @@ class MainActivity : FlutterActivity() {
                     try { stopService(Intent(this, PlaybackService::class.java)) } catch (e: Exception) {}
                     try { LanternService.set(this, false, 1) } catch (e: Exception) {}
                     Bells.cancelAll(this)
+                    Native.shutdown()
                     Hold.scuttle(applicationContext)
                     result.success(null)
                     window.decorView.postDelayed({ finishAndRemoveTask(); android.os.Process.killProcess(android.os.Process.myPid()) }, 300)
@@ -132,6 +133,7 @@ class MainActivity : FlutterActivity() {
                 // The radio starts again, as a switch such as Go through Tor needs.
                 "restart" -> {
                     try { stopService(Intent(this, PlaybackService::class.java)) } catch (e: Exception) {}
+                    Native.shutdown()
                     val again = packageManager.getLaunchIntentForPackage(packageName)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                     if (again != null) {
                         val pi = android.app.PendingIntent.getActivity(this, 7, again, android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_CANCEL_CURRENT)
@@ -237,7 +239,7 @@ class MainActivity : FlutterActivity() {
                 "record_stop" -> result.success(Ship.recordStop())
                 "speak" -> Voice.speakToFile(this, call.argument<String>("text") ?: "", call.argument<String>("path") ?: "",
                     (call.argument<Double>("rate") ?: 1.0).toFloat(), (call.argument<Double>("pitch") ?: 1.0).toFloat()) { ok -> result.success(ok) }
-                "play_file" -> { try { Ship.playOnce(call.argument<String>("path") ?: ""); result.success(true) } catch (e: Exception) { result.success(false) } }
+                "play_file" -> { try { Ship.playOnce(call.argument<String>("path") ?: "", call.argument<String>("mime") ?: "audio/ogg"); result.success(true) } catch (e: Exception) { result.success(false) } }
                 "lantern" -> { LanternService.set(this, call.argument<Boolean>("on") == true, call.argument<Int>("gb") ?: 1); result.success(null) }
                 "share_text" -> { Ship.shareText(this, call.argument<String>("text") ?: ""); result.success(null) }
                 "share_file" -> { Ship.shareFile(this, call.argument<String>("path") ?: "", call.argument<String>("mime") ?: "audio/ogg"); result.success(null) }
