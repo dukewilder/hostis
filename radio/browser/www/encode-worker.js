@@ -6,10 +6,14 @@ importScripts('opus/opusscript_native_wasm.js');
 const FRAME = 960, MAX_PACKET = 1276 * 3;
 let ready = null, M = null, job = null;
 // As the app's voice.rs: talk loses its mains hum (50 and 60 Hz and their harmonics, whose
-// drift dates and places a recording), and a keeper who asks has the voice shifted.
-const HUM = [50, 60, 100, 120, 150, 180, 200, 240, 250, 300, 350, 360], GRAIN = 1920;
+// drift dates and places a recording), and a keeper who asks has the voice shifted, by the
+// station's own number of semitones (the wasm's disguise_semitones).
+// Every harmonic of either grid up to 1 kHz (core voice.rs HUM: 33, ascending), each notched
+// twice in cascade, so neither the higher harmonics nor a notch's residue keep the grid's trace.
+const HUM = [50, 60, 100, 120, 150, 180, 200, 240, 250, 300, 350, 360, 400, 420, 450, 480, 500,
+  540, 550, 600, 650, 660, 700, 720, 750, 780, 800, 840, 850, 900, 950, 960, 1000], GRAIN = 1920;
 function voice(dehum, semis) {
-  const nb = dehum ? HUM.map(f => { const w = 2 * Math.PI * f / 48000, al = Math.sin(w) / 60, a0 = 1 + al;
+  const nb = dehum ? HUM.flatMap(f => [f, f]).map(f => { const w = 2 * Math.PI * f / 48000, al = Math.sin(w) / 60, a0 = 1 + al;
     return { b0: 1 / a0, b1: -2 * Math.cos(w) / a0, b2: 1 / a0, a1: -2 * Math.cos(w) / a0, a2: (1 - al) / a0, x1: 0, x2: 0, y1: 0, y2: 0 } }) : [];
   const ratio = Math.pow(2, Math.max(-12, Math.min(12, semis || 0)) / 12), shift = Math.abs(ratio - 1) > 1e-6;
   const line = new Float64Array(4 * GRAIN), n = line.length; let at = 0, ph = 0;
