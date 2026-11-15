@@ -78,6 +78,12 @@ object Hold {
      */
     fun scuttle(ctx: Context) {
         synchronized(this) {
+            // What sits in the clear goes before the key does: temporary copies, an opened
+            // hail, a downloaded update.
+            try {
+                ctx.cacheDir.listFiles()?.forEach { it.deleteRecursively() }
+                File(ctx.filesDir, "node").listFiles()?.forEach { if (it.name.startsWith("hail.") || it.name == "updates") it.deleteRecursively() }
+            } catch (e: Exception) {}
             try { KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(ALIAS) } catch (e: Exception) {}
             File(ctx.filesDir, "hold.wrapped").delete()
             cached = null

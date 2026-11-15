@@ -1324,6 +1324,7 @@ class _ChatterPanelState extends State<ChatterPanel> {
   bool joining = false;
   String? err;
   Timer? hailStop;
+  final List<String> hailsOpened = [];
   bool hailing = false;
 
   /// A hail: up to twenty seconds of the listener's voice, sealed so only the keeper hears it.
@@ -1361,6 +1362,9 @@ class _ChatterPanelState extends State<ChatterPanel> {
   @override
   void dispose() {
     tick?.cancel();
+    for (final p in hailsOpened) {
+      unawaited(File(p).delete().then((_) {}, onError: (_) {}));
+    }
     hailStop?.cancel();
     if (hailing) ship.invokeMethod<Map>('record_stop').then((r) => dropCopy(r?['path'] as String?)).catchError((_) {});
     say.dispose();
@@ -1516,7 +1520,20 @@ class _ChatterPanelState extends State<ChatterPanel> {
                   onPressed: () async {
                     final r = await Native.callAway({'cmd': 'chat_hail_open', 'station': widget.station, 'id': l['id']});
                     if (r is Map && r['path'] != null) {
-                      await ship.invokeMethod('play_file', {'path': r['path']});
+                      var path = r['path'].toString();
+                      if (isComputer) {
+                        // The node writes the opened message beside its own files, outside the
+                        // seal. It is moved into the scratch folder and removed when this sheet closes.
+                        try {
+                          final d = Directory('${(await scratchDir()).path}${Platform.pathSeparator}share')..createSync(recursive: true);
+                          final to = '${d.path}${Platform.pathSeparator}hail-${DateTime.now().millisecondsSinceEpoch}${path.contains('.') ? path.substring(path.lastIndexOf('.')) : ''}';
+                          await File(path).copy(to);
+                          await File(path).delete();
+                          path = to;
+                          hailsOpened.add(to);
+                        } catch (_) {}
+                      }
+                      await ship.invokeMethod('play_file', {'path': path});
                     } else if (context.mounted) {
                       toast(context, (r is Map ? r['error'] : null) ?? 'That message would not open.');
                     }

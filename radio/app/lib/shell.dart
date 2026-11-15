@@ -41,6 +41,15 @@ Future<void> deskTidy(String dir) async {
     for (final e in s.listSync()) {
       try { e.deleteSync(recursive: true); } catch (_) {}
     }
+    // A hail the node opened and a crash left behind.
+    final n = Directory('$dir${Platform.pathSeparator}node');
+    if (n.existsSync()) {
+      for (final e in n.listSync()) {
+        if (e is File && e.uri.pathSegments.last.startsWith('hail.')) {
+          try { e.deleteSync(); } catch (_) {}
+        }
+      }
+    }
     if (Platform.isMacOS) File('$dir/.metadata_never_index').createSync();
     if (Platform.isLinux) File('$dir/.trackerignore').createSync();
     if (Platform.isWindows) await Process.run('attrib', ['+I', dir]);
@@ -264,6 +273,22 @@ class Desktop {
 
   /// The key is overwritten and gone, then the app ends: everything the node kept is noise.
   static Future<void> _scuttle() async {
+    // What sits in the clear goes first: the scratch folder (takes, tapes, shares, picker
+    // copies), any opened hail, then whatever of the node's folder can be removed. The key
+    // goes after, so what is left is noise.
+    try {
+      final base = (await getApplicationSupportDirectory()).path;
+      final s = await scratchDir();
+      for (final e in s.listSync()) {
+        try { e.deleteSync(recursive: true); } catch (_) {}
+      }
+      final node = Directory('$base${Platform.pathSeparator}node');
+      if (node.existsSync()) {
+        for (final e in node.listSync()) {
+          try { e.deleteSync(recursive: true); } catch (_) {}
+        }
+      }
+    } catch (_) {}
     final f = await _key();
     if (await f.exists()) {
       final r = Random.secure();
