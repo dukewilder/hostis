@@ -105,22 +105,23 @@ mod kept_hails {
             }
         }
         let out = dir.join("opened");
-        assert_eq!(super::open_hails(&dir, &out).unwrap(), 1);
+        assert_eq!(super::open_hails(&dir, &out, None).unwrap(), 1);
         let files: Vec<_> = std::fs::read_dir(&out).unwrap().flatten().collect();
         assert_eq!(files.len(), 1);
         assert_eq!(std::fs::read(files[0].path()).unwrap(), voice);
         assert!(files[0].file_name().to_string_lossy().contains("Anne"));
         // Opened once, then forgotten.
-        assert_eq!(super::open_hails(&dir, &out).unwrap(), 0);
+        assert_eq!(super::open_hails(&dir, &out, None).unwrap(), 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
 
 /// Opens the hails a keeper's Lantern kept into `out`, one sound file each, named by
-/// station, time and sender, and forgets them. The count opened.
-pub fn open_hails(dir: &std::path::Path, out: &std::path::Path) -> Result<usize> {
-    let hold = crate::hold::Hold::for_dir(dir, None)?;
-    let store = crate::store::Store::open_with(dir, u64::MAX, None)?;
+/// station, time and sender, and forgets them. The count opened. `key` is the Lantern's hold
+/// key, as its keeper gave it (see `hold::lantern_key`).
+pub fn open_hails(dir: &std::path::Path, out: &std::path::Path, key: Option<[u8; 32]>) -> Result<usize> {
+    let hold = crate::hold::Hold::for_dir(dir, key)?;
+    let store = crate::store::Store::open_with(dir, u64::MAX, key)?;
     let kept: Vec<String> = hold.read_note(dir, "hails", None).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
     std::fs::create_dir_all(out)?;
     let mut n = 0;

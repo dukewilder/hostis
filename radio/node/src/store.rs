@@ -164,10 +164,16 @@ impl Store {
     /// Opens the store under a hold key handed in (a phone's, from its secure hardware), or
     /// the folder's own.
     pub fn open_with(dir: &Path, quota: u64, hold: Option<[u8; 32]>) -> Result<Self> {
-        for d in ["logs", "chunks", "keys", "hold"] {
+        for d in ["logs", "keys", "hold"] {
             fs::create_dir_all(dir.join(d))?;
         }
-        let hold = Hold::for_dir(dir, hold)?;
+        let mut given = hold;
+        let hold = Hold::for_dir(dir, given);
+        // The key handed in is wiped here once the hold has drawn its own keys from it.
+        if let Some(k) = given.as_mut() {
+            zeroize::Zeroize::zeroize(k);
+        }
+        let hold = hold?;
         let mut s = Self {
             dir: dir.to_path_buf(),
             hold,
