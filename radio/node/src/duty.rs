@@ -144,7 +144,9 @@ impl Inner {
             let hop_allowed = self.crew.load(Ordering::Relaxed) && !self.dark;
             match d.hops.tick(now, hop_allowed, &mids, rand::random()) {
                 Change::Open => say("duty: passing on routes, as the network needs more middles"),
-                Change::Close { rest } => say(if rest { "duty: six hours of passing on routes, resting now" } else { "duty: enough middles, this one stops" }),
+                Change::Close { rest: true } => say("duty: six hours of passing on routes, resting now"),
+                Change::Close { .. } if !hop_allowed => say("duty: the crew switch is off, so no routes are passed on"),
+                Change::Close { .. } => say("duty: enough middles, this one stops"),
                 Change::None => {}
             }
             (c, d.door.on, d.door_public, d.door_links, d.hops.on)
@@ -158,10 +160,10 @@ impl Inner {
                 let _ = self.door_open(public, true, links).await;
             }
             Change::Close { rest } => {
-                say(if rest { "duty: the door was open six hours, resting now" } else { "duty: enough doors, this one closes" });
+                let allowed = self.duty.lock().unwrap().door_allowed && !self.dark && self.crew.load(Ordering::Relaxed);
+                say(if rest { "duty: the door was open six hours, resting now" } else if allowed { "duty: enough doors, this one closes" } else { "duty: the door is not allowed now, so it closes" });
                 self.door_close();
                 self.hold.remove_note(&self.cfg.dir, "door");
-                let allowed = self.duty.lock().unwrap().door_allowed;
                 if allowed {
                     self.door_why(if rest { door::WHY_REST } else { door::WHY_IDLE });
                 }
