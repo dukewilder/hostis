@@ -1873,7 +1873,7 @@ class _SettingsPageState extends State<SettingsPage> {
         }, enabled: tor.isEmpty,
             sub: tor.isNotEmpty
                 ? 'Off while going through Tor.'
-                : 'Browsers on iPhones and on blocked networks reach the radio through listeners\' devices. While this is on, this device\'s internet address is listed publicly as a way in. Behind a VPN that forwards a port, the VPN\'s address is listed instead.'),
+                : 'Browsers on iPhones and on blocked networks reach the radio through listeners\' devices. While this is on, each browser this $thisDevice lets in sees its internet address, twelve an hour at most, and the address goes on no list. It opens when browsers need more ways in and rests after six hours. Behind a VPN, browsers see only the VPN\'s address.'),
         if (tor.isEmpty && doorOn)
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
@@ -1881,6 +1881,8 @@ class _SettingsPageState extends State<SettingsPage> {
                 ? 'Open. Browsers can reach the radio through this device.'
                 : (widget.radio.doorState['why'] ?? 'Shut for now. It opens on ${isComputer ? 'this computer' : 'Wi-Fi while the phone charges'} when the router allows it.').toString()),
           ),
+        if (widget.radio.jobsLine.isNotEmpty)
+          Padding(padding: const EdgeInsets.only(bottom: 6), child: note(widget.radio.jobsLine)),
         setting('Let shared links name this radio', pref('door_links') == true, (v) {
           pref('door_links', v);
           Native.call({'cmd': 'door', 'links': v});

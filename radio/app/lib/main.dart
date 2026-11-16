@@ -357,6 +357,8 @@ class Tuner extends ChangeNotifier {
 
   /// What the node last said of the door: open or shut, and a plain reason when shut.
   Map<String, dynamic> doorState = {};
+  /// What this device is doing for the network now, in one plain line from the node.
+  String jobsLine = '';
 
   /// A door's owner turned it off, or never will: on unless the owner said no.
   static bool get doorWanted => pref('door') != false;
@@ -378,6 +380,8 @@ class Tuner extends ChangeNotifier {
       // The first time a door really opens, its owner is told, once, and may turn it off.
       if (door && d['open'] == true && pref('door_notice') != true) unawaited(_doorNotice());
     }
+    final j = Native.call({'cmd': 'jobs'});
+    jobsLine = j is Map ? (j['line'] ?? '').toString() : '';
     if (r is Map && r['carrying'] is int) carrying = r['carrying'];
     if (r is Map && r['carried_bytes'] is int) carriedBytes = r['carried_bytes'];
   }
@@ -395,7 +399,7 @@ class Tuner extends ChangeNotifier {
         backgroundColor: panel,
         shape: const RoundedRectangleBorder(side: BorderSide(color: boneGhost, width: 0.5)),
         title: Text('Browsers can come in here', style: serif(22)),
-        content: Text('This device now lets browsers in. Browsers on iPhones and on blocked networks reach the radio through listeners\' devices like this one. While it does, this device\'s internet address is listed as a way in. Behind a VPN, only the VPN\'s address is ever listed.', style: serif(15, color: boneFaint, italic: true)),
+        content: Text('This device now lets browsers in. Browsers on iPhones and on blocked networks reach the radio through listeners\' devices like this one. Each browser it lets in sees this device\'s internet address, twelve an hour at most, and the address goes on no list. Behind a VPN, browsers see only the VPN\'s address.', style: serif(15, color: boneFaint, italic: true)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, true), child: Text('TURN IT OFF', style: carved(12, color: boneFaint))),
           TextButton(onPressed: () => Navigator.pop(c, false), child: Text('KEEP IT ON', style: carved(12))),
