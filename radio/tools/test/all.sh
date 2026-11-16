@@ -58,6 +58,7 @@ sleep 5
 
 line "== native suites"
 run privacy_test 600 "$NET target/release/privacy_test /tmp/all-tests/privacy '$WAV'"
+run lantern_hold 300 "$NET sh tools/test/lantern_hold.sh '$WAV'"
 run onair_test 600 "$NET target/release/onair_test $RELAY '$WAV'"
 run desk_test 900 "$NET target/release/desk_test $RELAY /tmp/all-tests/desk"
 run crew_deck_test 600 "$NET target/release/crew_deck_test $RELAY $GANG"
