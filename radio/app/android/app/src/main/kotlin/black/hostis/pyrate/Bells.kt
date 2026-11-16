@@ -173,7 +173,7 @@ class AlarmReceiver : BroadcastReceiver() {
         when (i.action) {
             "bell" -> Bells.ring(c, i.getStringExtra("title") ?: "", i.getStringExtra("station") ?: "", i.getStringExtra("name") ?: "", i.getIntExtra("id", 0))
             "wake" -> {
-                val s = Intent(c, PlaybackService::class.java).setAction("wake").putExtra("station", i.getStringExtra("station")).putExtra("key", bellKey(c))
+                val s = Intent(c, PlaybackService::class.java).setAction("wake").putExtra("station", i.getStringExtra("station")).putExtra("key", Bells.bellKey(c))
                 if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(s) else c.startService(s)
             }
         }
