@@ -1,6 +1,9 @@
 # A Lantern in one command. No rights reserved.
 #   docker build -t pyrate-lantern -f radio/Dockerfile radio
-#   docker run -d --restart unless-stopped -v pyrate:/data pyrate-lantern
+#   docker run -d --restart unless-stopped -v pyrate:/data \
+#     -v /media/usb/pyrate:/pass:ro -e PYRATE_HOLD_PASS_FILE=/pass/hold-pass pyrate-lantern
+# The passphrase seals the hold key; without it the Lantern opens nothing (LANTERN.md). Add
+# --hold-key-on-disk after the image name to keep the key on the volume in the clear instead.
 # To serve the open player at /listen/ on a name of your own (never a HOSTIS name), add
 #   -p 8080:8080 ... pyrate-lantern --http 0.0.0.0:8080 --player /usr/share/pyrate/player
 FROM rust:bookworm AS build

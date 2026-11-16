@@ -6,7 +6,10 @@ A Lantern is a node that never sleeps. It carries every station it hears of, rel
 
     git clone --depth 1 --branch radio https://github.com/dukewilder/hostis
     docker build -t pyrate-lantern -f hostis/radio/Dockerfile hostis/radio
-    docker run -d --name lantern --restart unless-stopped -v pyrate:/data pyrate-lantern
+    docker run -d --name lantern --restart unless-stopped -v pyrate:/data \
+      -v /media/usb/pyrate:/pass:ro -e PYRATE_HOLD_PASS_FILE=/pass/hold-pass pyrate-lantern
+
+First put a passphrase of twelve characters or more in `hold-pass` on a USB stick or another disk (four or five random words make a good one). The Lantern seals everything it keeps under it, and without it the Lantern opens nothing and starts nothing. Take the stick out and the box stays shut at its next start. Lose the passphrase and everything the Lantern kept is lost with it.
 
 It opens no ports and needs none. Behind a VPN it works the same, through the relays.
 
@@ -14,15 +17,21 @@ It opens no ports and needs none. Behind a VPN it works the same, through the re
 
     curl -fsSL https://raw.githubusercontent.com/dukewilder/hostis/radio/radio/tools/vps/install.sh -o pyrate.sh && bash pyrate.sh
 
-It asks for the relay's name (an A record pointing at the server, grey cloud if it is on Cloudflare), or makes a free one from the server's address. It installs iroh-relay at the iroh version the radio is built with, checked against its checksum, with its own Let's Encrypt certificate; runs the Lantern above with `PYRATE_RELAY_URL` set to the relay and restarts both on boot; and lets in only SSH, 80, 443 and 7842/udp. It prints the relay's address and the Lantern's id. Run it again to update.
+It asks for the relay's name (an A record pointing at the server, grey cloud if it is on Cloudflare), or makes a free one from the server's address. It installs iroh-relay at the iroh version the radio is built with, checked against its checksum, with its own Let's Encrypt certificate; runs the Lantern above with `PYRATE_RELAY_URL` set to the relay and restarts both on boot; and lets in only SSH, 80, 443 and 7842/udp. It prints the relay's address and the Lantern's id. Run it again to update. A rented server's disk is its provider's to read whatever the Lantern does, so this install keeps the hold key on that disk with `--hold-key-on-disk`.
 
 **How a new relay is found.** A Lantern homes on the relay it reaches fastest, and on the same server that is its own. Every couple of minutes it signs a harbour note naming that relay, and publishes the same to number0's lookup. Phones, computers and browser tabs that know the Lantern as a carrier take the note into their address book and reach it through that relay. Make the Lantern a first door (`id@https://relay/` in the app's harbour list) and the app takes its relay as one of its own for next time.
 
-**Its keys.** Everything a Lantern keeps is sealed under its hold key, which by default lies in `hold.key` beside the data, so a copy of the whole folder opens. Put the key on another disk, or a USB stick, with `-e PYRATE_HOLD_KEY=/keys/hold.key -v /path/on/that/disk:/keys`, and turn on the disk's own encryption. The first time it starts that way, the Lantern copies the old key there and checks the copy; remove the old `hold.key` yourself once it runs. The Lantern says so at every start until you do. Never print or share `hold.key`.
+**Its keys.** Everything a Lantern keeps is sealed under its hold key, and the hold key is sealed under your passphrase in `hold.sealed` (Argon2id, about a second a guess), so the disk alone opens nothing. The Lantern takes the passphrase from the first of these it finds.
+- `--hold-pass-fd 3`, with `3< /media/usb/pyrate/hold-pass` after it, a file descriptor;
+- `PYRATE_HOLD_PASS_FILE`, a file, best on a removable disk or in a secrets store such as Docker's (`/run/secrets/...`) or systemd's (`LoadCredential=`);
+- `PYRATE_HOLD_PASS_CMD`, a command that prints it, such as `secret-tool lookup service pyrate-hold` for a desktop keyring or `security find-generic-password -w -s pyrate-hold` on a Mac;
+- the terminal, where it asks, unseen (twice the first time).
+
+Without it the Lantern opens nothing, starts nothing and says so. A wrong one opens nothing and changes nothing. The first start with a passphrase seals an older Lantern's `hold.key`, beside the data or where `PYRATE_HOLD_KEY` named it, and removes the plain file. To keep the key on disk in the clear instead, start with `--hold-key-on-disk`, and the Lantern warns at every start that whoever takes that disk opens everything. `--scuttle` destroys the key, sealed or plain, and everything kept becomes noise. Never print or share the passphrase or a `hold.key`. `python3 tools/test/lantern_disk.py <data folder>` checks that nothing in the folder lies in the clear but signed releases and your `maroon.txt`.
 
 **What it carries for others.** Logs carried for other stations share 1 GB, no station more than 256 MB; a station that outgrows its share is taken no further for a week, and when the whole is full the newest station nobody has listened to through this Lantern in a day goes first. Your own stations are never counted. Set the total with `-e PYRATE_LOG_MB=<megabytes>` (16 or more); one station may then take half of it. Once a minute the Lantern hands memory it has finished with back to the system.
 
-**Its log.** A Lantern logs, for you, which stations it carries and which peers it meets, and Docker keeps those lines. `-e PYRATE_QUIET=1` stops them.
+**Its log.** Docker keeps a Lantern's log on disk in the clear, so the log gives counts and your own stations and names no carried station, no peer and not the Lantern's own id. Start with `--show-ids` to see those, for a test or to find the id. `-e PYRATE_QUIET=1` stops nearly everything.
 
 **Your own stations on your own site.** Add `--http 127.0.0.1:8080` and `--seed "Name|About|/folder|music"` (or `talk`, or `mono` for old records and anything else recorded in one channel: half the bytes of stereo; to move a seeded station to another kind, start once with `--reseed "Name"`: every recording in the folder is set again, and once they are on the clock the old ones are withdrawn, along with any whose file has left the folder), then put a web server or tunnel in front of port 8080. The page plays your Lantern's stations and nothing else, and any page can embed a station with one `<audio>` tag. The page and its streams are ordinary web: whoever runs the Lantern, and any proxy or tunnel in front of it, can see a listener's address beside the station played, and the page says so. Keep no access logs if you would rather not hold that. Podcast feeds name the address the page was reached at: set `-e PYRATE_PUBLIC_URL=https://your.address` to fix it, or `-e PYRATE_TRUST_PROXY=1` if a proxy in front sets `X-Forwarded-Host`. Without either, the Lantern trusts only the request's own Host.
 
@@ -32,9 +41,11 @@ It asks for the relay's name (an A record pointing at the server, grey cloud if 
 
 **What a Lantern carries.** Every station in the Log, by default. Put a station's id on a line of `maroon.txt` in the data folder (a `#` and a note after it if you like) and this Lantern drops it, art and log included, within a minute. Lists other people share are in the same form. Start with `--carry-own` to carry only your own stations.
 
+It carries them blind. A Lantern answers no clear request for a station it carries, says nothing of carrying it, ends no phone's stem for it, serves it on no web page or feed and passes its sound on only sealed, by name. Your own stations are open. Name others to keep open with `--open`, followed by a station id, a file of ids (such as HOSTIS's list, `browser/harbour.json`) or `all`. A Lantern kept open for every station helps phones' stations onto the network, and anyone can see that it carries them.
+
 **The bell.** A `bell.wav` (or .mp3, .ogg) in a seed folder plays on the hour. Replace the file and the new one takes over; the old one is withdrawn. `tools/bell.py` writes a daily one from the Annals; run it from cron each morning.
 
-**Podcasts.** `tools/feed2folder.py <feed url> <seed folder>` brings your own show's episodes into a seed folder, and the Lantern puts them on the clock. Going the other way, `/feed/<station id>.xml` on the web listener is the station's own podcast feed, newest recording first, so any podcast app can follow it. Episodes are made into MP3s the first time they are asked for.
+**Podcasts.** `tools/feed2folder.py <feed url> <seed folder>` brings your own show's episodes into a seed folder, and the Lantern puts them on the clock. Going the other way, `/feed/<station id>.xml` on the web listener is the station's own podcast feed, newest recording first, so any podcast app can follow it. Episodes are made into MP3s the first time they are asked for, and kept sealed under the hold key.
 
 **The programme.** A `programme.json` in a seed folder is the station's programme, in the same form the app writes, and the Lantern sets it whenever the file changes. Times are the folder's own: give `"utc_offset_min"` (-360 for Chicago in winter). Name recordings by title, by "Artist - Title", or by file name.
 
