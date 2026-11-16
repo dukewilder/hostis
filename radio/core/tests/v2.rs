@@ -2,13 +2,15 @@
 use pyrate_core::{Archive, Body, SignedEntry, StationKey, archive::legacy, audio::Profile, clock::Clock, ingest::ingest, tape::ogg_opus};
 use serde::Serialize;
 
+/// A tone clear of the hum comb (every harmonic of 50 and 60 Hz up to 1 kHz), which talk goes
+/// through: a tone near one of its notches comes out quieter by design.
 fn wav(path: &std::path::Path, secs_silence: f32, secs_tone: f32, amp: f32) {
     let rate = 48_000u32;
     let n_sil = (secs_silence * rate as f32) as usize;
     let n_tone = (secs_tone * rate as f32) as usize;
     let mut data = Vec::new();
     for i in 0..n_sil + n_tone {
-        let v = if i < n_sil { 0.0 } else { (i as f32 * 440.0 * std::f32::consts::TAU / rate as f32).sin() * amp };
+        let v = if i < n_sil { 0.0 } else { (i as f32 * 1500.0 * std::f32::consts::TAU / rate as f32).sin() * amp };
         data.extend(((v * 32767.0) as i16).to_le_bytes());
     }
     let mut f = b"RIFF".to_vec();
@@ -97,7 +99,7 @@ fn quiet_recordings_come_up_and_dead_air_goes() {
     let mut d = pyrate_core::audio::ChunkDecoder::new(1).unwrap();
     let pcm: Vec<i16> = got.chunks.iter().flat_map(|(_, b)| d.decode(b).unwrap()).collect();
     let peak = pcm.iter().map(|s| s.unsigned_abs()).max().unwrap() as f32 / 32767.0;
-    assert!(peak > 0.15 && peak < 0.95, "a 0.05 sine is raised toward the house level, peak {peak}");
+    assert!(peak > 0.15 && peak < 0.95, "a 0.05 sine at 1.5 kHz is raised toward the house level, peak {peak}");
 }
 
 #[test]
