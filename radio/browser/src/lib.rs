@@ -182,6 +182,27 @@ fn released(a: &Archive, now: u64) -> usize {
     cut_of(es.len(), |i| (es[i].entry.at_ms, matches!(es[i].entry.body().inner(), Body::Live { .. } | Body::LiveEnd)), now)
 }
 
+/// The chunks and pictures named by entries still waiting in the tab for their stamp. They wait
+/// with them: a carrier takes aboard only what a signed entry it holds names, so a chunk sent
+/// ahead of its entry is dropped at the end of the stem.
+fn waiting_chunks(a: &Archive, cut: usize) -> std::collections::HashSet<Hash> {
+    let mut out = std::collections::HashSet::new();
+    for e in a.entries().iter().skip(cut) {
+        match e.entry.body() {
+            Body::Track { chunks, .. } | Body::Release { chunks, .. } => out.extend(chunks.iter().map(|c| c.hash)),
+            Body::Live { chunk, .. } => {
+                out.insert(chunk.hash);
+            }
+            Body::Art { cover, banner, .. } => out.extend(cover.iter().chain(banner.iter()).map(|r| r.hash)),
+            Body::TrackArt { art, .. } => {
+                out.insert(art.hash);
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
 /// Chunks to a stem's cargo, and bytes at most: well inside a node's frame.
 const STEM_CHUNKS: usize = 40;
 const STEM_BYTES: usize = 3 * 1024 * 1024;
@@ -2145,17 +2166,21 @@ impl Ship {
             let me = *self.ep.id().as_bytes();
             self.log.lock().unwrap().get(&id).map(|l| l.carriers.iter().filter(|(n, _)| **n != me).map(|(_, (h, _))| *h).max().unwrap_or(0)).unwrap_or(0)
         };
-        let (entries, cut, held): (Vec<Vec<u8>>, usize, bool) = self.archives.lock().unwrap().get(&id).map(|a| {
+        let (entries, cut, held, waiting): (Vec<Vec<u8>>, usize, bool, std::collections::HashSet<Hash>) = self.archives.lock().unwrap().get(&id).map(|a| {
             let cut = released(a, raw_now());
             let es: Vec<Vec<u8>> = a.entries().iter().take(cut).skip(landed as usize).take(64).filter_map(|e| e.to_bytes().ok()).collect();
-            (es, cut, cut < a.entries().len())
+            (es, cut, cut < a.entries().len(), waiting_chunks(a, cut))
         }).unwrap_or_default();
         // The keeper's writes this cargo carries: every one so far, since its entries were just read.
+        // What an entry still waiting for its stamp names waits with it.
         let (chunks, batch, wrote): (Vec<(Hash, Vec<u8>)>, Vec<Hash>, u64) = {
             let mine = self.mine.lock().unwrap();
             let Some(m) = mine.get(&id) else { return false };
             let (mut out, mut hs, mut bytes) = (Vec::new(), Vec::new(), 0usize);
             for h in m.unsent.iter() {
+                if waiting.contains(h) {
+                    continue;
+                }
                 let Some(b) = m.chunks.get(h) else { continue };
                 if out.len() >= STEM_CHUNKS || bytes + b.len() > STEM_BYTES {
                     break;
@@ -2284,8 +2309,9 @@ impl Ship {
                     let now = raw_now();
                     // An entry waiting for its stamp does not make the cargo pending: it goes the
                     // moment its stamp comes, and not before.
-                    let due = me.archives.lock().unwrap().get(&id).map(|a| released(a, now)).unwrap_or(0);
-                    let (pending, passed) = me.mine.lock().unwrap().get(&id).map(|m| (!m.unsent.is_empty() || (m.wrote > m.sailed && due > m.cut), m.passed)).unwrap_or((false, 0));
+                    // Nor does a chunk such an entry names: it leaves with its entry.
+                    let (due, waiting) = me.archives.lock().unwrap().get(&id).map(|a| { let d = released(a, now); (d, waiting_chunks(a, d)) }).unwrap_or_default();
+                    let (pending, passed) = me.mine.lock().unwrap().get(&id).map(|m| (m.unsent.iter().any(|h| !waiting.contains(h)) || (m.wrote > m.sailed && due > m.cut), m.passed)).unwrap_or((false, 0));
                     if !pending && passed > 0 && now.saturating_sub(passed) > 15 * 60_000 {
                         if let Some(m) = me.mine.lock().unwrap().get_mut(&id) {
                             m.unsent = m.chunks.keys().copied().collect();
