@@ -3915,6 +3915,11 @@ impl Node {
             }
             // The jobs this device is doing now, and the one plain line the app shows for them.
             "jobs" => Ok(inner.jobs()),
+            // The radios that said lately they are there: doors with their load, and middles.
+            "presence" => {
+                let list = inner.notes.lock().unwrap().presence(now_ms());
+                Ok(json!(list.iter().map(|p| json!({ "node": hex(&p.node), "load": p.load, "limit": p.limit, "map": p.map, "hops": p.hops, "hop_limit": p.hop_limit, "since": p.since })).collect::<Vec<_>>()))
+            }
             // For the privacy test: the byte strings to look for in every gossip message in and
             // out (hex), or with none given, how often each was seen so far.
             "gossip_tap" => {
@@ -3948,7 +3953,11 @@ impl Node {
             // crew (when its connection may carry others' traffic) and fetches through decks.
             "crew" => {
                 if let Some(on) = req["on"].as_bool() {
-                    inner.crew.store(on, std::sync::atomic::Ordering::Relaxed);
+                    // The jobs follow the switch at once (see `duty`).
+                    if inner.crew.swap(on, std::sync::atomic::Ordering::Relaxed) != on {
+                        let i2 = inner.clone();
+                        self.rt.spawn(async move { i2.duty_tick().await });
+                    }
                 }
                 Ok(json!({ "on": inner.crew.load(std::sync::atomic::Ordering::Relaxed),
                     "served_bytes": inner.served_bytes.load(std::sync::atomic::Ordering::Relaxed),

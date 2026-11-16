@@ -139,7 +139,9 @@ impl Inner {
             d.ticked = now;
             let allowed = d.door_allowed && !self.dark && self.crew.load(Ordering::Relaxed);
             let c = d.door.tick(now, allowed, &doors, rand::random());
-            let hop_allowed = self.crew.load(Ordering::Relaxed) && self.relay_ok.load(Ordering::Relaxed) && !self.dark;
+            // On mobile data a device carries nobody's traffic, but that is the crew note's own
+            // gate (`relay_ok`), which can change at any moment: the job itself stays.
+            let hop_allowed = self.crew.load(Ordering::Relaxed) && !self.dark;
             match d.hops.tick(now, hop_allowed, &mids, rand::random()) {
                 Change::Open => say("duty: passing on routes, as the network needs more middles"),
                 Change::Close { rest } => say(if rest { "duty: six hours of passing on routes, resting now" } else { "duty: enough middles, this one stops" }),
