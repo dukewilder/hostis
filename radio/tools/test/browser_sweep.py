@@ -113,6 +113,12 @@ def press(pg, sel):
     if phone(pg): pg.tap(sel, timeout=8000)
     else: pg.click(sel, timeout=8000)
 def txt(pg, sel): return pg.evaluate("s => { const e = document.querySelector(s); return e ? e.textContent.trim() : '' }", sel)
+def sign(pg):
+    """Presses Sign on each recording whose title is ready to check: nothing goes on the clock
+    until the keeper has seen its title (D-4)."""
+    for b in pg.query_selector_all(".qi .qgo:not([hidden])"):
+        try: b.click(timeout=2000)
+        except Exception: pass
 def st(pg): return pg.evaluate("window.pyrate ? window.pyrate.state() : null") or {}
 def shown(pg, sel): return pg.evaluate("s => { const e = document.querySelector(s); if (!e || e.closest('[hidden]')) return false; const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden' }", sel)
 def errors(pg, what):
@@ -207,7 +213,7 @@ CAPTURE = r"""async (secs) => {
   const pack = parts => { let n = 0; for (const p of parts) n += p.length; const all = new Float32Array(n); let o = 0; for (const p of parts) { all.set(p, o); o += p.length }
     const out = new Int16Array(n >> 1); for (let i = 0; i + 1 < n; i += 2) out[i >> 1] = Math.max(-32768, Math.min(32767, Math.round((all[i] + all[i + 1]) * 16383.5)));
     const b = new Uint8Array(out.buffer); let t = ''; for (let i = 0; i < b.length; i += 0x8000) t += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(t) };
-  return { l: pack(L), r: pack(R), plan: p0, at: t0 };
+  return { l: pack(L), r: pack(R), plan: p0, at: t0, name: document.getElementById('name')?.textContent || '' };
 }"""
 SR = 24000
 def capture(pg, secs):
@@ -258,6 +264,10 @@ def hear(a, what, seq=None, const=None):
     ok = check(d["tonal"] > 0.75 and d["hi"] < 0.03 and d["flat"] < 0.05, f"{what}: a clean tone, not noise",
                f"tonal {d['tonal']:.2f}, above 4 kHz {d['hi'] * 100:.2f}%, flatness {d['flat']:.4f}, rms {d['rms']:.3f}")
     title = plan.get("title"); seq = seq or TRACKS.get(title)
+    # raise_test's stations ("Raised 0" and on) play whatever recording all.sh was given
+    # (PYRATE_TEST_WAV), under the title Harbour Lights: their notes are not the sweep's to know.
+    if seq and re.match(r"Raised \d+$", a.get("name") or ""):
+        note(f"{what}: on {a['name']!r}, raise_test's station, whose recording is the harness's own; its notes are not checked"); seq = None
     if const:
         for ch, want in const.items():
             ns = [f for _, f in notes(a[ch]) if f]
@@ -359,7 +369,8 @@ def t_studio(pw, browser):
     t0 = time.time(); pg.set_input_files("#st-files", [files[k] for k in order])
     qtimes = {}
     def queue():
-        rs = pg.eval_on_selector_all(".qi", "rs => rs.map(r => [r.querySelector('.qt').textContent, r.querySelector('.qs').textContent, r.className])")
+        sign(pg)
+        rs = pg.eval_on_selector_all(".qi", "rs => rs.map(r => [r.querySelector('.qt-in').value, r.querySelector('.qs').textContent, r.className])")
         for t_, s_, c_ in rs:
             if ("done" in c_ or "bad" in c_) and t_ not in qtimes: qtimes[t_] = (time.time() - t0, s_, "bad" not in c_)
         return len(qtimes) >= len(order)
@@ -382,7 +393,7 @@ def t_studio(pw, browser):
     lid = pg.evaluate("window.pyrate.mine().slice(-1)[0]"); SHARED["long"] = lid
     check(lid != sid, "Start another raised a second station", lid[:12])
     t0 = time.time(); pg.set_input_files("#st-files", files["long"])
-    _, t = poll(lambda: pg.eval_on_selector_all(".qi.done, .qi.bad", "l => l.length") >= 1 and "The Long Watch" in txt(pg, ".qi.done .qt, .qi.bad .qt"), 600, 0.25)
+    _, t = poll(lambda: sign(pg) or (pg.eval_on_selector_all(".qi.done, .qi.bad", "l => l.length") >= 1 and "The Long Watch" in pg.evaluate("(() => { const e = document.querySelector('.qi.done .qt-in, .qi.bad .qt-in'); return e ? e.value : '' })()")), 600, 0.25)
     timed("studio: a five-minute recording from choosing to on the clock", t, 15)
     top = pg.evaluate("(() => { const q = document.querySelector('.qi'); return q ? [q.className, q.textContent] : null })()")
     check(top and "done" in top[0], "the five-minute recording goes on the clock", str(top))
@@ -507,6 +518,7 @@ def t_keeper(pw, browser):
     press(lp, "#go"); time.sleep(3); note(f"Listen on it: the set says {txt(lp, '#np')!r}, the button {txt(lp, '#go .lbl')!r}, the tab title {lp.evaluate('document.title')!r}")
     t0 = time.time(); pg.set_input_files("#st-files", f); marks = {}
     while time.time() - t0 < 150 and len(marks) < 3:
+        sign(pg)
         if "clock" not in marks and pg.locator(".qi.done").count(): marks["clock"] = time.time() - t0
         if "status" not in marks and txt(pg, "#st-status").startswith("On the network · "): marks["status"] = time.time() - t0
         if "heard" not in marks and (lp.evaluate("window.pyrate.plan()") or {}).get("kind") == "track" and st(lp).get("scheduled", 0) > 0: marks["heard"] = time.time() - t0
@@ -871,9 +883,13 @@ def listener(pw, browser, w, visitor):
     if visitor == "returning" or w == WIDTHS[-1]:
         pg.check("#sw-direct")
         if txt(pg, "#keep span") == "Keep": view(pg, "radio"); press(pg, "#keep"); view(pg, "settings")
-        t0 = time.time(); press(pg, "#forget"); pg.wait_for_load_state("load"); time.sleep(1.5)
+        # Forget lets everything go and the page stays stopped, with no reload that would write a
+        # fresh key at once (B-10); opened again, it starts afresh.
+        t0 = time.time(); press(pg, "#forget"); time.sleep(1.5)
         left = pg.evaluate("Object.keys(localStorage).filter(k => k.startsWith('pyrate.'))")
-        check(not pg.is_checked("#sw-direct") and txt(pg, "#keep span") != "Kept", "Forget this browser resets settings and kept stations", f"keys after the reload: {left}")
+        check(not left and txt(pg, "#forget") == "Forgotten" and not st(pg).get("playing"), "Forget this browser lets go of what it keeps and stays stopped", f"keys left: {left}, button {txt(pg, '#forget')!r}")
+        pg.reload(); pg.wait_for_load_state("load"); time.sleep(1.5)
+        check(not pg.is_checked("#sw-direct") and txt(pg, "#keep span") != "Kept", "opened again after Forget, settings and kept stations are reset", f"keep says {txt(pg, '#keep span')!r}")
         errors(pg, "after Forget")
     ctx.close()
 
@@ -1113,10 +1129,20 @@ def t_landing(pw, browser):
             q = urllib.request.Request(u, method="HEAD"); return urllib.request.urlopen(q, timeout=10).status
         except urllib.error.HTTPError as e: return e.code
         except Exception as e: return str(e)[:40]
+    # The page asks the open player's public copies (IPFS gateways) whether they answer. This
+    # machine's way out cannot be relied on for them (a gateway rate-limits it, and its refusal
+    # comes without CORS headers), so the test answers for them as a live copy would, and no
+    # request leaves for a third party.
+    gateways = {urllib.parse.urlparse(u).netloc for u in json.load(open(f"{R}/browser/www/open.json"))["players"]}
+    gateways |= {g.replace(".inbrowser.link", ".dweb.link") for g in gateways}
+    def gateway(route):
+        body = "pyrate-player/v1\n" if route.request.url.endswith("/player.manifest") else ""
+        route.fulfill(status=200, body=body, headers={"Access-Control-Allow-Origin": "*", "Content-Type": "text/plain"})
     try:
         for path in ("", "how-it-works/", "handbook/"):
             for w in WIDTHS:
-                ctx = fresh(browser, w); pg = page(ctx); t0 = time.time(); pg.goto(base + path); pg.wait_for_load_state("load")
+                ctx = fresh(browser, w); ctx.route(lambda u: urllib.parse.urlparse(u).netloc in gateways, gateway)
+                pg = page(ctx); t0 = time.time(); pg.goto(base + path); pg.wait_for_load_state("load")
                 note(f"{path or 'landing'} at {w}: loaded in {time.time() - t0:.2f} s, title {pg.title()!r}")
                 shot(pg, f"landing-{(path or 'index').strip('/')}-{w}", full=True); layout(pg, f"{path or 'the landing page'}")
                 if w == WIDTHS[0]:
