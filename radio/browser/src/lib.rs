@@ -437,8 +437,15 @@ struct Crew {
     warm: HashMap<StationId, u64>,
     /// Decks that gave nothing lately, and when.
     suspect: HashMap<[u8; 32], u64>,
-    /// The middle that came back empty on the way to each deck, and when: left out for that deck.
-    deck_middle: HashMap<[u8; 32], (EndpointId, u64)>,
+    /// Middles that came back empty on the way to a deck another middle reached: which decks,
+    /// and when.
+    empty_middles: HashMap<EndpointId, Vec<([u8; 32], u64)>>,
+    /// Radios that failed as middles for three decks, or did not answer a deck about to name
+    /// them its way in, and when: left out of both until they say again that they are of the crew.
+    gone_middles: HashMap<EndpointId, u64>,
+    /// Decks that gave nothing by two middles, and when (by the network's clock): left out until
+    /// a note of theirs newer than that.
+    gone_decks: HashMap<[u8; 32], u64>,
     /// Bytes passed on for others today, and the day.
     today: (u64, u64),
     from_decks: u64,
@@ -497,6 +504,13 @@ const NEWCOMER_TAB_MS: u64 = 30 * 60_000;
 /// How long a radio's word that it is of the crew is believed: it says so every two minutes, so
 /// one silent for four has most likely gone (a closed tab says nothing as it goes).
 const CREW_FRESH_MS: u64 = 4 * 60_000;
+/// A deck's way in, or a middle, must have said it is of the crew within one of its two-minute
+/// notes and a little: a tab that has closed takes every route through it with it for as long as
+/// it is believed, and a deck behind it too.
+const WAY_IN_FRESH_MS: u64 = 170_000;
+/// The first seconds of listening to a station fetch by the quickest route alone, never a deck
+/// first: they are what the listener is waiting to hear.
+const FIRST_LISTEN_MS: u64 = 20_000;
 /// How long a deck or a middle that gave nothing is passed over: long enough that a gone one
 /// costs little, short enough that one that only stumbled comes back soon.
 const SUSPECT_MS: u64 = 45_000;
@@ -573,6 +587,8 @@ struct Ship {
     failed: Mutex<HashMap<[u8; 32], u64>>,
     /// Whether the visitor is listening: only then is the tab counted aboard.
     listening: std::sync::atomic::AtomicBool,
+    /// When the visitor last started listening.
+    listen_at: std::sync::atomic::AtomicU64,
     /// The first hop of this visit's private routes.
     first_hop: Mutex<Option<EndpointId>>,
     /// Exits whose route gave no answer lately, and when: drawn only after the others.
@@ -1367,8 +1383,10 @@ impl Ship {
         }
         let _done = Done(&self.crew, *hash);
         let pocket = self.pockets.lock().unwrap().contains_key(station);
-        // Not for a station just tuned: the first Listen waits on nothing but the quickest route.
-        let cold = !self.crew.lock().unwrap().warm.get(station).is_some_and(|t| raw_now().saturating_sub(*t) < 60_000);
+        // Not for a station just tuned: the first Listen waits on nothing but the quickest route,
+        // nor the first seconds after it, when the next chunks are what the listener waits for.
+        let just = *self.tuned.lock().unwrap() == Some(*station) && raw_now().saturating_sub(self.listen_at.load(std::sync::atomic::Ordering::Relaxed)) < FIRST_LISTEN_MS;
+        let cold = just || !self.crew.lock().unwrap().warm.get(station).is_some_and(|t| raw_now().saturating_sub(*t) < 60_000);
         let use_decks = decks && !pocket && self.crew_on() && !cold;
         type Try<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<(Vec<u8>, bool)>> + 'a>>;
         let deck: Try = Box::pin(async move { self.deck_fetch(station, hash).await.map(|b| (b, true)) });
@@ -1978,7 +1996,18 @@ impl Ship {
     /// since the first hop is a radio this tab is talking to; a first hop whose connection fails
     /// is redrawn. Fewer than two nodes known, and nothing is sent.
     async fn ask_route(&self, ask: &Ask, exit: Option<EndpointId>) -> Result<Response> {
-        let nodes = self.route_nodes();
+        let mut nodes = self.route_nodes();
+        // A returning visit has its station's log, kept from before, ahead of its first radios'
+        // answers: its first asks wait the moment for them, a few seconds at most, rather than
+        // spend every try at once on a route that cannot yet be had and leave a chunk to the
+        // late third try.
+        for _ in 0..30 {
+            if nodes.len() >= 2 {
+                break;
+            }
+            sleep(Duration::from_millis(100)).await;
+            nodes = self.route_nodes();
+        }
         if nodes.len() < 2 {
             say("route: fewer than two radios known");
             return Err(anyhow!("one node only"));
@@ -2805,7 +2834,7 @@ impl Ship {
         let pool: Vec<EndpointId> = c
             .radios
             .iter()
-            .filter(|(n, (_, at))| now.saturating_sub(*at) < CREW_FRESH_MS && **n != me && !not.contains(n) && !c.guards.contains(n) && Some(**n) != first && !away.contains(*n))
+            .filter(|(n, (_, at))| now.saturating_sub(*at) < WAY_IN_FRESH_MS && **n != me && !not.contains(n) && !c.guards.contains(n) && Some(**n) != first && !away.contains(*n) && !c.gone_middles.get(*n).is_some_and(|t| t >= at))
             .filter(|(n, _)| !c.suspect.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < SUSPECT_MS))
             .map(|(n, _)| *n)
             .collect();
@@ -2835,11 +2864,17 @@ impl Ship {
             .lock()
             .unwrap()
             .get(station)
-            .map(|l| l.decks.iter().filter(|(d, n)| now.saturating_sub(n.at_ms) < net::DECK_FRESH_MS && !mine.contains(d) && !c.suspect.get(*d).is_some_and(|t| raw.saturating_sub(*t) < SUSPECT_MS)).map(|(d, n)| (*d, n.clone())).collect())
+            .map(|l| l.decks.iter().filter(|(d, n)| now.saturating_sub(n.at_ms) < net::DECK_FRESH_MS && !mine.contains(d) && !c.suspect.get(*d).is_some_and(|t| raw.saturating_sub(*t) < SUSPECT_MS) && !c.gone_decks.get(*d).is_some_and(|t| *t >= n.at_ms)).map(|(d, n)| (*d, n.clone())).collect())
             .unwrap_or_default();
         let all: Vec<[u8; 32]> = theirs.iter().map(|x| x.0).chain(mine.iter().copied()).collect();
         let k = *pyrate_core::route::keepers(&all, key, rank + 1).get(rank)?;
         Some((k, theirs.into_iter().find(|x| x.0 == k).map(|x| x.1)))
+    }
+
+    /// Whether a radio answers at once: a request for the chatter of no station, which any radio
+    /// answers with nothing, within three seconds.
+    async fn answers_now(&self, n: EndpointId) -> bool {
+        matches!(timeout(Duration::from_secs(3), self.ask(n, &Request::Chatter { station: StationId([0; 32]) })).await, Ok(Ok(Response::Chatter(_))))
     }
 
     /// A request to one of a station's decks in three hops: this tab, its first hop, a middle,
@@ -2858,16 +2893,26 @@ impl Ship {
             why(1);
             return Err(anyhow!("the first hop leads to the deck"));
         }
-        // A way in never hands an ask back to the radio that brought it, so a middle that is the
-        // deck's own radio comes back empty, and no one but that radio can know it is one: a crew
-        // of five tabs draws it about one time in four. An empty answer is tried once more through
-        // another middle, and the first is left out for this deck a while. Only a second failure
-        // counts against the deck and its middle, as a deck that has gone does.
+        // An empty answer is the middle's fault or the deck's. A way in never hands an ask back to
+        // the radio that brought it, so a middle that is the deck's own radio comes back empty (no
+        // one but that radio can know it is one; a crew of five tabs draws it about one time in
+        // four), and a tab drawn as middle may have closed since its last note. So the ask goes
+        // once more through another middle. If that one answers, the first is left out for this
+        // deck a while, and one that failed so for three decks is left out of every route until
+        // it says again that it is of the crew. If neither answers, the deck has gone (or its way
+        // in has): it is passed over until it says again that it is there, as a live deck does
+        // every two minutes and a closed tab's never does.
         let now = raw_now();
         let mut not = vec![first, intro];
-        if let Some((m, _)) = self.crew.lock().unwrap().deck_middle.get(&deck).filter(|(_, t)| now.saturating_sub(*t) < SUSPECT_MS) {
-            not.push(*m);
+        {
+            let mut c = self.crew.lock().unwrap();
+            c.empty_middles.retain(|_, v| {
+                v.retain(|(_, t)| now.saturating_sub(*t) < SUSPECT_MS);
+                !v.is_empty()
+            });
+            not.extend(c.empty_middles.iter().filter(|(_, v)| v.iter().any(|(d, _)| *d == deck)).map(|(m, _)| *m));
         }
+        let mut turned: Option<EndpointId> = None;
         for again in [false, true] {
             let Some(middle) = self.middle(&not) else {
                 why(2);
@@ -2893,19 +2938,31 @@ impl Ship {
                 _ => None,
             };
             if let Some(r) = opened {
+                if let Some(m) = turned {
+                    let mut c = self.crew.lock().unwrap();
+                    let v = c.empty_middles.entry(m).or_default();
+                    if !v.iter().any(|(d, _)| *d == deck) {
+                        v.push((deck, now));
+                    }
+                    if v.len() >= 3 {
+                        c.gone_middles.insert(m, now);
+                    }
+                }
                 return Ok(r);
             }
-            let mut c = self.crew.lock().unwrap();
             if empty && !again {
-                c.deck_middle.retain(|_, (_, t)| now.saturating_sub(*t) < SUSPECT_MS);
-                c.deck_middle.insert(deck, (middle, now));
+                turned = Some(middle);
                 not.push(middle);
                 continue;
             }
-            // The deck, or the middle on the way to it: both are passed over for a while.
+            let mut c = self.crew.lock().unwrap();
             c.deck_why[6] += 1;
-            c.suspect.insert(deck, raw_now());
-            c.suspect.insert(*middle.as_bytes(), raw_now());
+            let at = self.now();
+            c.gone_decks.retain(|_, t| at.saturating_sub(*t) < net::DECK_FRESH_MS);
+            c.gone_decks.insert(deck, at);
+            if !empty {
+                c.suspect.insert(*middle.as_bytes(), now);
+            }
             return Err(anyhow!("the deck gave nothing"));
         }
         Err(anyhow!("the deck gave nothing"))
@@ -2956,7 +3013,7 @@ impl Ship {
         let pool: Vec<EndpointId> = c
             .radios
             .iter()
-            .filter(|(n, (_, at))| now.saturating_sub(*at) < CREW_FRESH_MS && **n != me && Some(**n) != first && !c.guards.contains(n) && !not.contains(n) && !away.contains(*n) && !c.rtc_clients.contains(*n))
+            .filter(|(n, (_, at))| now.saturating_sub(*at) < WAY_IN_FRESH_MS && **n != me && Some(**n) != first && !c.guards.contains(n) && !not.contains(n) && !away.contains(*n) && !c.rtc_clients.contains(*n) && !c.gone_middles.get(*n).is_some_and(|t| t >= at))
             .map(|(n, _)| *n)
             .collect();
         // The harbours count as one operator: a way in from them only when no other radio is
@@ -3391,17 +3448,39 @@ impl Ship {
                 let Some(d) = c.decks.get(i) else { break };
                 (d.station, d.intro, d.said, d.pull, d.cookie)
             };
+            let intro_was = intro;
             let fresh = if pull {
                 intro.is_some_and(|x| self.pull_radios(&[]).contains(&x))
             } else {
-                intro.is_some_and(|x| Some(x) != first && !self.crew.lock().unwrap().rtc_clients.contains(&x) && self.crew.lock().unwrap().radios.get(&x).is_some_and(|(_, t)| now.saturating_sub(*t) < CREW_FRESH_MS) && !self.norelay.lock().unwrap().get(&x).is_some_and(|t| now.saturating_sub(*t) < 30 * 60_000))
+                intro.is_some_and(|x| Some(x) != first && !self.crew.lock().unwrap().rtc_clients.contains(&x) && self.crew.lock().unwrap().radios.get(&x).is_some_and(|(_, t)| now.saturating_sub(*t) < WAY_IN_FRESH_MS) && !self.norelay.lock().unwrap().get(&x).is_some_and(|t| now.saturating_sub(*t) < 30 * 60_000))
             };
-            let intro = if fresh { intro } else if pull { self.choose_pull_intro() } else { self.choose_intro(&[]) };
-            let Some(intro) = intro else { continue };
-            let new = !fresh;
-            if !new && now.saturating_sub(said) < 120_000 {
+            let chosen = if fresh { intro } else if pull { self.choose_pull_intro() } else { self.choose_intro(&[]) };
+            let Some(mut chosen) = chosen else { continue };
+            if fresh && now.saturating_sub(said) < 120_000 {
                 continue;
             }
+            // Before its note names a way in, the deck makes sure it answers: a tab that has closed
+            // is believed for minutes after its last word, and every requester would be sent to it.
+            // The way in learns this tab's node from the deck's lead anyway, at its first ask.
+            if !pull {
+                let mut tried = Vec::new();
+                loop {
+                    if self.answers_now(chosen).await {
+                        break;
+                    }
+                    self.crew.lock().unwrap().gone_middles.insert(chosen, raw_now());
+                    tried.push(chosen);
+                    match (tried.len() < 3).then(|| self.choose_intro(&tried)).flatten() {
+                        Some(x) => chosen = x,
+                        None => break,
+                    }
+                }
+                if tried.contains(&chosen) {
+                    continue;
+                }
+            }
+            let intro = chosen;
+            let new = !fresh || Some(intro) != intro_was;
             // Behind a door the lead names the deck's cookie, never this tab's node.
             let named = if pull { pyrate_core::route::Lead { to: cookie, relay: pyrate_core::route::LEAD_PULL.into() } } else { pyrate_core::route::Lead { to: me, relay: relay.clone() } };
             let lead = if new { pyrate_core::route::make_lead(intro.as_bytes(), &named) } else { self.crew.lock().unwrap().decks.get(i).map(|d| d.lead.clone()) };
@@ -3466,8 +3545,13 @@ impl Ship {
         // Only what the listener hears counts as its own listening, and in where it came from:
         // ballast and fetches for others are the carrying, not the listening.
         let heard = *self.tuned.lock().unwrap() == Some(*station);
+        let listening = self.listening.load(std::sync::atomic::Ordering::Relaxed);
         let mut c = self.crew.lock().unwrap();
-        c.warm.insert(*station, now);
+        // A station on the set but not yet playing fetches its sound ahead; that does not make
+        // it warm, or the first Listen would wait on a deck (see `fetch_paced`).
+        if !heard || listening {
+            c.warm.insert(*station, now);
+        }
         if heard {
             c.played.insert(*station);
             c.own.push_back((now, len));
@@ -3708,6 +3792,7 @@ impl Radio {
             drift: Mutex::new(pyrate_core::drift::Drift::new()),
             failed: Mutex::new(HashMap::new()),
             listening: std::sync::atomic::AtomicBool::new(false),
+            listen_at: std::sync::atomic::AtomicU64::new(0),
             first_hop: Mutex::new(None),
             suspect: Mutex::new(HashMap::new()),
             direct_ok: std::sync::atomic::AtomicBool::new(false),
@@ -3830,7 +3915,10 @@ impl Radio {
     /// Puts a station on: its log is fetched and kept current, and this tab is counted aboard.
     pub fn tune(&self, id: &str) -> Result<(), JsValue> {
         let st = StationId(unhex32(id).map_err(js)?);
-        *self.ship.tuned.lock().unwrap() = Some(st);
+        // A switch while listening is a first Listen of the new station.
+        if self.ship.tuned.lock().unwrap().replace(st) != Some(st) {
+            self.ship.listen_at.store(raw_now(), std::sync::atomic::Ordering::Relaxed);
+        }
         self.ship.sync_soon(st);
         let s = self.ship.clone();
         spawn(async move { s.count_me().await });
@@ -3852,6 +3940,9 @@ impl Radio {
     /// Whether the visitor is listening. A tab is counted aboard only while it plays: looking
     /// at a station on the dial tells nobody anything.
     pub fn listening(&self, on: bool) {
+        if on && !self.ship.listening.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            self.ship.listen_at.store(raw_now(), std::sync::atomic::Ordering::Relaxed);
+        }
         self.ship.listening.store(on, std::sync::atomic::Ordering::Relaxed);
         if on {
             let s = self.ship.clone();
