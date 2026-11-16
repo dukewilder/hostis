@@ -437,6 +437,8 @@ struct Crew {
     warm: HashMap<StationId, u64>,
     /// Decks that gave nothing lately, and when.
     suspect: HashMap<[u8; 32], u64>,
+    /// The middle that came back empty on the way to each deck, and when: left out for that deck.
+    deck_middle: HashMap<[u8; 32], (EndpointId, u64)>,
     /// Bytes passed on for others today, and the day.
     today: (u64, u64),
     from_decks: u64,
@@ -1335,6 +1337,13 @@ impl Ship {
     /// Listen never waits on a deck. `decks` false for a deck fetching for another: no deck ever
     /// waits on a second deck.
     async fn fetch_via(&self, station: &StationId, hash: &Hash, decks: bool) -> Result<Vec<u8>> {
+        self.fetch_paced(station, hash, decks, true).await
+    }
+
+    /// As `fetch_via`; `hurry` false where no one is waiting on the first answer: ballast, and a
+    /// deck fetching for another tab, which asks a dozen seconds ahead of hearing it. The ordinary
+    /// route then goes one at a time, not two at once (see `fetch_ordinary`).
+    async fn fetch_paced(&self, station: &StationId, hash: &Hash, decks: bool, hurry: bool) -> Result<Vec<u8>> {
         if let Some(b) = self.hold.lock().unwrap().get(hash) {
             return Ok(b);
         }
@@ -1363,7 +1372,7 @@ impl Ship {
         let use_decks = decks && !pocket && self.crew_on() && !cold;
         type Try<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<(Vec<u8>, bool)>> + 'a>>;
         let deck: Try = Box::pin(async move { self.deck_fetch(station, hash).await.map(|b| (b, true)) });
-        let plain: Try = Box::pin(async move { self.fetch_ordinary(station, hash).await.map(|b| (b, false)) });
+        let plain: Try = Box::pin(async move { self.fetch_ordinary(station, hash, hurry).await.map(|b| (b, false)) });
         let r = if !use_decks {
             plain.await
         } else {
@@ -1405,7 +1414,7 @@ impl Ship {
         Ok(b)
     }
 
-    async fn fetch_ordinary(&self, station: &StationId, hash: &Hash) -> Result<Vec<u8>> {
+    async fn fetch_ordinary(&self, station: &StationId, hash: &Hash, hurry: bool) -> Result<Vec<u8>> {
         if let Some(b) = self.hold.lock().unwrap().get(hash) {
             return Ok(b);
         }
@@ -1421,7 +1430,10 @@ impl Ship {
                 _ => Err(anyhow!("no answer")),
             }
         };
-        // Two routes at once, and a third if one fails or neither has answered in 2.5 s.
+        // Two routes at once, and a third if one fails or neither has answered in 2.5 s. Without
+        // hurry (ballast, a deck fetching for another) one route, and a second only if the first
+        // fails or has not answered in a second: two at once would have the exits serve every
+        // such chunk twice.
         let one = &one;
         let go = move |wait: u64| async move {
             if wait > 0 {
@@ -1429,8 +1441,9 @@ impl Ship {
             }
             one().await
         };
-        let mut tries: n0_future::FuturesUnordered<_> = if pocket { Default::default() } else { [0u64, 0, 2500].into_iter().map(|w| Box::pin(go(w))).collect() };
-        let mut started = if pocket { 4 } else { 3 };
+        let waits: &[u64] = if hurry { &[0, 0, 2500] } else { &[0, 1000] };
+        let mut tries: n0_future::FuturesUnordered<_> = if pocket { Default::default() } else { waits.iter().map(|w| Box::pin(go(*w))).collect() };
+        let mut started = if pocket { 4 } else { waits.len() };
         while let Some(r) = n0_future::StreamExt::next(&mut tries).await {
             if let Ok(b) = r {
                 self.hold.lock().unwrap().put(*hash, b.clone());
@@ -2717,7 +2730,7 @@ impl Ship {
                             None => {
                                 let soon = self.upcoming(&st).into_iter().find(|h| pyrate_core::seal::name(h) == name);
                                 match soon {
-                                    Some(h) => self.fetch_via(&st, &h, false).await.ok().map(|b| (h, b)),
+                                    Some(h) => self.fetch_paced(&st, &h, false, false).await.ok().map(|b| (h, b)),
                                     None => None,
                                 }
                             }
@@ -2845,39 +2858,57 @@ impl Ship {
             why(1);
             return Err(anyhow!("the first hop leads to the deck"));
         }
-        let Some(middle) = self.middle(&[first, intro]) else {
-            why(2);
-            return Err(anyhow!("no middle"));
-        };
-        let (hop, ciphers) = three_hops(middle.as_bytes(), &deck, &postcard::to_stdvec(ask)?, Some((&note.intro, &note.lead))).ok_or_else(|| anyhow!("seal"))?;
-        let r = timeout(Duration::from_secs(8), self.ask(first, &Request::Hop(hop))).await;
-        why(match &r {
-            Err(_) => 3,
-            Ok(Err(_)) => 4,
-            Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => 7,
-            _ => 5,
-        });
-        let opened = match r {
-            Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => {
-                let mut b = Some(raw);
-                for c in &ciphers {
-                    b = b.filter(|x| !x.is_empty()).and_then(|x| pyrate_core::route::open_answer(c, &x));
-                }
-                b.and_then(|x| postcard::from_bytes::<Response>(&x).ok())
-            }
-            _ => None,
-        };
-        match opened {
-            Some(r) => Ok(r),
-            None => {
-                // The deck, or the middle on the way to it: both are passed over for a while.
-                let mut c = self.crew.lock().unwrap();
-                c.deck_why[6] += 1;
-                c.suspect.insert(deck, raw_now());
-                c.suspect.insert(*middle.as_bytes(), raw_now());
-                Err(anyhow!("the deck gave nothing"))
-            }
+        // A way in never hands an ask back to the radio that brought it, so a middle that is the
+        // deck's own radio comes back empty, and no one but that radio can know it is one: a crew
+        // of five tabs draws it about one time in four. An empty answer is tried once more through
+        // another middle, and the first is left out for this deck a while. Only a second failure
+        // counts against the deck and its middle, as a deck that has gone does.
+        let now = raw_now();
+        let mut not = vec![first, intro];
+        if let Some((m, _)) = self.crew.lock().unwrap().deck_middle.get(&deck).filter(|(_, t)| now.saturating_sub(*t) < SUSPECT_MS) {
+            not.push(*m);
         }
+        for again in [false, true] {
+            let Some(middle) = self.middle(&not) else {
+                why(2);
+                return Err(anyhow!("no middle"));
+            };
+            let (hop, ciphers) = three_hops(middle.as_bytes(), &deck, &postcard::to_stdvec(ask)?, Some((&note.intro, &note.lead))).ok_or_else(|| anyhow!("seal"))?;
+            let r = timeout(Duration::from_secs(8), self.ask(first, &Request::Hop(hop))).await;
+            why(match &r {
+                Err(_) => 3,
+                Ok(Err(_)) => 4,
+                Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => 7,
+                _ => 5,
+            });
+            let empty = matches!(&r, Ok(Ok(Response::Hop(raw))) if raw.is_empty());
+            let opened = match r {
+                Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => {
+                    let mut b = Some(raw);
+                    for c in &ciphers {
+                        b = b.filter(|x| !x.is_empty()).and_then(|x| pyrate_core::route::open_answer(c, &x));
+                    }
+                    b.and_then(|x| postcard::from_bytes::<Response>(&x).ok())
+                }
+                _ => None,
+            };
+            if let Some(r) = opened {
+                return Ok(r);
+            }
+            let mut c = self.crew.lock().unwrap();
+            if empty && !again {
+                c.deck_middle.retain(|_, (_, t)| now.saturating_sub(*t) < SUSPECT_MS);
+                c.deck_middle.insert(deck, (middle, now));
+                not.push(middle);
+                continue;
+            }
+            // The deck, or the middle on the way to it: both are passed over for a while.
+            c.deck_why[6] += 1;
+            c.suspect.insert(deck, raw_now());
+            c.suspect.insert(*middle.as_bytes(), raw_now());
+            return Err(anyhow!("the deck gave nothing"));
+        }
+        Err(anyhow!("the deck gave nothing"))
     }
 
     /// A chunk from the crew's deck that keeps it, when there is one and it is not this tab's.
@@ -3414,7 +3445,7 @@ impl Ship {
             self.crew.lock().unwrap().ballast_busy = true;
             let me = self.clone();
             spawn(async move {
-                let got = me.fetch_via(&st, &h, true).await;
+                let got = me.fetch_paced(&st, &h, true, false).await;
                 let mut c = me.crew.lock().unwrap();
                 c.ballast_busy = false;
                 if let Ok(b) = got {
