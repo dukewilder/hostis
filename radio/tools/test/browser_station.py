@@ -160,7 +160,8 @@ try:
         check(not d.evaluate(inlist), "and is in no stranger's list while it is")
         a.uncheck("#st-linkonly")
         view(d, "list"); t_l = time.time()
-        check(within(d, inlist, 300), f"a stranger's list shows the station once it is listed ({round(time.time() - t_l)} s more)")
+        listed = within(d, inlist, 300)
+        check(listed, f"a stranger's list shows the station once it is listed ({round(time.time() - t_l)} s more)" + ("" if listed else f"; the keeper's studio says {a.text_content('#st-dialnote')!r}"))
         # Kept off the dial: out of strangers' lists, and its link still plays.
         a.check("#st-linkonly"); t_o = time.time()
         check("Off the dial" in (a.text_content("#st-dialnote") or ""), "the keeper's switch keeps it off the dial")
