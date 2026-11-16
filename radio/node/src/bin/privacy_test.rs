@@ -183,7 +183,31 @@ fn main() -> anyhow::Result<()> {
         false
     };
     let open = Node::start(cfg("open", true))?;
+    open.call(&json!({ "cmd": "lan", "value": true }));
+    // Every gossip message in and out of the app door, a listener and a Lantern is looked at for
+    // the door's address, written out and as bytes, from before the door opens.
+    let hexs = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+    let look_for = json!([hexs(b"203.0.113.7"), hexs(&[203, 0, 113, 7]), hexs(&[203, 0, 113, 7, 0xa0, 0x29])]);
+    for n in [&open, &l, &r] {
+        n.call(&json!({ "cmd": "gossip_tap", "look_for": look_for }));
+    }
     check(door_at(&open, 41001), "a radio in the open opens a door at the address it is given");
+    let st = open.call(&json!({ "cmd": "door" }));
+    check(st["listed"] == false && st["addr"].is_null(), &format!("a listener's app door with no VPN's port is listed nowhere ({st})"));
+    let me = hexs(open.id().as_bytes());
+    let mut heard = false;
+    for _ in 0..90 {
+        std::thread::sleep(Duration::from_secs(1));
+        if [&l, &r].iter().all(|n| n.call(&json!({ "cmd": "presence" })).as_array().is_some_and(|v| v.iter().any(|p| p["node"] == me.as_str() && p["limit"].as_u64() > Some(0)))) {
+            heard = true;
+            break;
+        }
+    }
+    check(heard, "a listener and a Lantern hear the app door say it is there");
+    let taps: Vec<serde_json::Value> = [&open, &l, &r].iter().map(|n| n.call(&json!({ "cmd": "gossip_tap" }))).collect();
+    let looked: u64 = taps.iter().map(|t| t["looked"].as_u64().unwrap_or(0)).sum();
+    let seen: u64 = taps.iter().flat_map(|t| t["seen"].as_array().cloned().unwrap_or_default()).map(|v| v.as_u64().unwrap_or(0)).sum();
+    check(looked > 0 && seen == 0, &format!("no gossip message in or out carries the app door's address ({looked} looked at, {seen} with it)"));
     // SAFETY: set before the dark node starts; every other node here has already read it.
     unsafe { std::env::set_var("PYRATE_DARK", "1") };
     let dark = Node::start(cfg("dark", true))?;
