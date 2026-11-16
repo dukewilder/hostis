@@ -20,6 +20,7 @@ serve it (`python3 -m http.server <port>`), then rebuild the public page with pl
 - `lantern_stream.py`: plays a station from that Lantern page, breaks the stream, and checks the page reconnects.
 - `browser_trap.py`: a simulated wasm trap; the set comes back aboard once on the same station, then asks for a reload.
 - `browser_hidden.py <port>`: a hidden tab keeps more than a minute queued.
+- `net_music.py [<music dir>]`: the recordings net_up.sh, doors_up.sh and the sweep expect (Gangway's Harbour Lights and Low Tide in gang/, Second Watch's Lamplight and Second Watch in watch/, four-note cycles, and a station.jpg each), made only where a folder has none. all.sh runs it first.
 - `serve_test.sh <relay id> <station id>`: builds both copies against the test network: the open player on 8099, hostis.black's copy on 8097 (with the given station standing in for HOSTIS's), then rebuilds the public copies.
 - `lantern_player.sh [port]`: after `serve_test.sh`, a Lantern with `--http` and `--player /tmp/dist-test` serves the open player at /listen/; every file comes back byte for byte with its type, nothing outside the folder can be had, /player/ moves to /listen/, and a tab plays from the Lantern's copy (loopback and this machine's own address, with no secure context) as from 8099.
 - `browser_scope.py <station id>`: hostis.black's copy plays only HOSTIS's stations, hands a stranger's station, an invitation or a flock straight to the open player, and shows no chatter.

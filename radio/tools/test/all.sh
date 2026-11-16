@@ -7,6 +7,8 @@
 R=$(cd "$(dirname "$0")/../.." && pwd); cd "$R" || exit 2
 M=${1:-/tmp/net}
 OUT=/tmp/all-tests
+# A fresh container has no recordings for the test network: make them where they are missing.
+python3 tools/test/net_music.py "$M" || exit 2
 WAV=${PYRATE_TEST_WAV:-"$M/gang/$(ls "$M/gang" | grep -i '\.wav$' | head -1)"}
 rm -rf "$OUT"; mkdir -p "$OUT/privacy" "$OUT/desk" "$OUT/pentest" "$OUT/ux" "$OUT/scale" "$OUT/sweep"
 export PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/opt/pw-browsers}
@@ -35,7 +37,7 @@ run() {
 }
 
 if [ "$(free_mb)" -lt 800 ]; then echo "under 800 MB free on /: not building"; exit 2; fi
-line "== builds (release; the test wasm with PYRATE_LIST_AGE_MS=60000 PYRATE_DOOR_AGE_MS=30000)"
+line "== builds (release; the test wasm with PYRATE_LIST_AGE_MS=60000 PYRATE_DOOR_AGE_MS=30000 PYRATE_QUARTER_MS=20000)"
 # The listening suites play (to a null sink with PYRATE_NULL_AUDIO), so they are built with playback.
 run build-native 2400 "cargo build --release -p pyrate-node --bin lantern --bin pentest && cargo build --release -p pyrate-node --features playback --bin desk_test --bin privacy_test --bin onair_test --bin raise_test --bin crew_deck_test --bin pocket_test --bin flock_test"
 if [ "$(free_mb)" -lt 800 ]; then line "FAIL disk under 800 MB after the native build"; exit 2; fi
@@ -113,7 +115,13 @@ run browser_station 900 "$B/browser_station.py 8099"
 # The crowd at five tabs, the target's size (eight is the design's own test; run it by hand).
 run browser_crew 900 "$B/browser_crew.py 8099 5"
 # The landing page's part of the sweep builds the landing round the released app.
-[ -e /tmp/pyrate-radio-0.9.14.apk ] || ln -s /mnt/user-data/outputs/pyrate-radio-0.9.14-to-sign.apk /tmp/pyrate-radio-0.9.14.apk
+# A fresh container has no app at all: a stand-in of a megabyte then, for the page to name.
+APK=/tmp/pyrate-radio-0.9.14.apk
+if [ ! -e "$APK" ]; then
+  rm -f "$APK"
+  if [ -e /mnt/user-data/outputs/pyrate-radio-0.9.14-to-sign.apk ]; then ln -s /mnt/user-data/outputs/pyrate-radio-0.9.14-to-sign.apk "$APK"
+  else head -c 1000000 /dev/urandom > "$APK"; fi
+fi
 # The sweep's listening, chat, pocket, flock, harbour and landing parts, layout checked at both
 # widths. Its studio, keeper, tuning and sleep parts (ten minutes more) overlap browser_station,
 # browser_raise, onair_test and raise_test; run the whole sweep on its own before a release.
