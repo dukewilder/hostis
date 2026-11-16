@@ -107,13 +107,21 @@ pub(crate) enum Ask {
     /// A line a keeper speaks in its own station's room, for the exit to say there: from the
     /// keeper's own endpoint, the station's signature would name the device it came from.
     Line { station: StationId, line: Vec<u8> },
+    /// To a middle, from a tab that wants a way in: draw a door from the presence notes held
+    /// (`pyrate_core::doorway::draw`) and answer with its node and a ticket for it alone. The tab
+    /// names no door; the middle never sees the tab, only the hop before it.
+    Doorway,
+    /// To the same middle: `offer` (a `Hop::Sealed` for the door the ticket names, which the
+    /// middle cannot open) goes to that door as `Request::Introduce`, and the door's sealed
+    /// answer comes back under this hop's seal. A ticket goes once, from the hop it was drawn for.
+    Introduce { ticket: [u8; 16], offer: Vec<u8> },
 }
 
 impl Ask {
     fn station(&self) -> Option<StationId> {
         match self {
             Ask::Log { station, .. } | Ask::Chunk { station, .. } | Ask::Token { station, .. } | Ask::Sealed { station, .. } | Ask::Stem { station, .. } | Ask::Line { station, .. } => Some(*station),
-            Ask::Relay { .. } | Ask::Lead { .. } | Ask::Pull { .. } => None,
+            Ask::Relay { .. } | Ask::Lead { .. } | Ask::Pull { .. } | Ask::Doorway | Ask::Introduce { .. } => None,
         }
     }
 }
@@ -335,15 +343,19 @@ impl Inner {
             .map(|g| *g.as_bytes())
             .collect();
         let failed = self.failed.lock().unwrap().clone();
-        let pool: Vec<[u8; 32]> = self
+        let all: Vec<[u8; 32]> = self
             .crew_radios
             .lock()
             .unwrap()
             .iter()
             .filter(|(n, (_, at))| now.saturating_sub(*at) < CREW_FRESH_MS && **n != me && !not.contains(n) && !guards.contains(n))
-            .filter(|(n, _)| !failed.get(*n).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS))
             .map(|(n, _)| *n)
             .collect();
+        // One that failed lately only when there is no other, as for exits: the only middle
+        // there is, passed over for ten minutes after one slow hop, left a deck with no way to
+        // pull at all.
+        let well: Vec<[u8; 32]> = all.iter().filter(|n| !failed.get(*n).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS)).copied().collect();
+        let pool = if well.is_empty() { all } else { well };
         // Apart from the guard: a middle homed on the guard's relay, or named by the radio that
         // named the guard, would put both in one operator's view. Where none is apart, the draw
         // goes on and is counted.
@@ -630,8 +642,9 @@ impl Inner {
         let _ = self.ask_privately(&Ask::Token { station, hour, token, nonce }).await;
     }
 
-    /// Answers a hop. Forward passes it on; Sealed is opened and answered; Stem moves on or spreads.
-    pub(crate) async fn on_hop(self: &Arc<Self>, bytes: &[u8]) -> Vec<u8> {
+    /// Answers a hop from the radio `from`. Forward passes it on; Sealed is opened and answered;
+    /// Stem moves on or spreads.
+    pub(crate) async fn on_hop(self: &Arc<Self>, bytes: &[u8], from: &[u8; 32]) -> Vec<u8> {
         let Ok(hop) = postcard::from_bytes::<Hop>(bytes) else { return vec![] };
         if !self.relay_ok.load(std::sync::atomic::Ordering::Relaxed) {
             return vec![];
@@ -686,6 +699,12 @@ impl Inner {
                 if matches!(ask, Ask::Relay { .. } | Ask::Lead { .. }) {
                     return self.pass_on(ask, &c).await;
                 }
+                if matches!(ask, Ask::Doorway) {
+                    return self.doorway(from, &c);
+                }
+                if let Ask::Introduce { ticket, offer } = ask {
+                    return self.introduce(from, ticket, offer, &c).await;
+                }
                 if let Ask::Pull { cookie, note, answers } = ask {
                     let Some(items) = self.on_pull(cookie, note, answers).await else { return vec![] };
                     let out = postcard::to_stdvec(&items).unwrap_or_default();
@@ -730,7 +749,7 @@ impl Inner {
                         Response::Sealed(took.then(|| vec![1]))
                     }
                     Ask::Line { station, line } => Response::Sealed(Box::pin(self.say_for_keeper(station, line)).await.then(|| vec![1])),
-                    Ask::Relay { .. } | Ask::Lead { .. } | Ask::Pull { .. } => return vec![],
+                    Ask::Relay { .. } | Ask::Lead { .. } | Ask::Pull { .. } | Ask::Doorway | Ask::Introduce { .. } => return vec![],
                 };
                 let out = postcard::to_stdvec(&resp).unwrap_or_default();
                 if matches!(resp, Response::Entries(_) | Response::Chunk(_) | Response::Sealed(Some(_))) {
@@ -753,6 +772,7 @@ impl Inner {
         if !self.crew.load(std::sync::atomic::Ordering::Relaxed) {
             return vec![];
         }
+        self.hop_counted();
         let me = *self.endpoint.id().as_bytes();
         let (next, blob) = match ask {
             Ask::Relay { next, blob } => (next, blob),
@@ -805,6 +825,57 @@ impl Inner {
         pyrate_core::route::seal_answer(c, &raw)
     }
 
+    /// A middle asked for a way in by the hop `from`: a door drawn from the presence notes this
+    /// radio holds, weighted towards light load, never this radio or `from`, and a ticket for
+    /// it, both under this hop's seal. Nothing when the switch is off, `from` has asked too often
+    /// this minute, or no door has room.
+    pub(crate) fn doorway(&self, from: &[u8; 32], c: &ChaCha20Poly1305) -> Vec<u8> {
+        let now = now_ms();
+        if !self.crew.load(std::sync::atomic::Ordering::Relaxed) || !self.middle_draws.lock().unwrap().take(from, now) {
+            return vec![];
+        }
+        let me = *self.endpoint.id().as_bytes();
+        let failed = self.failed.lock().unwrap().clone();
+        let pool: Vec<pyrate_core::doorway::Door> = self
+            .notes
+            .lock()
+            .unwrap()
+            .presence(now)
+            .into_iter()
+            .filter(|p| !failed.get(&p.node).is_some_and(|t| now.saturating_sub(*t) < 3 * 60_000))
+            .map(|p| pyrate_core::doorway::Door { node: p.node, load: p.load, limit: p.limit })
+            .collect();
+        self.hop_counted();
+        let Some(door) = pyrate_core::doorway::draw(&pool, &[me, *from], rand::random()) else { return vec![] };
+        let ticket: [u8; 16] = rand::random();
+        self.middle_tickets.lock().unwrap().issue(ticket, door, *from, now);
+        self.introductions.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        pyrate_core::route::seal_answer(c, &postcard::to_stdvec(&(door, ticket)).unwrap_or_default())
+    }
+
+    /// The same middle, brought the ticket and the tab's sealed offer: the offer goes to the door
+    /// the ticket names and to no other, and the door's sealed answer comes back under this
+    /// hop's seal. A few a minute for any one hop before it.
+    pub(crate) async fn introduce(&self, from: &[u8; 32], ticket: [u8; 16], offer: Vec<u8>, c: &ChaCha20Poly1305) -> Vec<u8> {
+        let now = now_ms();
+        if !self.crew.load(std::sync::atomic::Ordering::Relaxed) || offer.len() > 8 * 1024 || !matches!(postcard::from_bytes::<Hop>(&offer), Ok(Hop::Sealed { .. })) {
+            return vec![];
+        }
+        if !self.middle_intros.lock().unwrap().take(from, now) {
+            return vec![];
+        }
+        let Some(door) = self.middle_tickets.lock().unwrap().take(&ticket, from, now) else { return vec![] };
+        let Ok(id) = EndpointId::from_bytes(&door) else { return vec![] };
+        let raw = match tokio::time::timeout(Duration::from_millis(PASS_MS), self.ask(id, &Request::Introduce(offer))).await {
+            Ok(Ok(Response::Hop(b))) if !b.is_empty() => b,
+            _ => {
+                self.failed.lock().unwrap().insert(door, now_ms());
+                return vec![];
+            }
+        };
+        pyrate_core::route::seal_answer(c, &raw)
+    }
+
     /// A deck's pull, at its way in: the answers it brings go to the requesters waiting on them,
     /// its note (if it is this deck's, naming this radio and this cookie) goes on to the
     /// network, and the asks waiting for it come back, after up to `PULL_HOLD_MS` when there
@@ -814,6 +885,7 @@ impl Inner {
         if !self.crew.load(std::sync::atomic::Ordering::Relaxed) {
             return None;
         }
+        self.hop_counted();
         let now = now_ms();
         let (wake, noted) = {
             let mut p = self.pulls.lock().unwrap();
@@ -1266,6 +1338,28 @@ mod tests {
         let Ok(Hop::Sealed { eph, ct }) = postcard::from_bytes::<Hop>(hop) else { panic!("not sealed") };
         let (plain, c) = pyrate_core::route::open_sealed(seed, id, &eph, &ct).expect("opens for its own radio");
         (postcard::from_bytes::<Ask>(&plain).unwrap(), c, plain)
+    }
+
+    #[test]
+    fn an_introduction_names_no_door_and_shows_the_middle_no_address() {
+        let (mid_seed, mid) = radio(21);
+        let (door_seed, door) = radio(22);
+        // The tab's two asks, in the order the browser writes them (`Ask` in browser/src/lib.rs).
+        assert_eq!(postcard::to_stdvec(&Ask::Doorway).unwrap(), vec![9], "a way in is asked for with nothing in it");
+        let offer = pyrate_core::doorway::Offer { ufrag: "tabu".into(), pwd: "t".repeat(24), fp: [3; 32], cands: vec!["candidate:1 1 udp 1 45.87.214.22 50000 typ srflx".into()] };
+        let (eph, ct, _) = pyrate_core::route::seal_to(&door, &postcard::to_stdvec(&offer).unwrap()).unwrap();
+        let ask = Ask::Introduce { ticket: [1; 16], offer: postcard::to_stdvec(&Hop::Sealed { eph, ct }).unwrap() };
+        let (eph, ct, _) = pyrate_core::route::seal_to(&mid, &postcard::to_stdvec(&ask).unwrap()).unwrap();
+        let to_mid = postcard::to_stdvec(&Hop::Sealed { eph, ct }).unwrap();
+        // The middle reads a ticket and a blob: no door named, and nothing of the tab's address.
+        let (read, _, plain) = open(&mid_seed, &mid, &to_mid);
+        let Ask::Introduce { offer: blob, .. } = read else { panic!("not an introduction") };
+        assert!(plain[0] == 10 && !holds(&plain, &door) && !holds(&plain, b"45.87.214.22") && !holds(&plain, &[45, 87, 214, 22]));
+        // Only the door the ticket names opens the offer.
+        let Ok(Hop::Sealed { eph, ct }) = postcard::from_bytes::<Hop>(&blob) else { panic!() };
+        assert!(pyrate_core::route::open_sealed(&mid_seed, &mid, &eph, &ct).is_none());
+        let (plain, _) = pyrate_core::route::open_sealed(&door_seed, &door, &eph, &ct).unwrap();
+        assert_eq!(postcard::from_bytes::<pyrate_core::doorway::Offer>(&plain).unwrap(), offer);
     }
 
     #[test]

@@ -446,9 +446,14 @@ async function doorOpen(d, src) {
     `m=application ${port} UDP/DTLS/SCTP webrtc-datachannel`, 'a=mid:0', 'a=setup:passive', `a=ice-ufrag:${ufrag}`, `a=ice-pwd:${ufrag}`,
     'a=fingerprint:sha-256 ' + d.fp.match(/../g).join(':').toUpperCase(), 'a=sctp-port:5000', 'a=max-message-size:16384',
     `a=candidate:1 1 UDP 2130706431 ${ip} ${port} typ host`, 'a=end-of-candidates', ''].join('\r\n') });
-  const parts = new Map();
-  return await new Promise((ok, no) => {
-    const t = setTimeout(() => { no('timeout'); try { pc.close() } catch (e) { } }, 8000);
+  return await doorWire(p, all => radio.door_up(all, d.fp, src), 8000);
+}
+// A door's channel, dialled or introduced: its first frame is the door's own note, which `up`
+// checks and answers with this tab's hello; then requests, answers and forwards in parts.
+function doorWire(p, up, ms) {
+  const { pc, ch } = p, parts = new Map();
+  return new Promise((ok, no) => {
+    const t = setTimeout(() => { no('timeout'); try { pc.close() } catch (e) { } }, ms);
     pc.onconnectionstatechange = () => { if (['failed', 'closed'].includes(pc.connectionState)) { if (!p.ready) { clearTimeout(t); no(pc.connectionState) } else if (door === p) doorClose(pc.connectionState) } };
     ch.onclose = () => { if (door === p) doorClose('channel') };
     ch.onmessage = e => {
@@ -463,7 +468,7 @@ async function doorOpen(d, src) {
       if (id === 0) {
         if (!p.ready) {
           // The door's note first: it must be the door dialled. Then this tab's hello.
-          try { const hello = radio.door_up(all, d.fp, src); p.ready = true; door = p; rtcSend(p, 0, hello); clearTimeout(t); ok(p) } catch (e) { clearTimeout(t); no(String(e)); try { pc.close() } catch (x) { } }
+          try { const hello = up(all); p.ready = true; door = p; rtcSend(p, 0, hello); clearTimeout(t); ok(p) } catch (e) { clearTimeout(t); no(String(e)); try { pc.close() } catch (x) { } }
         } else try { radio.door_ctl(all) } catch (e) { }
         return;
       }
@@ -476,6 +481,40 @@ async function doorOpen(d, src) {
     };
   });
 }
+// ---- An introduced door ----
+// A door no note names. The radio asks a middle, through this tab's own guard, to draw one, and
+// passes it this tab's half of the link sealed; the door answers the same way with the addresses
+// the network already sees it at, and both ends check each other until the link opens (full ICE,
+// so the door's router lets this tab in with no port mapped). The door sees this tab's address,
+// as a guard does; the radio takes it as its guard only under rule A, otherwise as the relay of
+// its hops.
+let introPc = null;
+globalThis.pyrateIntroOffer = async () => {
+  if (typeof RTCPeerConnection === 'undefined' || door || !directLinks()) throw 'no';
+  if (introPc) try { introPc.pc.close() } catch (e) { }
+  const pc = rtcPc(), ch = pc.createDataChannel('pyrate', { negotiated: true, id: 0, ordered: true });
+  ch.binaryType = 'arraybuffer';
+  introPc = { pc, ch };
+  await pc.setLocalDescription(await pc.createOffer()); await rtcGathered(pc);
+  const sdp = pc.localDescription.sdp, line = k => ((sdp.match(new RegExp('^a=' + k + ':(.+)$', 'm')) || [])[1] || '').trim();
+  const fp = (line('fingerprint').split(' ')[1] || '').replace(/:/g, '').toLowerCase();
+  const cands = [...sdp.matchAll(/^a=(candidate:[^\r\n]+)/gm)].map(m => m[1].trim().split(/\s+/).slice(0, 8).join(' ')).filter(c => / udp /i.test(c)).slice(0, 12);
+  return JSON.stringify({ ufrag: line('ice-ufrag'), pwd: line('ice-pwd'), fp, cands });
+};
+globalThis.pyrateIntroAnswer = async json => {
+  const a = JSON.parse(json), x = introPc; introPc = null;
+  if (!x || door) { try { x?.pc.close() } catch (e) { } throw 'no offer' }
+  const at = (a.cands || []).map(c => /^\[?([0-9a-f:.]+)\]?:(\d+)$/i.exec(c)).filter(Boolean);
+  if (!at.length || !/^[0-9a-f]{64}$/.test(a.fp || '')) { try { x.pc.close() } catch (e) { } throw 'answer' }
+  const ip = at[0][1], v = ip.includes(':') ? 6 : 4;
+  await x.pc.setRemoteDescription({ type: 'answer', sdp: ['v=0', `o=- 0 0 IN IP${v} ${ip}`, 's=-', `c=IN IP${v} ${ip}`, 't=0 0',
+    `m=application ${at[0][2]} UDP/DTLS/SCTP webrtc-datachannel`, 'a=mid:0', 'a=setup:passive', `a=ice-ufrag:${a.ufrag}`, `a=ice-pwd:${a.pwd}`,
+    'a=fingerprint:sha-256 ' + a.fp.match(/../g).join(':').toUpperCase(), 'a=sctp-port:5000', 'a=max-message-size:16384',
+    ...at.map((m, i) => `a=candidate:${i + 1} 1 UDP ${2130706431 - i} ${m[1]} ${m[2]} typ host`), 'a=end-of-candidates', ''].join('\r\n') });
+  const p = { pc: x.pc, ch: x.ch, ready: false, pend: new Map(), next: 1, addr: a.cands[0], fp: a.fp, intro: a.door };
+  await doorWire(p, all => radio.door_up_intro(all, a.door), 15000);
+  console.info('through an introduced door at', p.addr);
+};
 globalThis.pyrateDoorAsk = bytes => {
   const p = door; if (!p?.ready) return Promise.reject('no door');
   const id = p.next++; if (p.next >= 0x80000000) p.next = 1;
@@ -508,6 +547,8 @@ async function doorsDial() {
     try { await doorOpen(d, LINK_DOORS.some(l => l.fp === d.fp) ? 3 : src); console.info('through the door at', d.addr); return } catch (e) { console.info('door', d.addr, 'did not open:', e) }
   }
   if (doorTried.size >= tries.length) doorTried.clear();
+  // No listed door to go through: a middle is asked to introduce one (the radio says when).
+  try { if (!door && radio.intro_due()) radio.introduce().catch(e => console.info('no introduction:', e)) } catch (e) { }
 }
 // The doors this tab trusted this visit, for the next: never one it knew only as a hint.
 function doorsKeep() { try { const l = JSON.parse(radio.doors(16)).filter(d => d.trusted).slice(0, 8).map(d => d.note); if (l.length) sset('pyrate.doors', JSON.stringify(l)) } catch (e) { } }
@@ -2746,7 +2787,7 @@ window.pyrate.card = id => { const s = stations.find(x => x.id === id); return s
 window.pyrate.logs = () => ({ taken: logsTaken, kept: !!logsMark });
 window.pyrate.crew = () => radio ? JSON.parse(radio.crew_stats()) : null;
 window.pyrate.rtc = () => globalThis.pyrateRtcOpen();
-window.pyrate.doors = () => { try { return { ...JSON.parse(radio.door_stats()), through: door?.ready ? door.addr : null, link: LINK_DOORS.length } } catch (e) { return null } };
+window.pyrate.doors = () => { try { return { ...JSON.parse(radio.door_stats()), through: door?.ready ? door.addr : null, through_intro: door?.ready && door.intro ? door.intro : null, link: LINK_DOORS.length } } catch (e) { return null } };
 window.pyrate.shareUrl = () => cur ? shareUrl(cur) : null;
 window.pyrate.copy = () => swCopy;
 window.pyrate.keeper = () => radio ? JSON.parse(radio.mine()) : [];

@@ -157,8 +157,15 @@ impl Inner {
                     if let Some(d) = self.deck.lock().unwrap().as_mut().filter(|d| d.id == deck && d.note.is_empty()) {
                         d.note = note;
                     }
-                    // No route to be had is no fault of the way in: wait for one.
+                    // No route to be had is no fault of the way in: wait for one, saying why at
+                    // most once a minute.
                     if e.to_string().starts_with("no ") {
+                        static SAID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                        let now = now_ms();
+                        if now.saturating_sub(SAID.load(std::sync::atomic::Ordering::Relaxed)) > 60_000 {
+                            SAID.store(now, std::sync::atomic::Ordering::Relaxed);
+                            say(&format!("deck: waiting for a route ({e})"));
+                        }
                         tokio::time::sleep(Duration::from_secs(3)).await;
                         continue;
                     }

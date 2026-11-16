@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
     // An unknown flag stops the Lantern before it starts: a mistyped or test flag must never
     // bring up a stray node on whatever network the shell happens to be on.
     const VALUED: &[&str] = &["--dir", "--quota-gb", "--bootstrap", "--seed", "--http", "--open-hails", "--relay", "--release-keys", "--words", "--withdraw", "--reseed", "--player", "--door"];
-    const BARE: &[&str] = &["--carry-own", "--public-dns", "--scuttle", "--web-all", "--listener", "--door-links", "--lan"];
+    const BARE: &[&str] = &["--carry-own", "--public-dns", "--scuttle", "--web-all", "--listener", "--door-links", "--door-kept", "--lan"];
     let mut i = 1;
     while i < args.len() {
         let a = args[i].as_str();
@@ -78,9 +78,12 @@ fn main() -> anyhow::Result<()> {
         node.call(&serde_json::json!({ "cmd": "lan", "value": true }));
     }
     // --door <ip:port> opens a door for browsers at that outside address; --door auto asks the
-    // home router for a port (UPnP-IGD, NAT-PMP, PCP) and stays shut if none is given.
+    // home router for a port (UPnP-IGD, NAT-PMP, PCP). A Lantern's door is kept and listed. A
+    // --listener's is a listener's app door, opened when the network needs one and introduced by
+    // middles, never listed, unless --door-kept says its keeper keeps it as a listed door.
     if let Some(d) = get("--door") {
-        let r = node.call(&serde_json::json!({ "cmd": "door", "on": true, "app": listener, "links": args.iter().any(|a| a == "--door-links"), "addr": if d == "auto" { serde_json::Value::Null } else { d.into() } }));
+        let app = listener && !args.iter().any(|a| a == "--door-kept");
+        let r = node.call(&serde_json::json!({ "cmd": "door", "on": true, "app": app, "links": args.iter().any(|a| a == "--door-links"), "addr": if d == "auto" { serde_json::Value::Null } else { d.into() } }));
         let _ = r;
         std::thread::sleep(std::time::Duration::from_secs(4));
         println!("door {}", node.call(&serde_json::json!({ "cmd": "door" })));

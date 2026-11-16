@@ -68,6 +68,10 @@ pub enum Request {
     /// instead of waiting on gossip, with what it needs to reach their carriers privately.
     /// Answered with `Response::Cards`; older nodes answer nothing.
     Cards,
+    /// From a middle to the door it drew: a tab's offer of a link, sealed to the door (a
+    /// `Hop::Sealed` holding a `pyrate_core::doorway::Offer`), answered with `Response::Hop`
+    /// holding the door's own half sealed back. Older nodes answer nothing.
+    Introduce(Vec<u8>),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -438,6 +442,59 @@ pub enum Gossip {
     /// `app` says it is a listener's app (not a Lantern); `link` that its owner lets shared links
     /// name it. Signed with its own node key. Older nodes do not know this message and pass over it.
     Door { node: [u8; 32], addr: String, fp: [u8; 32], since: u64, app: bool, link: bool, at_ms: u64, sig: Vec<u8> },
+    /// A radio saying it is there and how busy it is, with no address: as a door taking
+    /// introductions (`limit` tabs at most, `load` now, `map` whether its router gave it a port,
+    /// `since` when this spell of door duty began; `limit` 0 when it is no door), and as a radio
+    /// passing on routes (`hops` passed in the last minute of the most `hop_limit` it takes; 0
+    /// when it takes none). `relay` is the relay it is homed on, never an address of its own.
+    /// Signed with its own node key, believed for fifteen minutes, never written into a page or
+    /// a build. Older nodes do not know this message and pass over it.
+    Presence { node: [u8; 32], at_ms: u64, since: u64, load: u16, limit: u16, map: bool, hops: u16, hop_limit: u16, relay: String, sig: Vec<u8> },
+}
+
+#[allow(clippy::too_many_arguments)]
+fn presence_message(node: &[u8; 32], at_ms: u64, since: u64, load: u16, limit: u16, map: bool, hops: u16, hop_limit: u16, relay: &str) -> Vec<u8> {
+    let mut m = b"pyrate/presence/v1\0".to_vec();
+    m.extend_from_slice(node);
+    m.extend_from_slice(&at_ms.to_le_bytes());
+    m.extend_from_slice(&since.to_le_bytes());
+    m.extend_from_slice(&load.to_le_bytes());
+    m.extend_from_slice(&limit.to_le_bytes());
+    m.push(map as u8);
+    m.extend_from_slice(&hops.to_le_bytes());
+    m.extend_from_slice(&hop_limit.to_le_bytes());
+    m.extend_from_slice(relay.as_bytes());
+    m
+}
+
+/// A radio's presence as a middle keeps it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PresenceNote {
+    pub node: [u8; 32],
+    pub at_ms: u64,
+    pub since: u64,
+    pub load: u16,
+    pub limit: u16,
+    pub map: bool,
+    pub hops: u16,
+    pub hop_limit: u16,
+    pub relay: String,
+}
+
+/// The most a presence note's bytes may be: a fixed few fields and a relay's name.
+pub const PRESENCE_WIRE: usize = 400;
+
+/// Whether a relay is named rather than written as an address: a presence note names the relay
+/// a radio is homed on, and an address there could be the radio's own. A loopback relay only
+/// on a test network.
+pub fn relay_named(relay: &str) -> bool {
+    let Some(rest) = relay.strip_prefix("https://").or_else(|| relay.strip_prefix("http://")) else { return false };
+    let host_port = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = if let Some(v6) = host_port.strip_prefix('[') { v6.split(']').next().unwrap_or("") } else { host_port.rsplit_once(':').map(|(h, _)| h).unwrap_or(host_port) };
+    match host.trim_end_matches('.').parse::<std::net::IpAddr>() {
+        Ok(ip) => ip.is_loopback() && LOCAL_RELAYS_OK.load(std::sync::atomic::Ordering::Relaxed),
+        Err(_) => relay_public(relay),
+    }
 }
 
 fn door_message(node: &[u8; 32], addr: &str, fp: &[u8; 32], since: u64, app: bool, link: bool, at_ms: u64) -> Vec<u8> {
@@ -613,6 +670,44 @@ impl Gossip {
         Gossip::Door { node, addr: addr.into(), fp, since, app, link, at_ms, sig: key.sign(&door_message(&node, addr, &fp, since, app, link, at_ms)).to_vec() }
     }
 
+    /// This radio's presence, signed with its own secret.
+    #[allow(clippy::too_many_arguments)]
+    pub fn presence(secret: &[u8; 32], since: u64, load: u16, limit: u16, map: bool, hops: u16, hop_limit: u16, relay: &str, at_ms: u64) -> Self {
+        let key = StationKey::from_seed(*secret);
+        let node = key.id().0;
+        let sig = key.sign(&presence_message(&node, at_ms, since, load, limit, map, hops, hop_limit, relay)).to_vec();
+        Gossip::Presence { node, at_ms, since, load, limit, map, hops, hop_limit, relay: relay.into(), sig }
+    }
+
+    /// For a presence note: what it says, if its radio signed it within `DOOR_FRESH_MS` of `now`
+    /// (and not more than five minutes ahead), its load is within its limit, and the relay it
+    /// names is a name and not an address.
+    pub fn presence_checked(&self, now: u64) -> Option<PresenceNote> {
+        let Gossip::Presence { node, at_ms, since, load, limit, map, hops, hop_limit, relay, sig } = self else { return None };
+        if relay.len() > 256 || now.saturating_sub(*at_ms) > DOOR_FRESH_MS || at_ms.saturating_sub(now) > 5 * 60_000 || since > at_ms || load > limit {
+            return None;
+        }
+        if !relay.is_empty() && !relay_named(relay) {
+            return None;
+        }
+        let sig: [u8; 64] = sig.as_slice().try_into().ok()?;
+        StationId(*node).verify(&presence_message(node, *at_ms, *since, *load, *limit, *map, *hops, *hop_limit, relay), &sig).ok()?;
+        Some(PresenceNote { node: *node, at_ms: *at_ms, since: *since, load: *load, limit: *limit, map: *map, hops: *hops, hop_limit: *hop_limit, relay: relay.clone() })
+    }
+
+    /// A presence note as it came: only exactly the bytes its fields make, so nothing (an
+    /// address least of all) rides along after them, and only if the note itself holds.
+    pub fn presence_raw(raw: &[u8], now: u64) -> Option<PresenceNote> {
+        if raw.len() > PRESENCE_WIRE {
+            return None;
+        }
+        let g: Gossip = postcard::from_bytes(raw).ok()?;
+        if postcard::to_stdvec(&g).ok()?.as_slice() != raw {
+            return None;
+        }
+        g.presence_checked(now)
+    }
+
     /// For a door's note: the door, if it signed it within `DOOR_FRESH_MS` of `now` and names a
     /// plain public address (a loopback or private one only on a test network).
     pub fn door_checked(&self, now: u64) -> Option<DoorNote> {
@@ -678,6 +773,9 @@ pub struct Notes {
     crew: std::collections::HashMap<[u8; 32], (u64, Vec<u8>)>,
     decks: std::collections::HashMap<(StationId, [u8; 32]), (u64, Vec<u8>)>,
     doors: std::collections::HashMap<[u8; 32], (u64, Vec<u8>)>,
+    /// Presence notes, as checked: for drawing doors and for duty. Never handed on in cards,
+    /// in a page or in a build; they travel in the gossip alone.
+    presence: std::collections::HashMap<[u8; 32], PresenceNote>,
 }
 
 impl Notes {
@@ -691,6 +789,23 @@ impl Notes {
         let mut d: Vec<&(u64, Vec<u8>)> = self.doors.values().filter(|(t, _)| now.saturating_sub(*t) < DOOR_FRESH_MS).collect();
         d.sort_by(|a, b| b.0.cmp(&a.0));
         d.into_iter().take(n).map(|x| x.1.clone()).collect()
+    }
+
+    /// The radios that said they are there in the last fifteen minutes, freshest note of each.
+    pub fn presence(&self, now: u64) -> Vec<PresenceNote> {
+        self.presence.values().filter(|p| now.saturating_sub(p.at_ms) < DOOR_FRESH_MS).cloned().collect()
+    }
+
+    /// The listed doors heard lately, by node and whether each is a listener's app.
+    pub fn doors_listed(&self, now: u64) -> Vec<([u8; 32], bool)> {
+        self.doors
+            .iter()
+            .filter(|(_, (t, _))| now.saturating_sub(*t) < DOOR_FRESH_MS)
+            .filter_map(|(k, (_, raw))| match postcard::from_bytes::<Gossip>(raw) {
+                Ok(Gossip::Door { app, .. }) => Some((*k, app)),
+                _ => None,
+            })
+            .collect()
     }
 
     /// The same, leaving out listeners' app doors: only doors kept by their keepers as doors
@@ -742,6 +857,16 @@ impl Notes {
                 }
                 if self.doors.len() > Self::HARBOURS {
                     Self::trim(&mut self.doors, now, Self::HARBOURS);
+                }
+            }
+            Gossip::Presence { node, .. } => {
+                if let Some(p) = Gossip::presence_raw(raw, now) {
+                    if self.presence.get(node).is_none_or(|o| o.at_ms < p.at_ms) {
+                        self.presence.insert(*node, p);
+                    }
+                    if self.presence.len() > Self::HARBOURS {
+                        self.presence.retain(|_, p| now.saturating_sub(p.at_ms) < Self::FRESH_MS);
+                    }
                 }
             }
             Gossip::Deck { .. } => {
@@ -1447,6 +1572,42 @@ mod card_limit_tests {
         }
         assert_eq!(n.doors(now, 16).len(), 2, "both are heard and passed on in the gossip");
         assert_eq!(n.doors_kept(now, 16), vec![postcard::to_stdvec(&kept).unwrap()], "only the kept door is published");
+    }
+
+    #[test]
+    fn a_presence_note_carries_no_address_and_is_refused_when_it_does() {
+        LOCAL_RELAYS_OK.store(false, std::sync::atomic::Ordering::Relaxed);
+        let holds = |hay: &[u8], needle: &[u8]| hay.windows(needle.len()).any(|w| w == needle);
+        let now = 1_800_000_000_000;
+        let secret = [5u8; 32];
+        // A door at 198.51.100.23:40123 says it is there: nothing of its address is in the note.
+        let g = Gossip::presence(&secret, now - 60_000, 3, 64, false, 10, 600, "https://relay.hostis.black/", now);
+        let raw = postcard::to_stdvec(&g).unwrap();
+        for needle in [&[198u8, 51, 100, 23][..], b"198.51.100.23", &40123u16.to_be_bytes(), &40123u16.to_le_bytes()] {
+            assert!(!holds(&raw, needle), "no part of the address: {needle:?}");
+        }
+        let p = Gossip::presence_raw(&raw, now).expect("the radio's own note holds");
+        assert_eq!((p.load, p.limit, p.map, p.hops, p.hop_limit), (3, 64, false, 10, 600));
+        // An address carried after the fields is refused, though the signature still holds.
+        let mut tail = raw.clone();
+        tail.extend_from_slice(b"198.51.100.23:40123");
+        assert!(Gossip::presence_raw(&tail, now).is_none(), "nothing rides after the fields");
+        // A relay written as an address (it could be the radio's own) is refused, signed or not.
+        for relay in ["http://198.51.100.23:3340/", "https://[2001:db8::7]/", "http://127.0.0.1:3340/"] {
+            assert!(Gossip::presence(&secret, now, 0, 64, false, 0, 0, relay, now).presence_checked(now).is_none(), "{relay}");
+        }
+        // An edited load, a load past its limit, or a stale note: refused.
+        let Gossip::Presence { node, at_ms, since, limit, map, hops, hop_limit, relay, sig, .. } = g.clone() else { unreachable!() };
+        assert!(Gossip::Presence { node, at_ms, since, load: 0, limit, map, hops, hop_limit, relay: relay.clone(), sig }.presence_checked(now).is_none());
+        assert!(Gossip::presence(&secret, now, 65, 64, false, 0, 0, "", now).presence_checked(now).is_none());
+        assert!(g.presence_checked(now + DOOR_FRESH_MS + 1).is_none());
+        // Kept apart: never among the doors handed on, the kept doors or the cards.
+        let mut n = Notes::default();
+        n.keep(&g, &raw, now);
+        n.keep(&g, &tail, now);
+        assert_eq!(n.presence(now).len(), 1);
+        assert!(n.doors(now, 16).is_empty() && n.doors_kept(now, 16).is_empty() && n.doors_listed(now).is_empty());
+        assert!(!n.for_stations(&[], now).contains(&raw));
     }
 
     #[test]

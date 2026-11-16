@@ -225,6 +225,27 @@ pub(crate) fn gateway() -> Option<Ipv4Addr> {
     }
 }
 
+/// Whether this device's default route goes through a tunnel (a VPN's interface), where the
+/// system shows it. Where it does not show it, never: a door is listed only on a VPN this
+/// device can see it is on.
+pub fn via_tunnel() -> bool {
+    let Ok(t) = std::fs::read_to_string("/proc/net/route") else { return false };
+    t.lines().skip(1).any(|line| {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        f.len() > 2 && f[1] == "00000000" && tunnel_name(f[0])
+    })
+}
+
+pub fn tunnel_name(iface: &str) -> bool {
+    ["tun", "wg", "ppp", "utun", "ipsec", "tap", "nordlynx", "proton", "mullvad", "tailscale"].iter().any(|p| iface.starts_with(p))
+}
+
+/// The public addresses this device holds itself: the one it sends from towards the internet,
+/// where that is public. A router's address equal to one of these is home's, never a VPN's.
+pub fn home_addresses() -> Vec<IpAddr> {
+    [local_ip_toward(IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)))].into_iter().flatten().filter(|ip| public_ok(*ip)).collect()
+}
+
 fn public_ok(ip: IpAddr) -> bool {
     crate::net::relay_public(&format!("http://{}/", SocketAddr::new(ip, 1)))
 }

@@ -13,6 +13,7 @@ pub mod audio;
 pub mod callsign;
 pub mod chat;
 pub mod clock;
+pub mod doorway;
 pub mod drift;
 #[cfg(feature = "codec")]
 pub mod ingest;

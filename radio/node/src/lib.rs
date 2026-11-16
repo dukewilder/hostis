@@ -16,6 +16,7 @@ pub mod clockfix;
 mod desk;
 mod deck;
 pub mod door;
+mod duty;
 mod portmap;
 pub mod net;
 pub mod page;
@@ -545,6 +546,22 @@ pub struct Inner {
     /// Decks behind doors that keep this node as their way in, by the cookie their lead names
     /// (see `hop::PullBox`).
     pub(crate) pulls: Mutex<HashMap<[u8; 32], hop::PullBox>>,
+    /// A middle's part in introducing tabs to doors: draws and introductions passed on lately
+    /// for each hop before it, the tickets it gave, and how many doors it drew (see `hop`).
+    pub(crate) middle_draws: Mutex<pyrate_core::doorway::PerRadio>,
+    pub(crate) middle_intros: Mutex<pyrate_core::doorway::PerRadio>,
+    pub(crate) middle_tickets: Mutex<pyrate_core::doorway::Tickets>,
+    pub introductions: std::sync::atomic::AtomicU64,
+    /// Duty by need (see `duty`): what the app allows, and the door and hop jobs.
+    pub(crate) duty: Mutex<duty::Duties>,
+    /// Whether this node holds the hop job now: it says it is of the crew only then.
+    pub(crate) hop_duty: std::sync::atomic::AtomicBool,
+    /// Hops passed on as a middle or a way in: the minute, its count, the minute before's.
+    pub(crate) hops_minute: Mutex<(u64, u16, u16)>,
+    /// For the privacy test: byte strings looked for in every gossip message in and out, and
+    /// how many messages held each; and how many messages were looked at.
+    tap: Mutex<Vec<(Vec<u8>, u64)>>,
+    tapped: std::sync::atomic::AtomicU64,
 }
 
 pub struct Node {
@@ -648,7 +665,11 @@ impl ProtocolHandler for Proto {
                     Request::Hop(b) => {
                         // A hop costs this node a connection of its own: fewer of those at once.
                         let Ok(_hop) = (if inner.cfg.lantern { &HOPPING_LANTERN } else { &HOPPING }).try_acquire() else { return };
-                        Response::Hop(inner.on_hop(&b).await)
+                        Response::Hop(inner.on_hop(&b, &from).await)
+                    }
+                    Request::Introduce(b) => {
+                        let Ok(_hop) = (if inner.cfg.lantern { &HOPPING_LANTERN } else { &HOPPING }).try_acquire() else { return };
+                        Response::Hop(inner.on_introduce(&from, &b).await)
                     }
                     other => {
                         if matches!(other, Request::Log { .. } | Request::Chunk { .. } | Request::SealedChunk { .. }) {
@@ -763,6 +784,7 @@ impl Inner {
             Request::Chatter { station } => Response::Chatter(self.chatter_for(&station)),
             Request::PocketChatter { tag } => Response::Chatter(self.pocket_chatter(&tag)),
             Request::Cards => Response::Cards(vec![]),
+            Request::Introduce(_) => Response::Hop(vec![]),
         }
     }
 
@@ -1284,7 +1306,22 @@ impl Inner {
     async fn broadcast(&self, g: &Gossip) {
         let tx = self.gossip_tx.lock().unwrap().clone();
         if let (Some(tx), Ok(bytes)) = (tx, postcard::to_stdvec(g)) {
+            self.tap_look(&bytes);
             let _ = tx.broadcast(bytes.into()).await;
+        }
+    }
+
+    /// For the privacy test: counts a gossip message, and each byte string looked for in it.
+    fn tap_look(&self, bytes: &[u8]) {
+        let mut t = self.tap.lock().unwrap();
+        if t.is_empty() {
+            return;
+        }
+        self.tapped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        for (needle, n) in t.iter_mut() {
+            if !needle.is_empty() && bytes.windows(needle.len()).any(|w| w == needle.as_slice()) {
+                *n += 1;
+            }
         }
     }
 
@@ -1433,6 +1470,18 @@ impl Inner {
                 }
                 if c.len() > 4_000 {
                     c.retain(|_, (_, t)| now.saturating_sub(*t) < 15 * 60_000);
+                }
+                return None;
+            }
+            g @ Gossip::Presence { .. } => {
+                // A radio saying it is there: a door a middle may draw, reached through the relay
+                // it is homed on. The note itself is kept with the others (`Notes`).
+                drop(log);
+                let Some(p) = g.presence_checked(now) else { return None };
+                if p.node != *self.endpoint.id().as_bytes() && !p.relay.is_empty() {
+                    if let (Ok(id), Ok(url)) = (EndpointId::from_bytes(&p.node), p.relay.parse::<iroh::RelayUrl>()) {
+                        self.book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+                    }
                 }
                 return None;
             }
@@ -1762,7 +1811,8 @@ impl Inner {
             // No relay at all (every relay down, or none to be had): it still says it is of the
             // crew, with no relay named, so the tabs behind doors have middles and ways in that
             // are not each other. Radios reach it directly; nobody is sent anywhere by the note.
-            if relay.is_none() && self.crew.load(std::sync::atomic::Ordering::Relaxed) && self.relay_ok.load(std::sync::atomic::Ordering::Relaxed) {
+            let hops = self.hop_duty.load(std::sync::atomic::Ordering::Relaxed);
+            if relay.is_none() && hops && self.crew.load(std::sync::atomic::Ordering::Relaxed) && self.relay_ok.load(std::sync::atomic::Ordering::Relaxed) {
                 self.last_harbour.store(now, std::sync::atomic::Ordering::Relaxed);
                 let crew = Gossip::crew(&self.secret, "", now);
                 static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -1783,7 +1833,7 @@ impl Inner {
                 self.broadcast(&note).await;
                 // With the switch on, and on a connection that may carry others' traffic, it says
                 // too that it is of the crew: a middle for three-hop routes and a way in to decks.
-                if self.crew.load(std::sync::atomic::Ordering::Relaxed) && self.relay_ok.load(std::sync::atomic::Ordering::Relaxed) {
+                if hops && self.crew.load(std::sync::atomic::Ordering::Relaxed) && self.relay_ok.load(std::sync::atomic::Ordering::Relaxed) {
                     let crew = Gossip::crew(&self.secret, &relay, now);
                     if let Ok(raw) = postcard::to_stdvec(&crew) {
                         self.notes.lock().unwrap().keep(&crew, &raw, now);
@@ -2836,8 +2886,19 @@ impl Node {
             door_of: Mutex::new(HashMap::new()),
             routes_shared: Default::default(),
             pulls: Mutex::new(HashMap::new()),
+            middle_draws: Mutex::new(pyrate_core::doorway::PerRadio::new(60_000, pyrate_core::doorway::MIDDLE_PER_MINUTE, 4_096)),
+            middle_intros: Mutex::new(pyrate_core::doorway::PerRadio::new(60_000, pyrate_core::doorway::MIDDLE_PER_MINUTE, 4_096)),
+            middle_tickets: Mutex::new(Default::default()),
+            introductions: Default::default(),
+            duty: Mutex::new(duty::Duties::new()),
+            hop_duty: std::sync::atomic::AtomicBool::new(true),
+            hops_minute: Mutex::new((0, 0, 0)),
+            tap: Mutex::new(Vec::new()),
+            tapped: Default::default(),
         });
         *proto.0.lock().unwrap() = Some(inner.clone());
+        // Which jobs this device takes, decided every few minutes (see `duty`).
+        inner.duty_loop();
         {
             let i2 = inner.clone();
             inner.load_log();
@@ -2927,6 +2988,7 @@ impl Node {
                     }
                     _ => continue,
                 };
+                i2.tap_look(&msg.content);
                 let Ok(g) = postcard::from_bytes::<Gossip>(&msg.content) else { continue };
                 i2.notes.lock().unwrap().keep(&g, &msg.content, now_ms());
                 // The tabs behind this node's door hear the Log through it.
@@ -3793,20 +3855,28 @@ impl Node {
             // A door for browsers (see `door`): opened when the app says this radio may be one (a
             // computer, or a phone on Wi-Fi while charging, with carrying on), closed otherwise.
             // `addr` names the outside address where the keeper knows it; else the router is asked.
+            // A listener's app says only whether this device may be a door: the node opens one when
+            // the network needs it (see `duty`), and the reply says whether it is open now.
             "door" => {
+                let app = req["app"].as_bool().unwrap_or(true);
+                let public = req["addr"].as_str().and_then(|a| a.parse().ok());
+                let links = req["links"].as_bool().unwrap_or(false);
                 match req["on"].as_bool() {
                     // Never while running dark: see `door_open`.
                     Some(true) if inner.dark => inner.door_why(door::WHY_DARK),
+                    Some(true) if app && !inner.cfg.lantern => inner.door_allow(true, public, links),
                     Some(true) if inner.door.lock().unwrap().is_none() && !inner.door_opening.load(std::sync::atomic::Ordering::SeqCst) => {
-                        let public = req["addr"].as_str().and_then(|a| a.parse().ok());
-                        let app = req["app"].as_bool().unwrap_or(true);
-                        let links = req["links"].as_bool().unwrap_or(false);
                         let i2 = inner.clone();
                         self.rt.spawn(async move {
                             let _ = i2.door_open(public, app, links).await;
                         });
                     }
-                    Some(false) => inner.door_close(),
+                    Some(false) => {
+                        inner.duty.lock().unwrap().door_allowed = false;
+                        inner.door_close();
+                        let i2 = inner.clone();
+                        self.rt.spawn(async move { i2.duty_tick().await });
+                    }
                     _ => {}
                 }
                 // "Let shared links name this radio": its owner's choice, never on by itself.
@@ -3816,7 +3886,7 @@ impl Node {
                 let d = inner.door.lock().unwrap().clone();
                 let mapped_by = ["none", "upnp", "nat-pmp", "pcp"][portmap::HOW.load(std::sync::atomic::Ordering::Relaxed).min(3) as usize];
                 Ok(match d {
-                    Some(d) => json!({ "open": true, "addr": d.public.lock().unwrap().map(|a| a.to_string()), "fp": hex(&d.fp), "since": d.since,
+                    Some(d) => json!({ "open": true, "addr": d.public.lock().unwrap().map(|a| a.to_string()), "listed": d.listed(), "introduced": d.introduced.load(std::sync::atomic::Ordering::Relaxed), "fp": hex(&d.fp), "since": d.since,
                         "browsers": d.clients(), "sessions": d.sessions.load(std::sync::atomic::Ordering::Relaxed), "opened": d.opened.load(std::sync::atomic::Ordering::Relaxed),
                         "served": d.served.load(std::sync::atomic::Ordering::Relaxed), "stun": d.stun.load(std::sync::atomic::Ordering::Relaxed),
                         "mapped_by": mapped_by }),
@@ -3843,6 +3913,24 @@ impl Node {
                 }
                 Ok(json!({ "value": number0_on(&inner.hold, &inner.cfg.dir), "standing_in": NUMBER0_IN.load(std::sync::atomic::Ordering::Relaxed) }))
             }
+            // The jobs this device is doing now, and the one plain line the app shows for them.
+            "jobs" => Ok(inner.jobs()),
+            // The radios that said lately they are there: doors with their load, and middles.
+            "presence" => {
+                let list = inner.notes.lock().unwrap().presence(now_ms());
+                Ok(json!(list.iter().map(|p| json!({ "node": hex(&p.node), "load": p.load, "limit": p.limit, "map": p.map, "hops": p.hops, "hop_limit": p.hop_limit, "since": p.since })).collect::<Vec<_>>()))
+            }
+            // For the privacy test: the byte strings to look for in every gossip message in and
+            // out (hex), or with none given, how often each was seen so far.
+            "gossip_tap" => {
+                if let Some(list) = req["look_for"].as_array() {
+                    let mut t = inner.tap.lock().unwrap();
+                    *t = list.iter().filter_map(|h| h.as_str().and_then(|h| (0..h.len() / 2).map(|i| u8::from_str_radix(h.get(2 * i..2 * i + 2)?, 16).ok()).collect::<Option<Vec<u8>>>())).map(|b| (b, 0)).collect();
+                    inner.tapped.store(0, std::sync::atomic::Ordering::Relaxed);
+                }
+                let t = inner.tap.lock().unwrap();
+                Ok(json!({ "looked": inner.tapped.load(std::sync::atomic::Ordering::Relaxed), "seen": t.iter().map(|(_, n)| *n).collect::<Vec<u64>>() }))
+            }
             // Before the app quits: the door shut and the router's port given back.
             "shutdown" => {
                 let i2 = inner.clone();
@@ -3865,9 +3953,17 @@ impl Node {
             // crew (when its connection may carry others' traffic) and fetches through decks.
             "crew" => {
                 if let Some(on) = req["on"].as_bool() {
-                    inner.crew.store(on, std::sync::atomic::Ordering::Relaxed);
+                    // The jobs follow the switch at once (see `duty`).
+                    if inner.crew.swap(on, std::sync::atomic::Ordering::Relaxed) != on {
+                        let i2 = inner.clone();
+                        self.rt.spawn(async move { i2.duty_tick().await });
+                    }
                 }
-                Ok(json!({ "on": inner.crew.load(std::sync::atomic::Ordering::Relaxed),
+                let now = now_ms();
+                let radios: Vec<Value> = inner.crew_radios.lock().unwrap().iter().map(|(n, (r, t))| json!({ "node": hex(&n[..5]), "relay": r, "ago_s": now.saturating_sub(*t) / 1000 })).collect();
+                let guards: Vec<String> = ["fetch-guard", "stem-guard"].iter().map(|k| inner.hold.read_note(&inner.cfg.dir, k, None).and_then(|b| String::from_utf8(b).ok()).map(|g| g.chars().take(10).collect()).unwrap_or_default()).collect();
+                let failed: Vec<String> = inner.failed.lock().unwrap().iter().filter(|(_, t)| now.saturating_sub(**t) < net::FAILED_MS).map(|(n, _)| hex(&n[..5])).collect();
+                Ok(json!({ "on": inner.crew.load(std::sync::atomic::Ordering::Relaxed), "radios": radios, "guards": guards, "failed": failed, "me": hex(&inner.endpoint.id().as_bytes()[..5]), "hop_duty": inner.hop_duty.load(std::sync::atomic::Ordering::Relaxed),
                     "served_bytes": inner.served_bytes.load(std::sync::atomic::Ordering::Relaxed),
                     "relayed_bytes": inner.relayed_bytes.load(std::sync::atomic::Ordering::Relaxed) }))
             }
