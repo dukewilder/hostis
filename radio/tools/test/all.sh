@@ -86,6 +86,19 @@ sleep 32
 run browser_doors 900 "$B/browser_doors.py"
 run browser_offline 600 "$B/browser_offline.py"
 
+line "== introduced doors (no listed door, the relay stopped part way)"
+pkill -f "$R/target/release/lantern" 2>/dev/null; pkill -f "http.server 80" 2>/dev/null
+# The tab must need fresh sound after the relay stops: a recording longer than the test.
+IM=${PYRATE_INTRO_MUSIC:-/tmp/intro-music}
+if [ ! -s "$IM/gang/long.wav" ]; then
+  mkdir -p "$IM/gang" "$IM/watch"
+  ffmpeg -hide_banner -loglevel error -y -f lavfi -i "sine=frequency=330:duration=420" -ar 48000 -ac 2 "$IM/gang/long.wav"
+  cp "$WAV" "$IM/watch/" 2>/dev/null
+fi
+PYRATE_QUARTER_MS=20000 sh tools/test/intro_up.sh "$IM" > "$OUT/intro_up.log" 2>&1
+sleep 10
+run browser_intro 900 "$B/browser_intro.py"
+
 line "== the slowest, last"
 # A station raised by a phone waits for its work and a day before the dial lists it; the test
 # network shortens the day to a minute, as the test wasm does.
