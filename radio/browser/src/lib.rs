@@ -2847,6 +2847,10 @@ impl Ship {
         }
         let now = raw_now();
         let c = self.crew.lock().unwrap();
+        // A guard kept from an earlier visit was a first hop then: it was seasoned already.
+        if c.kept.contains(n) {
+            return true;
+        }
         let wait = if c.relays.contains_key(n) || !c.radios.contains_key(n) { NEWCOMER_MS } else { NEWCOMER_TAB_MS };
         c.first_seen.get(n).is_some_and(|t| now.saturating_sub(*t) >= wait)
     }
