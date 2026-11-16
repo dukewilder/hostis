@@ -1117,7 +1117,7 @@ fn encode(inner: Arc<Inner>, station: StationId, music: bool, rx: mpsc::Receiver
                     let _ = inner.store.lock().unwrap().write(station, now_ms() + 1, Body::LiveEnd);
                     sail(&inner, station);
                 }
-                say(&format!("off the air {}", station.call_sign()));
+                crate::say_named(&format!("off the air {}", station.call_sign()));
                 return;
             }
         }
@@ -1263,7 +1263,7 @@ impl Mixer {
             let i2 = self.inner.clone();
             let _ = std::thread::Builder::new().name("encoder".into()).spawn(move || encode(i2, station, music, rx));
             self.lim.ceil = db(if music { -3.0 } else { -4.0 });
-            say(&format!("ON AIR {}", station.call_sign()));
+            crate::say_named(&format!("ON AIR {}", station.call_sign()));
             self.show = Some(Show { station, started, tx, music });
         }
     }

@@ -740,7 +740,7 @@ fn getrandom_fill(b: &mut [u8; 32]) -> anyhow::Result<()> {
 /// One per station with listeners: follows the clock (or the live broadcast),
 /// decodes, encodes to MP3 at the pace of the hour, and hands the bytes to every tab.
 async fn tower(inner: Arc<Inner>, towers: Towers, views: Arc<Views>, st: StationId, tx: broadcast::Sender<Bytes>) {
-    say(&format!("web: tower up for {}", st.call_sign()));
+    crate::say_named(&format!("web: tower up for {}", st.call_sign()));
     let mut lame = match mp3lame_encoder::Builder::new().and_then(|mut b| {
         b.set_num_channels(2).ok()?;
         b.set_sample_rate(48_000).ok()?;
@@ -853,5 +853,5 @@ async fn tower(inner: Arc<Inner>, towers: Towers, views: Arc<Views>, st: Station
         }
     }
     towers.lock().unwrap().remove(&st);
-    say(&format!("web: tower down for {}", st.call_sign()));
+    crate::say_named(&format!("web: tower down for {}", st.call_sign()));
 }

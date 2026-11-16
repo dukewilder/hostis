@@ -75,6 +75,20 @@ pub fn say(msg: &str) {
     }
 }
 
+/// A line that names a station, a peer or this node: said only where names may be said. A
+/// Lantern keeps them out of its log unless its keeper asks (`--show-ids`), since a log lies on
+/// disk in the clear and a station's call sign or a peer's id in it says what the box carried
+/// and whom it met.
+pub fn say_named(msg: &str) {
+    if NAMES.load(std::sync::atomic::Ordering::Relaxed) {
+        say(msg);
+    }
+}
+
+/// Whether lines naming stations, peers and this node are said (see `say_named`). On by default;
+/// a Lantern turns it off unless asked.
+pub static NAMES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
 /// Set by the app on a computer: it writes nothing about stations or peers anywhere, unless
 /// PYRATE_LOG asks it to. A Lantern logs, for its keeper, unless PYRATE_QUIET is set.
 pub static QUIET: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -862,7 +876,7 @@ impl Inner {
                 n += 1;
             }
         }
-        say(&format!("{cards} cards and {notes} carrier notes from {} ({n} logs behind)", node.fmt_short()));
+        crate::say_named(&format!("{cards} cards and {notes} carrier notes from {} ({n} logs behind)", node.fmt_short()));
     }
 
     /// One of our stations' frequency, claimed once and kept for good: the one an earlier card
@@ -924,7 +938,7 @@ impl Inner {
             .collect();
         parts.sort();
         if !parts.is_empty() {
-            say(&format!("paths: {}", parts.join(", ")));
+            say_named(&format!("paths: {}", parts.join(", ")));
         }
     }
 
@@ -1114,7 +1128,7 @@ impl Inner {
                 redone += 1;
             }
         }
-        say(&format!("{}: two phones wrote at once; {redone} of ours rewritten after the network's", station.call_sign()));
+        crate::say_named(&format!("{}: two phones wrote at once; {redone} of ours rewritten after the network's", station.call_sign()));
         Ok(redone)
     }
 
@@ -1189,7 +1203,7 @@ impl Inner {
                     _ => break,
                 }
             }
-            say(&format!("log {}: {added} new entries from {}", station.call_sign(), node.fmt_short()));
+            crate::say_named(&format!("log {}: {added} new entries from {}", station.call_sign(), node.fmt_short()));
         }
         Ok(added)
     }
@@ -1376,7 +1390,7 @@ impl Inner {
                 if l.announce.is_none() {
                     // A node keeps no record of what passes through it: only its own stations are named.
                     if self.store.lock().unwrap().keys.contains_key(&a.station) {
-                        say(&format!("in the Log: {} {}", a.station.call_sign(), a.name));
+                        crate::say_named(&format!("in the Log: {} {}", a.station.call_sign(), a.name));
                     }
                 }
                 if l.announce.as_ref().is_none_or(|old| a.at_ms > old.at_ms) {
@@ -2932,7 +2946,7 @@ impl Node {
         let topic = TopicId::from_bytes(net::log_topic());
         let i2 = inner.clone();
         rt.spawn(async move {
-            say(&format!("node {} up, joining the Log through {} bootstrap peers", i2.endpoint.id(), i2.cfg.bootstrap.len()));
+            say_named(&format!("node {} up, joining the Log through {} bootstrap peers", i2.endpoint.id(), i2.cfg.bootstrap.len()));
             let sub = match gossip.subscribe(topic, i2.cfg.bootstrap.clone()).await {
                 Ok(s) => s,
                 Err(e) => {
@@ -2969,7 +2983,7 @@ impl Node {
                 let msg = match ev {
                     Ok(Event::Received(m)) => m,
                     Ok(Event::NeighborUp(n)) => {
-                        say(&format!("neighbour up {}", n.fmt_short()));
+                        crate::say_named(&format!("neighbour up {}", n.fmt_short()));
                         // A node with a near-empty Log asks its first neighbours for theirs.
                         if i2.log.lock().unwrap().len() < 8 && i2.cards_asked.lock().unwrap().len() < 6 {
                             let (i5, n) = (i2.clone(), n);
@@ -2982,7 +2996,7 @@ impl Node {
                         continue;
                     }
                     Ok(Event::NeighborDown(n)) => {
-                        say(&format!("neighbour down {}", n.fmt_short()));
+                        crate::say_named(&format!("neighbour down {}", n.fmt_short()));
                         i2.neighbours.lock().unwrap().remove(n.as_bytes());
                         continue;
                     }
@@ -3760,7 +3774,7 @@ impl Node {
                 if inner.refused().contains(&st) {
                     anyhow::bail!("you marooned this station; take it back first");
                 }
-                say(&format!("tune {}", st.call_sign()));
+                crate::say_named(&format!("tune {}", st.call_sign()));
                 *inner.tuned.lock().unwrap() = Some(Tuned { station: st, since: now_ms(), playhead: None });
                 #[cfg(feature = "playback")]
                 playout::reset(inner);

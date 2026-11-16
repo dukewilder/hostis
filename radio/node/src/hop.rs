@@ -694,7 +694,7 @@ impl Inner {
                         let now = now_ms();
                         if now.saturating_sub(LAST.swap(now, std::sync::atomic::Ordering::Relaxed)) > 60_000 {
                             tracing::warn!("a hop to {} failed: {e}", next.fmt_short());
-                            say(&format!("a hop to {} failed: {e}", next.fmt_short()));
+                            crate::say_named(&format!("a hop to {} failed: {e}", next.fmt_short()));
                         }
                         vec![]
                     }

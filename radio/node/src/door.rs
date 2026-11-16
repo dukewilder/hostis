@@ -672,7 +672,7 @@ impl Inner {
         }
         let Ok(Ok(Some(answer))) = tokio::time::timeout(Duration::from_secs(3), rx).await else { return vec![] };
         door.introduced.fetch_add(1, Ordering::Relaxed);
-        say(&format!("door: a tab introduced by {}", crate::hex(&from[..4])));
+        crate::say_named(&format!("door: a tab introduced by {}", crate::hex(&from[..4])));
         pyrate_core::route::seal_answer(&c, &postcard::to_stdvec(&answer).unwrap_or_default())
     }
 
