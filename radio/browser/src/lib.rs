@@ -2356,8 +2356,10 @@ impl Ship {
                     // An entry waiting for its stamp does not make the cargo pending: it goes the
                     // moment its stamp comes, and not before.
                     // Nor does a chunk such an entry names: it leaves with its entry.
-                    let (due, waiting) = me.archives.lock().unwrap().get(&id).map(|a| { let d = released(a, now); (d, waiting_chunks(a, d)) }).unwrap_or_default();
-                    let (pending, passed) = me.mine.lock().unwrap().get(&id).map(|m| (m.unsent.iter().any(|h| !waiting.contains(h)) || (m.wrote > m.sailed && due > m.cut), m.passed)).unwrap_or((false, 0));
+                    // A write with nothing held behind it (the work that earns the listing, which
+                    // changes only the card) sails at once.
+                    let (due, waiting, held) = me.archives.lock().unwrap().get(&id).map(|a| { let d = released(a, now); (d, waiting_chunks(a, d), d < a.entries().len()) }).unwrap_or_default();
+                    let (pending, passed) = me.mine.lock().unwrap().get(&id).map(|m| (m.unsent.iter().any(|h| !waiting.contains(h)) || (m.wrote > m.sailed && (due > m.cut || !held)), m.passed)).unwrap_or((false, 0));
                     if !pending && passed > 0 && now.saturating_sub(passed) > 15 * 60_000 {
                         if let Some(m) = me.mine.lock().unwrap().get_mut(&id) {
                             m.unsent = m.chunks.keys().copied().collect();
