@@ -1017,8 +1017,12 @@ def t_pocket(pw, browser):
         for p_, nm in ((a, "phone"), (b, "desktop")):
             _, t = poll(lambda: "Back Room" in txt(p_, "#name"), 60, 0.1); timed(f"the {nm} tab opens the private station from the invitation", time.time() - t0 if t else None, 5)
         check(not shown(a, "#pass") and not shown(a, "#keep"), "a private station offers no Share and no Keep")
+        # The keeper's entries each wait for their own quarter hour (D-2), the recording's after
+        # the station's, so the list, which leaves out a station with nothing to play, shows it
+        # once the recording has left: four quarters on the test network's 20-second grain.
+        _, t = poll(lambda: next((x for x in rows(a) if "Back Room" in x["name"]), None), 120, 0.5)
         r = next((x for x in rows(a) if "Back Room" in x["name"]), None)
-        check(r and "Private" in r["tags"], "it is listed, tagged Private", str(r))
+        check(r and "Private" in r["tags"], "it is listed, tagged Private, once its recording has left", f"{r} after {t and round(t)} s")
         t0 = time.time(); press(a, "#go"); t = until_heard(a, timeout=90); timed("a private station: Listen to sound", t)
         p_ = a.evaluate("window.pyrate.plan()") or {}
         note(f"the private station on the set: {txt(a, '#name')!r}, line {txt(a, '#np')!r}, plan {p_.get('kind')}" + (f", back at {time.strftime('%H:%M:%S', time.localtime(p_['back_at'] / 1000))}" if p_.get('back_at') else "") + f"; now {time.strftime('%H:%M:%S')}")
