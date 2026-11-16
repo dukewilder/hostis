@@ -194,7 +194,9 @@ impl Web {
     /// A pocket station is never on the gangway: it is for its invited members only. Nor is
     /// one this Lantern carries blind, even with `--web-all`.
     fn allowed(&self, st: &StationId) -> bool {
-        !self.inner.is_pocket(st) && (self.every_station || self.inner.store.lock().unwrap().keys.contains_key(st)) && self.inner.is_open(st)
+        // The store's lock is let go before is_open takes it again.
+        let own = self.inner.store.lock().unwrap().keys.contains_key(st);
+        !self.inner.is_pocket(st) && (self.every_station || own) && self.inner.is_open(st)
     }
 }
 

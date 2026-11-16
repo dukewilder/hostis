@@ -249,7 +249,7 @@ fn main() -> anyhow::Result<()> {
     if open_all {
         println!("every station it carries is kept open");
     } else {
-        println!("{} carried stations kept open besides its own; any other is carried blind", open.len());
+        println!("{} stations named open with --open, and its own are open too; any other is carried blind", open.len());
     }
     if listener {
         node.call(&serde_json::json!({ "cmd": "ballast_ok", "value": false, "unmetered": true }));
