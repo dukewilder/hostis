@@ -1,7 +1,14 @@
 //! The tab's rules that need no network, kept apart so they are tested on any machine with
 //! `rustc --edition 2021 --test browser/src/pure.rs -o /tmp/pure && /tmp/pure`.
 
-pub const QUARTER_MS: u64 = 15 * 60_000;
+/// A test build sets a shorter grain with PYRATE_QUARTER_MS, as a test network's nodes do.
+pub const QUARTER_MS: u64 = match option_env!("PYRATE_QUARTER_MS") {
+    Some(v) => match u64::from_str_radix(v, 10) {
+        Ok(n) => n,
+        Err(_) => 15 * 60_000,
+    },
+    None => 15 * 60_000,
+};
 
 /// When a keeper's entry other than the live air is stamped, as the node stamps it: the next
 /// quarter hour after now, and after the entry before it. The stamp then says nothing of the

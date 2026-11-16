@@ -8,6 +8,7 @@ R=$(cd "$(dirname "$0")/../.." && pwd)
 M=${1:-/tmp/net}
 L="$R/target/release/lantern"
 export PYRATE_RELAYS=http://127.0.0.1:3340
+export PYRATE_QUARTER_MS=${PYRATE_QUARTER_MS:-20000}
 pkill -f "$L" 2>/dev/null || true
 sleep 1
 rm -rf /tmp/net-relay /tmp/net-carry

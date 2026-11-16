@@ -10,7 +10,7 @@ OUT=/tmp/all-tests
 WAV=${PYRATE_TEST_WAV:-"$M/gang/$(ls "$M/gang" | grep -i '\.wav$' | head -1)"}
 rm -rf "$OUT"; mkdir -p "$OUT/privacy" "$OUT/desk" "$OUT/pentest" "$OUT/ux" "$OUT/scale" "$OUT/sweep"
 export PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/opt/pw-browsers}
-NET="PYRATE_RELAYS=http://127.0.0.1:3340 PYRATE_LAN_ANY=1 PYRATE_NULL_AUDIO=1"
+NET="PYRATE_RELAYS=http://127.0.0.1:3340 PYRATE_LAN_ANY=1 PYRATE_NULL_AUDIO=1 PYRATE_QUARTER_MS=20000"
 PASSED=0; FAILED=0; START=$(date +%s)
 SUMMARY="$OUT/summary.txt"; : > "$SUMMARY"
 
@@ -39,7 +39,7 @@ line "== builds (release; the test wasm with PYRATE_LIST_AGE_MS=60000 PYRATE_DOO
 # The listening suites play (to a null sink with PYRATE_NULL_AUDIO), so they are built with playback.
 run build-native 2400 "cargo build --release -p pyrate-node --bin lantern --bin pentest && cargo build --release -p pyrate-node --features playback --bin desk_test --bin privacy_test --bin onair_test --bin raise_test --bin crew_deck_test --bin pocket_test --bin flock_test"
 if [ "$(free_mb)" -lt 800 ]; then line "FAIL disk under 800 MB after the native build"; exit 2; fi
-run build-wasm 2400 "PYRATE_LIST_AGE_MS=60000 PYRATE_DOOR_AGE_MS=30000 sh browser/build.sh"
+run build-wasm 2400 "PYRATE_LIST_AGE_MS=60000 PYRATE_DOOR_AGE_MS=30000 PYRATE_QUARTER_MS=20000 sh browser/build.sh"
 
 line "== unit"
 run unit-node 1200 "cargo test --release -p pyrate-node --lib"
