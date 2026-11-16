@@ -664,10 +664,20 @@ impl Inner {
                 }
                 // As long as a stem's second node may take to land its cargo, and no longer.
                 // Only a radio that could not be reached at all is passed over; a slow one is not.
+                // A request that was taken and answered slowly (`ask` gives up on it at 20 s and marks
+                // the radio failed) is no sign the radio has gone: a stem going round passes over
+                // closed radios one after another, and a first hop that passed over its exit for a
+                // minute after one such stem cut every route through it to that exit.
                 let r = match tokio::time::timeout(Duration::from_secs(25), self.hop(next, &inner)).await {
                     Ok(r) => {
-                        if r.is_err() {
-                            self.failed.lock().unwrap().insert(*next.as_bytes(), now_ms());
+                        match &r {
+                            Err(e) if e.to_string() == "request timed out" => {
+                                self.failed.lock().unwrap().remove(next.as_bytes());
+                            }
+                            Err(_) => {
+                                self.failed.lock().unwrap().insert(*next.as_bytes(), now_ms());
+                            }
+                            Ok(_) => {}
                         }
                         r
                     }
