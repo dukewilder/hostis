@@ -20,9 +20,15 @@ def wait(pg, js, secs):
 # Listen is pressed the moment the page opens, so the time includes everything the radio must
 # fetch first: on a cold visit the whole log, on a returning one only what is newer.
 def visit(ctx):
-    pg = ctx.new_page(); t = time.time(); pg.goto(f"http://127.0.0.1:{port}/"); pg.click("#go")
+    # The radio's own notes (shown with ?debug), printed for a visit that never sounds.
+    pg = ctx.new_page(); notes = []; t = time.time()
+    pg.on("console", lambda m: notes.append(f"{time.time() - t:6.2f} {m.text[:180]}") if m.text.startswith("pyrate") else None)
+    pg.goto(f"http://127.0.0.1:{port}/?debug"); pg.click("#go")
     heard = wait(pg, "window.pyrate.state().heard", 90)
     took = time.time() - t
+    if not heard:
+        print(f"a visit with no sound in 90 s: state {pg.evaluate('window.pyrate.state()')}, plan {pg.evaluate('window.pyrate.plan()')}, crew {pg.evaluate('window.pyrate.crew()')}; its notes:")
+        print("\n".join(notes[:60] + ["..."] + notes[-60:] if len(notes) > 120 else notes), flush=True)
     pg.click("#go"); time.sleep(0.5)
     return pg, (took if heard else None)
 
