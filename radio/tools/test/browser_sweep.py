@@ -722,8 +722,17 @@ def listener(pw, browser, w, visitor):
     check(re.match(r"^https://[^\s#]+/#[0-9a-f]{64}$", link) and link.endswith(sid), "the share link is well formed and names the station", link)
     try:
         import cv2
-        pg.locator("#qr").screenshot(path=f"{OUT}/qr.png"); im = cv2.imread(f"{OUT}/qr.png"); im = cv2.resize(im, None, fx=3, fy=3, interpolation=cv2.INTER_NEAREST); im = cv2.copyMakeBorder(im, 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=(255, 255, 255))
-        got, _, _ = cv2.QRCodeDetector().detectAndDecode(im); os.remove(f"{OUT}/qr.png")
+        pg.locator("#qr").screenshot(path=f"{OUT}/qr.png"); im0 = cv2.imread(f"{OUT}/qr.png"); os.remove(f"{OUT}/qr.png")
+        # OpenCV's reader misses some perfectly drawn codes at one scale and reads them at
+        # another (a clean render of a station's link read at 3x and 5x, not 1x, 2x or 4x), so
+        # it is given a few scales and both its readers before the code is called unreadable.
+        got = ""
+        for det in [cv2.QRCodeDetector()] + ([cv2.QRCodeDetectorAruco()] if hasattr(cv2, "QRCodeDetectorAruco") else []):
+            for f in (3, 2, 4, 5, 6):
+                im = cv2.copyMakeBorder(cv2.resize(im0, None, fx=f, fy=f, interpolation=cv2.INTER_NEAREST), 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=(255, 255, 255))
+                got = det.detectAndDecode(im)[0]
+                if got: break
+            if got: break
         check(got == link, "the QR code scans to the same link", got[:80])
     except ImportError: note("no OpenCV: the QR code was not scanned")
     press(pg, "#pcopy"); time.sleep(0.4)
