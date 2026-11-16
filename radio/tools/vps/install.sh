@@ -462,8 +462,11 @@ run docker image prune -f >/dev/null
 run docker rmi rust:bookworm python:3.12-slim-bookworm >/dev/null 2>&1 || true
 
 # The gangway on loopback, for Caddy alone, with the image's copy of the open player.
-LANTERN_ARGS=()
-[ "$PLAYER" = none ] || LANTERN_ARGS=(--http "$LANTERN_HTTP" --player /usr/share/pyrate/player)
+# A rented server's disk is its provider's to read whatever the Lantern does, so the hold key
+# stays on it in the clear (LANTERN.md says how to take it off). The node id goes in the log,
+# for this script to report.
+LANTERN_ARGS=(--hold-key-on-disk --show-ids)
+[ "$PLAYER" = none ] || LANTERN_ARGS+=(--http "$LANTERN_HTTP" --player /usr/share/pyrate/player)
 have=0 want_img=new have_img=none have_env="" have_net="" have_args=""
 if docker container inspect lantern >/dev/null 2>&1; then
   have=1
@@ -475,11 +478,8 @@ if docker container inspect lantern >/dev/null 2>&1; then
 fi
 # The container keeps its flags after the image's own: they must be the ones wanted now.
 args_ok=0
-if [ ${#LANTERN_ARGS[@]} = 0 ]; then
-  [[ $have_args == *--player* ]] || args_ok=1
-else
-  [[ $have_args == *" ${LANTERN_ARGS[*]}" ]] && args_ok=1
-fi
+[[ $have_args == *" ${LANTERN_ARGS[*]}" ]] && args_ok=1
+[ "$PLAYER" = none ] && [[ $have_args == *--player* ]] && args_ok=0
 if [ "$have_img" = "$want_img" ] && [ "$have_env" = "PYRATE_RELAY_URL=$RELAY_URL" ] && [ "$have_net" = host ] && [ "$args_ok" = 1 ]; then
   run docker start lantern >/dev/null
 else

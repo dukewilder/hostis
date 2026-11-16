@@ -9,13 +9,17 @@ M=${1:-/tmp/net}
 L="$R/target/release/lantern"
 export PYRATE_RELAYS=http://127.0.0.1:3340
 export PYRATE_QUARTER_MS=${PYRATE_QUARTER_MS:-20000}
+# Each Lantern's hold key sealed under a passphrase, as a keeper's is. The carrier keeps every
+# station open, as the test network's suites expect of it; lantern_hold.sh tests the blind one.
+printf 'the test network passphrase\n' > /tmp/net-pass
+export PYRATE_HOLD_PASS_FILE=/tmp/net-pass
 pkill -f "$L" 2>/dev/null || true
 sleep 1
 rm -rf /tmp/net-relay /tmp/net-carry
-setsid nohup "$L" --dir /tmp/net-relay --relay 127.0.0.1:3340 --carry-own --seed "Gangway|Shanties and sea songs for the test network|$M/gang|music|Bristol" > /tmp/net-relay.log 2>&1 &
+setsid nohup "$L" --dir /tmp/net-relay --show-ids --relay 127.0.0.1:3340 --carry-own --seed "Gangway|Shanties and sea songs for the test network|$M/gang|music|Bristol" > /tmp/net-relay.log 2>&1 &
 for i in $(seq 1 40); do grep -q "Gangway" /tmp/net-relay.log 2>/dev/null && grep -qi "id" /tmp/net-relay.log && break; sleep 1; done
 RELAY=$(grep -o "[0-9a-f]\{64\}" /tmp/net-relay.log | head -1)
-setsid nohup "$L" --dir /tmp/net-carry --bootstrap "$RELAY" --seed "Second Watch|Night music for the late watch|$M/watch|music|Lisbon" > /tmp/net-carry.log 2>&1 &
+setsid nohup "$L" --dir /tmp/net-carry --show-ids --open all --bootstrap "$RELAY" --seed "Second Watch|Night music for the late watch|$M/watch|music|Lisbon" > /tmp/net-carry.log 2>&1 &
 sleep 8
 GANG=$(grep "Gangway" /tmp/net-relay.log | grep -o "[0-9a-f]\{64\}" | head -1)
 echo "relay $RELAY"

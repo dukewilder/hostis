@@ -16,18 +16,176 @@
 //!         A seed folder's notices.txt holds the station's notices, one per paragraph.
 //!         [--http 127.0.0.1:8080] the web listener; [--player <folder>] serves the open player
 //!         (browser/www/dist-open) on it at /listen/. Never at a HOSTIS name.
+//!         The hold key comes from a passphrase (see HELP below and LANTERN.md); stations are
+//!         carried blind unless kept open with --open.
 
 use std::{collections::HashSet, path::PathBuf, time::Duration};
 
 use pyrate_core::{Body, Profile};
 use pyrate_node::{Config, Node, now_ms};
+use zeroize::Zeroizing;
+
+const HELP: &str = "A Pyrate Radio Lantern is a node that runs all day on a spare machine and carries the network.
+
+lantern --dir <folder> [flags]
+
+The hold key
+  Everything a Lantern keeps is sealed under its hold key, and the hold key is sealed under a
+  passphrase that never lies beside the data. The Lantern takes the passphrase from the first of
+    --hold-pass-fd <n>            a file descriptor, such as 3 with 3</media/usb/pass
+    PYRATE_HOLD_PASS_FILE=<file>  a file, best on a removable disk or in a secrets store
+    PYRATE_HOLD_PASS_CMD=<cmd>    a command that prints it, such as the system keyring's own
+                                  (secret-tool lookup service pyrate-hold, or on a Mac
+                                  security find-generic-password -w -s pyrate-hold)
+  or asks for it at the terminal. Twelve characters or more; four or five random words are good.
+  Without it the Lantern opens nothing and starts nothing. Lose it and the hold is lost.
+  The first start with a passphrase seals an older Lantern's hold.key and removes the plain file.
+  --hold-key-on-disk    keep the key in the clear in hold.key (or PYRATE_HOLD_KEY) instead.
+                        Whoever takes the disk opens everything. Warned at every start.
+  --scuttle             destroy the hold key, sealed or plain, and everything kept becomes noise.
+
+What it carries
+  --carry-own           carry only this Lantern's own stations
+  --quota-gb <n>        disk for carried sound (default 20)
+  --open <station>      keep a carried station open, named by its id, by a file of ids (such as
+                        HOSTIS's harbour list, radio/browser/harbour.json) or by all. Repeatable.
+                        Its own stations are always open. Any other is carried blind, with no
+                        clear answer, no carrier note and no web page, and its sound passed on
+                        sealed.
+  --seed \"Name|About|folder|music|Home port\"   raise and keep a station from a folder
+  --reseed \"Name\"  --withdraw \"words\"  --words <file>   see LANTERN.md
+
+The network and the web
+  --bootstrap <id>,<id>   first doors; --relay <addr> run a relay; --public-dns
+  --http <addr>           the web page and podcast feeds (open stations only); --web-all for
+                          every open station, not just its own; --player <folder> the open player
+  --door <addr|auto> --door-links --door-kept --lan --listener   see LANTERN.md
+  --open-hails <folder>   open the hails this Lantern kept into a folder, then stop
+
+The log
+  --show-ids            print this Lantern's node id, and the stations, peers and paths it meets.
+                        By default its log names none of them.
+  PYRATE_QUIET=1        say almost nothing
+";
+
+/// The passphrase for the hold, from the first place the keeper put it, or None.
+fn passphrase(args: &[String], dir: &std::path::Path) -> anyhow::Result<Option<Zeroizing<String>>> {
+    let get = |flag: &str| args.iter().position(|a| a == flag).and_then(|i| args.get(i + 1)).cloned();
+    let mut raw = Zeroizing::new(String::new());
+    if let Some(fd) = get("--hold-pass-fd") {
+        let fd: i32 = fd.parse().map_err(|_| anyhow::anyhow!("--hold-pass-fd takes a file descriptor number, such as 3"))?;
+        #[cfg(unix)]
+        {
+            use std::io::Read;
+            use std::os::fd::FromRawFd;
+            // SAFETY: the keeper handed this descriptor to the Lantern for this one read.
+            let mut f = unsafe { std::fs::File::from_raw_fd(fd) };
+            f.read_to_string(&mut raw).map_err(|e| anyhow::anyhow!("the passphrase could not be read from descriptor {fd} ({e})"))?;
+        }
+        #[cfg(not(unix))]
+        anyhow::bail!("--hold-pass-fd works on Linux and macOS; use PYRATE_HOLD_PASS_FILE here (descriptor {fd})");
+    } else if let Some(p) = std::env::var_os("PYRATE_HOLD_PASS_FILE") {
+        let b = Zeroizing::new(std::fs::read(&p).map_err(|e| anyhow::anyhow!("PYRATE_HOLD_PASS_FILE names {}, which could not be read ({e}). Is its disk mounted?", std::path::Path::new(&p).display()))?);
+        raw.push_str(std::str::from_utf8(&b).map_err(|_| anyhow::anyhow!("the passphrase file is not text"))?);
+    } else if let Ok(cmd) = std::env::var("PYRATE_HOLD_PASS_CMD") {
+        let out = if cfg!(windows) { std::process::Command::new("cmd").args(["/C", &cmd]).stderr(std::process::Stdio::inherit()).output() } else { std::process::Command::new("sh").args(["-c", &cmd]).stderr(std::process::Stdio::inherit()).output() };
+        let out = out.map_err(|e| anyhow::anyhow!("PYRATE_HOLD_PASS_CMD could not run ({e})"))?;
+        let b = Zeroizing::new(out.stdout);
+        if !out.status.success() {
+            anyhow::bail!("PYRATE_HOLD_PASS_CMD ended with {} and gave no passphrase", out.status);
+        }
+        raw.push_str(std::str::from_utf8(&b).map_err(|_| anyhow::anyhow!("PYRATE_HOLD_PASS_CMD printed something that is not text"))?);
+    } else if let Some(p) = typed(dir)? {
+        return Ok(Some(p));
+    } else {
+        return Ok(None);
+    }
+    let pass = Zeroizing::new(raw.trim_end_matches(['\n', '\r']).to_string());
+    if pass.is_empty() {
+        anyhow::bail!("the passphrase given for the hold is empty");
+    }
+    Ok(Some(pass))
+}
+
+/// The passphrase typed at the terminal, unseen, and typed twice for a hold sealed for the first
+/// time. None when no one is at a terminal.
+fn typed(dir: &std::path::Path) -> anyhow::Result<Option<Zeroizing<String>>> {
+    #[cfg(unix)]
+    {
+        if unsafe { libc::isatty(0) } != 1 || unsafe { libc::isatty(2) } != 1 {
+            return Ok(None);
+        }
+        let ask = |prompt: &str| -> anyhow::Result<Zeroizing<String>> {
+            eprint!("{prompt}");
+            let mut t: libc::termios = unsafe { std::mem::zeroed() };
+            let had = unsafe { libc::tcgetattr(0, &mut t) } == 0;
+            let quiet = libc::termios { c_lflag: t.c_lflag & !libc::ECHO, ..t };
+            if had {
+                unsafe { libc::tcsetattr(0, libc::TCSANOW, &quiet) };
+            }
+            let mut line = Zeroizing::new(String::new());
+            let read = std::io::stdin().read_line(&mut line);
+            if had {
+                unsafe { libc::tcsetattr(0, libc::TCSANOW, &t) };
+            }
+            eprintln!();
+            read?;
+            Ok(Zeroizing::new(line.trim_end_matches(['\n', '\r']).to_string()))
+        };
+        let first = ask("Hold passphrase: ")?;
+        if first.is_empty() {
+            return Ok(None);
+        }
+        if !dir.join(pyrate_node::hold::SEALED_KEY).exists() && ask("The same again: ")? != first {
+            anyhow::bail!("the two passphrases differ, so nothing was sealed");
+        }
+        Ok(Some(first))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = dir;
+        Ok(None)
+    }
+}
+
+/// The stations named by --open: ids, files of ids (any 64-character hex in them), or all.
+fn open_list(args: &[String]) -> anyhow::Result<(Vec<pyrate_core::StationId>, bool)> {
+    let (mut ids, mut all) = (Vec::new(), false);
+    for v in args.windows(2).filter(|w| w[0] == "--open").map(|w| w[1].trim().to_string()) {
+        if v == "all" {
+            all = true;
+        } else if let Ok(id) = pyrate_core::StationId::from_hex(&v) {
+            ids.push(id);
+        } else {
+            let text = std::fs::read_to_string(&v).map_err(|e| anyhow::anyhow!("--open {v} is neither a station id nor a file that can be read ({e})"))?;
+            let before = ids.len();
+            for word in text.split(|c: char| !c.is_ascii_hexdigit()) {
+                if word.len() == 64 {
+                    if let Ok(id) = pyrate_core::StationId::from_hex(word) {
+                        ids.push(id);
+                    }
+                }
+            }
+            if ids.len() == before {
+                anyhow::bail!("--open {v} names a file with no station ids in it");
+            }
+        }
+    }
+    ids.sort_by_key(|i| i.0);
+    ids.dedup();
+    Ok((ids, all))
+}
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        print!("{HELP}");
+        return Ok(());
+    }
     // An unknown flag stops the Lantern before it starts: a mistyped or test flag must never
     // bring up a stray node on whatever network the shell happens to be on.
-    const VALUED: &[&str] = &["--dir", "--quota-gb", "--bootstrap", "--seed", "--http", "--open-hails", "--relay", "--release-keys", "--words", "--withdraw", "--reseed", "--player", "--door"];
-    const BARE: &[&str] = &["--carry-own", "--public-dns", "--scuttle", "--web-all", "--listener", "--door-links", "--door-kept", "--lan"];
+    const VALUED: &[&str] = &["--dir", "--quota-gb", "--bootstrap", "--seed", "--http", "--open-hails", "--relay", "--release-keys", "--words", "--withdraw", "--reseed", "--player", "--door", "--open", "--hold-pass-fd"];
+    const BARE: &[&str] = &["--carry-own", "--public-dns", "--scuttle", "--web-all", "--listener", "--door-links", "--door-kept", "--lan", "--hold-key-on-disk", "--show-ids"];
     let mut i = 1;
     while i < args.len() {
         let a = args[i].as_str();
@@ -36,7 +194,7 @@ fn main() -> anyhow::Result<()> {
         } else if BARE.contains(&a) {
             i += 1;
         } else {
-            eprintln!("lantern: {a} is not a flag this Lantern knows. Flags: {} {}. See LANTERN.md.", VALUED.join(" "), BARE.join(" "));
+            eprintln!("lantern: {a} is not a flag this Lantern knows. Flags: {} {}. See lantern --help and LANTERN.md.", VALUED.join(" "), BARE.join(" "));
             std::process::exit(2);
         }
     }
@@ -48,28 +206,51 @@ fn main() -> anyhow::Result<()> {
     let seeds: Vec<String> = args.windows(2).filter(|w| w[0] == "--seed").map(|w| w[1].clone()).collect();
     std::fs::create_dir_all(&dir)?;
 
-    // Scuttle: the hold key goes, and everything this Lantern kept becomes noise at once.
+    // Scuttle: the hold key goes, sealed or plain, and everything this Lantern kept becomes
+    // noise at once. No passphrase is needed for that.
     if args.iter().any(|a| a == "--scuttle") {
-        let key = std::env::var_os("PYRATE_HOLD_KEY").map(PathBuf::from).unwrap_or_else(|| dir.join("hold.key"));
-        if key.exists() {
-            let len = std::fs::metadata(&key).map(|m| m.len()).unwrap_or(32) as usize;
-            let _ = std::fs::write(&key, vec![0u8; len]);
-            std::fs::remove_file(&key)?;
-        }
+        pyrate_node::hold::scuttle(&dir)?;
         println!("scuttled: {} is noise now; delete it at leisure", dir.display());
         return Ok(());
     }
+    // Lines naming stations, peers and this node stay out of the log unless asked for.
+    let show_ids = args.iter().any(|a| a == "--show-ids");
+    pyrate_node::NAMES.store(show_ids, std::sync::atomic::Ordering::Relaxed);
+    let (open, open_all) = match open_list(&args) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("lantern: {e}");
+            std::process::exit(2);
+        }
+    };
+    // The hold key, from the keeper's passphrase. Without it this Lantern opens nothing.
+    let key = match passphrase(&args, &dir).and_then(|p| pyrate_node::hold::lantern_key(&dir, p.as_ref().map(|p| p.as_bytes()), args.iter().any(|a| a == "--hold-key-on-disk"))) {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("lantern: {e}");
+            std::process::exit(1);
+        }
+    };
     // The keeper, back: the hails this Lantern kept, opened into a folder of their choosing.
     if let Some(out) = get("--open-hails") {
-        let n = pyrate_node::open_hails(&dir, std::path::Path::new(&out))?;
+        let n = pyrate_node::open_hails(&dir, std::path::Path::new(&out), Some(*key))?;
         println!("{n} {} opened into {out}", if n == 1 { "hail" } else { "hails" });
         return Ok(());
     }
     // --listener runs as a listener's app does (for the test network): no Lantern duties, fetching
     // through routes, carrying for the crew.
     let listener = args.iter().any(|a| a == "--listener");
+    pyrate_node::set_hold_key(*key);
+    drop(key);
     let node = Node::start(Config { dir: dir.clone(), quota, lantern: !listener, carry_all: !listener && !args.iter().any(|a| a == "--carry-own"), bootstrap, public_dns: args.iter().any(|a| a == "--public-dns"), private: listener, ballast: 0, release_keys: get("--release-keys").map(|p| std::fs::read_to_string(p).unwrap_or_default().lines().filter_map(|l| pyrate_core::StationId::from_hex(l.trim()).ok().map(|i| i.0)).collect()).unwrap_or_default() })?;
+    node.keep_open(&open, open_all);
     println!("LANTERN LIT");
+    // Counts only, as everywhere in this log.
+    if open_all {
+        println!("every station it carries is kept open");
+    } else {
+        println!("{} carried stations kept open besides its own; any other is carried blind", open.len());
+    }
     if listener {
         node.call(&serde_json::json!({ "cmd": "ballast_ok", "value": false, "unmetered": true }));
     }
@@ -134,7 +315,9 @@ fn main() -> anyhow::Result<()> {
             }
         });
     }
-    println!("node id: {}", node.id());
+    if show_ids {
+        println!("node id: {}", node.id());
+    }
 
     // --withdraw "words": takes matching recordings off our own stations' clocks.
     let withdraw: Vec<String> = args.windows(2).filter(|w| w[0] == "--withdraw").map(|w| w[1].to_lowercase()).collect();

@@ -16,12 +16,12 @@ pkill -f "$L" 2>/dev/null || true
 sleep 1
 if (echo > /dev/udp/127.0.0.1/3340) 2>/dev/null && ss -lnt 2>/dev/null | grep -q ":3340 "; then echo "a relay is still listening on 3340"; exit 1; fi
 rm -rf /tmp/doors-a /tmp/doors-b /tmp/doors-d1 /tmp/doors-d2
-setsid nohup "$L" --dir /tmp/doors-a --carry-own --lan --seed "Gangway|Shanties and sea songs for the test network|$M/gang|music|Bristol" > /tmp/doors-a.log 2>&1 &
+setsid nohup "$L" --dir /tmp/doors-a --show-ids --hold-key-on-disk --carry-own --lan --seed "Gangway|Shanties and sea songs for the test network|$M/gang|music|Bristol" > /tmp/doors-a.log 2>&1 &
 for i in $(seq 1 40); do grep -q "node id" /tmp/doors-a.log 2>/dev/null && break; sleep 1; done
 A=$(grep "node id" /tmp/doors-a.log | grep -o "[0-9a-f]\{64\}" | head -1)
-setsid nohup "$L" --dir /tmp/doors-b --carry-own --lan --bootstrap "$A" --seed "Second Watch|Night music for the late watch|$M/watch|music|Lisbon" > /tmp/doors-b.log 2>&1 &
-PYRATE_DOOR_PORT=47101 setsid nohup "$L" --dir /tmp/doors-d1 --listener --lan --bootstrap "$A" --door 127.0.0.1:47101 --door-kept --door-links --http 127.0.0.1:8091 > /tmp/doors-d1.log 2>&1 &
-PYRATE_DOOR_PORT=47102 setsid nohup "$L" --dir /tmp/doors-d2 --listener --lan --bootstrap "$A" --door 127.0.0.1:47102 --door-kept --door-links --http 127.0.0.1:8092 > /tmp/doors-d2.log 2>&1 &
+setsid nohup "$L" --dir /tmp/doors-b --show-ids --hold-key-on-disk --carry-own --lan --bootstrap "$A" --seed "Second Watch|Night music for the late watch|$M/watch|music|Lisbon" > /tmp/doors-b.log 2>&1 &
+PYRATE_DOOR_PORT=47101 setsid nohup "$L" --dir /tmp/doors-d1 --show-ids --hold-key-on-disk --listener --lan --bootstrap "$A" --door 127.0.0.1:47101 --door-kept --door-links --http 127.0.0.1:8091 > /tmp/doors-d1.log 2>&1 &
+PYRATE_DOOR_PORT=47102 setsid nohup "$L" --dir /tmp/doors-d2 --show-ids --hold-key-on-disk --listener --lan --bootstrap "$A" --door 127.0.0.1:47102 --door-kept --door-links --http 127.0.0.1:8092 > /tmp/doors-d2.log 2>&1 &
 for i in $(seq 1 60); do grep -q '"open":true' /tmp/doors-d1.log 2>/dev/null && grep -q '"open":true' /tmp/doors-d2.log 2>/dev/null && break; sleep 1; done
 sleep 4
 GANG=$(grep "Gangway" /tmp/doors-a.log | grep -o "[0-9a-f]\{64\}" | head -1)
