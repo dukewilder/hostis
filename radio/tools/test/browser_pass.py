@@ -19,11 +19,17 @@ with sync_playwright() as p:
     sid = a.evaluate("window.pyrate.mine()[0]")
     a.wait_for_function("document.getElementById('st-status').textContent.startsWith('On the')", timeout=240000)
     c = b.new_context(bypass_csp=True).new_page(); c.on("pageerror", lambda e: errs.append(str(e)))
-    c.goto("http://127.0.0.1:8099/"); c.wait_for_function("window.pyrate && document.getElementById('signal').textContent.includes('Connected')", timeout=90000)
+    # The radio's own notes (shown with ?debug), printed if the station is not taken back.
+    notes = []; c.on("console", lambda m: notes.append(m.text[:200]) if m.text.startswith("pyrate") else None)
+    t_on = time.time()
+    c.goto("http://127.0.0.1:8099/?debug"); c.wait_for_function("window.pyrate && document.getElementById('signal').textContent.includes('Connected')", timeout=90000)
     c.click(".tab[data-v=studio]"); c.click("text=Bring back a station with its 24 words"); c.fill("#st-words", words); c.fill("#st-rpass", "lanterns at low tide"); c.click("#st-restore")
     c.wait_for_function("window.pyrate.mine().length > 0 || document.getElementById('st-note').textContent.length > 40", timeout=120000)
     got = c.evaluate("window.pyrate.mine()")
     check(sid in got, "the words and the passphrase take the station back: %s" % (c.text_content("#st-note") or "taken"))
+    if sid not in got:
+        print(f"the keeper's studio says {a.text_content('#st-status')!r}; the search ended {round(time.time() - t_on)} s after the fresh tab opened; its notes:")
+        print("\n".join(notes[-80:]))
     d = b.new_context(bypass_csp=True).new_page()
     d.goto("http://127.0.0.1:8099/"); d.wait_for_function("window.pyrate && document.getElementById('signal').textContent.includes('Connected')", timeout=90000)
     other = d.evaluate("(w) => window.pyrate && 1", words)
