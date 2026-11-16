@@ -29,7 +29,7 @@ const TABS_PER_MIDDLE: u64 = 8;
 const MIDDLES_FLOOR: usize = 6;
 /// Hops a middle takes in a minute: a listener's device, and a Lantern.
 const HOP_LIMIT: u16 = 600;
-const HOP_LIMIT_LANTERN: u16 = 6_000;
+pub(crate) const HOP_LIMIT_LANTERN: u16 = 6_000;
 
 /// What the app allows and what this device is doing.
 pub(crate) struct Duties {

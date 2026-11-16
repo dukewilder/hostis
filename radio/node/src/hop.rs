@@ -250,6 +250,16 @@ impl Inner {
                 }
             }
         }
+        drop(log);
+        // A Lantern carrying blind signs no carrier note, so none brings it here; its presence
+        // as a middle, which names no station, does, and it stays a hop for stems and fetches.
+        for p in self.notes.lock().unwrap().presence(now) {
+            if p.hop_limit == crate::duty::HOP_LIMIT_LANTERN {
+                if let Ok(id) = EndpointId::from_bytes(&p.node) {
+                    v.push(id);
+                }
+            }
+        }
         v.retain(|n| *n != me);
         v.sort();
         v.dedup();
