@@ -599,6 +599,9 @@ struct Ship {
     direct_links: std::sync::atomic::AtomicBool,
     /// Each station's clock, rebuilt only when its log grows: the player asks every second.
     clocks: Mutex<HashMap<StationId, (u64, Clock)>>,
+    /// A station of this tab's as far as it has left, while entries wait for their stamp: what
+    /// its card is made from (see `card`). Rebuilt only when another entry leaves.
+    card_views: Mutex<HashMap<StationId, (usize, Archive)>>,
     /// When each log was last played or synced, so the least used go first when trimming.
     touched: Mutex<HashMap<StationId, u64>>,
     /// Stations that struck their colours: never searched for, listed or played again.
@@ -2143,7 +2146,22 @@ impl Ship {
         let m = mine.get(id)?;
         let pow = m.pow?;
         let archives = self.archives.lock().unwrap();
-        let log = archives.get(id)?;
+        let full = archives.get(id)?;
+        // The card tells only what has left, as a phone's does: entries still waiting for their
+        // quarter hour are not on it, or a card signed now would say when they were written (a
+        // new station's card would go out the moment it was raised, ahead of its entries).
+        let cut = released(full, now);
+        let mut views = self.card_views.lock().unwrap();
+        let log: &Archive = if cut < full.entries().len() {
+            let v = views.entry(*id).or_insert_with(|| (usize::MAX, Archive::new(*id)));
+            if v.0 != cut {
+                *v = (cut, full.prefix(cut));
+            }
+            &v.1
+        } else {
+            views.remove(id);
+            full
+        };
         let Some(Body::Colours { name, about, port, tip }) = log.colours().cloned() else { return None };
         if log.is_struck() {
             return None;
@@ -2160,7 +2178,7 @@ impl Ship {
         let (kinds, mature) = log.details().unwrap_or_default();
         Some(
             net::Card {
-                station: *id, head: released(log, now) as u64, name, about, port, live, at_ms: now, pow, since, proof,
+                station: *id, head: log.len() as u64, name, about, port, live, at_ms: now, pow, since, proof,
                 cover: art.and_then(|a| a.0).map(|a| a.hash), accent: art.map(|a| a.2), kinds, mature, tip, explicit: log.explicit(),
                 tracks: Some(log.library().map(|l| l.len() as u32).unwrap_or(0)),
                 named: log.named_since(),
@@ -3702,26 +3720,35 @@ impl Radio {
     /// `n0` is "Use number0's relays when ours fail": on, number0's relays come in when none of
     /// ours has answered within fifteen seconds, and number0's address server may be asked
     /// about a harbour named without its relay. Off, number0 is never contacted.
-    pub async fn start(harbour: String, token_key: String, relays: String, n0: bool) -> Result<Radio, JsValue> {
+    ///
+    /// `peers` are the radios that answered quickly last visit and the guards kept from it, in
+    /// the same form: met at once beside the harbours, but never counted as harbours. A harbour
+    /// is HOSTIS's, one operator on every route and named by the build itself; a peer is
+    /// whoever answered.
+    pub async fn start(harbour: String, token_key: String, relays: String, n0: bool, peers: String) -> Result<Radio, JsValue> {
         let book = iroh::address_lookup::MemoryLookup::new();
         let book2 = book.clone();
-        let mut ids = Vec::new();
         let mut unplaced = HashSet::new();
-        for item in harbour.split(|c: char| c == ',' || c.is_whitespace()).filter(|s| !s.is_empty()) {
-            let (id, relay) = item.split_once('@').map(|(a, b)| (a, Some(b))).unwrap_or((item, None));
-            let Ok(id) = id.parse::<EndpointId>() else { continue };
-            match relay.and_then(|r| r.parse::<iroh::RelayUrl>().ok()) {
-                Some(url) => book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() }),
-                None => {
-                    unplaced.insert(id);
+        let mut parse = |list: &str| -> Vec<EndpointId> {
+            let mut ids = Vec::new();
+            for item in list.split(|c: char| c == ',' || c.is_whitespace()).filter(|s| !s.is_empty()) {
+                let (id, relay) = item.split_once('@').map(|(a, b)| (a, Some(b))).unwrap_or((item, None));
+                let Ok(id) = id.parse::<EndpointId>() else { continue };
+                match relay.and_then(|r| r.parse::<iroh::RelayUrl>().ok()) {
+                    Some(url) => book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() }),
+                    None => {
+                        unplaced.insert(id);
+                    }
                 }
+                ids.push(id);
             }
-            ids.push(id);
-        }
-        // A harbour kept from an older build without its relay is the same harbour.
-        let mut seen = HashSet::new();
-        ids.retain(|id| seen.insert(*id));
-        let harbour = ids;
+            // A harbour kept from an older build without its relay is the same harbour.
+            let mut seen = HashSet::new();
+            ids.retain(|id| seen.insert(*id));
+            ids
+        };
+        let harbour = parse(&harbour);
+        let peers: Vec<EndpointId> = parse(&peers).into_iter().filter(|p| !harbour.contains(p)).collect();
         let token_key = unhex32(&token_key).map_err(js)?;
         let custom: Vec<iroh::RelayUrl> = relays.split(',').filter_map(|r| r.trim().parse().ok()).collect();
         if custom.iter().any(|u| !net::relay_public(u.as_str())) {
@@ -3804,6 +3831,7 @@ impl Radio {
             direct_ok: std::sync::atomic::AtomicBool::new(false),
             direct_links: std::sync::atomic::AtomicBool::new(true),
             clocks: Mutex::new(HashMap::new()),
+            card_views: Mutex::new(HashMap::new()),
             touched: Mutex::new(HashMap::new()),
             struck: Mutex::new(HashSet::new()),
             last_trim: std::sync::atomic::AtomicU64::new(0),
@@ -3849,8 +3877,8 @@ impl Radio {
         }
         let s2 = ship.clone();
         spawn(async move {
-            say(&format!("node {} up, joining the Log through {} harbour peers", s2.ep.id().fmt_short(), s2.harbour.len()));
-            let sub = match gossip.subscribe(TopicId::from_bytes(net::log_topic()), s2.harbour.clone()).await {
+            say(&format!("node {} up, joining the Log through {} harbour peers and {} remembered", s2.ep.id().fmt_short(), s2.harbour.len(), peers.len()));
+            let sub = match gossip.subscribe(TopicId::from_bytes(net::log_topic()), s2.harbour.iter().chain(peers.iter()).copied().collect()).await {
                 Ok(s) => s,
                 Err(e) => return say(&format!("gossip: {e}")),
             };

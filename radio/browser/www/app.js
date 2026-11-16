@@ -212,10 +212,16 @@ function rememberHarbours() {
   const door = h => typeof h === 'string' && /^[0-9a-f]{64}(@https?:\/\/[^\s,@]+)?$/.test(h);
   const union = [...new Set(HARBOUR.split(/[,\s]+/).filter(door).concat(Array.isArray(saved) ? saved.filter(door) : []))].slice(0, 24);
   try { store('pyrate.harbours', JSON.stringify(union)) } catch (e) {}
-  // With the switch on, the radios that answered quickly last time are tried beside the doors.
-  // The guards kept from last time come too, so the first hop is drawn from them again.
+  return union.join(',');
+}
+// With the switch on, the radios that answered quickly last time are met beside the harbours,
+// and the guards kept from last time too, so the first hop is drawn from them again. They are
+// passed apart from the harbours: a harbour is HOSTIS's, one operator on every route, and these
+// are whoever answered.
+function rememberedPeers() {
+  const door = h => typeof h === 'string' && /^[0-9a-f]{64}(@https?:\/\/[^\s,@]+)?$/.test(h);
   let peers = []; if (crewOn()) try { peers = JSON.parse(sget('pyrate.guards') || '[]').filter(door).slice(0, 3).concat(JSON.parse(sget('pyrate.peers') || '[]').filter(door).slice(0, 20)) } catch (e) {}
-  return [...new Set(union.concat(peers))].join(',');
+  return [...new Set(peers)].join(',');
 }
 
 // ---- The crew: "Carry the radio while you listen" ----
@@ -2706,7 +2712,7 @@ async function boot() {
   const key = await tokenKey();
   // No relay answering is not the end: the set says so and tries again, more slowly each time.
   for (let tries = 0; !radio; tries++) {
-    try { radio = await Radio.start(rememberHarbours(), key, RELAYS, n0On()) } catch (e) {
+    try { radio = await Radio.start(rememberHarbours(), key, RELAYS, n0On(), rememberedPeers()) } catch (e) {
       console.warn(e);
       $('signal').textContent = 'Could not reach the network. Trying again. If it never connects, this network may block the radio; try another, or the app.';
       await sleep(Math.min(60000, 5000 * 2 ** tries));
