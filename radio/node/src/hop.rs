@@ -887,7 +887,8 @@ impl Inner {
         }
         self.hop_counted();
         let now = now_ms();
-        let (wake, noted) = {
+        let note = if note.is_empty() { None } else { self.pull_note(&cookie, &note).map(|g| (g, note)) };
+        let (wake, noted, full) = {
             let mut p = self.pulls.lock().unwrap();
             p.retain(|_, b| now.saturating_sub(b.seen) < PULL_GONE_MS);
             if !p.contains_key(&cookie) && p.len() >= PULL_BOXES {
@@ -900,27 +901,32 @@ impl Inner {
                     let _ = tx.send(raw);
                 }
             }
-            let noted = !note.is_empty() && now.saturating_sub(b.noted) > 20_000;
+            // Only a note taken counts against the twenty seconds. One turned away (a deck's note
+            // naming its last way in) would hold back the one that names this radio, and a deck
+            // whose pull was answered says its note again only two minutes later.
+            let noted = note.is_some() && now.saturating_sub(b.noted) > 20_000;
             if noted {
                 b.noted = now;
             }
-            if b.parked >= PULL_PARKED {
-                return Some(vec![]);
+            let full = b.parked >= PULL_PARKED;
+            if !full {
+                b.parked += 1;
             }
-            b.parked += 1;
-            (b.wake.clone(), noted)
+            (b.wake.clone(), noted, full)
         };
-        if noted {
-            if let Some(g) = self.pull_note(&cookie, &note) {
-                self.notes.lock().unwrap().keep(&g, &note, now);
-                let _ = self.on_gossip(g.clone());
-                let d = self.door.lock().unwrap().clone();
-                if let Some(d) = d {
-                    d.push(&note);
-                }
-                let i = self.clone();
-                tokio::spawn(async move { i.broadcast(&g).await });
+        // Passed on even when the pull itself is not held, since its deck counts it said.
+        if let Some((g, note)) = note.filter(|_| noted) {
+            self.notes.lock().unwrap().keep(&g, &note, now);
+            let _ = self.on_gossip(g.clone());
+            let d = self.door.lock().unwrap().clone();
+            if let Some(d) = d {
+                d.push(&note);
             }
+            let i = self.clone();
+            tokio::spawn(async move { i.broadcast(&g).await });
+        }
+        if full {
+            return Some(vec![]);
         }
         let end = tokio::time::Instant::now() + Duration::from_millis(PULL_HOLD_MS);
         loop {

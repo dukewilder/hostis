@@ -39,8 +39,8 @@ pub(crate) struct Deck {
     cookie: [u8; 32],
     pub(crate) intro: Option<[u8; 32]>,
     lead: Vec<u8>,
-    /// The deck's note, to go up in its next pull.
-    note: Vec<u8>,
+    /// The deck's note and the way in it names, to go up in its next pull to that way in.
+    note: Option<([u8; 32], Vec<u8>)>,
     pulling: bool,
     said: u64,
     /// The sealed names of the station's chunks this node holds: the deck serves only those.
@@ -86,7 +86,7 @@ impl Inner {
             let seed: [u8; 32] = rand::random();
             let id = pyrate_core::StationKey::from_seed(seed).id().0;
             let cookie: [u8; 32] = rand::random();
-            *self.deck.lock().unwrap() = Some(Deck { station, seed, id, cookie, intro: None, lead: vec![], note: vec![], pulling: false, said: 0, names: HashSet::new(), names_at: 0, minute: (0, 0) });
+            *self.deck.lock().unwrap() = Some(Deck { station, seed, id, cookie, intro: None, lead: vec![], note: None, pulling: false, said: 0, names: HashSet::new(), names_at: 0, minute: (0, 0) });
         }
         let now = now_ms();
         // The way in: a radio of the crew heard from lately, never this node or its guards.
@@ -120,7 +120,7 @@ impl Inner {
             let mut d = self.deck.lock().unwrap();
             match d.as_mut() {
                 Some(d) if d.id == id => {
-                    d.note = note;
+                    d.note = Some((intro, note));
                     !std::mem::replace(&mut d.pulling, true)
                 }
                 _ => false,
@@ -142,7 +142,9 @@ impl Inner {
             let job = {
                 let mut d = self.deck.lock().unwrap();
                 match d.as_mut() {
-                    Some(d) if d.id == deck => d.intro.map(|i| (i, d.cookie, std::mem::take(&mut d.note))),
+                    // A note goes only to the way in it names. One left from the last way in would
+                    // be turned away at the new one; the next tick writes the new one's.
+                    Some(d) if d.id == deck => d.intro.map(|i| (i, d.cookie, d.note.take().filter(|(to, _)| *to == i).map(|(_, n)| n).unwrap_or_default())),
                     _ => None,
                 }
             };
@@ -154,8 +156,8 @@ impl Inner {
             match self.deck_pull(deck, intro, cookie, note.clone(), vec![]).await {
                 Ok(()) => fails = 0,
                 Err(e) => {
-                    if let Some(d) = self.deck.lock().unwrap().as_mut().filter(|d| d.id == deck && d.note.is_empty()) {
-                        d.note = note;
+                    if let Some(d) = self.deck.lock().unwrap().as_mut().filter(|d| d.id == deck && d.note.is_none() && d.intro == Some(intro) && !note.is_empty()) {
+                        d.note = Some((intro, note));
                     }
                     // No route to be had is no fault of the way in: wait for one, saying why at
                     // most once a minute.
