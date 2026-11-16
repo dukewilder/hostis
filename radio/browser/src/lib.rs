@@ -2109,8 +2109,12 @@ impl Ship {
             // An empty answer: the first hop relays for nobody, or the exit it reached does not.
             // A first hop that has carried a route this visit is believed; one that has not is
             // the likelier to have said no, and it is the one left out.
+            // A harbour is never let go as a first hop, so with one that has carried nothing yet
+            // (a returning visit asks before its first route has gone) the exit is: else the
+            // same exit that cannot be reached was drawn again and again, and a returning
+            // visit heard nothing.
             Ok(Ok(Response::Hop(_))) => {
-                let proven = self.relayed.lock().unwrap().contains(&first);
+                let proven = self.relayed.lock().unwrap().contains(&first) || self.harbour.contains(&first);
                 self.turned_away(if proven { exit } else { first });
                 if !proven {
                     return Err(RouteFail::FirstHop);
