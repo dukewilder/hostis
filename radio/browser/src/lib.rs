@@ -1390,6 +1390,10 @@ impl Ship {
         let use_decks = decks && !pocket && self.crew_on() && !cold;
         type Try<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<(Vec<u8>, bool)>> + 'a>>;
         let deck: Try = Box::pin(async move { self.deck_fetch(station, hash).await.map(|b| (b, true)) });
+        // A deck is asked first only for a station heard a while, with a dozen seconds of it in
+        // hand: the ordinary route behind it then goes one at a time too, so a chunk this tab
+        // keeps itself, or one a deck could not give, is served once and not twice.
+        let hurry = hurry && !use_decks;
         let plain: Try = Box::pin(async move { self.fetch_ordinary(station, hash, hurry).await.map(|b| (b, false)) });
         let r = if !use_decks {
             plain.await
