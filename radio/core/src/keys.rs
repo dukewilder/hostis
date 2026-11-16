@@ -90,8 +90,8 @@ impl StationKey {
     }
 
     /// The key from 24 words and a passphrase, which may be empty. With a passphrase the words
-    /// alone are another station: a photograph of the words gives nothing away, and words given
-    /// up under force can open that other, empty one instead. The passphrase is stretched with
+    /// alone make another key, which no station uses, so a photograph of the words gives
+    /// nothing away. The passphrase is stretched with
     /// Argon2id, so guessing it costs a second or so a try.
     pub fn from_words(phrase: &str, pass: &str) -> Result<Self> {
         let base = Self::from_phrase(phrase)?;
