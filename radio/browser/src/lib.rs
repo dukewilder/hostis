@@ -203,6 +203,14 @@ enum Ask {
     /// A deck behind a door keeping its way in (the node's `Ask::Pull`): its answers and its
     /// note go up, the asks waiting for it come back.
     Pull { cookie: [u8; 32], note: Vec<u8>, answers: Vec<(u64, Vec<u8>)> },
+    /// A keeper's line for its own room (the node's `Ask::Line`): never sent by a tab, here so
+    /// the asks after it keep the node's numbers.
+    Line { station: StationId, line: Vec<u8> },
+    /// To a middle: a way in, please. It draws a door from the presence notes it holds and
+    /// answers with the door's node and a ticket for it alone (`pyrate_core::doorway`).
+    Doorway,
+    /// To the same middle: this tab's offer, sealed to the door the ticket names.
+    Introduce { ticket: [u8; 16], offer: Vec<u8> },
 }
 
 /// Why a route failed: its first hop could not be reached, or the hop gave no answer.
@@ -216,8 +224,8 @@ enum RouteFail {
 impl Ask {
     fn station(&self) -> Option<StationId> {
         match self {
-            Ask::Log { station, .. } | Ask::Chunk { station, .. } | Ask::Token { station, .. } | Ask::Sealed { station, .. } | Ask::Stem { station, .. } => Some(*station),
-            Ask::Relay { .. } | Ask::Lead { .. } | Ask::Pull { .. } => None,
+            Ask::Log { station, .. } | Ask::Chunk { station, .. } | Ask::Token { station, .. } | Ask::Sealed { station, .. } | Ask::Stem { station, .. } | Ask::Line { station, .. } => Some(*station),
+            Ask::Relay { .. } | Ask::Lead { .. } | Ask::Pull { .. } | Ask::Doorway | Ask::Introduce { .. } => None,
         }
     }
 }
@@ -310,6 +318,20 @@ struct Doors {
     /// Doors the link that opened the page named, by address and fingerprint: a note for one of
     /// them counts the link as one more source.
     hints: Vec<(String, [u8; 32])>,
+    /// Doors a middle introduced this tab to, with when each door's spell began and the middles
+    /// that drew it: a door two middles drew may be a guard once open long enough (rule A).
+    introduced: HashMap<[u8; 32], (u64, Vec<u32>)>,
+    /// The open door, when a middle introduced it: its node and where the tab reached it.
+    intro_open: Option<(EndpointId, String)>,
+    /// The introduction asked for now, and when the next may be: tried, made, and middles that
+    /// had no door lately.
+    intro_busy: bool,
+    intro_next: u64,
+    intro_wait: u64,
+    intro_tries: u64,
+    intro_made: u64,
+    intro_empty: HashMap<EndpointId, u64>,
+    intro_why: String,
 }
 
 const SRC_BUILT_IN: u32 = 1;
@@ -333,9 +355,16 @@ fn src_of(id: &EndpointId) -> u32 {
 }
 
 impl Doors {
-    /// A door may be a guard when this copy carries it, it was used before, or two sources name it.
+    /// A door may be a guard when this copy carries it, it was used before, or two sources name
+    /// it; an introduced one when two middles drew it.
     fn trusted(&self, d: &[u8; 32]) -> bool {
         self.known.get(d).is_some_and(|(_, _, s)| s.contains(&SRC_BUILT_IN) || s.contains(&SRC_REMEMBERED) || s.len() >= 2)
+            || self.introduced.get(d).is_some_and(|(_, s)| s.len() >= 2)
+    }
+
+    /// When the door's spell began, by its note or its introduction.
+    fn since(&self, d: &[u8; 32]) -> Option<u64> {
+        self.known.get(d).map(|(n, _, _)| n.since).or_else(|| self.introduced.get(d).map(|(t, _)| *t))
     }
     fn add(&mut self, note: net::DoorNote, raw: Vec<u8>, src: u32) {
         let hinted = self.hints.iter().any(|(a, f)| *f == note.fp && *a == note.addr.to_string());
@@ -430,6 +459,9 @@ struct Crew {
     pulls: u64,
     pull_fails: u64,
     pulled: u64,
+    /// Nodes that said, in their presence, that they pass on routes: they know how to introduce
+    /// a tab to a door. Never used to choose a door; the middle chooses.
+    introducers: HashMap<EndpointId, u64>,
 }
 
 /// A computer passes on up to six times its own listening, a phone once: each carries itself
@@ -621,6 +653,8 @@ impl Ship {
                     .unwrap_or_default(),
             ),
             Request::Cards => Response::Cards(vec![]),
+            // A tab is no door a middle may draw.
+            Request::Introduce(_) => Response::Hop(vec![]),
             Request::PocketChatter { tag } => {
                 let found = self.pockets.lock().unwrap().iter().find(|(_, (k, _))| pyrate_core::pocket::tag(k) == tag).map(|(st, (k, _))| (*st, *k));
                 let Some((st, key)) = found else { return Response::Chatter(vec![]) };
@@ -796,13 +830,29 @@ impl Ship {
             if node == d && matches!(req, Request::Hop(_) | Request::Cards) {
                 return self.ask_door(req).await;
             }
-            if self.door_only() {
+            let relays = self.door_relays();
+            if self.door_only() || relays {
                 match req {
-                    Request::Hop(b) if matches!(postcard::from_bytes::<Hop>(b), Ok(Hop::Sealed { .. })) => {
-                        let fwd = postcard::to_stdvec(&Hop::Forward { next: *node.as_bytes(), blob: b.clone() })?;
-                        return self.ask_door(&Request::Hop(fwd)).await;
-                    }
-                    Request::Cards => return self.ask_door(req).await,
+                    Request::Hop(b) => match postcard::from_bytes::<Hop>(b) {
+                        Ok(Hop::Sealed { .. }) => {
+                            let fwd = postcard::to_stdvec(&Hop::Forward { next: *node.as_bytes(), blob: b.clone() })?;
+                            return self.ask_door(&Request::Hop(fwd)).await;
+                        }
+                        // A door that relays this tab's hops and is not its guard: the leg to the
+                        // guard is sealed to the guard as well, which passes the rest on as a middle
+                        // would, so the door sees only that this tab talks to its guard.
+                        Ok(Hop::Forward { next, blob }) if relays => {
+                            use pyrate_core::route::{open_answer, seal_to};
+                            let (eph, ct, c) = seal_to(node.as_bytes(), &postcard::to_stdvec(&Ask::Relay { next, blob })?).ok_or_else(|| anyhow!("seal"))?;
+                            let fwd = postcard::to_stdvec(&Hop::Forward { next: *node.as_bytes(), blob: postcard::to_stdvec(&Hop::Sealed { eph, ct })? })?;
+                            return match self.ask_door(&Request::Hop(fwd)).await? {
+                                Response::Hop(raw) if !raw.is_empty() => Ok(Response::Hop(open_answer(&c, &raw).unwrap_or_default())),
+                                _ => Ok(Response::Hop(vec![])),
+                            };
+                        }
+                        _ => {}
+                    },
+                    Request::Cards if self.door_only() => return self.ask_door(req).await,
                     _ => {}
                 }
             }
@@ -897,6 +947,21 @@ impl Ship {
     fn door_only(&self) -> bool {
         let d = self.doors.lock().unwrap();
         d.open.is_some() && raw_now().saturating_sub(d.relay_ok) > 20_000
+    }
+
+    /// Whether the door this tab is through may be its guard (rule A): named by this copy, by an
+    /// earlier visit or by two sources (for an introduced door, drawn by two middles), and open
+    /// long enough.
+    fn door_may_guard(&self, d: &EndpointId) -> bool {
+        let ds = self.doors.lock().unwrap();
+        ds.trusted(d.as_bytes()) && ds.since(d.as_bytes()).is_some_and(|t| self.base_now().saturating_sub(t) >= DOOR_AGE_MS)
+    }
+
+    /// Through a door a middle introduced that may not be the guard yet: it relays this tab's
+    /// hops, in place of the relay, and the guard is another radio.
+    fn door_relays(&self) -> bool {
+        let Some((d, _)) = self.doors.lock().unwrap().intro_open.clone() else { return false };
+        self.door_now() == Some(d) && !self.door_may_guard(&d)
     }
 
     /// One request over the door's channel.
@@ -1588,6 +1653,19 @@ impl Ship {
                 d.add(note, raw, if from == src_of(&id) { 0 } else { from });
                 None
             }
+            g @ Gossip::Presence { .. } => {
+                // A node that passes on routes knows how to introduce a tab to a door. Which door
+                // is the middle's to draw: the doors' presence is no business of this tab's.
+                let p = g.presence_checked(self.base_now())?;
+                let id = EndpointId::from_bytes(&p.node).ok()?;
+                if p.hop_limit > 0 && id != self.ep.id() {
+                    let mut c = self.crew.lock().unwrap();
+                    if c.introducers.len() < 2_000 || c.introducers.contains_key(&id) {
+                        c.introducers.insert(id, p.at_ms);
+                    }
+                }
+                None
+            }
             g @ Gossip::Harbour { .. } => {
                 // A carrier's own word on where it can be reached: into the tab's address book,
                 // for carriers it knows and harbours only.
@@ -1747,11 +1825,9 @@ impl Ship {
         // A door this tab is through is its guard when it may be one: named by this copy, by an
         // earlier visit or by two sources, and open long enough (rule A). The first leg then runs
         // on no relay at all.
+        let relay_door = self.door_relays().then(|| self.door_now()).flatten();
         if let Some(d) = self.door_now() {
-            let ok = {
-                let ds = self.doors.lock().unwrap();
-                ds.trusted(d.as_bytes()) && ds.known.get(d.as_bytes()).is_some_and(|(n, _, _)| self.base_now().saturating_sub(n.since) >= DOOR_AGE_MS)
-            };
+            let ok = self.door_may_guard(&d);
             if ok {
                 let never = self.doors.lock().unwrap().relay_ok == 0;
                 let mut g = self.first_hop.lock().unwrap();
@@ -1771,11 +1847,15 @@ impl Ship {
                 }
                 return Some(d);
             }
-            if self.door_only() {
+            if self.door_only() && relay_door.is_none() {
                 return None;
             }
         }
         let mut g = self.first_hop.lock().unwrap();
+        // A door that relays this tab's hops is never its guard as well.
+        if relay_door.is_some() && *g == relay_door {
+            *g = None;
+        }
         if g.is_none_or(|f| !nodes.contains(&f) && !(self.crew_on() && self.crew.lock().unwrap().radios.contains_key(&f))) {
             // The quickest to answer of the radios this tab knows, drawn among those within half
             // as slow again: every request of the visit waits on the first hop, so a slow one
@@ -1789,7 +1869,7 @@ impl Ship {
                 let crew: Vec<EndpointId> = self.crew.lock().unwrap().radios.iter().filter(|(_, (_, t))| now.saturating_sub(*t) < CREW_FRESH_MS).map(|(n, _)| *n).collect();
                 cands.extend(crew.into_iter().filter(|n| !nodes.contains(n)));
             }
-            let seasoned: Vec<EndpointId> = cands.into_iter().filter(|n| self.seasoned(n)).collect();
+            let seasoned: Vec<EndpointId> = cands.into_iter().filter(|n| self.seasoned(n) && Some(*n) != relay_door).collect();
             let pool: Vec<(f64, EndpointId)> = seasoned.iter().map(|x| (self.answer_ms(x, near.contains(x)), *x)).collect();
             let best = pool.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
             let quick: Vec<EndpointId> = pool.iter().filter(|p| p.0 <= best * 1.5 + 50.0).map(|p| p.1).collect();
@@ -2446,6 +2526,13 @@ extern "C" {
     fn door_ask_js(bytes: &[u8]) -> Result<js_sys::Promise, JsValue>;
     #[wasm_bindgen(catch, js_name = pyrateDoorCtl)]
     fn door_ctl_js(bytes: &[u8]) -> Result<(), JsValue>;
+    /// An introduced door's link (app.js): this tab's half of it as JSON (ICE name, password,
+    /// fingerprint, candidates), then the door's half taken, resolving once the door's first
+    /// frame has come and the hello gone.
+    #[wasm_bindgen(catch, js_name = pyrateIntroOffer)]
+    fn intro_offer_js() -> Result<js_sys::Promise, JsValue>;
+    #[wasm_bindgen(catch, js_name = pyrateIntroAnswer)]
+    fn intro_answer_js(answer: &str) -> Result<js_sys::Promise, JsValue>;
 }
 
 impl Ship {
@@ -2820,6 +2907,119 @@ impl Ship {
         let others: Vec<EndpointId> = pool.iter().filter(|n| !self.harbour.contains(n)).copied().collect();
         let from = if others.is_empty() { pool } else { others };
         (!from.is_empty()).then(|| from[pick(from.len())])
+    }
+
+    /// A middle that can introduce this tab to a door: a node of the crew heard from lately (one
+    /// that says where it is homed, a harbour, or one whose presence says it passes on routes),
+    /// never this tab's first hop, apart from it where one is, and not one that had no door for
+    /// this tab a moment ago.
+    fn intro_middle(&self, first: &EndpointId) -> Option<EndpointId> {
+        let now = raw_now();
+        let me = self.ep.id();
+        let empty: HashSet<EndpointId> = self.doors.lock().unwrap().intro_empty.iter().filter(|(_, t)| now.saturating_sub(**t) < 120_000).map(|(n, _)| *n).collect();
+        let c = self.crew.lock().unwrap();
+        let pool: Vec<EndpointId> = c
+            .radios
+            .iter()
+            .filter(|(n, (r, at))| now.saturating_sub(*at) < CREW_FRESH_MS && **n != me && *n != first && !empty.contains(*n) && net::door_of_relay(r).is_none())
+            .filter(|(n, _)| c.relays.contains_key(*n) || self.harbour.contains(n) || c.introducers.get(*n).is_some_and(|t| self.base_now().saturating_sub(*t) < net::DOOR_FRESH_MS))
+            .map(|(n, _)| *n)
+            .collect();
+        drop(c);
+        let apart: Vec<EndpointId> = pool.iter().filter(|n| self.apart(n, first)).copied().collect();
+        let pool = if apart.is_empty() { pool } else { apart };
+        (!pool.is_empty()).then(|| pool[pick(pool.len())])
+    }
+
+    /// Whether to ask for an introduction now: direct links on, no door open, a first hop to ask
+    /// through, and the wait since the last try over.
+    fn intro_due(&self) -> bool {
+        if !self.direct_links.load(std::sync::atomic::Ordering::Relaxed) || self.door_now().is_some() {
+            return false;
+        }
+        {
+            let d = self.doors.lock().unwrap();
+            if d.intro_busy || raw_now() < d.intro_next {
+                return false;
+            }
+        }
+        // Only once this tab has a guard of its own and a middle to ask: before that nothing
+        // would be sent, and nothing counts as a try.
+        let first = *self.first_hop.lock().unwrap();
+        first.is_some_and(|f| self.intro_middle(&f).is_some())
+    }
+
+    /// A way in through a door no note names: this tab asks a middle, through its own guard, to
+    /// draw a door; then sends its offer, sealed to that door, through the same middle; then
+    /// links to the door with the door's answer. The guard sees only sealed forwards to the
+    /// middle, the middle never sees this tab or its address, and the door learns this tab's
+    /// address only as a guard would. Returns the door, in hex.
+    async fn introduce(self: &Arc<Self>) -> Result<String> {
+        use pyrate_core::route::{open_answer, seal_to};
+        let nodes = self.route_nodes();
+        let first = self.first_hop_for(&nodes).ok_or_else(|| anyhow!("no first hop"))?;
+        let middle = self.intro_middle(&first).ok_or_else(|| anyhow!("no middle that introduces"))?;
+        let via_middle = |ask: &Ask| -> Result<(Vec<u8>, pyrate_core::route::Cipher)> {
+            let (eph, ct, c) = seal_to(middle.as_bytes(), &postcard::to_stdvec(ask)?).ok_or_else(|| anyhow!("seal"))?;
+            Ok((postcard::to_stdvec(&Hop::Forward { next: *middle.as_bytes(), blob: postcard::to_stdvec(&Hop::Sealed { eph, ct })? })?, c))
+        };
+        let empty = |why: &str| {
+            self.doors.lock().unwrap().intro_empty.insert(middle, raw_now());
+            anyhow!("{why}")
+        };
+        // The draw.
+        let (fwd, c) = via_middle(&Ask::Doorway)?;
+        let raw = match timeout(Duration::from_secs(9), self.ask(first, &Request::Hop(fwd))).await {
+            Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => raw,
+            _ => return Err(empty("the middle drew no door")),
+        };
+        let (door, ticket): ([u8; 32], [u8; 16]) = open_answer(&c, &raw).and_then(|b| postcard::from_bytes(&b).ok()).ok_or_else(|| empty("the draw did not open"))?;
+        let door_id = EndpointId::from_bytes(&door).map_err(|_| empty("not a radio"))?;
+        if door_id == first || door_id == self.ep.id() {
+            return Err(empty("the middle drew this tab's own guard"));
+        }
+        // This tab's half, made by the browser, sealed to the door alone.
+        let v = wasm_bindgen_futures::JsFuture::from(intro_offer_js().map_err(|_| anyhow!("no WebRTC"))?).await.map_err(|_| anyhow!("no offer"))?;
+        let o: Value = serde_json::from_str(&v.as_string().unwrap_or_default())?;
+        let offer = pyrate_core::doorway::Offer {
+            ufrag: o["ufrag"].as_str().unwrap_or_default().into(),
+            pwd: o["pwd"].as_str().unwrap_or_default().into(),
+            fp: o["fp"].as_str().and_then(|f| unhex32(f).ok()).ok_or_else(|| anyhow!("no fingerprint"))?,
+            cands: o["cands"].as_array().map(|a| a.iter().filter_map(|c| c.as_str().map(String::from)).take(12).collect()).unwrap_or_default(),
+        };
+        if !offer.sound() {
+            return Err(anyhow!("the browser's offer is not one a door takes"));
+        }
+        let (eph, ct, c_door) = seal_to(&door, &postcard::to_stdvec(&offer)?).ok_or_else(|| anyhow!("seal"))?;
+        let (fwd, c_mid) = via_middle(&Ask::Introduce { ticket, offer: postcard::to_stdvec(&Hop::Sealed { eph, ct })? })?;
+        let raw = match timeout(Duration::from_secs(12), self.ask(first, &Request::Hop(fwd))).await {
+            Ok(Ok(Response::Hop(raw))) if !raw.is_empty() => raw,
+            _ => return Err(anyhow!("the door gave no answer")),
+        };
+        let answer: pyrate_core::doorway::Answer = open_answer(&c_mid, &raw)
+            .and_then(|b| open_answer(&c_door, &b))
+            .and_then(|b| postcard::from_bytes(&b).ok())
+            .filter(|a: &pyrate_core::doorway::Answer| a.sound() && a.since <= self.base_now() + 5 * 60_000)
+            .ok_or_else(|| anyhow!("the door's answer did not open"))?;
+        {
+            let mut d = self.doors.lock().unwrap();
+            if d.introduced.len() > 64 {
+                d.introduced.clear();
+            }
+            let e = d.introduced.entry(door).or_insert((answer.since, vec![]));
+            e.0 = answer.since;
+            let src = src_of(&middle);
+            if !e.1.contains(&src) && e.1.len() < 8 {
+                e.1.push(src);
+            }
+            d.intro.entry(door_id).or_insert(src_of(&middle));
+        }
+        // The link: the browser takes the door's half and dials; the door's first frame comes to
+        // `door_up_intro`.
+        let a = json!({ "door": hex(&door), "ufrag": answer.ufrag, "pwd": answer.pwd, "fp": hex(&answer.fp), "cands": answer.cands });
+        wasm_bindgen_futures::JsFuture::from(intro_answer_js(&a.to_string()).map_err(|_| anyhow!("no WebRTC"))?).await.map_err(|e| anyhow!("the link did not open: {e:?}"))?;
+        say(&format!("introduced to the door {} by {}", door_id.fmt_short(), middle.fmt_short()));
+        Ok(hex(&door))
     }
 
     /// Radios a deck behind a door may pull through or from: nodes of the crew heard from lately
@@ -3893,8 +4093,79 @@ impl Radio {
         postcard::to_stdvec(&net::DoorCtl::Hello { node: me, at_ms, sig }).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
+    /// Whether to ask a middle for an introduction now (see `Ship::introduce`).
+    pub fn intro_due(&self) -> bool {
+        self.ship.intro_due()
+    }
+
+    /// Asks a middle for a way in through a door no note names, and links to it. Resolves with
+    /// the door's id once its channel is open; the next try waits longer after each that fails.
+    pub fn introduce(&self) -> js_sys::Promise {
+        let s = self.ship.clone();
+        wasm_bindgen_futures::future_to_promise(async move {
+            if !s.intro_due() {
+                return Err(JsValue::from_str("not now"));
+            }
+            {
+                let mut d = s.doors.lock().unwrap();
+                d.intro_busy = true;
+                d.intro_tries += 1;
+            }
+            let r = s.introduce().await;
+            let mut d = s.doors.lock().unwrap();
+            d.intro_busy = false;
+            match r {
+                Ok(door) => {
+                    d.intro_made += 1;
+                    d.intro_wait = 0;
+                    d.intro_next = raw_now() + 10_000;
+                    d.intro_why.clear();
+                    Ok(JsValue::from_str(&door))
+                }
+                Err(e) => {
+                    d.intro_wait = (d.intro_wait * 2).clamp(15_000, 600_000);
+                    d.intro_next = raw_now() + d.intro_wait;
+                    d.intro_why = e.to_string();
+                    say(&format!("introduction: {e}"));
+                    Err(JsValue::from_str(&e.to_string()))
+                }
+            }
+        })
+    }
+
+    /// An introduced door's channel is open: `note` is what it sent first, `door` the radio the
+    /// middle drew (hex). The note must be that radio's own: its presence, or its listed note.
+    /// Returns the tab's hello.
+    pub fn door_up_intro(&self, note: &[u8], door: &str) -> Result<Vec<u8>, JsValue> {
+        let bad = |m: &str| JsValue::from_str(m);
+        let want = unhex32(door).map_err(|_| bad("not a door"))?;
+        let Ok(net::DoorCtl::Note(raw)) = postcard::from_bytes::<net::DoorCtl>(note) else { return Err(bad("not a door")) };
+        let g: Gossip = postcard::from_bytes(&raw).map_err(|_| bad("not a door"))?;
+        let now = self.ship.base_now();
+        let node = g.presence_checked(now).map(|p| p.node).or_else(|| g.door_checked(now).map(|d| d.node)).ok_or_else(|| bad("the door's note does not hold"))?;
+        if node != want {
+            return Err(bad("the door is not the one the middle drew"));
+        }
+        let id = EndpointId::from_bytes(&node).map_err(|_| bad("id"))?;
+        {
+            let mut ds = self.ship.doors.lock().unwrap();
+            ds.open = Some((id, raw_now()));
+            ds.intro_open = Some((id, String::new()));
+        }
+        self.ship.cards_asked.lock().unwrap().remove(&id);
+        let s = self.ship.clone();
+        spawn(async move { s.cards_from(id).await });
+        let at_ms = self.ship.base_now();
+        let me = *self.ship.ep.id().as_bytes();
+        let key = pyrate_core::StationKey::from_seed(self.ship.secret);
+        let sig = key.sign(&net::door_hello_message(&node, &me, at_ms)).to_vec();
+        say(&format!("through the introduced door {}", id.fmt_short()));
+        postcard::to_stdvec(&net::DoorCtl::Hello { node: me, at_ms, sig }).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
     /// The door's channel closed.
     pub fn door_down(&self) {
+        self.ship.doors.lock().unwrap().intro_open = None;
         let d = self.ship.doors.lock().unwrap().open.take();
         if let Some((d, _)) = d {
             let mut f = self.ship.first_hop.lock().unwrap();
@@ -3956,9 +4227,12 @@ impl Radio {
     /// What the doors have done this visit, as JSON: counts only.
     pub fn door_stats(&self) -> String {
         let only = self.ship.door_only();
+        let relays = self.ship.door_relays();
+        let guard = self.ship.door_now().is_some_and(|d| self.ship.door_may_guard(&d));
         let first = *self.ship.first_hop.lock().unwrap();
         let d = self.ship.doors.lock().unwrap();
         json!({ "open": d.open.map(|(x, _)| x.to_string()), "door_only": only, "asks": d.asks, "bytes": d.bytes, "served": d.served,
+            "introduced": d.intro_open.is_some(), "relays": relays, "door_guard": guard, "intro_tries": d.intro_tries, "intro_made": d.intro_made, "intro_why": d.intro_why,
             "known": d.known.len(), "trusted": d.known.keys().filter(|k| d.trusted(k)).count(), "behind": d.behind.len(),
             "routes": d.routes, "routes_shared": d.routes_shared, "capped": d.capped, "relay_ok_ago": if d.relay_ok == 0 { -1.0 } else { raw_now().saturating_sub(d.relay_ok) as f64 },
             "first_hop": first.map(|f| f.to_string()) }).to_string()
@@ -4681,7 +4955,7 @@ impl Radio {
                         Gossip::Aboard { station, .. } => *station == st,
                         Gossip::Harbour { .. } => true,
                         // No decks and no crew inside a pocket: its sound stays among its members.
-                        Gossip::Crew { .. } | Gossip::Deck { .. } | Gossip::Door { .. } => false,
+                        Gossip::Crew { .. } | Gossip::Deck { .. } | Gossip::Door { .. } | Gossip::Presence { .. } => false,
                     };
                     if ok {
                         s2.on_gossip(g);
