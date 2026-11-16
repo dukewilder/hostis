@@ -1038,6 +1038,15 @@ impl Inner {
         let pass = declines || (!again && rand::random::<f64>() > FLUFF);
         if pass {
             let mut nodes = self.known_nodes();
+            // Not a radio that could not be reached lately: a carrier's note outlives it by ten
+            // minutes, and a stem passed round closed radios one ten-second connect after another
+            // (a live show's chunks came half a minute late, and the hop that brought the stem
+            // gave up on this radio).
+            {
+                let failed = self.failed.lock().unwrap();
+                let now = now_ms();
+                nodes.retain(|n| !failed.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS));
+            }
             nodes.shuffle(&mut rand::thread_rng());
             let next = Hop::Stem { station, entries: entries.clone(), chunks: chunks.clone(), announce: announce.clone(), hops: 0 };
             for n in nodes.into_iter().take(3) {
