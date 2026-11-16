@@ -112,7 +112,16 @@ sh tools/test/serve_test.sh "$RELAY" "$GANG" > "$OUT/serve_test2.log" 2>&1
 sleep 5
 run raise_test 1300 "PYRATE_LIST_AGE_MS=60000 $NET target/release/raise_test $RELAY '$WAV'"
 run browser_station 900 "$B/browser_station.py 8099"
-# The crowd at five tabs, the target's size (eight is the design's own test; run it by hand).
+# The crowd at five tabs, the target's size (eight is the design's own test; run it by hand),
+# on a network of its own as its notes ask: the tabs browser_station and raise_test closed are
+# still believed for a few minutes as middles, ways in and decks, and the crowd would be
+# measured against them, not against itself.
+pkill -f "$R/target/release/lantern" 2>/dev/null; pkill -f "http.server 80" 2>/dev/null
+PYRATE_STATS_S=5 sh tools/test/net_up.sh "$M" > "$OUT/net_up3.log" 2>&1
+RELAY=$(awk '/^relay/ {print $2}' "$OUT/net_up3.log"); GANG=$(awk '/^gangway/ {print $2}' "$OUT/net_up3.log")
+echo "$RELAY $GANG" > /tmp/net-ids
+sh tools/test/serve_test.sh "$RELAY" "$GANG" > "$OUT/serve_test3.log" 2>&1
+sleep 5
 run browser_crew 900 "$B/browser_crew.py 8099 5"
 # The landing page's part of the sweep builds the landing round the released app.
 # A fresh container has no app at all: a stand-in of a megabyte then, for the page to name.
