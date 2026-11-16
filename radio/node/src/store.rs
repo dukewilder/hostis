@@ -252,8 +252,9 @@ impl Store {
         // again, entry by entry and at the same times, so it keeps its library, its clock and
         // its place in the hour; its recordings are already aboard. Anything else is set aside,
         // to be fetched again in the new form.
+        // The old file, a station's log in the clear, goes either way.
         for (id, path, bytes) in legacy {
-            let _ = fs::rename(&path, path.with_extension("legacy"));
+            let _ = fs::remove_file(&path);
             let master = s.keys.get(&id).is_some_and(|k| k.id() == id);
             if !master {
                 continue;
@@ -276,9 +277,51 @@ impl Store {
                     kept += 1;
                 }
             }
-            crate::say(&format!("carried {} into the new log format: {kept} entries", id.call_sign()));
+            crate::say_named(&format!("carried {} into the new log format: {kept} entries", id.call_sign()));
         }
+        s.seal_leftovers();
         Ok(s)
+    }
+
+    /// What older versions left on disk under keys anyone can draw from public facts is filed
+    /// under the hold key, or let go where it cannot be. Chunks are sealed again (one kept in
+    /// the clear is sealed under its address first). Logs of stations whose keys are not here
+    /// go, to be fetched again when wanted, and so do logs set aside in the clear. Once done,
+    /// the folder `chunks/` is gone and this costs nothing.
+    fn seal_leftovers(&mut self) {
+        let top = self.dir.join("chunks");
+        if let Ok(rd) = fs::read_dir(&top) {
+            for sub in rd.flatten() {
+                let Ok(files) = fs::read_dir(sub.path()) else {
+                    let _ = fs::remove_file(sub.path());
+                    continue;
+                };
+                for f in files.flatten() {
+                    let name = f.file_name().to_string_lossy().to_string();
+                    let Some(h) = crate::unhex(&name).ok().filter(|_| name.len() == 64) else {
+                        let _ = fs::remove_file(f.path());
+                        continue;
+                    };
+                    let Ok(b) = fs::read(f.path()) else { continue };
+                    let done = if blake3::hash(&b).as_bytes() == &h { self.put_chunk(&h, &b) } else { self.file_sealed(&h, &b) };
+                    if done.is_ok() {
+                        let _ = fs::remove_file(f.path());
+                    }
+                }
+                let _ = fs::remove_dir(sub.path());
+            }
+            let _ = fs::remove_dir(&top);
+        }
+        // An own station's old file that could not be taken in stays, for the next start.
+        let own: HashSet<PathBuf> = self.keys.keys().flat_map(|id| [self.old_log_path(id), self.dir.join("logs").join(format!("{}.log", id.to_hex()))]).collect();
+        let Ok(rd) = fs::read_dir(self.dir.join("logs")) else { return };
+        for f in rd.flatten() {
+            let p = f.path();
+            let ext = p.extension().map(|e| e.to_string_lossy().to_string()).unwrap_or_default();
+            if ["sl", "log", "legacy"].contains(&ext.as_str()) && !own.contains(&p) {
+                let _ = fs::remove_file(&p);
+            }
+        }
     }
 
     pub fn dir(&self) -> &Path {
@@ -996,6 +1039,32 @@ mod tests {
         assert!(s.open_log(&id));
         assert!(!dir.join("keys").join(id.to_hex()).exists() && !dir.join("logs").join(format!("{}.sl", filed_as(&id))).exists());
         assert!(!dir.join("chunks").join(&name[..2]).join(&name).exists(), "and the old files are gone");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn leftovers_from_before_the_hold_key_are_sealed_or_let_go_at_start() {
+        let dir = std::env::temp_dir().join(format!("pyrate-leftover-{}", rand::random::<u64>()));
+        for d in ["logs", "chunks"] {
+            fs::create_dir_all(dir.join(d)).unwrap();
+        }
+        // A carried station's log under the id's key, one set aside in the clear, a chunk sealed
+        // once and a chunk in the clear: none of them ever asked for again.
+        let id = StationKey::generate().unwrap().id();
+        fs::write(dir.join("logs").join(format!("{}.sl", filed_as(&id))), b"old seal").unwrap();
+        fs::write(dir.join("logs").join(format!("{}.legacy", id.to_hex())), b"a log in the clear").unwrap();
+        let (a, b) = (b"chunk sealed once".to_vec(), b"chunk in the clear".to_vec());
+        let (ha, hb) = (*blake3::hash(&a).as_bytes(), *blake3::hash(&b).as_bytes());
+        let na = pyrate_core::seal::name(&ha);
+        for (name, bytes) in [(hex(&na), pyrate_core::seal::seal(&ha, &a)), (hex(&hb), b.clone())] {
+            fs::create_dir_all(dir.join("chunks").join(&name[..2])).unwrap();
+            fs::write(dir.join("chunks").join(&name[..2]).join(&name), bytes).unwrap();
+        }
+        let s = Store::open_with(&dir, 1 << 20, Some([9; 32])).unwrap();
+        assert!(!dir.join("chunks").exists(), "nothing is left under chunks/");
+        assert_eq!(fs::read_dir(dir.join("logs")).unwrap().count(), 0, "nor under logs/");
+        assert_eq!(s.get_chunk(&ha), Some(a), "the sealed chunk is in the hold");
+        assert_eq!(s.get_chunk(&hb), Some(b), "and so is the plain one, sealed");
         let _ = fs::remove_dir_all(&dir);
     }
 
