@@ -1020,8 +1020,10 @@ impl Inner {
         }
         // A Lantern that carries only its own stations never ends a stranger's stem: it
         // hands the cargo on, so nothing of anyone else's lands on its disk. Nor does any
-        // node end a stem for a station its owner chose not to carry.
-        let declines = (self.cfg.lantern && !self.cfg.carry_all && !self.is_own(&station)) || !self.will_carry(&station, Some((&announce, &entries)));
+        // node end a stem for a station its owner chose not to carry. Nor does a Lantern end
+        // one for a station it would carry blind: the end of a stem shows the station to the
+        // network, and a blind carrier shows nothing, so the cargo goes to a node that can.
+        let declines = (self.cfg.lantern && !self.cfg.carry_all && !self.is_own(&station)) || (self.cfg.lantern && !self.is_open(&station)) || !self.will_carry(&station, Some((&announce, &entries)));
         // Cargo that has been here before has gone round: it spreads now.
         let id = cargo_id(&station, &entries, &announce);
         let again = {

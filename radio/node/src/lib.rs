@@ -429,6 +429,9 @@ pub struct Inner {
     pub(crate) voice: [u8; 32],
     /// Station-naming requests answered straight from a peer, for the privacy harness.
     pub(crate) served_direct: std::sync::atomic::AtomicU64,
+    /// The stations a Lantern keeps openly, besides its own (`--open`), and whether it keeps
+    /// every station so. Everything else it carries blind (see `is_open`).
+    open: Mutex<(bool, std::collections::HashSet<StationId>)>,
     store: Mutex<Store>,
     log: Mutex<HashMap<StationId, Listing>>,
     conns: Mutex<HashMap<EndpointId, Connection>>,
@@ -734,7 +737,10 @@ impl Inner {
     /// from its ballast share or a pocket; a room's last lines only to that room's members.
     /// Anything else gets the answer a node with nothing gives.
     fn serve_peer(&self, req: Request, from: &[u8; 32]) -> Response {
-        if !self.cfg.private || self.cfg.lantern {
+        if self.cfg.lantern {
+            return self.serve_lantern(req);
+        }
+        if !self.cfg.private {
             return self.serve(req);
         }
         match &req {
@@ -761,6 +767,47 @@ impl Inner {
             _ => {}
         }
         self.serve(req)
+    }
+
+    /// Whether a Lantern keeps this station openly: one of its own, one it was told to keep
+    /// openly, or any when told so. Any other node answers by its own rules (`serve_peer`).
+    pub(crate) fn is_open(&self, st: &StationId) -> bool {
+        if !self.cfg.lantern {
+            return true;
+        }
+        let o = self.open.lock().unwrap();
+        o.0 || o.1.contains(st) || { drop(o); self.is_own(st) }
+    }
+
+    /// What a Lantern gives a peer asking straight. A station it keeps openly is answered as
+    /// it always was. Any other it carries blind: no log, no chunk or picture in the clear and
+    /// no room's lines, the answer a node without it gives, while its chunks still go to whoever
+    /// asks by their sealed names, unopened, as a phone passes its share.
+    fn serve_lantern(&self, req: Request) -> Response {
+        match &req {
+            Request::Log { station, .. } if !self.is_open(station) => Response::Entries(vec![]),
+            Request::Chatter { station } if !self.is_open(station) => Response::Chatter(vec![]),
+            Request::Chunk { hash } => {
+                let own = self.store.lock().unwrap().is_own_named(hash);
+                if own {
+                    return self.serve(req);
+                }
+                let pic = self.art_mem.lock().unwrap().get(hash);
+                Response::Chunk(pic.filter(|_| self.art_open(hash)))
+            }
+            _ => self.serve(req),
+        }
+    }
+
+    /// Whether a picture belongs to a station this Lantern keeps openly.
+    fn art_open(&self, hash: &Hash) -> bool {
+        let (all, listed) = {
+            let o = self.open.lock().unwrap();
+            (o.0, o.1.clone())
+        };
+        let s = self.store.lock().unwrap();
+        let mut look: Box<dyn Iterator<Item = &Archive>> = if all { Box::new(s.logs.values()) } else { Box::new(listed.iter().chain(s.keys.keys()).filter_map(|id| s.logs.get(id))) };
+        look.any(|a| a.art_hashes().contains(hash))
     }
 
     fn serve(&self, req: Request) -> Response {
@@ -1782,6 +1829,12 @@ impl Inner {
             // the hash chose for it, and only while it is on Wi-Fi and charging. Away from the
             // charger it serves nobody, and its ballast set, which would tie one day's fresh id
             // to the next and one network to another, goes unsaid.
+            // A Lantern says nothing of a station it carries blind: no card from it and no
+            // carrier note, until carriers can be named by tags only the station's listeners
+            // can work out.
+            if self.cfg.lantern && !self.is_open(&station) {
+                continue;
+            }
             let direct = self.direct.lock().unwrap().contains(&station);
             if self.cfg.private && !direct {
                 let ballast = !own_set.contains(&station) && self.store.lock().unwrap().pinned.contains(&station);
@@ -2513,6 +2566,17 @@ impl Node {
     pub fn paths_to(&self, peer: &EndpointId) -> Vec<bool> {
         self.inner.paths_to(peer)
     }
+    /// The stations this Lantern keeps openly besides its own, or every station with `all`.
+    /// Everything else it carries blind: it answers no clear request for it, says nothing of
+    /// carrying it and serves it on no web page, and passes its chunks on sealed by name.
+    pub fn keep_open(&self, stations: &[StationId], all: bool) {
+        let mut o = self.inner.open.lock().unwrap();
+        o.0 |= all;
+        o.1.extend(stations.iter().copied());
+        drop(o);
+        *self.inner.cards_cache.lock().unwrap() = None;
+    }
+
     /// For harnesses: logs and chunks this node has handed straight to a peer that asked.
     pub fn served_direct(&self) -> u64 {
         self.inner.served_direct.load(std::sync::atomic::Ordering::Relaxed)
@@ -2886,6 +2950,7 @@ impl Node {
             dark,
             last_harbour: std::sync::atomic::AtomicU64::new(0),
             relay_ok: std::sync::atomic::AtomicBool::new(!cfg.private),
+            open: Mutex::new((false, std::collections::HashSet::new())),
             crew: std::sync::atomic::AtomicBool::new(std::env::var("PYRATE_CREW").map_or(true, |v| v != "0")),
             crew_radios: Mutex::new(HashMap::new()),
             first_seen: Mutex::new(first_seen),
@@ -3260,6 +3325,12 @@ impl Node {
 
     /// Whether this node has heard of a station at all: a card, a carrier, a listener token or
     /// a log. The pocket test uses it to prove an outsider never learns a pocket exists.
+    /// For harnesses: the nodes this one believes carry a station, from their notes.
+    #[doc(hidden)]
+    pub fn carriers_of(&self, id: &pyrate_core::StationId) -> Vec<[u8; 32]> {
+        self.inner.log.lock().unwrap().get(id).map(|l| l.carriers.keys().copied().collect()).unwrap_or_default()
+    }
+
     pub fn heard_of(&self, id: &pyrate_core::StationId) -> bool {
         self.inner.log.lock().unwrap().contains_key(id) || self.inner.store.lock().unwrap().logs.contains_key(id)
     }
