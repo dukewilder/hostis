@@ -28,6 +28,9 @@ with sync_playwright() as p:
     a.wait_for_function("document.getElementById('st-status').textContent.length > 0 && !document.getElementById('st-status').textContent.includes('ready')", timeout=120000)
     check(True, "proof of work done: " + a.text_content("#st-status"))
     a.set_input_files("#st-files", wav)
+    # The title is shown before anything is signed; the keeper names it and presses Sign (D-4).
+    a.wait_for_selector(".qi .qgo:not([hidden]), .qi.bad", timeout=120000)
+    if a.is_visible(".qi .qgo"): a.fill(".qi .qt-in", "Harbour Lights"); a.click(".qi .qgo")
     a.wait_for_selector(".qi.done, .qi.bad", timeout=120000)
     check(a.is_visible(".qi.done"), "the recording is on the clock: " + a.text_content(".qi .qs"))
     a.wait_for_function("document.getElementById('st-status').textContent.startsWith('On the network · ')", timeout=180000)

@@ -44,7 +44,8 @@ with sync_playwright() as p:
     a.click("#st-safer summary"); a.check("#st-tabonly")
     check(a.evaluate("localStorage.getItem('pyrate.mine')") is None and len(a.evaluate("sessionStorage.getItem('pyrate.mine')") or "") > 0, "tab-only: the key leaves the browser's storage and lives in the tab")
     a.set_input_files("#st-files", stamp); time.sleep(1)
-    check(a.text_content(".qi .qt") == "Untitled", "a recorder's date never becomes a title: " + (a.text_content(".qi .qt") or ""))
+    # The title is shown for the keeper to check in a field of its own before it is signed (D-4).
+    check(a.input_value(".qi .qt-in") == "Untitled", "a recorder's date never becomes a title: " + (a.input_value(".qi .qt-in") or ""))
     time.sleep(5)
     check(a.evaluate("window.__rtc") == 0, "no WebRTC")
     # The test harbour names its relay, so no one's lookup service is asked anything.

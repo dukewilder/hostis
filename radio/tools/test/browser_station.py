@@ -66,6 +66,10 @@ try:
         wait(a, "!document.getElementById('st-status').textContent.includes('ready') && document.getElementById('st-status').textContent.length > 0", 120)
         sid = a.evaluate("window.pyrate.mine()[0]")
         a.set_input_files("#st-files", [KEEP, DROP])
+        # Each title is shown to the keeper before it is signed, and the keeper presses Sign (D-4).
+        for _ in range(2):
+            wait(a, "!!document.querySelector('#st-queue .qi .qgo:not([hidden])')", 90); a.click("#st-queue .qi .qgo:not([hidden]) >> nth=0")
+            time.sleep(0.3)
         wait(a, "document.querySelectorAll('#st-queue .qi.done').length === 2", 90)
         check(a.is_visible("#ys") and a.text_content("#ys-lib-v") == "2 recordings", "the keeper's panel shows the station and its two recordings")
         within(a, "!document.getElementById('st-dial').hidden", 30)

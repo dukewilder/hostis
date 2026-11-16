@@ -1,6 +1,7 @@
 """The live desk, heard from another tab: browser_desk.py [port]
 Serve a test build first (serve_test.sh). A tab raises a station and broadcasts from the desk with
-Chromium's fake microphone (a 396 Hz beep, twice a second); a second tab tunes in, and what reaches
+Chromium's fake microphone (a 1.5 kHz tone from a file, clear of the hum comb that takes every
+harmonic of 50 and 60 Hz to 1 kHz off the talk path); a second tab tunes in, and what reaches
 its speaker is measured. The keeper's show runs in phases a few seconds apart: the microphone
 alone, the microphone disguised, the microphone closed, music from the deck (a 523 Hz tone), the
 music under the open mic, the music back, a pad (880 Hz), then a second input. The disguise stays
@@ -32,6 +33,11 @@ def tone(name, f, secs, amp=0.3):
     path = os.path.join(tmp, name); w = wave.open(path, "wb"); w.setnchannels(1); w.setsampwidth(2); w.setframerate(48000)
     w.writeframes((amp * 32767 * np.sin(2 * np.pi * f * np.arange(int(48000 * secs)) / 48000)).astype("<i2").tobytes()); w.close()
     return path
+# The microphone: Chromium's own fake beep is 396 Hz, in the comb's notch at 400 Hz, so the
+# fake device reads a steady tone above the comb instead. Disguised, it falls 3.5 to 6 semitones
+# (the keeper's own shift, drawn from the station's key) and stays above the comb.
+MIC_HZ = 1500.0
+MIC = tone("mic.wav", MIC_HZ, 60)
 MUSIC = tone("Test Band - Middle C.wav", 523.25, 70)
 PAD = tone("Ident.wav", 880, 3)
 # The station's own schedule, which comes back after the show: one recording, a 1.1 kHz tone.
@@ -59,7 +65,7 @@ TAKE = """() => { window.__capStop(); const n = window.__cap.reduce((s, x) => s 
 errs = []
 try:
     with sync_playwright() as p:
-        b = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"])
+        b = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", f"--use-file-for-fake-audio-capture={MIC}"])
         ctx = b.new_context(permissions=["microphone"], viewport={"width": 1440, "height": 900})
         ctx.add_init_script(HOOKS); a = ctx.new_page()
         for pg in (a,):
@@ -70,6 +76,8 @@ try:
         wait(a, "!document.getElementById('st-status').textContent.includes('ready') && document.getElementById('st-status').textContent.length > 0", 120)
         sid = a.evaluate("window.pyrate.mine()[0]")
         a.set_input_files("#st-files", [REC])
+        # The keeper sees the title before anything is signed, and presses Sign (D-4).
+        wait(a, "!!document.querySelector('#st-queue .qi .qgo:not([hidden])')", 60); a.click("#st-queue .qi .qgo")
         wait(a, "!!document.querySelector('#st-queue .qi.done')", 60)
         # The keeper's tab plays its own station, then goes live with the microphone alone.
         a.click("#st-tune"); time.sleep(1.5)
@@ -188,16 +196,19 @@ try:
     if D is not None:
         at = lambda k, off=0: T[k] + D - t0 + off
         A, V, B, C, Dk, E, F = seg(at("A", 1.5), at("V", -1.5)), seg(at("V", 1.5), at("B", -1.5)), seg(at("B", 1.5), at("C", -1.0)), seg(at("C", 2.5), at("D", -1.5)), seg(at("D", 1.5), at("E", -1.5)), seg(at("E", 2.0), at("F", -1.5)), seg(at("F", 0.4), at("F", 2.6))
-        # Four semitones under the voice as the listener heard it undisguised.
-        SHIFT = (top(A) if len(A) > sr else 396) * 2 ** (-4 / 12)
+        # The keeper's own shift, 3.5 to 6 semitones under the voice as the listener heard it
+        # undisguised; what the disguised phase reads, if it is in that span.
+        heard = top(A) if len(A) > sr else MIC_HZ
+        LO, HI = heard * 2 ** (-6 / 12), heard * 2 ** (-3.5 / 12)
+        SHIFT = top(V) if len(V) > sr and LO - 15 < top(V) < HI + 15 else (LO + HI) / 2
         pk = lambda s: float(np.abs(s).max()) if len(s) else 0.0
         rms = lambda s: float(np.sqrt(np.mean(s ** 2))) if len(s) else 0.0
         print("phases, seconds and peak: " + ", ".join(f"{k} {len(s) / sr:.1f} {pk(s):.3f}" for k, s in zip("AVBCDEF", (A, V, B, C, Dk, E, F))), flush=True)
-        check(len(A) > sr * 4 and abs(top(A) - 396) < 15, f"mic alone: the listener hears the microphone's tone ({top(A) if len(A) else 0:.0f} Hz)")
+        check(len(A) > sr * 4 and abs(top(A) - MIC_HZ) < 15, f"mic alone: the listener hears the microphone's tone ({top(A) if len(A) else 0:.0f} Hz)")
         check(len(A) > 0 and hf(A) < 0.05, f"mic alone: nothing piles up above 4 kHz ({hf(A) * 100 if len(A) else 0:.2f}% of the energy)")
         check(len(A) > 0 and pk(A) < 1.0, f"mic alone: the peak stays under full scale ({pk(A):.3f})")
-        check(len(V) > sr * 4 and abs(top(V) - SHIFT) < 15 and band(V, 396) < 0.3 * band(A, 396), f"disguise: the voice is shifted down ({top(V) if len(V) else 0:.0f} Hz, near {SHIFT:.0f})")
-        check(len(B) > sr * 4 and rms(B) < 0.003 and band(B, 396) < 0.01 * max(1e-9, band(A, 396)), f"mic closed: no microphone on the air (rms {rms(B):.4f}, tone {band(B, 396):.5f} against {band(A, 396):.4f})")
+        check(len(V) > sr * 4 and LO - 15 < top(V) < HI + 15 and band(V, MIC_HZ) < 0.3 * band(A, MIC_HZ), f"disguise: the voice is shifted down ({top(V) if len(V) else 0:.0f} Hz, within {LO:.0f} to {HI:.0f})")
+        check(len(B) > sr * 4 and rms(B) < 0.003 and band(B, MIC_HZ) < 0.01 * max(1e-9, band(A, MIC_HZ)), f"mic closed: no microphone on the air (rms {rms(B):.4f}, tone {band(B, MIC_HZ):.5f} against {band(A, MIC_HZ):.4f})")
         check(len(C) > sr * 4 and abs(top(C) - 523.25) < 10, f"music: the listener hears the deck, untouched by the disguise ({top(C) if len(C) else 0:.0f} Hz)")
         # The music's level in each phase: the middle of its half-second readings, so a moment
         # the listener stalled, or a phase edge read a second early or late, does not move it.
@@ -213,7 +224,7 @@ try:
         check(len(F) > sr and abs(top(F) - 880) < 10, f"a pad fires and is heard ({top(F) if len(F) else 0:.0f} Hz)")
         w = t0 + int(np.argmax(np.abs(x))) / sr - D; k = max((k for k in T if T[k] <= w), key=lambda k: T[k], default=None)
         check(pk(x) < 1.0, f"the air never clips (peak {pk(x):.3f}, {k and round(w - T[k], 1)} s into phase {k})")
-        # The sign-off: the second input's beep in the last seconds before the end reaches the
+        # The sign-off: the second input's tone in the last seconds before the end reaches the
         # listener, and the station's recording follows it.
         # t_back is when the listener's set named the recording, already on the listener's clock.
         S, R = seg(at("end", -3.5), at("end", -0.5)), seg(T["end"] + t_back + 1.0 - t0 if t_back else at("end", 3.0), len(x) / sr)
