@@ -216,6 +216,15 @@ fn doors_hex(n: usize) -> Vec<String> {
 
 pub async fn serve(inner: Arc<Inner>, addr: SocketAddr, every_station: bool) -> anyhow::Result<()> {
     let _ = NODE.set(Arc::downgrade(&inner));
+    // Episodes an older version kept in the clear, named by station and recording, go; and so
+    // does any half-made one. They are made again, sealed, when next asked for.
+    if let Ok(rd) = std::fs::read_dir(inner.cfg.dir.join("episodes")) {
+        for f in rd.flatten() {
+            if f.path().extension().is_none_or(|e| e != "ep") {
+                let _ = std::fs::remove_file(f.path());
+            }
+        }
+    }
     let web = Web {
         inner,
         towers: Arc::new(Mutex::new(HashMap::new())),
@@ -406,24 +415,26 @@ async fn episode(State(w): State<Web>, Path((id, track)): Path<(String, String)>
     }
     let dir = w.inner.cfg.dir.join("episodes");
     let key = format!("{}-{}", st.to_hex(), crate::hex(&th));
-    let path = dir.join(format!("{key}.mp3"));
+    // Sealed under the hold key, in a file whose name says nothing (see `SealedWriter`).
+    let what = format!("episode/{key}");
+    let path = dir.join(format!("{}.ep", w.inner.hold.name(what.as_bytes())));
     if !path.exists() {
         let lock = w.making.lock().unwrap().entry(key.clone()).or_default().clone();
         let _making = lock.lock().await;
         if !path.exists() {
             let Ok(_permit) = w.makers.clone().acquire_owned().await else { return StatusCode::SERVICE_UNAVAILABLE.into_response() };
             let _ = std::fs::create_dir_all(&dir);
-            let tmp = dir.join(format!("{key}.{}.part", now_ms()));
+            let tmp = path.with_extension(format!("{}.part", now_ms()));
             let Some((chunks, channels)) = chunks_at(&w.inner, &st, tr.at) else { return StatusCode::NOT_FOUND.into_response() };
-            let (inner, handle, tmp2) = (w.inner.clone(), tokio::runtime::Handle::current(), tmp.clone());
-            let made = tokio::task::spawn_blocking(move || make_episode(&inner, &handle, st, &chunks, channels, &tmp2)).await.ok().flatten();
+            let (inner, handle, tmp2, what2) = (w.inner.clone(), tokio::runtime::Handle::current(), tmp.clone(), what.clone());
+            let made = tokio::task::spawn_blocking(move || make_episode(&inner, &handle, st, &chunks, channels, &tmp2, &what2)).await.ok().flatten();
             if made.is_none() || std::fs::rename(&tmp, &path).is_err() {
                 let _ = std::fs::remove_file(&tmp);
                 return StatusCode::SERVICE_UNAVAILABLE.into_response();
             }
             // Keep the newest forty; the rest can be made again.
             if let Ok(rd) = std::fs::read_dir(&dir) {
-                let mut files: Vec<_> = rd.filter_map(|f| f.ok()).filter(|f| f.path().extension().is_some_and(|e| e == "mp3")).filter_map(|f| Some((f.metadata().ok()?.modified().ok()?, f.path()))).collect();
+                let mut files: Vec<_> = rd.filter_map(|f| f.ok()).filter(|f| f.path().extension().is_some_and(|e| e == "ep")).filter_map(|f| Some((f.metadata().ok()?.modified().ok()?, f.path()))).collect();
                 files.sort();
                 let n = files.len().saturating_sub(40);
                 for (_, f) in files.into_iter().take(n) {
@@ -433,11 +444,11 @@ async fn episode(State(w): State<Web>, Path((id, track)): Path<(String, String)>
         }
         w.making.lock().unwrap().remove(&key);
     }
-    serve_file(&path, &h).await
+    serve_sealed(&w.inner, &path, &what, &h).await
 }
 
 /// Fetches, decodes and encodes a recording chunk by chunk into `out`.
-fn make_episode(inner: &Arc<Inner>, handle: &tokio::runtime::Handle, st: StationId, chunks: &[pyrate_core::Chunk], channels: u8, out: &std::path::Path) -> Option<()> {
+fn make_episode(inner: &Arc<Inner>, handle: &tokio::runtime::Handle, st: StationId, chunks: &[pyrate_core::Chunk], channels: u8, out: &std::path::Path, what: &str) -> Option<()> {
     use std::io::Write;
     let mut lame = mp3lame_encoder::Builder::new()?;
     lame.set_num_channels(channels).ok()?;
@@ -446,7 +457,7 @@ fn make_episode(inner: &Arc<Inner>, handle: &tokio::runtime::Handle, st: Station
     lame.set_quality(mp3lame_encoder::Quality::Good).ok()?;
     let mut lame = lame.build().ok()?;
     let mut dec = ChunkDecoder::new(channels).ok()?;
-    let mut file = std::io::BufWriter::new(std::fs::File::create(out).ok()?);
+    let mut file = SealedWriter::new(&inner.hold, std::fs::File::create(out).ok()?, what);
     let mut buf = Vec::new();
     for c in chunks {
         let bytes = handle.block_on(inner.chunk(&st, &c.hash)).ok()?;
@@ -469,15 +480,92 @@ fn make_episode(inner: &Arc<Inner>, handle: &tokio::runtime::Handle, st: Station
     buf.reserve(7_200);
     lame.flush_to_vec::<mp3lame_encoder::FlushNoGap>(&mut buf).ok()?;
     file.write_all(&buf).ok()?;
-    file.flush().ok()
+    file.finish().ok()
 }
 
-/// A file on disk, in the pieces podcast apps ask for: a range, a suffix, or the whole,
-/// read as it goes out rather than loaded whole.
-async fn serve_file(path: &std::path::Path, h: &HeaderMap) -> Response {
-    use tokio::io::{AsyncReadExt, AsyncSeekExt};
-    let Ok(mut f) = tokio::fs::File::open(path).await else { return StatusCode::NOT_FOUND.into_response() };
-    let Ok(total) = f.metadata().await.map(|m| m.len()) else { return StatusCode::NOT_FOUND.into_response() };
+/// Plain bytes in a sealed file's block. Each block lies on disk as a fresh nonce, the bytes
+/// under the hold key and its tag, bound to the file's own name and the block's place, so a
+/// range can be opened without opening the whole, and no block can be moved or swapped.
+const EP_BLOCK: usize = 64 * 1024;
+const EP_OVER: usize = 12 + 16;
+
+/// Writes a file sealed under the hold key a block at a time: nothing of it reaches the disk
+/// in the clear, not even for a moment.
+struct SealedWriter<'a> {
+    hold: &'a crate::hold::Hold,
+    file: std::io::BufWriter<std::fs::File>,
+    what: String,
+    buf: Vec<u8>,
+    n: u64,
+}
+
+impl<'a> SealedWriter<'a> {
+    fn new(hold: &'a crate::hold::Hold, file: std::fs::File, what: &str) -> Self {
+        Self { hold, file: std::io::BufWriter::new(file), what: what.to_string(), buf: Vec::with_capacity(EP_BLOCK), n: 0 }
+    }
+
+    fn block(&mut self) -> std::io::Result<()> {
+        use std::io::Write;
+        let sealed = self.hold.seal(format!("{}/{}", self.what, self.n).as_bytes(), &self.buf);
+        self.file.write_all(&sealed)?;
+        self.buf.clear();
+        self.n += 1;
+        Ok(())
+    }
+
+    fn finish(mut self) -> std::io::Result<()> {
+        use std::io::Write;
+        if !self.buf.is_empty() {
+            self.block()?;
+        }
+        self.file.flush()?;
+        self.file.get_ref().sync_all()
+    }
+}
+
+impl std::io::Write for SealedWriter<'_> {
+    fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+        let n = b.len().min(EP_BLOCK - self.buf.len());
+        self.buf.extend_from_slice(&b[..n]);
+        if self.buf.len() == EP_BLOCK {
+            self.block()?;
+        }
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// The plain length of a sealed file `len` bytes long on disk.
+fn sealed_len(len: u64) -> u64 {
+    let blocks = len.div_ceil((EP_BLOCK + EP_OVER) as u64);
+    len.saturating_sub(blocks * EP_OVER as u64)
+}
+
+/// The plain bytes `start..=end` of a sealed file, opened a block at a time as they go out.
+fn open_range(hold: &crate::hold::Hold, f: &mut std::fs::File, what: &str, start: u64, end: u64) -> Option<Vec<u8>> {
+    use std::io::{Read, Seek};
+    let b = EP_BLOCK as u64;
+    let mut out = Vec::with_capacity((end + 1 - start) as usize);
+    for i in start / b..=end / b {
+        f.seek(std::io::SeekFrom::Start(i * (b + EP_OVER as u64))).ok()?;
+        let mut sealed = Vec::with_capacity(EP_BLOCK + EP_OVER);
+        f.by_ref().take((EP_BLOCK + EP_OVER) as u64).read_to_end(&mut sealed).ok()?;
+        let plain = hold.open(format!("{what}/{i}").as_bytes(), &sealed)?;
+        let from = start.saturating_sub(i * b) as usize;
+        let to = ((end + 1).min((i + 1) * b) - i * b) as usize;
+        out.extend_from_slice(plain.get(from..to.min(plain.len()))?);
+    }
+    Some(out)
+}
+
+/// A sealed file on disk, opened as it goes out, in the pieces podcast apps ask for: a range, a
+/// suffix, or the whole, a block at a time rather than loaded whole.
+async fn serve_sealed(inner: &Arc<Inner>, path: &std::path::Path, what: &str, h: &HeaderMap) -> Response {
+    let Ok(f) = std::fs::File::open(path) else { return StatusCode::NOT_FOUND.into_response() };
+    let Ok(total) = f.metadata().map(|m| sealed_len(m.len())) else { return StatusCode::NOT_FOUND.into_response() };
     let asked = h.get(header::RANGE).and_then(|v| v.to_str().ok()).and_then(|r| r.strip_prefix("bytes="));
     let (status, start, end) = match asked.map(|r| r.split_once('-')) {
         None => (StatusCode::OK, 0, total.saturating_sub(1)),
@@ -491,21 +579,21 @@ async fn serve_file(path: &std::path::Path, h: &HeaderMap) -> Response {
         },
         Some(None) => (StatusCode::OK, 0, total.saturating_sub(1)),
     };
-    if f.seek(std::io::SeekFrom::Start(start)).await.is_err() {
-        return StatusCode::NOT_FOUND.into_response();
-    }
     let len = if total == 0 { 0 } else { end - start + 1 };
-    let body = stream::unfold((f, len), |(mut f, left)| async move {
-        if left == 0 {
-            return None;
-        }
-        let mut b = vec![0u8; left.min(64 * 1024) as usize];
-        match f.read(&mut b).await {
-            Ok(0) | Err(_) => None,
-            Ok(n) => {
-                b.truncate(n);
-                Some((Ok::<Bytes, std::io::Error>(Bytes::from(b)), (f, left - n as u64)))
+    let (inner, what) = (inner.clone(), what.to_string());
+    let body = stream::unfold((f, start, len), move |(mut f, at, left)| {
+        let (inner, what) = (inner.clone(), what.clone());
+        async move {
+            if left == 0 {
+                return None;
             }
+            // To the end of the block `at` lies in, so each piece opens one block.
+            let b = EP_BLOCK as u64;
+            let upto = (at + left - 1).min((at / b + 1) * b - 1);
+            let (piece, f) = tokio::task::spawn_blocking(move || (open_range(&inner.hold, &mut f, &what, at, upto), f)).await.ok()?;
+            let piece = piece?;
+            let n = piece.len() as u64;
+            Some((Ok::<Bytes, std::io::Error>(Bytes::from(piece)), (f, at + n, left - n)))
         }
     });
     let mut r = Response::builder()
@@ -627,6 +715,32 @@ fn player_path(dir: &std::path::Path, path: &str) -> Option<std::path::PathBuf> 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn an_episode_lies_sealed_and_opens_by_the_range() {
+        use super::*;
+        use std::io::Write;
+        let hold = crate::hold::Hold::new(&[3; 32]);
+        let dir = std::env::temp_dir().join(format!("pyrate-ep-{}", rand::random::<u64>()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("e.ep");
+        let plain: Vec<u8> = (0..EP_BLOCK * 2 + 1000).map(|i| (i % 251) as u8).collect();
+        let mut w = SealedWriter::new(&hold, std::fs::File::create(&path).unwrap(), "episode/x");
+        w.write_all(&plain).unwrap();
+        w.finish().unwrap();
+        let disk = std::fs::read(&path).unwrap();
+        assert!(!disk.windows(32).any(|x| plain.windows(32).take(300).any(|p| p == x)), "nothing of it lies in the clear");
+        assert_eq!(sealed_len(disk.len() as u64), plain.len() as u64);
+        let n = plain.len() as u64;
+        for (a, b) in [(0, n - 1), (5, 70_000), (EP_BLOCK as u64, EP_BLOCK as u64), (n - 10, n - 1), (EP_BLOCK as u64 - 3, EP_BLOCK as u64 + 3)] {
+            let mut f = std::fs::File::open(&path).unwrap();
+            assert_eq!(open_range(&hold, &mut f, "episode/x", a, b).as_deref(), Some(&plain[a as usize..=b as usize]), "{a}..={b}");
+        }
+        let mut f = std::fs::File::open(&path).unwrap();
+        assert!(open_range(&hold, &mut f, "episode/y", 0, 10).is_none(), "bound to its own name");
+        assert!(open_range(&crate::hold::Hold::new(&[4; 32]), &mut f, "episode/x", 0, 10).is_none(), "and to this hold");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn the_player_serves_its_own_folder_and_nothing_else() {
         let dir = std::env::temp_dir().join(format!("pyrate-player-test-{}", std::process::id()));
