@@ -21,8 +21,11 @@ def cycle(path, notes):
     t = np.arange(2 * SR) / SR
     # Each note eased in and out over 10 ms, so a step between notes is no click.
     env = np.minimum(1.0, np.minimum(t, 2.0 - t) / 0.01)
-    one = np.concatenate([0.3 * np.sin(2 * np.pi * f * t) * env for f in notes])
+    one = np.concatenate([np.sin(2 * np.pi * f * t) * env for f in notes])
     x = np.tile(one, SECS // 8)
+    # A slow swell over 61 seconds, so no six-second chunk is the same as another: identical
+    # chunks share a hash, and a tab holding one would never fetch the next.
+    x *= 0.3 * (0.8 + 0.2 * np.sin(2 * np.pi * np.arange(len(x)) / SR / 61.0))
     with wave.open(path, "wb") as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(SR); w.writeframes((x * 32767).astype("<i2").tobytes())
 
