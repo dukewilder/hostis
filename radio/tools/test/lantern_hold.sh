@@ -9,13 +9,15 @@
 #   - --open takes ids, a file of ids or all, and refuses anything else;
 #   - lantern_disk.py finds nothing in the clear in the folder, episodes included.
 # One PASS or FAIL line a check. Usage: lantern_hold.sh [<wav>]   (default /tmp/tone.wav)
-# Run under the test network's lock with its environment (PYRATE_RELAYS and the rest).
+# Run under the test network's lock. It joins no network: its relay is a closed port.
 R=$(cd "$(dirname "$0")/../.." && pwd)
 L="$R/target/release/lantern"
 WAV=${1:-/tmp/tone.wav}
 W=$(mktemp -d /tmp/lantern-hold.XXXXXX)
 PORT=${PYRATE_HOLD_TEST_PORT:-8377}
-unset PYRATE_HOLD_KEY PYRATE_HOLD_PASS_FILE PYRATE_HOLD_PASS_CMD
+unset PYRATE_HOLD_KEY PYRATE_HOLD_PASS_FILE PYRATE_HOLD_PASS_CMD PYRATE_LAN_ANY
+# Kept off the test network, so its station never reaches the dial the other suites see.
+export PYRATE_RELAYS=http://127.0.0.1:9
 mkdir -p "$W/usb" "$W/music"
 cp "$WAV" "$W/music/Tone - Hold Tone.wav"
 printf 'four random words for the hold\n' > "$W/usb/pass"
