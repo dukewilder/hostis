@@ -343,15 +343,19 @@ impl Inner {
             .map(|g| *g.as_bytes())
             .collect();
         let failed = self.failed.lock().unwrap().clone();
-        let pool: Vec<[u8; 32]> = self
+        let all: Vec<[u8; 32]> = self
             .crew_radios
             .lock()
             .unwrap()
             .iter()
             .filter(|(n, (_, at))| now.saturating_sub(*at) < CREW_FRESH_MS && **n != me && !not.contains(n) && !guards.contains(n))
-            .filter(|(n, _)| !failed.get(*n).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS))
             .map(|(n, _)| *n)
             .collect();
+        // One that failed lately only when there is no other, as for exits: the only middle
+        // there is, passed over for ten minutes after one slow hop, left a deck with no way to
+        // pull at all.
+        let well: Vec<[u8; 32]> = all.iter().filter(|n| !failed.get(*n).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS)).copied().collect();
+        let pool = if well.is_empty() { all } else { well };
         // Apart from the guard: a middle homed on the guard's relay, or named by the radio that
         // named the guard, would put both in one operator's view. Where none is apart, the draw
         // goes on and is counted.

@@ -75,6 +75,10 @@ fn main() -> anyhow::Result<()> {
     }
     let (entries, paths) = got.unwrap_or((0, vec![]));
     ok &= check(entries > 0, &format!("the way in reads the deck's log through the lead ({entries} entries, {:.0} s)", t.elapsed().as_secs_f64()));
+    if entries == 0 {
+        println!("INFO the phone's crew: {}", phone.call(&json!({ "cmd": "crew" })));
+        println!("INFO the way in's crew: {}", way.call(&json!({ "cmd": "crew" })));
+    }
     ok &= check(paths.is_empty(), &format!("the way in hands the deck its asks in the deck's own pulls, and holds no connection to it ({} paths)", paths.len()));
     // Against that: the same radio's connection to the Lantern on this machine runs direct.
     let lantern = way.paths_to(&boot);

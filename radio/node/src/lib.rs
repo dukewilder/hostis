@@ -3959,7 +3959,11 @@ impl Node {
                         self.rt.spawn(async move { i2.duty_tick().await });
                     }
                 }
-                Ok(json!({ "on": inner.crew.load(std::sync::atomic::Ordering::Relaxed),
+                let now = now_ms();
+                let radios: Vec<Value> = inner.crew_radios.lock().unwrap().iter().map(|(n, (r, t))| json!({ "node": hex(&n[..5]), "relay": r, "ago_s": now.saturating_sub(*t) / 1000 })).collect();
+                let guards: Vec<String> = ["fetch-guard", "stem-guard"].iter().map(|k| inner.hold.read_note(&inner.cfg.dir, k, None).and_then(|b| String::from_utf8(b).ok()).map(|g| g.chars().take(10).collect()).unwrap_or_default()).collect();
+                let failed: Vec<String> = inner.failed.lock().unwrap().iter().filter(|(_, t)| now.saturating_sub(**t) < net::FAILED_MS).map(|(n, _)| hex(&n[..5])).collect();
+                Ok(json!({ "on": inner.crew.load(std::sync::atomic::Ordering::Relaxed), "radios": radios, "guards": guards, "failed": failed, "me": hex(&inner.endpoint.id().as_bytes()[..5]), "hop_duty": inner.hop_duty.load(std::sync::atomic::Ordering::Relaxed),
                     "served_bytes": inner.served_bytes.load(std::sync::atomic::Ordering::Relaxed),
                     "relayed_bytes": inner.relayed_bytes.load(std::sync::atomic::Ordering::Relaxed) }))
             }
