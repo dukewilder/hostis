@@ -209,12 +209,12 @@ impl Inner {
                 _ => None,
             };
             let Some(items) = items else {
-                // No answer at all is most often a middle that has gone: the next pull draws
-                // another. An empty one came back through the middle, so the way in is the
-                // likelier fault, and the loop counts it against the way in.
-                if !matches!(raw, Ok(Ok(_))) {
-                    self.failed.lock().unwrap().insert(*middle.as_bytes(), now_ms());
-                }
+                // No answer at all is most often a middle that has gone, and so is an empty one:
+                // the guard answers empty at once for a middle it could not reach (it does not
+                // try one again for a minute). Either way the next pull draws another middle;
+                // the loop counts the failure against the way in, and six in a row through
+                // different middles let it go.
+                self.failed.lock().unwrap().insert(*middle.as_bytes(), now_ms());
                 return Err(match raw {
                     Err(_) => anyhow!("slow pull"),
                     Ok(Err(e)) => e,
