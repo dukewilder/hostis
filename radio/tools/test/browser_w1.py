@@ -1,7 +1,10 @@
 # What a tab leaves behind: the tuned station stays out of the address bar and history (the
 # tab alone remembers it, for a reload); a raised station's deputy can be sealed under a
-# passphrase or kept in the tab alone; a recorder's date never becomes a title; and the page
-# opens no WebRTC and asks nothing of any host but the test network's.
+# passphrase or kept in the tab alone; a recorder's date never becomes a title; and, with
+# Direct links off, the page opens no WebRTC, and it asks nothing of any host but the test
+# network's. (Since LII and LIV a tab links to a listener's door over WebRTC when a middle
+# introduces one, with Direct links on as they are by default; the switch is what keeps a tab
+# off WebRTC, so it is what this checks.)
 # Run after tools/test/serve_test.sh. Usage: browser_w1.py <station id> <wav file>
 import sys, time, shutil, os
 from urllib.parse import urlparse
@@ -14,6 +17,7 @@ hosts = set()
 with sync_playwright() as p:
     b = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
     ctx = b.new_context(bypass_csp=True); errs = []
+    ctx.add_init_script("try { localStorage.setItem('pyrate.directlinks', '0') } catch (e) {}")
     ctx.add_init_script("window.__rtc = 0; for (const k of ['RTCPeerConnection', 'webkitRTCPeerConnection']) if (window[k]) { const R = window[k]; window[k] = function (...a) { window.__rtc++; return new R(...a) } }")
     ctx.on("request", lambda r: hosts.add(urlparse(r.url).hostname))
     a = ctx.new_page(); a.on("pageerror", lambda e: errs.append(str(e))); a.on("dialog", lambda d: d.accept())
@@ -47,7 +51,7 @@ with sync_playwright() as p:
     # The title is shown for the keeper to check in a field of its own before it is signed (D-4).
     check(a.input_value(".qi .qt-in") == "Untitled", "a recorder's date never becomes a title: " + (a.input_value(".qi .qt-in") or ""))
     time.sleep(5)
-    check(a.evaluate("window.__rtc") == 0, "no WebRTC")
+    check(a.evaluate("window.__rtc") == 0, "with Direct links off, no WebRTC")
     # The test harbour names its relay, so no one's lookup service is asked anything.
     # blob: and data: addresses (pictures made in the tab) have no host and go nowhere.
     check({h for h in hosts if h} <= {"127.0.0.1"}, "no host but the test network's: %s" % sorted(h for h in hosts if h))
