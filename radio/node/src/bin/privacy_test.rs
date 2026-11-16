@@ -116,6 +116,10 @@ fn main() -> anyhow::Result<()> {
     // first hop (the crew's rule against a crowd of new radios), and a door is one at once.
     let r = Node::start(Config { carry_all: true, lantern: true, ..cfg("relay", false) })?;
     r.call(&json!({ "cmd": "lan", "value": true }));
+    // The Lantern keeps the broadcasting phone's station open, so it can end that station's
+    // stem and show it; a Lantern ends no stem for a station it would carry blind. Every
+    // other station it carries blind (checked below).
+    r.keep_open(&[bid], false);
     // A guard is a radio known under one id for a week: the keeper's phone has known the other
     // keeper's that long, so it has a first hop, and the Lantern, the second node, takes the stem.
     b.age_peers(&[*k.id().as_bytes()], 8 * 86_400_000);
@@ -167,8 +171,28 @@ fn main() -> anyhow::Result<()> {
         check(!told(&probe(l.addr(), Request::Chunk { hash: h })), "nor that chunk in the clear");
     }
     check(!told(&probe(l.addr(), Request::Chatter { station: wid })), "nor the lines of a room it sits in");
-    // The same probe of a Lantern, which answers for what it carries, shows the probe works.
-    check(told(&probe(r.addr(), Request::Log { station: wid, from: 0 })), "a Lantern answers the same probe for a station it carries");
+    // A Lantern carries what it was not told to keep openly blind: it holds the station, and a
+    // stranger asking straight gets no log and no sound in the clear, while its sound still
+    // goes to whoever asks by sealed name.
+    let mut held = None;
+    for _ in 0..120 {
+        held = first_chunk(&r, &wid).filter(|h| r.on_disk(&pyrate_node::hex(h)));
+        if held.is_some() {
+            break;
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
+    check(held.is_some(), "the Lantern carries the station the listener played");
+    check(!told(&probe(r.addr(), Request::Log { station: wid, from: 0 })), "a Lantern hands a stranger no log of a station it carries blind");
+    check(!told(&probe(r.addr(), Request::Chatter { station: wid })), "nor the lines of its room");
+    if let Some(h) = held {
+        check(!told(&probe(r.addr(), Request::Chunk { hash: h })), "nor its sound in the clear");
+        check(told(&probe(r.addr(), Request::SealedChunk { name: pyrate_core::seal::name(&h) })), "and still passes that sound on sealed, by name");
+    }
+    check(!l.carriers_of(&wid).contains(r.id().as_bytes()) && !l2.carriers_of(&wid).contains(r.id().as_bytes()), "nobody hears the Lantern say it carries a station it keeps blind");
+    // Told to keep it openly, the same Lantern answers the same probe: the probe works.
+    r.keep_open(&[wid], false);
+    check(told(&probe(r.addr(), Request::Log { station: wid, from: 0 })), "told to keep it open, the Lantern answers the same probe");
 
     // A door names the address it was given. A radio in the open opens one at a test address;
     // a radio running dark (through Tor) opens none and names nothing, even when told to.
