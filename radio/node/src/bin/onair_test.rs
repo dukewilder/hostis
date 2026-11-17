@@ -29,6 +29,9 @@ fn main() -> anyhow::Result<()> {
     s.call(&json!({ "cmd": "tune", "station": id }));
     // First the new station has to reach the listener at all.
     let t = Instant::now();
+    // A station raised here is kept to its link, so only a listener holding the link hears of
+    // it: this one opens it at once.
+    l.call(&json!({ "cmd": "tune", "station": id }));
     let sees = |n: &Node| n.call(&json!({ "cmd": "stations" })).as_array().is_some_and(|a| a.iter().any(|x| x["id"] == id.as_str()));
     while !sees(&l) && t.elapsed() < Duration::from_secs(180) { std::thread::sleep(Duration::from_millis(500)) }
     println!("{} the listener sees the new station ({:.1} s after it went live)", if sees(&l) { "PASS" } else { "FAIL" }, t.elapsed().as_secs_f64());

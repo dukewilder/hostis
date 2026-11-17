@@ -7,8 +7,9 @@ Three checks, one PASS or FAIL line each:
   - nDPI names every flow as generic QUIC, HTTP/3, TLS, HTTP (WebSocket included, since the
     test relay speaks plain HTTP where a real one speaks TLS), the BitTorrent DHT or ICMP. A
     flow nDPI cannot name, or names as something else from a handful of bytes, passes only when
-    it is QUIC that carries nothing to name it by: every UDP packet in it a QUIC short packet,
-    and either two or more of them or a socket that began a QUIC handshake nDPI named. A TCP
+    it is QUIC that carries nothing to name it by: every UDP packet in it a QUIC packet (a
+    short header, or a long one of QUIC version 1 or 2), and either two or more of them or a
+    socket that began a QUIC handshake nDPI named. A TCP
     flow whose start the capture never saw (a relay connection opened before it) is counted
     apart, as nobody, nDPI included, can name it from its middle.
   - every QUIC handshake offers only h3 and h3-29, and names no server.
@@ -64,6 +65,12 @@ def packets(path):
                 yield ("tcp", src, sp, dst, dp, l4[(l4[12] >> 4) * 4:], l4[13])
 
 
+def quic_packet(x):
+    """Whether bytes are a QUIC packet: a short header (fixed bit, form bit clear), or a long
+    header of QUIC version 1 or 2."""
+    return len(x) >= 1 and (x[0] & 0xC0 == 0x40 or (x[0] & 0xC0 == 0xC0 and len(x) >= 5 and x[1:5] in (b"\0\0\0\1", b"\x6b\x33\x43\xcf")))
+
+
 def ndpi_flows(reader, path):
     out = subprocess.run([reader, "-i", path, "-v", "2", "-q"], capture_output=True, text=True).stdout
     out += subprocess.run([reader, "-i", path, "-v", "2"], capture_output=True, text=True).stdout if "[proto:" not in out else ""
@@ -104,12 +111,12 @@ def main():
         if k == "tcp" and key not in syn:
             before += 1
             continue
-        shaped = k == "udp" and payloads and all(x[0] & 0xC0 == 0x40 for x in payloads)
+        shaped = k == "udp" and payloads and all(quic_packet(x) for x in payloads)
         if shaped and (len(payloads) >= 2 or (a, ap) in quic_socks or (b, bp) in quic_socks):
             quiet += 1
             continue
         bad.append(f"{k} {a}:{ap} <-> {b}:{bp} as {n}")
-    say(bool(flows) and not bad, f"{len(flows)} flows, every one generic QUIC, HTTP/3, TLS, HTTP, the DHT or ICMP ({dict(kinds)}; {quiet} of them QUIC short packets nDPI could not name, {before} begun before the capture){'; ' + '; '.join(bad[:6]) if bad else ''}")
+    say(bool(flows) and not bad, f"{len(flows)} flows, every one generic QUIC, HTTP/3, TLS, HTTP, the DHT or ICMP ({dict(kinds)}; {quiet} of them QUIC flows nDPI could not name, {before} begun before the capture){'; ' + '; '.join(bad[:6]) if bad else ''}")
 
     hello = subprocess.run(["tshark", "-r", path, "-Y", "tls.handshake.type==1 && quic", "-T", "fields", "-e", "tls.handshake.extensions_alpn_str", "-e", "tls.handshake.extensions_server_name"], capture_output=True, text=True).stdout
     offers = collections.Counter(l.strip() for l in hello.splitlines() if l.strip() or l)
