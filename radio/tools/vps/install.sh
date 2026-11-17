@@ -198,6 +198,8 @@ run ufw allow "$STUN_PORT/udp" >/dev/null
 run ufw default deny incoming >/dev/null
 run ufw default allow outgoing >/dev/null
 run ufw --force enable >/dev/null
+# The firewall keeps no record of who knocked: its log would be a list of addresses.
+run ufw logging off >/dev/null
 
 # ---- STUN ----------------------------------------------------------------------------------
 # A tab asks this what its own address looks like from outside, so that it and its guard can
@@ -529,7 +531,7 @@ else
   run docker run -d --name lantern --restart unless-stopped --network host \
     -v pyrate:/data -v "$HOLD_PASS:/run/secrets/hold-pass:ro" \
     -e "PYRATE_RELAY_URL=$RELAY_URL" -e PYRATE_HOLD_PASS_FILE=/run/secrets/hold-pass \
-    --log-driver local --log-opt max-size=1m --log-opt max-file=1 pyrate-lantern "${LANTERN_ARGS[@]}" >/dev/null
+    --log-driver local --log-opt max-size=1m --log-opt max-file=1 --log-opt compress=false pyrate-lantern "${LANTERN_ARGS[@]}" >/dev/null
 fi
 
 NODE=""
