@@ -3,7 +3,8 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/dukewilder/hostis/radio/radio/tools/vps/install.sh -o pyrate.sh && bash pyrate.sh
 #
-# It asks one thing, the relay's name, and prints the relay's address, the Lantern's id and the
+# It asks two things, the relay's name and the Lantern's passphrase (once, unseen, kept in a
+# file only root can read), and prints the relay's address, the Lantern's id and the
 # open player's address at the end. Run it again at any time: it changes only what is out of
 # date, and that is also how to update. DOMAIN=relay.example.org skips the question.
 # PLAYER_DOMAIN=listen.example.org serves the open player at a second name (none: not at all).
@@ -119,6 +120,44 @@ if [ "$PLAYER" != none ]; then
   if hostis "$PLAYER"; then die "The open player is never served at a HOSTIS name. Set PLAYER_DOMAIN to another, or to none."; fi
   [[ $PLAYER =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] || die "\"$PLAYER\" is not a name."
   say "Open player: https://$PLAYER/listen/"
+fi
+
+# ---- The Lantern's passphrase -------------------------------------------------------------
+# The hold key, sealed under a passphrase asked once and kept in a file only root can read,
+# handed to the Lantern as a secret file. It is never printed. A rented server's disk is its
+# provider's to read, so the keeper may move the file off the server once the Lantern is up
+# (LANTERN.md); the Lantern then needs it back at its next start.
+HOLD_PASS=/etc/pyrate/hold-pass
+read_secret() {
+  local a=""
+  if [ -r /dev/tty ] && { : </dev/tty; } 2>/dev/null; then
+    printf '%s' "$1" >/dev/tty
+    IFS= read -r -s a </dev/tty || true
+    printf '\n' >/dev/tty
+  else
+    IFS= read -r a || true
+  fi
+  printf '%s' "$a"
+}
+if [ -s "$HOLD_PASS" ]; then
+  say "The Lantern's passphrase"
+  echo "Kept in $HOLD_PASS."
+else
+  say "The Lantern's passphrase"
+  echo "Everything the Lantern keeps is sealed under a passphrase. Twelve characters or more;"
+  echo "four or five random words are good. Lose it and everything the Lantern kept is lost."
+  p1=$(read_secret "Passphrase: ")
+  [ ${#p1} -ge 12 ] || die "That is shorter than twelve characters. Run this again."
+  p2=$(read_secret "Again: ")
+  [ "$p1" = "$p2" ] || die "The two did not match. Run this again."
+  if [ "$DRY" = 1 ]; then
+    printf '  + write %s (root only, never printed)\n' "$HOLD_PASS"
+  else
+    (umask 077 && mkdir -p "$(dirname "$HOLD_PASS")" && printf '%s\n' "$p1" >"$HOLD_PASS")
+    chmod 600 "$HOLD_PASS"
+    chown 0:0 "$HOLD_PASS"
+  fi
+  unset p1 p2
 fi
 
 # ---- Packages, swap, firewall --------------------------------------------------------------
@@ -461,39 +500,42 @@ run docker builder prune -af >/dev/null || true
 run docker image prune -f >/dev/null
 run docker rmi rust:bookworm python:3.12-slim-bookworm >/dev/null 2>&1 || true
 
-# The gangway on loopback, for Caddy alone, with the image's copy of the open player.
-# A rented server's disk is its provider's to read whatever the Lantern does, so the hold key
-# stays on it in the clear (LANTERN.md says how to take it off). The node id goes in the log,
-# for this script to report.
-LANTERN_ARGS=(--hold-key-on-disk --show-ids)
+# The gangway on loopback, for Caddy alone, with the image's copy of the open player. The log
+# names no station, peer or node; the id is asked of the Lantern itself below.
+LANTERN_ARGS=()
 [ "$PLAYER" = none ] || LANTERN_ARGS+=(--http "$LANTERN_HTTP" --player /usr/share/pyrate/player)
 have=0 want_img=new have_img=none have_env="" have_net="" have_args=""
 if docker container inspect lantern >/dev/null 2>&1; then
   have=1
   want_img=$(docker image inspect -f '{{.Id}}' pyrate-lantern 2>/dev/null | tr -d '[:space:]' || true)
   have_img=$(docker container inspect -f '{{.Image}}' lantern | tr -d '[:space:]')
-  have_env=$(docker container inspect -f '{{range .Config.Env}}{{println .}}{{end}}' lantern | grep '^PYRATE_RELAY_URL=' || true)
+  have_env=$(docker container inspect -f '{{range .Config.Env}}{{println .}}{{end}}' lantern | grep '^PYRATE_RELAY_URL=\|^PYRATE_HOLD_PASS_FILE=' | sort | tr '\n' ' ' || true)
   have_net=$(docker container inspect -f '{{.HostConfig.NetworkMode}}' lantern | tr -d '[:space:]')
   have_args=$(docker container inspect -f '{{join .Args " "}}' lantern)
 fi
 # The container keeps its flags after the image's own: they must be the ones wanted now.
 args_ok=0
-[[ $have_args == *" ${LANTERN_ARGS[*]}" ]] && args_ok=1
+if [ ${#LANTERN_ARGS[@]} = 0 ]; then
+  [[ $have_args != *--http* && $have_args != *--hold-key-on-disk* && $have_args != *--show-ids* ]] && args_ok=1
+else
+  [[ $have_args == *" ${LANTERN_ARGS[*]}" ]] && [[ $have_args != *--hold-key-on-disk* && $have_args != *--show-ids* ]] && args_ok=1
+fi
 [ "$PLAYER" = none ] && [[ $have_args == *--player* ]] && args_ok=0
-if [ "$have_img" = "$want_img" ] && [ "$have_env" = "PYRATE_RELAY_URL=$RELAY_URL" ] && [ "$have_net" = host ] && [ "$args_ok" = 1 ]; then
+if [ "$have_img" = "$want_img" ] && [ "$have_env" = "PYRATE_HOLD_PASS_FILE=/run/secrets/hold-pass PYRATE_RELAY_URL=$RELAY_URL " ] && [ "$have_net" = host ] && [ "$args_ok" = 1 ]; then
   run docker start lantern >/dev/null
 else
   # Its keys and everything it carries live in the pyrate volume, which stays.
   [ "$have" = 0 ] || run docker rm -f lantern >/dev/null
   run docker run -d --name lantern --restart unless-stopped --network host \
-    -v pyrate:/data -e "PYRATE_RELAY_URL=$RELAY_URL" \
-    --log-opt max-size=10m --log-opt max-file=3 pyrate-lantern "${LANTERN_ARGS[@]}" >/dev/null
+    -v pyrate:/data -v "$HOLD_PASS:/run/secrets/hold-pass:ro" \
+    -e "PYRATE_RELAY_URL=$RELAY_URL" -e PYRATE_HOLD_PASS_FILE=/run/secrets/hold-pass \
+    --log-driver local --log-opt max-size=1m --log-opt max-file=1 pyrate-lantern "${LANTERN_ARGS[@]}" >/dev/null
 fi
 
 NODE=""
 if [ "$DRY" != 1 ]; then
   for _ in $(seq 1 30); do
-    NODE=$(docker logs lantern 2>&1 | sed -n 's/^node id: \([0-9a-f]\{64\}\)$/\1/p' | tail -1 || true)
+    NODE=$(docker exec lantern lantern --dir /data --id 2>/dev/null | sed -n 's/^node id: \([0-9a-f]\{64\}\)$/\1/p' | tail -1 || true)
     [ -n "$NODE" ] && break
     sleep 2
   done
@@ -502,7 +544,7 @@ fi
 # ---- Done ----------------------------------------------------------------------------------
 say "Done."
 echo "Relay:    $RELAY_URL"
-echo "Lantern:  ${NODE:-(not started yet: see docker logs lantern)}"
+echo "Lantern:  ${NODE:-(not started yet: docker exec lantern lantern --dir /data --id, in a minute)}"
 [ -n "$NODE" ] && echo "Harbour:  $NODE@$RELAY_URL"
 echo "STUN:     stun:$DOMAIN:$STUN_PORT   (a line for browser/stun.txt)"
 PLAYER_OK=0
@@ -528,5 +570,6 @@ if [ "$PLAYER" != none ] && [ "$PLAYER_OK" != 1 ] && [ "$DRY" != 1 ]; then
 fi
 echo
 echo "Every line is public: send them to whoever runs the radio, and the player's address"
-echo "to anyone. The Lantern's keys stay in its volume on this server and are never shown."
+echo "to anyone. The Lantern's keys stay sealed in its volume, its passphrase in $HOLD_PASS"
+echo "(root only), and neither is ever shown."
 echo "Run this again to update."
