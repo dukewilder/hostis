@@ -126,7 +126,8 @@ fn main() -> anyhow::Result<()> {
             }
             let doc = serde_json::json!({ "pyrate": "seeds", "at": pyrate_node::now_ms(), "seeds": seeds, "mirrors": mirrors });
             std::fs::write(path, serde_json::to_string_pretty(&doc)? + "\n")?;
-            println!("Wrote {path} with {} seeds. Two holders sign it: release sign-paper <words> <1-3> {path}", doc["seeds"].as_array().map(|s| s.len()).unwrap_or(0));
+            let n = doc["seeds"].as_array().map(|s| s.len()).unwrap_or(0);
+            println!("Wrote {path} with {n} {}. Two holders sign it: release sign-paper <words> <1-3> {path}", if n == 1 { "seed" } else { "seeds" });
         }
         Some("canary") => {
             // A fresh canary for this month, unsigned: sign it with sign-paper.
