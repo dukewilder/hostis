@@ -2923,7 +2923,9 @@ impl Node {
                 .relay_mode(iroh::RelayMode::Custom(relays));
             // A Lantern running dark looks nobody up either: the lookup is plain DNS from its own
             // address, outside the tunnel. Its doors are named with their relays (`id@relay`).
-            if lantern && !dark {
+            // number0's address server only at the owner's word: its name in the TLS handshake
+            // marks the box as running iroh. Lanterns are found through gossip and the DHT.
+            if lantern && !dark && number0 {
                 b = b.address_lookup(iroh::address_lookup::PkarrResolver::n0_dns());
             } else if !dark && number0 {
                 b = b.address_lookup(DoorsOnly(asked));
@@ -2931,7 +2933,7 @@ impl Node {
             // A phone running dark looks nobody up: that lookup would leave from its own address,
             // outside the tunnel. It reaches peers from its own sealed book, which every signed
             // harbour note it has heard filled in.
-            if lantern && !dark {
+            if lantern && !dark && number0 {
                 // A Lantern homed on its own relay by its inside address (PYRATE_RELAY_LOCAL)
                 // publishes the public one (PYRATE_RELAY_URL) in its place: a record naming
                 // 127.0.0.1 would send every phone and browser that looks it up to itself.
