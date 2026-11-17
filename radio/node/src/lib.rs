@@ -3376,7 +3376,7 @@ impl Node {
     /// Raises colours with the master key in hand: it flies them, appoints this
     /// device's deputy, and is then forgotten. Returns the station and the master's
     /// 24 words, shown once. A Lantern (`keep_master`) keeps the master itself.
-    pub fn raise_with(&self, name: &str, about: &str, port: Option<String>, keep_master: bool, pass: &str) -> Result<(StationId, String)> {
+    pub fn raise_with(&self, name: &str, about: &str, port: Option<String>, keep_master: bool, pass: &str, link_only: bool) -> Result<(StationId, String)> {
         let (master, words) = pyrate_core::StationKey::generate_with(pass)?;
         let id = master.id();
         {
@@ -3384,6 +3384,11 @@ impl Node {
             let mut a = s.logs.remove(&id).unwrap_or_else(|| Archive::new(id));
             let now = now_ms();
             a.write(&master, now, Body::Colours { name: name.into(), about: about.into(), port, tip: None })?;
+            // Kept to its link from its first entries, before any card can be signed: written
+            // after, a card signed between the two went out in the clear (proof_test caught it).
+            if link_only {
+                a.write(&master, now, Body::Listing { link_only: true })?;
+            }
             if keep_master {
                 s.put_entries(id, a.entries().to_vec())?;
                 s.add_key_for(id, master)?;
@@ -3400,7 +3405,7 @@ impl Node {
     }
 
     pub fn raise(&self, name: &str, about: &str, port: Option<String>) -> Result<StationId> {
-        Ok(self.raise_with(name, about, port, true, "")?.0)
+        Ok(self.raise_with(name, about, port, true, "", false)?.0)
     }
 
     /// Master acts from the 24 words: strike, or revoke every deputy and appoint this device.
@@ -4035,16 +4040,14 @@ impl Node {
                 if name.is_empty() {
                     anyhow::bail!("a station needs a name");
                 }
-                let (id, words) = self.raise_with(name, req["about"].as_str().unwrap_or(""), req["port"].as_str().map(String::from), false, req["passphrase"].as_str().unwrap_or(""))?;
+                // Every station raised here starts off the dial, heard by its link (Dylan); its
+                // keeper lists it once it is made. Lanterns raise theirs elsewhere, listed.
+                let link_only = req["link_only"].as_bool() != Some(false);
+                let (id, words) = self.raise_with(name, req["about"].as_str().unwrap_or(""), req["port"].as_str().map(String::from), false, req["passphrase"].as_str().unwrap_or(""), link_only)?;
                 // A pocket station: for invited listeners only, never on the public Log. The words
                 // come back whatever happens here: they are shown once, and the station exists.
                 // (A pocket is marked private before its topic opens, so a failure here leaves it
                 // private, never public.)
-                // Every station raised here starts off the dial, heard by its link (Dylan); its
-                // keeper lists it once it is made. Lanterns raise theirs elsewhere, listed.
-                if req["link_only"].as_bool() != Some(false) {
-                    inner.store.lock().unwrap().write(id, now_ms(), Body::Listing { link_only: true })?;
-                }
                 let pocket_error = if req["pocket"].as_bool() == Some(true) { inner.pocket_new(id).err().map(|e| e.to_string()) } else { None };
                 Ok(json!({ "id": id.to_hex(), "call_sign": id.call_sign(), "words": words, "pocket_error": pocket_error }))
             }
