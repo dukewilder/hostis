@@ -1046,7 +1046,15 @@ impl Inner {
             }
             again
         };
-        let pass = declines || (!again && rand::random::<f64>() > FLUFF);
+        // A station kept to its link never travels the plain stem: each node along it reads the
+        // cargo, and would learn a station only its link should name. The node the broadcaster's
+        // guard handed it to, sealed, which never learns who sent it, shows it at once, and one
+        // that would not carry it turns it away, so the broadcaster's guard tries another.
+        let link_only = announce.as_ref().map(|a| a.link_only).unwrap_or_else(|| self.link_only(&station));
+        if link_only && declines {
+            return false;
+        }
+        let pass = !link_only && (declines || (!again && rand::random::<f64>() > FLUFF));
         if pass {
             let mut nodes = self.known_nodes();
             // Not a radio that could not be reached lately: a carrier's note outlives it by ten

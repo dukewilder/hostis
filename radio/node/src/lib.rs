@@ -1942,9 +1942,10 @@ impl Inner {
         }
         // Having said it carries something, this node says where it can be reached, every
         // couple of minutes: the network's own address book, in place of anyone's directory. A
-        // Lantern says so always: it is there to carry, and one carrying only stations kept to
-        // their links names itself as their carrier under tags alone.
-        if (said_carrier || self.cfg.lantern) && !self.dark && now.saturating_sub(self.last_harbour.load(std::sync::atomic::Ordering::Relaxed)) > 120_000 {
+        // Lantern says so always once it is homed on a relay: it is there to carry, and one
+        // carrying only stations kept to their links names itself as their carrier under tags
+        // alone.
+        if (said_carrier || (self.cfg.lantern && self.public_relay().is_some())) && !self.dark && now.saturating_sub(self.last_harbour.load(std::sync::atomic::Ordering::Relaxed)) > 120_000 {
             // A Lantern running its own relay names it by its public address (PYRATE_RELAY_URL),
             // even while it reaches it from inside by another.
             // Only while it really is homed there: a note naming a relay this node is not on
