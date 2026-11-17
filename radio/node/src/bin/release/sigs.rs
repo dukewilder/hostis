@@ -4,7 +4,7 @@
 //! another: the APK and the player's file list keep `pyrate/release/v1` (what phones and the
 //! installed player already check), players.txt signs as `pyrate/players/v1` and a computer's
 //! build as `pyrate/desktop/v1`. Signatures go one per line, `<key index 0-2> <hex>`, into a
-//! file beside each artifact; bearings and canaries carry theirs inside.
+//! file beside each artifact; bearings, seed lists and canaries carry theirs inside.
 
 use std::path::{Path, PathBuf};
 
@@ -103,7 +103,7 @@ impl Artifact {
 
 fn paper(p: &Path) -> Option<serde_json::Value> {
     let d: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).ok()?).ok()?;
-    matches!(d["pyrate"].as_str(), Some("bearings" | "canary")).then_some(d)
+    matches!(d["pyrate"].as_str(), Some("bearings" | "seeds" | "canary")).then_some(d)
 }
 
 /// Every file in the folder a release key signs, by name.

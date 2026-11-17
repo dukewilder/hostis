@@ -26,6 +26,12 @@
 //!     into a file beside its artifact, kept with any other holder's, so two holders sign the
 //!     same folder in turn.
 //!
+//! release seeds <seeds.json> <id@relay>... [--mirror <https address>]...
+//!     Writes a seed list, unsigned: volunteers' Lanterns a new node may start from when every
+//!     door it was handed is gone, and the mirrors the next list may be fetched from. Each of two
+//!     holders then signs it with sign-paper (or sign-all on the folder); a list with one
+//!     signature is refused by every node. Publish it at the mirrors and in releases/.
+//!
 //! release check <release folder>
 //!     Says in plain words what in the folder is signed, and by how many keys.
 
@@ -86,15 +92,41 @@ fn main() -> anyhow::Result<()> {
             println!("android-cert.der is public: keep it with the release folder and send a copy to Claude.");
         }
         Some("sign-paper") => {
-            // Bearings take two of the three keys, a canary any one: run once per key.
+            // Bearings and seed lists take two of the three keys, a canary any one: run once per key.
             let words = std::fs::read_to_string(a.get(2).ok_or_else(|| anyhow::anyhow!("words file"))?)?;
             let n: u8 = a.get(3).and_then(|s| s.parse().ok()).filter(|n| (1..=3).contains(n)).ok_or_else(|| anyhow::anyhow!("key number 1-3"))?;
-            let path = a.get(4).ok_or_else(|| anyhow::anyhow!("bearings.json or canary.json"))?;
+            let path = a.get(4).ok_or_else(|| anyhow::anyhow!("bearings.json, seeds.json or canary.json"))?;
             let mut doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path)?)?;
             let key = StationKey::from_phrase(&words)?;
-            pyrate_core::papers::sign(&key, n - 1, &mut doc).ok_or_else(|| anyhow::anyhow!("not a paper: it needs \"pyrate\": \"bearings\" or \"canary\""))?;
+            pyrate_core::papers::sign(&key, n - 1, &mut doc).ok_or_else(|| anyhow::anyhow!("not a paper: it needs \"pyrate\": \"bearings\", \"seeds\" or \"canary\""))?;
             std::fs::write(path, serde_json::to_string_pretty(&doc)? + "\n")?;
             println!("Signed {path} with key {n}: {} signature(s) on it.", doc["sigs"].as_array().map(|s| s.len()).unwrap_or(0));
+        }
+        Some("seeds") => {
+            let path = a.get(2).ok_or_else(|| anyhow::anyhow!("seeds.json"))?;
+            let (mut seeds, mut mirrors) = (Vec::new(), Vec::new());
+            let mut rest = a.iter().skip(3);
+            while let Some(x) = rest.next() {
+                if x == "--mirror" {
+                    let m = rest.next().ok_or_else(|| anyhow::anyhow!("--mirror needs an address"))?;
+                    if !m.starts_with("https://") {
+                        anyhow::bail!("a mirror is an https address: {m}");
+                    }
+                    mirrors.push(m.clone());
+                } else {
+                    let (id, relay) = x.split_once('@').map(|(i, r)| (i, Some(r))).unwrap_or((x.as_str(), None));
+                    if pyrate_core::StationId::from_hex(id).is_err() || relay.is_some_and(|r| !r.starts_with("https://")) {
+                        anyhow::bail!("not a seed: {x} (a Lantern's id, then @ and its relay's https address)");
+                    }
+                    seeds.push(x.clone());
+                }
+            }
+            if seeds.is_empty() {
+                anyhow::bail!("a seed list needs at least one Lantern");
+            }
+            let doc = serde_json::json!({ "pyrate": "seeds", "at": pyrate_node::now_ms(), "seeds": seeds, "mirrors": mirrors });
+            std::fs::write(path, serde_json::to_string_pretty(&doc)? + "\n")?;
+            println!("Wrote {path} with {} seeds. Two holders sign it: release sign-paper <words> <1-3> {path}", doc["seeds"].as_array().map(|s| s.len()).unwrap_or(0));
         }
         Some("canary") => {
             // A fresh canary for this month, unsigned: sign it with sign-paper.
@@ -175,7 +207,7 @@ fn main() -> anyhow::Result<()> {
                 std::process::exit(1);
             }
         }
-        _ => eprintln!("release init <folder> | sign <words> <1-3> <apk> <code> | genesis <words 1> <folder> | android-init <folder> | sign-apk <key> <cert> <in> <out> | canary [file] [text] | sign-paper <words> <1-3> <bearings.json|canary.json> | sign-all <words or -> <1-3> <folder> | check <folder>"),
+        _ => eprintln!("release init <folder> | sign <words> <1-3> <apk> <code> | genesis <words 1> <folder> | android-init <folder> | sign-apk <key> <cert> <in> <out> | canary [file] [text] | seeds <seeds.json> <id@relay>... [--mirror <url>] | sign-paper <words> <1-3> <bearings.json|seeds.json|canary.json> | sign-all <words or -> <1-3> <folder> | check <folder>"),
     }
     Ok(())
 }
