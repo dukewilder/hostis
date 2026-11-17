@@ -5,6 +5,10 @@
 //! source. They take two of the three release keys, as a release does, because they steer
 //! where every new install goes first.
 //!
+//! **Seed lists** name volunteers' Lanterns (`id@relay`) a new node can start from when every
+//! door it was handed is gone, and the mirrors the next list may be fetched from. They take two
+//! of the three release keys too: a list signed by one is refused.
+//!
 //! **The canary** is a line HOSTIS signs once a month. Any one release key will do. A canary
 //! that stops being renewed says what a gag order forbids saying.
 //!
@@ -47,10 +51,12 @@ pub fn signers(keys: &[[u8; 32]], kind: &str, doc: &Value) -> usize {
     good.len()
 }
 
-/// Whether the release keys stand behind this document: two for bearings, one for a canary.
+/// Whether the release keys stand behind this document: two for bearings and seed lists, one
+/// for a canary.
 pub fn trusted(keys: &[[u8; 32]], doc: &Value) -> bool {
     match doc["pyrate"].as_str() {
         Some("bearings") => signers(keys, "bearings", doc) >= 2,
+        Some("seeds") => signers(keys, "seeds", doc) >= 2,
         Some("canary") => signers(keys, "canary", doc) >= 1,
         _ => false,
     }
@@ -97,5 +103,26 @@ mod tests {
         let mut wrong = c.clone();
         wrong["pyrate"] = json!("bearings");
         assert!(!trusted(&ids, &wrong), "a canary's signature is not a bearing's");
+    }
+
+    #[test]
+    fn a_seed_list_takes_two_keys() {
+        let k: Vec<StationKey> = (0..3).map(|_| StationKey::generate().unwrap()).collect();
+        let ids: Vec<[u8; 32]> = k.iter().map(|k| k.id().0).collect();
+        let mut s = json!({ "pyrate": "seeds", "at": 7, "seeds": ["a@https://r.example/"], "mirrors": [] });
+        sign(&k[1], 1, &mut s).unwrap();
+        assert!(!trusted(&ids, &s), "a seed list signed by one key is refused");
+        let mut wrong_slot = s.clone();
+        sign(&k[1], 0, &mut wrong_slot).unwrap();
+        assert!(!trusted(&ids, &wrong_slot), "one key under two numbers is still one key");
+        sign(&k[0], 0, &mut s).unwrap();
+        assert!(trusted(&ids, &s), "two keys are enough");
+        let mut more = s.clone();
+        more["seeds"] = json!(["a@https://r.example/", "evil@https://x.example/"]);
+        assert!(!trusted(&ids, &more), "a seed added after signing breaks it");
+        let mut as_bearings = s.clone();
+        as_bearings["pyrate"] = json!("bearings");
+        assert!(!trusted(&ids, &as_bearings), "a seed list's signatures are not bearings'");
+        assert!(!trusted(&[], &s), "a build with no release keys trusts no list");
     }
 }
