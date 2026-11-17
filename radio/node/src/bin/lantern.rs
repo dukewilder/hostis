@@ -56,13 +56,18 @@ What it carries
   --reseed \"Name\"  --withdraw \"words\"  --words <file>   see LANTERN.md
 
 The network and the web
-  --bootstrap <id>,<id>   first doors; --relay <addr> run a relay; --public-dns
+  --bootstrap <id>,<id>   first doors, each best as id@relay; --relay <addr> run a relay;
+                          --public-dns; --release-keys <file> to take seed lists (and releases)
+  PYRATE_DARK=1 with PYRATE_PROXY=<Tor's HTTP tunnel>   run dark: relays only, through Tor,
+                          no address published and no DHT; radio/lantern-dark/ sets it all up
+  PYRATE_DHT=0            leave no note in the DHT (a Lantern not running dark leaves one)
   --http <addr>           the web page and podcast feeds (open stations only); --web-all for
                           every open station, not just its own; --player <folder> the open player
   --door <addr|auto> --door-links --door-kept --lan --listener   see LANTERN.md
   --open-hails <folder>   open the hails this Lantern kept into a folder, then stop
 
 The log
+  --id                  print this Lantern's node id and stop (it may be running meanwhile)
   --show-ids            print this Lantern's node id, and the stations, peers and paths it meets.
                         By default its log names none of them.
   PYRATE_QUIET=1        say almost nothing
@@ -185,7 +190,7 @@ fn main() -> anyhow::Result<()> {
     // An unknown flag stops the Lantern before it starts: a mistyped or test flag must never
     // bring up a stray node on whatever network the shell happens to be on.
     const VALUED: &[&str] = &["--dir", "--quota-gb", "--bootstrap", "--seed", "--http", "--open-hails", "--relay", "--release-keys", "--words", "--withdraw", "--reseed", "--player", "--door", "--open", "--hold-pass-fd"];
-    const BARE: &[&str] = &["--carry-own", "--public-dns", "--scuttle", "--web-all", "--listener", "--door-links", "--door-kept", "--lan", "--hold-key-on-disk", "--show-ids"];
+    const BARE: &[&str] = &["--carry-own", "--public-dns", "--scuttle", "--web-all", "--listener", "--door-links", "--door-kept", "--lan", "--hold-key-on-disk", "--show-ids", "--id"];
     let mut i = 1;
     while i < args.len() {
         let a = args[i].as_str();
@@ -231,6 +236,15 @@ fn main() -> anyhow::Result<()> {
             std::process::exit(1);
         }
     };
+    // --id: this Lantern's node id, for its keeper, read from the hold; nothing is started and
+    // nothing is written, so it may be asked while the Lantern runs.
+    if args.iter().any(|a| a == "--id") {
+        let hold = pyrate_node::hold::Hold::new(&key);
+        let seed = hold.read_note(&dir, "node-key", None).filter(|b| b.len() >= 32).ok_or_else(|| anyhow::anyhow!("this Lantern has no id yet: start it once"))?;
+        let secret = iroh::SecretKey::from_bytes(&<[u8; 32]>::try_from(&seed[..32]).unwrap());
+        println!("node id: {}", secret.public());
+        return Ok(());
+    }
     // The keeper, back: the hails this Lantern kept, opened into a folder of their choosing.
     if let Some(out) = get("--open-hails") {
         let n = pyrate_node::open_hails(&dir, std::path::Path::new(&out), Some(*key))?;
