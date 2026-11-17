@@ -71,6 +71,9 @@ function torLikely() {
 // doors known when it was built (signed notes), and a Lantern or app serving it may add its own
 // in a meta tag. A link may carry two more after its station: `#<station>~<door>.<door>`.
 const DOORS = '{{DOORS}}';
+// The release keys and the mirrors of the signed seed list, as the app has them.
+const RELEASE_KEYS = '{{RELEASE_KEYS}}';
+const SEED_MIRRORS = '{{SEED_MIRRORS}}';
 const SERVED_DOORS = (document.querySelector('meta[name="pyrate-doors"]')?.content || '').split(',').filter(x => /^[0-9a-f]{40,2048}$/.test(x)).slice(0, 16);
 // A link's doors leave the address bar at once; they are hints, never a guard on their word alone.
 const LINK_DOORS = (() => {
@@ -563,6 +566,26 @@ function doorsIn() {
   try { if (Array.isArray(DOORS) && DOORS.length) radio.doors_add(DOORS.join(','), 1) } catch (e) { }
   try { const r = JSON.parse(sget('pyrate.doors') || '[]'); if (Array.isArray(r) && r.length) radio.doors_add(r.filter(x => typeof x === 'string').join(','), 2) } catch (e) { }
   try { if (SERVED_DOORS.length) radio.doors_add(SERVED_DOORS.join(','), 4) } catch (e) { }
+}
+// The signed seed list, as the app climbs to it: when this tab has met nobody after twenty
+// seconds, the list kept from an earlier visit, then one fetched from the mirrors. The radio
+// takes a list only when two of the three release keys signed it, and an older list never
+// replaces a newer one.
+async function seedsIn() {
+  await sleep(20000);
+  if (!radio || radio.neighbours() > 0 || !Array.isArray(RELEASE_KEYS) || !Array.isArray(SEED_MIRRORS)) return;
+  const keys = RELEASE_KEYS.join(','), at = t => { try { return JSON.parse(t).at || 0 } catch (e) { return 0 } };
+  const kept = sget('pyrate.seeds');
+  try { if (kept && radio.seeds_take(kept, keys)) { await sleep(20000); if (radio.neighbours() > 0) return } } catch (e) { }
+  for (const u of SEED_MIRRORS) {
+    try {
+      const r = await fetch(u, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined });
+      if (!r.ok) continue;
+      const t = await r.text();
+      if (t.length > 65536 || (kept && at(t) < at(kept))) continue;
+      if (radio.seeds_take(t, keys)) { sset('pyrate.seeds', t); return }
+    } catch (e) { }
+  }
 }
 function stockLine() { const el = $('stockuse'); if (el) { el.hidden = !keepsStock(); el.textContent = 'Kept for the crew: ' + mb(stockBytes) + ' of 500 MB' } }
 function marooned() { try { return new Set(JSON.parse(sget('pyrate.maroon') || '[]')) } catch (e) { return new Set() } }
@@ -2723,7 +2746,7 @@ async function boot() {
   try { radio.set_chat_key(await chatSecret()) } catch (e) { }
   ballastSet();
   crewSet();
-  doorsIn(); doorsDial();
+  doorsIn(); doorsDial(); seedsIn();
   // The installed player keeps this copy whole, and takes a new one only under two of the three
   // release signatures (sw.js): only at an address that is the fingerprint of the copy itself
   // (a CID gateway's own subdomain), since whoever serves any other address can replace the

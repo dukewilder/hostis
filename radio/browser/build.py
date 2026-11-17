@@ -52,7 +52,7 @@ import json
 # A station whose key is still to be made (an empty id) waits in the list, in its place, and is left out.
 harbour_stations = json.dumps([h for h in json.load(open(os.environ.get("PYRATE_HARBOUR_STATIONS") or f"{R}/browser/harbour.json", encoding="utf-8")) if re.fullmatch(r"[0-9a-f]{64}", h["id"])], ensure_ascii=False)
 # Each value goes in as a JSON string, so nothing in it can close the quote it sits in.
-for k in ["'{{HARBOUR}}'", "'{{RELAYS}}'", "'{{HARBOUR_STATIONS}}'", "'{{SCOPE}}'", "'{{OPEN_PLAYERS}}'", "'{{STUN}}'", "'{{DOORS}}'", "'{{ONION}}'"]:
+for k in ["'{{HARBOUR}}'", "'{{RELAYS}}'", "'{{HARBOUR_STATIONS}}'", "'{{SCOPE}}'", "'{{OPEN_PLAYERS}}'", "'{{STUN}}'", "'{{DOORS}}'", "'{{ONION}}'", "'{{RELEASE_KEYS}}'", "'{{SEED_MIRRORS}}'"]:
     assert js.count(k) == 1, k
 # Lanterns that serve the open player at /listen/ on names of their own (tools/vps/install.sh
 # prints each one's address), one per line in browser/mirrors.txt. Every copy names them all,
@@ -105,7 +105,15 @@ mirrors_html = "".join(f'<li><a href="{u}" target="_blank" rel="noopener norefer
 # bearings name the same. Offered to Tor Browser listeners.
 ONION = open(f"{R}/browser/onion.txt").read().strip() if os.path.exists(f"{R}/browser/onion.txt") else ""
 assert not ONION or re.fullmatch(r"https?://[a-z2-7]{56}\.onion/[^\s'\"<>]*", ONION), "onion.txt holds one onion address"
-base_js = js.replace("'{{HARBOUR}}'", json.dumps(harbour)).replace("'{{RELAYS}}'", json.dumps(os.environ.get("PYRATE_RELAYS", ""))).replace("'{{HARBOUR_STATIONS}}'", harbour_stations).replace("'{{STUN}}'", json.dumps(STUN)).replace("'{{DOORS}}'", json.dumps(DOORS)).replace("'{{ONION}}'", json.dumps(ONION))
+# The release keys the installed player and the seed list are checked by, and the mirrors the
+# seed list is fetched from (as the app's: node/src/find.rs SEED_MIRRORS). A test build names its
+# own: PYRATE_RELEASE_KEYS and PYRATE_SEED_MIRRORS (comma separated).
+keys = [k for k in (os.environ.get("PYRATE_RELEASE_KEYS", "").split(",") if os.environ.get("PYRATE_RELEASE_KEYS") else open(f"{R}/app/assets/release_keys.txt").read().split()) if k]
+assert len(keys) == 3 and all(re.fullmatch(r"[0-9a-f]{64}", k) for k in keys), "three release keys"
+_find = open(f"{R}/node/src/find.rs", encoding="utf-8").read()
+SEED_MIRRORS = [u for u in os.environ.get("PYRATE_SEED_MIRRORS", "").split(",") if u] or re.findall(r'"(https://[^"]+seeds\.json)"', _find.split("pub const SEED_MIRRORS", 1)[1].split(";", 1)[0])
+assert SEED_MIRRORS and all(re.fullmatch(r"https?://[^\s'\"<>]+", u) for u in SEED_MIRRORS), "seed mirrors"
+base_js = js.replace("'{{RELEASE_KEYS}}'", json.dumps(keys)).replace("'{{SEED_MIRRORS}}'", json.dumps(SEED_MIRRORS)).replace("'{{HARBOUR}}'", json.dumps(harbour)).replace("'{{RELAYS}}'", json.dumps(os.environ.get("PYRATE_RELAYS", ""))).replace("'{{HARBOUR_STATIONS}}'", harbour_stations).replace("'{{STUN}}'", json.dumps(STUN)).replace("'{{DOORS}}'", json.dumps(DOORS)).replace("'{{ONION}}'", json.dumps(ONION))
 
 def build(scope, dist, open_players):
     out_js = base_js.replace("'{{SCOPE}}'", json.dumps(scope)).replace("'{{OPEN_PLAYERS}}'", json.dumps(open_players))
@@ -195,8 +203,6 @@ def build(scope, dist, open_players):
     # and the list of every file in this copy with its SHA-256 under the copy's code: what two of
     # the three keyholders sign (`release sign <words> <n> player.manifest <code>`, the lines going
     # into player.sigs beside it). An unsigned copy still plays; it is never installed over one.
-    keys = [k for k in (os.environ.get("PYRATE_RELEASE_KEYS", "").split(",") if os.environ.get("PYRATE_RELEASE_KEYS") else open(f"{R}/app/assets/release_keys.txt").read().split()) if k]
-    assert len(keys) == 3 and all(re.fullmatch(r"[0-9a-f]{64}", k) for k in keys), "three release keys"
     sw = open(f"{W}/sw.js", encoding="utf-8").read()
     assert sw.count("'{{RELEASE_KEYS}}'") == 1
     open(f"{dist}/sw.js", "w", encoding="utf-8").write(sw.replace("'{{RELEASE_KEYS}}'", json.dumps(keys)))

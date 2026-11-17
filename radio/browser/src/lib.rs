@@ -4030,6 +4030,43 @@ impl Radio {
         self.ship.neighbours.lock().unwrap().len() as u32
     }
 
+    /// A seed list the page fetched from a mirror (or kept from an earlier visit), as the app
+    /// takes one: only when two of the three release keys (`keys`, hex, commas) signed it. Its
+    /// Lanterns (`id@relay`) go in the address book and the gossip is asked to meet them, and a
+    /// few are asked for their cards. Gives how many were taken; 0 for a list refused.
+    pub fn seeds_take(&self, text: &str, keys: &str) -> u32 {
+        let keys: Vec<[u8; 32]> = keys.split(',').filter_map(|k| unhex32(k.trim()).ok()).collect();
+        let Ok(doc) = serde_json::from_str::<Value>(text) else { return 0 };
+        if doc["pyrate"] != "seeds" || !pyrate_core::papers::trusted(&keys, &doc) {
+            return 0;
+        }
+        let mut ids = Vec::new();
+        for seed in doc["seeds"].as_array().into_iter().flatten().filter_map(|v| v.as_str()).take(64) {
+            let (id, relay) = seed.split_once('@').unwrap_or((seed, ""));
+            let Ok(id) = id.parse::<EndpointId>() else { continue };
+            if id == self.ship.ep.id() {
+                continue;
+            }
+            if let Some(url) = relay_from_link(relay) {
+                self.ship.book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+            }
+            ids.push(id);
+        }
+        let n = ids.len() as u32;
+        let s = self.ship.clone();
+        spawn(async move {
+            let tx = s.tx.lock().unwrap().clone();
+            if let Some(tx) = tx {
+                let _ = tx.join_peers(ids.iter().take(16).copied().collect()).await;
+            }
+            for id in ids.into_iter().take(3) {
+                s.cards_asked.lock().unwrap().remove(&id);
+                s.cards_from(id).await;
+            }
+        });
+        n
+    }
+
     /// Every station heard of lately, most aboard first, as JSON.
     pub fn stations(&self) -> String {
         self.ship.stations().to_string()
