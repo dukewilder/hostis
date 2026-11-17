@@ -506,7 +506,7 @@ run docker rmi rust:bookworm python:3.12-slim-bookworm >/dev/null 2>&1 || true
 # names no station, peer or node; the id is asked of the Lantern itself below.
 LANTERN_ARGS=()
 [ "$PLAYER" = none ] || LANTERN_ARGS+=(--http "$LANTERN_HTTP" --player /usr/share/pyrate/player)
-have=0 want_img=new have_img=none have_env="" have_net="" have_args=""
+have=0 want_img=new have_img=none have_env="" have_net="" have_args="" have_log=""
 if docker container inspect lantern >/dev/null 2>&1; then
   have=1
   want_img=$(docker image inspect -f '{{.Id}}' pyrate-lantern 2>/dev/null | tr -d '[:space:]' || true)
@@ -514,6 +514,7 @@ if docker container inspect lantern >/dev/null 2>&1; then
   have_env=$(docker container inspect -f '{{range .Config.Env}}{{println .}}{{end}}' lantern | grep '^PYRATE_RELAY_URL=\|^PYRATE_HOLD_PASS_FILE=' | sort | tr '\n' ' ' || true)
   have_net=$(docker container inspect -f '{{.HostConfig.NetworkMode}}' lantern | tr -d '[:space:]')
   have_args=$(docker container inspect -f '{{join .Args " "}}' lantern)
+  have_log=$(docker container inspect -f '{{index .HostConfig.LogConfig.Config "compress"}}' lantern 2>/dev/null | tr -d '[:space:]' || true)
 fi
 # The container keeps its flags after the image's own: they must be the ones wanted now.
 args_ok=0
@@ -523,7 +524,7 @@ else
   [[ $have_args == *" ${LANTERN_ARGS[*]}" ]] && [[ $have_args != *--hold-key-on-disk* && $have_args != *--show-ids* ]] && args_ok=1
 fi
 [ "$PLAYER" = none ] && [[ $have_args == *--player* ]] && args_ok=0
-if [ "$have_img" = "$want_img" ] && [ "$have_env" = "PYRATE_HOLD_PASS_FILE=/run/secrets/hold-pass PYRATE_RELAY_URL=$RELAY_URL " ] && [ "$have_net" = host ] && [ "$args_ok" = 1 ]; then
+if [ "$have_img" = "$want_img" ] && [ "$have_env" = "PYRATE_HOLD_PASS_FILE=/run/secrets/hold-pass PYRATE_RELAY_URL=$RELAY_URL " ] && [ "$have_net" = host ] && [ "$have_log" = false ] && [ "$args_ok" = 1 ]; then
   run docker start lantern >/dev/null
 else
   # Its keys and everything it carries live in the pyrate volume, which stays.
