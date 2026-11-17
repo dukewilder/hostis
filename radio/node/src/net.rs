@@ -1,12 +1,25 @@
 //! What passes between nodes.
 //!
-//! Requests go over `pyrate/0`: one request per stream, one answer back.
+//! Requests go over their own protocol: one request per stream, one answer back.
 //! The Log goes over gossip, on one topic every node joins.
 
 use pyrate_core::{Hash, StationId, StationKey};
 use serde::{Deserialize, Serialize};
 
-pub const ALPN: &[u8] = b"pyrate/1";
+/// What a connection names in the clear, in the first packet of its handshake, where anyone on
+/// the line can read it. Every node speaks as an HTTP/3 client does: gossip offers `h3` alone, as
+/// browsers do, and requests offer `h3` and then `h3-29`, as browsers did a few years ago. A node
+/// prefers `h3-29` for what it answers, so a request lands on the request protocol and gossip on
+/// gossip, and nothing on the wire says Pyrate Radio.
+pub const ALPN: &[u8] = b"h3-29";
+/// The first protocol a request offers, before `ALPN`.
+pub const ALPN_OFFER: &[u8] = b"h3";
+/// The gossip's protocol.
+pub const GOSSIP_ALPN: &[u8] = b"h3";
+/// What nodes before 0.9.20 offer: answered for one release, so a phone still waiting out its
+/// three days for 0.9.20 reaches the Lanterns that already run it, and never offered.
+pub const ALPN_OLD: &[u8] = b"pyrate/1";
+pub const GOSSIP_ALPN_OLD: &[u8] = b"/iroh-gossip/1";
 pub const MAX_FRAME: usize = 16 * 1024 * 1024;
 /// Leading zero bits a station's proof of work must show. About a second on a phone, once.
 pub const POW_BITS: u32 = 24;

@@ -845,7 +845,7 @@ impl Ship {
         }
         let _done = Done(&self.connecting, node);
         let t = raw_now();
-        let c = match timeout(Duration::from_secs(15), self.ep.connect(node, ALPN)).await {
+        let c = match timeout(Duration::from_secs(15), async { anyhow::Ok(self.ep.connect_with_opts(node, net::ALPN_OFFER, iroh::endpoint::ConnectOptions::new().with_additional_alpns(vec![ALPN.to_vec()])).await?.await?) }).await {
             Ok(Ok(c)) => c,
             Ok(Err(e)) => {
                 say(&format!("connect {} failed after {} ms: {e}", node.fmt_short(), raw_now() - t));
@@ -3785,9 +3785,10 @@ impl Radio {
             .bind()
             .await
             .map_err(|e| JsValue::from_str(&format!("bind: {e}")))?;
-        let gossip = GossipNet::builder().max_message_size(128 * 1024).spawn(ep.clone());
+        // The same names in the clear as the app's (see `net::ALPN`).
+        let gossip = GossipNet::builder().max_message_size(128 * 1024).alpn(net::GOSSIP_ALPN).spawn(ep.clone());
         let proto = Proto(Arc::new(Mutex::new(None)));
-        let router = Router::builder(ep.clone()).accept(ALPN, proto.clone()).accept(GOSSIP_ALPN, gossip.clone()).spawn();
+        let router = Router::builder(ep.clone()).accept(ALPN, proto.clone()).accept(net::GOSSIP_ALPN, gossip.clone()).accept(net::ALPN_OLD, proto.clone()).accept(GOSSIP_ALPN, gossip.clone()).spawn();
         if standby {
             // number0's relays, only once ours have had fifteen seconds and none answered.
             let ep2 = ep.clone();

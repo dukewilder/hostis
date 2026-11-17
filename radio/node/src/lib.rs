@@ -194,6 +194,23 @@ pub static DOOR_RELAYS: Mutex<Vec<(EndpointId, String)>> = Mutex::new(Vec::new()
 
 /// Whether a keeper's own station, after `misses` stems no one took, goes on the air from the
 /// device: only after three, never in strict mode, and only with the owner's leave for it.
+/// Dials a node for requests, offering what an HTTP/3 client offers (see `net::ALPN`).
+pub async fn dial(ep: &Endpoint, node: impl Into<iroh::EndpointAddr>) -> Result<Connection> {
+    let opts = iroh::endpoint::ConnectOptions::new().with_additional_alpns(vec![ALPN.to_vec()]);
+    Ok(ep.connect_with_opts(node, net::ALPN_OFFER, opts).await?.await?)
+}
+
+/// A relay as this node uses it: with no QUIC address discovery. Those probes name iroh's own
+/// protocol in the clear in their first packet, to the relay's address on its own port, so
+/// anyone on the line could list the devices that make them. A node learns its outside address
+/// no other way, so two phones behind home routers meet through the relay where they once
+/// might have met directly; a Lantern on a public address is reached directly as before.
+fn relay_config(url: iroh::RelayUrl) -> Arc<iroh::RelayConfig> {
+    let mut c = iroh::RelayConfig::from(url);
+    c.quic = None;
+    Arc::new(c)
+}
+
 fn may_go_direct(misses: u32, strict: bool, own_leave: bool) -> bool {
     misses >= 3 && !strict && own_leave
 }
@@ -1011,7 +1028,7 @@ impl Inner {
                 return Ok(c.clone());
             }
         }
-        let c = tokio::time::timeout(Duration::from_secs(10), self.endpoint.connect(node, ALPN))
+        let c = tokio::time::timeout(Duration::from_secs(10), dial(&self.endpoint, node))
             .await
             .map_err(|_| anyhow!("connect timed out"))?
             .map_err(|e| anyhow!("connect: {e}"))?;
@@ -2609,7 +2626,7 @@ impl Node {
         let ep = self.inner.endpoint.clone();
         self.rt.block_on(async move {
             let me = format!("{:?}", ep.addr());
-            let r = tokio::time::timeout(Duration::from_secs(15), ep.connect(peer, net::ALPN)).await;
+            let r = tokio::time::timeout(Duration::from_secs(15), dial(&ep, peer)).await;
             format!("me {me}\ndial {peer}: {:?}", r.map(|c| c.map(|_| "ok")))
         })
     }
@@ -2786,7 +2803,10 @@ impl Node {
             // those the first doors named. number0's come in only with the owner's switch on:
             // then, with any of ours to try, they stand by and come in only if none of ours
             // answers within fifteen seconds.
-            let n0 = iroh::defaults::prod::default_relay_map();
+            let n0 = iroh::RelayMap::empty();
+            for url in iroh::defaults::prod::default_relay_map().urls::<Vec<iroh::RelayUrl>>() {
+                n0.insert(url.clone(), relay_config(url));
+            }
             let mine = iroh::RelayMap::empty();
             let own_relay: Option<iroh::RelayUrl> = std::env::var("PYRATE_RELAY_URL").ok().and_then(|u| u.parse().ok());
             // PYRATE_RELAY_LOCAL: how the Lantern reaches its own relay from inside its tunnel,
@@ -2794,7 +2814,7 @@ impl Node {
             // network the public one.
             let relay_local: Option<iroh::RelayUrl> = std::env::var("PYRATE_RELAY_LOCAL").ok().and_then(|u| u.parse().ok());
             for url in CREW_RELAYS.iter().filter_map(|r| r.parse::<iroh::RelayUrl>().ok()).chain(ours.iter().cloned()).chain(door_relays.iter().cloned()).chain(relay_local.clone().or(own_relay.clone())) {
-                mine.insert(url.clone(), Arc::new(iroh::RelayConfig::from(url)));
+                mine.insert(url.clone(), relay_config(url));
             }
             let prefer_ours = !ours.is_empty() || own_relay.is_some();
             let standby: Vec<iroh::RelayUrl> = if prefer_ours && number0 { n0.urls() } else { Vec::new() };
@@ -2802,7 +2822,7 @@ impl Node {
                 mine
             } else {
                 for url in mine.urls::<Vec<iroh::RelayUrl>>() {
-                    n0.insert(url.clone(), Arc::new(iroh::RelayConfig::from(url)));
+                    n0.insert(url.clone(), relay_config(url));
                 }
                 n0
             };
@@ -2812,7 +2832,15 @@ impl Node {
             if custom.iter().any(|u| !net::relay_public(u.as_str())) {
                 net::LOCAL_RELAYS_OK.store(true, std::sync::atomic::Ordering::Relaxed);
             }
-            let relays = if custom.is_empty() { relays } else { iroh::RelayMap::from_iter(custom) };
+            let relays = if custom.is_empty() {
+                relays
+            } else {
+                let m = iroh::RelayMap::empty();
+                for url in custom {
+                    m.insert(url.clone(), relay_config(url));
+                }
+                m
+            };
             // Peers are found first in the network's own book, then through number0's pkarr
             // server over HTTPS. No node id is ever looked up in plain DNS, where the line's
             // provider would read who this node dials. A dark node resolves others but never
@@ -2885,7 +2913,7 @@ impl Node {
                         use iroh::Watcher;
                         say(&format!("our relays, after {wait} seconds: {:?}", { let mut w = ep2.home_relay_status(); w.get() }));
                         for url in standby {
-                            let _ = ep2.insert_relay(url.clone(), Arc::new(iroh::RelayConfig::from(url))).await;
+                            let _ = ep2.insert_relay(url.clone(), relay_config(url)).await;
                         }
                         say("none of our own relays answered: number0's stand in");
                         NUMBER0_IN.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -2893,8 +2921,16 @@ impl Node {
                 });
             }
             // Room for a hail: twenty seconds of a voice, sealed.
-            let gossip = GossipNet::builder().max_message_size(128 * 1024).spawn(ep.clone());
-            let router = Router::builder(ep.clone()).accept(ALPN, proto.clone()).accept(GOSSIP_ALPN, gossip.clone()).spawn();
+            // What a connection names in the clear is what an HTTP/3 client names (see
+            // `net::ALPN`): `h3-29` first, so a request offering both lands here and gossip,
+            // offering `h3` alone, on gossip. The old names are answered for one release.
+            let gossip = GossipNet::builder().max_message_size(128 * 1024).alpn(net::GOSSIP_ALPN).spawn(ep.clone());
+            let router = Router::builder(ep.clone())
+                .accept(ALPN, proto.clone())
+                .accept(net::GOSSIP_ALPN, gossip.clone())
+                .accept(net::ALPN_OLD, proto.clone())
+                .accept(GOSSIP_ALPN, gossip.clone())
+                .spawn();
             anyhow::Ok((ep, router, gossip))
         })?;
 
