@@ -583,6 +583,9 @@ struct Ship {
     /// The tags of the stations this tab knows, for opening what is said of those kept to their
     /// link: when built, how many stations the Log held then, and the tags.
     tags: Mutex<(u64, usize, HashMap<[u8; 16], (StationId, u64)>)>,
+    /// Stations named by a link this tab opened, before it tunes them: their tagged notes are
+    /// opened from the first.
+    linked: Mutex<HashSet<StationId>>,
     tokens_sent: Mutex<HashMap<StationId, u64>>,
     syncing: Mutex<HashSet<StationId>>,
     drift: Mutex<pyrate_core::drift::Drift>,
@@ -1561,7 +1564,8 @@ impl Ship {
         if let Some(a) = self.log.lock().unwrap().get(st).and_then(|l| l.announce.as_ref()) {
             return a.link_only;
         }
-        self.archives.lock().unwrap().get(st).is_some_and(|a| a.link_only())
+        // One the tab holds neither card nor log of is taken to be, as the app takes it.
+        self.archives.lock().unwrap().get(st).is_none_or(|a| a.is_empty() || a.link_only())
     }
 
     /// As the app does (see the node's `tags`): anything said of a station kept to its link
@@ -1593,6 +1597,7 @@ impl Ship {
                 let mut stations: Vec<StationId> = self.log.lock().unwrap().keys().copied().collect();
                 stations.extend(self.archives.lock().unwrap().keys().copied());
                 stations.extend(*self.tuned.lock().unwrap());
+                stations.extend(self.linked.lock().unwrap().iter().copied());
                 let mut map = HashMap::new();
                 for st in stations {
                     for h in net::tag_hours(now) {
@@ -3900,6 +3905,7 @@ impl Radio {
             ballast_explicit: std::sync::atomic::AtomicBool::new(false),
             tuned: Mutex::new(None),
             tags: Mutex::new((0, 0, HashMap::new())),
+            linked: Mutex::new(HashSet::new()),
             tokens_sent: Mutex::new(HashMap::new()),
             syncing: Mutex::new(HashSet::new()),
             drift: Mutex::new(pyrate_core::drift::Drift::new()),
@@ -4030,6 +4036,32 @@ impl Radio {
         self.ship.neighbours.lock().unwrap().len() as u32
     }
 
+    /// A station named by a link the page was opened with or followed: a station kept to its
+    /// link is spoken of only under tags, so the tab learns its card and carriers only once it
+    /// knows the id. The neighbours' cards are asked again.
+    pub fn link(&self, id: &str) -> Result<(), JsValue> {
+        let st = StationId(unhex32(id).map_err(js)?);
+        {
+            let mut l = self.ship.linked.lock().unwrap();
+            if l.len() >= 64 {
+                l.clear();
+            }
+            if !l.insert(st) {
+                return Ok(());
+            }
+        }
+        self.ship.tags.lock().unwrap().0 = 0;
+        if !self.ship.log.lock().unwrap().get(&st).is_some_and(|l| l.announce.is_some()) {
+            let near: Vec<EndpointId> = self.ship.neighbours.lock().unwrap().iter().take(2).copied().collect();
+            for n in near {
+                self.ship.cards_asked.lock().unwrap().remove(&n);
+                let s = self.ship.clone();
+                spawn(async move { s.cards_from(n).await });
+            }
+        }
+        Ok(())
+    }
+
     /// A seed list the page fetched from a mirror (or kept from an earlier visit), as the app
     /// takes one: only when two of the three release keys (`keys`, hex, commas) signed it. Its
     /// Lanterns (`id@relay`) go in the address book and the gossip is asked to meet them, and a
@@ -4081,6 +4113,7 @@ impl Radio {
         }
         // A station not heard of yet may be one kept to its link, whose card and carriers go
         // only under its tag: the neighbours' cards are asked again, and its tagged notes opened.
+        self.ship.tags.lock().unwrap().0 = 0;
         if !self.ship.log.lock().unwrap().get(&st).is_some_and(|l| l.announce.is_some()) {
             let near: Vec<EndpointId> = self.ship.neighbours.lock().unwrap().iter().take(2).copied().collect();
             for n in near {

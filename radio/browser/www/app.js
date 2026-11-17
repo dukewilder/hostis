@@ -609,6 +609,9 @@ function allowed(s) { return !((s.explicit && !sw.explicit()) || (sw.mature() &&
 // reached by its link alone. HOSTIS's own, the visitor's kept and pockets, this browser's own,
 // the one on the set and any opened by a link stay in reach regardless.
 const linkedIds = new Set();
+// A station a link names is told to the radio at once: one kept to its link is spoken of only
+// under tags, which the radio opens only for stations it knows.
+function linkTell(id) { linkedIds.add(id); try { if (radio && /^[0-9a-f]{64}$/.test(id)) radio.link(id) } catch (e) { } }
 function listable() { const mine = new Set(kept().map(k => k.id)); return s => s.listed || isHarbour(s.id) || keptSet.has(s.id) || mine.has(s.id) || isPocket(s) || s.id === cur?.id || linkedIds.has(s.id) }
 
 // ---- What this browser keeps of its own choosing ------------------------------------------
@@ -1501,7 +1504,7 @@ async function pocketJoin(link, open) {
 function followLink() {
   const linked = wanted || location.hash.slice(1), id = linked || lastId();
   if (!/^[0-9a-f]{64}$/.test(id) || cur?.id === id || (HOSTIS_ONLY && !isHarbour(id))) return;
-  if (linked) linkedIds.add(id);
+  if (linked) linkTell(id);
   // The tab's last station, known now to have nothing to play, is passed over; a link is not.
   if (!linked && stations.some(x => x.id === id && !playable(x))) return;
   // On an Android phone, a passed station can go straight to the app if it is there.
@@ -2747,6 +2750,7 @@ async function boot() {
   ballastSet();
   crewSet();
   doorsIn(); doorsDial(); seedsIn();
+  for (const id of linkedIds) linkTell(id);
   // The installed player keeps this copy whole, and takes a new one only under two of the three
   // release signatures (sw.js): only at an address that is the fingerprint of the copy itself
   // (a CID gateway's own subdomain), since whoever serves any other address can replace the
@@ -2913,7 +2917,7 @@ else {
   views();
   stations = cachedCards().filter(inSet); rows();
   // The link is read before show() clears it from the address: a station opened by its link stays.
-  if (!foreign(location.hash)) { const linked = wanted || passedId(); if (linked) linkedIds.add(linked); const s = firstStation() || (passedId() && !HOSTIS_ONLY ? { id: passedId(), call_sign: passedId().slice(0, 8).toUpperCase(), name: 'A passed-on station' } : null); if (s) { show(s); if (!linked) landed(s, opening) } }
+  if (!foreign(location.hash)) { const linked = wanted || passedId(); if (linked) linkTell(linked); const s = firstStation() || (passedId() && !HOSTIS_ONLY ? { id: passedId(), call_sign: passedId().slice(0, 8).toUpperCase(), name: 'A passed-on station' } : null); if (s) { show(s); if (!linked) landed(s, opening) } }
   booting = boot();
 }
 // In the page, the radio's engine loads from this site while the page is read, so Listen
