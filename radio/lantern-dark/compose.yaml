@@ -1,0 +1,59 @@
+# A dark Lantern: Tor and a Lantern side by side. The Lantern sits on a network with no way out
+# but Tor, runs dark (relays only, through Tor's tunnel, no address published, no DHT), carries
+# blind, and takes its hold key from a passphrase file only root can read. No port is published.
+# Logs are capped at a megabyte each and name no station, peer or node.
+#
+#   bash install.sh          (asks for the passphrase once, then runs `docker compose up -d`)
+#
+# PYRATE_HOLD_PASS_PATH (set in .env by install.sh) names the passphrase file: ./hold-pass by
+# default, or a file on a removable disk. No rights reserved.
+name: pyrate-dark
+
+x-logs: &logs
+  driver: local
+  options:
+    max-size: "1m"
+    max-file: "1"
+
+services:
+  tor:
+    build: ./tor
+    image: pyrate-dark-tor
+    restart: unless-stopped
+    networks: [inside, outside]
+    volumes:
+      - tor-data:/var/lib/tor
+    read_only: true
+    tmpfs: [/tmp]
+    logging: *logs
+
+  lantern:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: pyrate-lantern
+    restart: unless-stopped
+    depends_on: [tor]
+    # The inside network has no route out: all the Lantern sends goes through Tor or nowhere.
+    networks: [inside]
+    environment:
+      PYRATE_DARK: "1"
+      PYRATE_PROXY: http://tor:8118
+      PYRATE_HOLD_PASS_FILE: /run/secrets/hold-pass
+    secrets: [hold-pass]
+    volumes:
+      - pyrate-dark:/data
+    logging: *logs
+
+networks:
+  inside:
+    internal: true
+  outside: {}
+
+secrets:
+  hold-pass:
+    file: ${PYRATE_HOLD_PASS_PATH:-./hold-pass}
+
+volumes:
+  pyrate-dark: {}
+  tor-data: {}

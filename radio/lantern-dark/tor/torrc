@@ -1,0 +1,9 @@
+# Tor for a dark Lantern. It offers one thing: an HTTP tunnel on the compose file's inside
+# network, which only the Lantern can reach. Nothing is published on the host.
+SocksPort 0
+HTTPTunnelPort 0.0.0.0:8118
+DataDirectory /var/lib/tor
+Log notice stdout
+# Keep what Tor writes of its own work small: no circuit or address details in the log.
+SafeLogging 1
+AvoidDiskWrites 1
