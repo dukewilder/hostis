@@ -116,10 +116,9 @@ fn main() -> anyhow::Result<()> {
     // first hop (the crew's rule against a crowd of new radios), and a door is one at once.
     let r = Node::start(Config { carry_all: true, lantern: true, ..cfg("relay", false) })?;
     r.call(&json!({ "cmd": "lan", "value": true }));
-    // The Lantern keeps the broadcasting phone's station open, so it can end that station's
-    // stem and show it; a Lantern ends no stem for a station it would carry blind. Every
-    // other station it carries blind (checked below).
-    r.keep_open(&[bid], false);
+    // The Lantern carries every station blind (checked below), and ends the broadcasting
+    // phone's stem all the same: it shows the card and names itself as a carrier under the
+    // station's tag, as the station is kept to its link.
     // A guard is a radio known under one id for a week: the keeper's phone has known the other
     // keeper's that long, so it has a first hop, and the Lantern, the second node, takes the stem.
     b.age_peers(&[*k.id().as_bytes()], 8 * 86_400_000);
@@ -173,7 +172,9 @@ fn main() -> anyhow::Result<()> {
     check(!told(&probe(l.addr(), Request::Chatter { station: wid })), "nor the lines of a room it sits in");
     // A Lantern carries what it was not told to keep openly blind: it holds the station, and a
     // stranger asking straight gets no log and no sound in the clear, while its sound still
-    // goes to whoever asks by sealed name.
+    // goes to whoever asks by sealed name. A station kept to its link reaches a Lantern that
+    // carries everything only by its link, a stem or a listener's ask through it: here, its link.
+    r.call(&json!({ "cmd": "warm", "stations": [id] }));
     let mut held = None;
     for _ in 0..120 {
         held = first_chunk(&r, &wid).filter(|h| r.on_disk(&pyrate_node::hex(h)));
@@ -189,7 +190,43 @@ fn main() -> anyhow::Result<()> {
         check(!told(&probe(r.addr(), Request::Chunk { hash: h })), "nor its sound in the clear");
         check(told(&probe(r.addr(), Request::SealedChunk { name: pyrate_core::seal::name(&h) })), "and still passes that sound on sealed, by name");
     }
-    check(!l.carriers_of(&wid).contains(r.id().as_bytes()) && !l2.carriers_of(&wid).contains(r.id().as_bytes()), "nobody hears the Lantern say it carries a station it keeps blind");
+    // Watched is kept to its link. Whoever holds the link learns, from the Lantern's note under
+    // the station's tag, that the Lantern carries it; a stranger who has not the link hears the
+    // same notes and learns nothing, and no gossip message in or out names the station.
+    let hexs = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+    let marks = json!([hexs(&wid.0), hexs(b"Watched"), hexs(&bid.0), hexs(b"Held Back")]);
+    let stranger = Node::start(Config { bootstrap: vec![r.addr().id], ..cfg("stranger", true) })?;
+    stranger.call(&json!({ "cmd": "lan", "value": true }));
+    for n in [&stranger, &r, &k] {
+        n.call(&json!({ "cmd": "gossip_tap", "look_for": marks }));
+    }
+    let l3 = Node::start(Config { bootstrap: vec![r.addr().id], ..cfg("listener3", true) })?;
+    l3.call(&json!({ "cmd": "lan", "value": true }));
+    std::thread::sleep(Duration::from_secs(5));
+    l3.call(&json!({ "cmd": "tune", "station": id }));
+    let mut named = false;
+    for _ in 0..120 {
+        if l3.carriers_of(&wid).contains(r.id().as_bytes()) {
+            named = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
+    check(named, "a newcomer holding the link learns from the Lantern's tagged note that it carries the station");
+    // Half a minute more of gossip, cards and tokens through the three taps.
+    std::thread::sleep(Duration::from_secs(30));
+    let taps: Vec<serde_json::Value> = [&stranger, &r, &k].iter().map(|n| n.call(&json!({ "cmd": "gossip_tap" }))).collect();
+    let looked: u64 = taps.iter().map(|t| t["looked"].as_u64().unwrap_or(0)).sum();
+    let seen: u64 = taps.iter().flat_map(|t| t["seen"].as_array().cloned().unwrap_or_default()).map(|v| v.as_u64().unwrap_or(0)).sum();
+    check(looked > 0 && seen == 0, &format!("no gossip message in or out of a stranger, the Lantern or the keeper names a station kept to its link ({looked} looked at, {seen} naming one)"));
+    check(!stranger.heard_of(&wid) && !stranger.carriers_of(&wid).contains(r.id().as_bytes()), "a stranger with no link never learns the station, nor that the Lantern carries it");
+    let cards = match probe(r.addr(), Request::Cards) {
+        Some(Response::Cards(c)) => c,
+        _ => vec![],
+    };
+    let plain = cards.iter().filter_map(|b| postcard::from_bytes::<pyrate_node::net::Gossip>(b).ok()).filter(|g| g.about() == Some(wid)).count();
+    let tagged = cards.iter().filter_map(|b| postcard::from_bytes::<pyrate_node::net::Gossip>(b).ok()).filter(|g| matches!(g, pyrate_node::net::Gossip::Tagged { .. })).count();
+    check(!cards.is_empty() && plain == 0 && tagged > 0, &format!("the Lantern's cards for a stranger hold no plain note of the station, only tagged ones ({plain} plain, {tagged} tagged of {})", cards.len()));
     // Told to keep it openly, the same Lantern answers the same probe: the probe works.
     r.keep_open(&[wid], false);
     check(told(&probe(r.addr(), Request::Log { station: wid, from: 0 })), "told to keep it open, the Lantern answers the same probe");
@@ -210,7 +247,6 @@ fn main() -> anyhow::Result<()> {
     open.call(&json!({ "cmd": "lan", "value": true }));
     // Every gossip message in and out of the app door, a listener and a Lantern is looked at for
     // the door's address, written out and as bytes, from before the door opens.
-    let hexs = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
     let look_for = json!([hexs(b"203.0.113.7"), hexs(&[203, 0, 113, 7]), hexs(&[203, 0, 113, 7, 0xa0, 0x29])]);
     for n in [&open, &l, &r] {
         n.call(&json!({ "cmd": "gossip_tap", "look_for": look_for }));
