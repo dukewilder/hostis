@@ -1717,7 +1717,7 @@ impl Ship {
                 // is the middle's to draw: the doors' presence is no business of this tab's.
                 let p = g.presence_checked(self.base_now())?;
                 let id = EndpointId::from_bytes(&p.node).ok()?;
-                if p.hop_limit > 0 && id != self.ep.id() {
+                if p.middle && id != self.ep.id() {
                     let mut c = self.crew.lock().unwrap();
                     if c.introducers.len() < 2_000 || c.introducers.contains_key(&id) {
                         c.introducers.insert(id, p.at_ms);

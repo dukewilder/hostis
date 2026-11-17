@@ -27,9 +27,13 @@ const TABS_PER_DOOR: u64 = 16;
 const DOORS_FLOOR: usize = 3;
 const TABS_PER_MIDDLE: u64 = 8;
 const MIDDLES_FLOOR: usize = 6;
-/// Hops a middle takes in a minute: a listener's device, and a Lantern.
-const HOP_LIMIT: u16 = 600;
-pub(crate) const HOP_LIMIT_LANTERN: u16 = 6_000;
+/// Hops a middle takes in a minute: a listener's device, and a Lantern. Neither figure leaves the
+/// device: a presence note says how busy the middle is in thousandths of its own.
+const HOP_LIMIT: u32 = 600;
+const HOP_LIMIT_LANTERN: u32 = 6_000;
+/// The furthest back a door's `since` is said: a listener's spell lasts six hours at most, and a
+/// Lantern's door, always open, would otherwise show itself by an older one.
+const SINCE_SAID_MS: u64 = 6 * 3_600_000;
 
 /// What the app allows and what this device is doing.
 pub(crate) struct Duties {
@@ -74,10 +78,15 @@ impl Inner {
             return None;
         }
         let now = now_ms();
-        let (since, load, limit, map) = door.map(|d| (d.since.min(now), d.clients().min(door::MAX_SESSIONS) as u16, door::MAX_SESSIONS as u16, d.map)).unwrap_or((0, 0, 0, false));
-        let (hops, hop_limit) = if hop { (self.hops_lately(now), if self.cfg.lantern { HOP_LIMIT_LANTERN } else { HOP_LIMIT }) } else { (0, 0) };
+        let (since, load, limit, map) = door.map(|d| (d.since.min(now).max(now.saturating_sub(SINCE_SAID_MS)), d.clients().min(door::MAX_SESSIONS) as u16, door::MAX_SESSIONS as u16, d.map)).unwrap_or((0, 0, 0, false));
+        let busy = if hop {
+            let most = if self.cfg.lantern { HOP_LIMIT_LANTERN } else { HOP_LIMIT };
+            (u32::from(self.hops_lately(now)) * u32::from(crate::net::BUSY_FULL) / most).min(u32::from(crate::net::BUSY_FULL)) as u16
+        } else {
+            0
+        };
         let relay = self.endpoint.addr().relay_urls().next().map(|u| u.to_string()).filter(|r| crate::net::relay_named(r)).unwrap_or_default();
-        Some(Gossip::presence(&self.secret, since, load, limit, map, hops.min(hop_limit), hop_limit, &relay, now))
+        Some(Gossip::presence(&self.secret, since, load, limit, map, hop, busy, &relay, now))
     }
 
     /// One more hop passed on as a middle or a way in.
@@ -117,7 +126,7 @@ impl Inner {
         let listed = notes.doors_listed(now).into_iter().filter(|(n, _)| *n != me && !doors.iter().any(|p| p.node == *n)).count();
         let share = |v: &[f64]| if v.is_empty() { 0.0 } else { v.iter().sum::<f64>() / v.len() as f64 };
         let door_load: Vec<f64> = doors.iter().map(|p| p.load as f64 / p.limit as f64).collect();
-        let mids: Vec<f64> = pres.iter().filter(|p| p.hop_limit > 0).map(|p| p.hops as f64 / p.hop_limit as f64).collect();
+        let mids: Vec<f64> = pres.iter().filter(|p| p.middle).map(|p| p.busy as f64 / crate::net::BUSY_FULL as f64).collect();
         (
             Seen { known: doors.len() + listed, load: share(&door_load), target: target(tabs, TABS_PER_DOOR, DOORS_FLOOR) },
             Seen { known: mids.len(), load: share(&mids), target: target(tabs, TABS_PER_MIDDLE, MIDDLES_FLOOR) },

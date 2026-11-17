@@ -4076,7 +4076,7 @@ impl Node {
             // The radios that said lately they are there: doors with their load, and middles.
             "presence" => {
                 let list = inner.notes.lock().unwrap().presence(now_ms());
-                Ok(json!(list.iter().map(|p| json!({ "node": hex(&p.node), "load": p.load, "limit": p.limit, "map": p.map, "hops": p.hops, "hop_limit": p.hop_limit, "since": p.since })).collect::<Vec<_>>()))
+                Ok(json!(list.iter().map(|p| json!({ "node": hex(&p.node), "load": p.load, "limit": p.limit, "map": p.map, "middle": p.middle, "busy": p.busy, "since": p.since })).collect::<Vec<_>>()))
             }
             // For the privacy test: the byte strings to look for in every gossip message in and
             // out (hex), or with none given, how often each was seen so far.
