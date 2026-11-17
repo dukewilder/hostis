@@ -195,6 +195,21 @@ pub static DOOR_RELAYS: Mutex<Vec<(EndpointId, String)>> = Mutex::new(Vec::new()
 
 /// Whether a keeper's own station, after `misses` stems no one took, goes on the air from the
 /// device: only after three, never in strict mode, and only with the owner's leave for it.
+/// A radio's memory holds what it plays and passes on, and the keys its disk is sealed under. A
+/// crash writes no core file, where all of it would land on the disk in the clear, and on Linux
+/// and Android no other program run by the same user may read the process's memory or attach
+/// to it (only root or the kernel can). Set once, before any key is opened.
+pub fn no_core_dumps() {
+    #[cfg(unix)]
+    // SAFETY: plain system calls on this process's own limits, with valid arguments.
+    unsafe {
+        let none = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+        libc::setrlimit(libc::RLIMIT_CORE, &none);
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0);
+    }
+}
+
 /// Dials a node for requests, offering what an HTTP/3 client offers (see `net::ALPN`).
 pub async fn dial(ep: &Endpoint, node: impl Into<iroh::EndpointAddr>) -> Result<Connection> {
     let opts = iroh::endpoint::ConnectOptions::new().with_additional_alpns(vec![ALPN.to_vec()]);
@@ -2662,6 +2677,11 @@ impl Node {
     pub fn ballast_held(&self) -> usize {
         self.inner.store.lock().unwrap().ballast.len()
     }
+    /// For the proof test: a chunk as this node holds it, opened.
+    #[doc(hidden)]
+    pub fn chunk_plain(&self, h: &pyrate_core::Hash) -> Option<Vec<u8>> {
+        self.inner.store.lock().unwrap().get_chunk(h)
+    }
     pub fn chunk_here(&self, h: &pyrate_core::Hash) -> bool {
         self.inner.store.lock().unwrap().get_chunk(h).is_some()
     }
@@ -2677,6 +2697,7 @@ impl Node {
     }
 
     pub fn start(cfg: Config) -> Result<Self> {
+        no_core_dumps();
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build()?;
         let mut store = Store::open_with(&cfg.dir, cfg.quota + if cfg.ballast == BALLAST_AUTO { 0 } else { cfg.ballast }, HOLD_KEY.lock().unwrap().take())?;
         // A phone's or computer's own entries carry the quarter hour, not the keeper's minute.

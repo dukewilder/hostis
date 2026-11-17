@@ -182,6 +182,8 @@ fn open_list(args: &[String]) -> anyhow::Result<(Vec<pyrate_core::StationId>, bo
 }
 
 fn main() -> anyhow::Result<()> {
+    // Before the passphrase is read: no core file, and no other program reads this memory.
+    pyrate_node::no_core_dumps();
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--help" || a == "-h") {
         print!("{HELP}");
