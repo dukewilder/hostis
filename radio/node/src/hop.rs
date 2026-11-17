@@ -235,7 +235,11 @@ fn seal(to: &[u8; 32], ask: &Ask) -> Result<(Hop, ChaCha20Poly1305)> {
 }
 
 impl Inner {
-    /// Nodes this one knows of, other than itself: bootstrap peers and every carrier in the Log.
+    /// Nodes this one knows of, other than itself: bootstrap peers, every carrier in the Log,
+    /// and every node that said lately where it is reached. A node says that only once it carries
+    /// something, so a Lantern carrying every station blind, which names itself as a carrier
+    /// only under tags most nodes cannot read, is still a hop for stems and fetches, and its
+    /// note says nothing of what it carries or what it is.
     fn known_nodes(&self) -> Vec<EndpointId> {
         let me = self.endpoint.id();
         let mut v: Vec<EndpointId> = self.cfg.bootstrap.clone();
@@ -251,15 +255,7 @@ impl Inner {
             }
         }
         drop(log);
-        // A Lantern carrying blind signs no carrier note, so none brings it here; its presence
-        // as a middle, which names no station, does, and it stays a hop for stems and fetches.
-        for p in self.notes.lock().unwrap().presence(now) {
-            if p.hop_limit == crate::duty::HOP_LIMIT_LANTERN {
-                if let Ok(id) = EndpointId::from_bytes(&p.node) {
-                    v.push(id);
-                }
-            }
-        }
+        v.extend(self.notes.lock().unwrap().harbours(now).iter().filter_map(|n| EndpointId::from_bytes(n).ok()));
         v.retain(|n| *n != me);
         v.sort();
         v.dedup();
@@ -907,7 +903,10 @@ impl Inner {
         }
         self.hop_counted();
         let now = now_ms();
-        let note = if note.is_empty() { None } else { self.pull_note(&cookie, &note).map(|g| (g, note)) };
+        // A deck of a station kept to its link hands up its note sealed under the station's tag,
+        // which this radio cannot read: it is passed on as it came, once in twenty seconds.
+        let tagged = (note.len() <= crate::net::TAG_WIRE + 64).then(|| postcard::from_bytes::<Gossip>(&note).ok()).flatten().filter(|g| matches!(g, Gossip::Tagged { .. }));
+        let note = if note.is_empty() { None } else if let Some(g) = tagged { Some((g, note)) } else { self.pull_note(&cookie, &note).map(|g| (g, note)) };
         let (wake, noted, full) = {
             let mut p = self.pulls.lock().unwrap();
             p.retain(|_, b| now.saturating_sub(b.seen) < PULL_GONE_MS);
@@ -1030,10 +1029,10 @@ impl Inner {
         }
         // A Lantern that carries only its own stations never ends a stranger's stem: it
         // hands the cargo on, so nothing of anyone else's lands on its disk. Nor does any
-        // node end a stem for a station its owner chose not to carry. Nor does a Lantern end
-        // one for a station it would carry blind: the end of a stem shows the station to the
-        // network, and a blind carrier shows nothing, so the cargo goes to a node that can.
-        let declines = (self.cfg.lantern && !self.cfg.carry_all && !self.is_own(&station)) || (self.cfg.lantern && !self.is_open(&station)) || !self.will_carry(&station, Some((&announce, &entries)));
+        // node end a stem for a station its owner chose not to carry. A Lantern carrying blind
+        // ends one as any node does: it shows the card, and names itself as the station's
+        // carrier under its tag when the station is kept to its link (see `tags`).
+        let declines = (self.cfg.lantern && !self.cfg.carry_all && !self.is_own(&station)) || !self.will_carry(&station, Some((&announce, &entries)));
         // Cargo that has been here before has gone round: it spreads now.
         let id = cargo_id(&station, &entries, &announce);
         let again = {
@@ -1163,8 +1162,10 @@ impl Inner {
         let me = *self.endpoint.id().as_bytes();
         let carrier = Gossip::Carrier { station, node: me, head };
         self.on_gossip(carrier.clone());
-        self.broadcast(&Gossip::carried(&self.secret, station, head, now_ms())).await;
-        self.broadcast(&carrier).await;
+        if self.may_name_carrier(&station) {
+            self.broadcast(&Gossip::carried(&self.secret, station, head, now_ms())).await;
+            self.broadcast(&carrier).await;
+        }
     }
 
     /// The guard: the first hop of every stem, kept for weeks so an attacker cannot wait for a lucky draw.

@@ -10,6 +10,7 @@ mod pack;
 pub mod hold;
 mod flock;
 mod pocket;
+mod tags;
 pub mod hop;
 pub mod trust;
 pub mod clockfix;
@@ -454,6 +455,8 @@ pub struct Inner {
     log: Mutex<HashMap<StationId, Listing>>,
     conns: Mutex<HashMap<EndpointId, Connection>>,
     gossip_tx: Mutex<Option<GossipSender>>,
+    /// The tags of the stations this node knows, for opening what is said of those kept to their link.
+    tags: Mutex<tags::TagTable>,
     /// Whether the nearby-radios beacon is running (see `lan.rs`).
     lan_running: std::sync::atomic::AtomicBool,
     gossip: GossipNet,
@@ -885,8 +888,9 @@ impl Inner {
         let refused = self.refused();
         let mut list: Vec<(u64, StationId, Vec<u8>)> = {
             let log = self.log.lock().unwrap();
+            // Never a station kept to its link: its card goes only sealed, below.
             log.iter()
-                .filter(|(id, l)| l.fresh(now) && !self.is_pocket(id) && !refused.contains(id))
+                .filter(|(id, l)| l.fresh(now) && !self.is_pocket(id) && !refused.contains(id) && l.announce.as_ref().is_some_and(|a| !a.link_only))
                 .filter_map(|(id, l)| Some((l.aboard(now), *id, postcard::to_stdvec(&Gossip::Station(l.announce.clone()?)).ok()?)))
                 .collect()
         };
@@ -908,6 +912,15 @@ impl Inner {
         for b in self.notes.lock().unwrap().for_stations(&shown, now) {
             bytes += b.len();
             if bytes > (1 << 20) + (256 << 10) {
+                break;
+            }
+            out.push(b);
+        }
+        // Then the tagged notes heard lately, unread: a newcomer with a link opens its station's.
+        let room = net::CARDS_ITEMS.saturating_sub(out.len());
+        for b in self.notes.lock().unwrap().tagged_fresh(now, room.min(1_500)) {
+            bytes += b.len();
+            if bytes > (1 << 20) + (768 << 10) {
                 break;
             }
             out.push(b);
@@ -936,15 +949,23 @@ impl Inner {
         let (mut n, mut cards, mut notes) = (0, 0, 0);
         let now = now_ms();
         for b in list.into_iter().take(net::CARDS_ITEMS) {
-            if b.len() > net::CARD_WIRE {
+            if b.len() > net::TAG_WIRE + 64 {
                 continue;
             }
             // Taken as gossip from that node: checked against its own signature or dropped.
             let Ok(g) = postcard::from_bytes::<Gossip>(&b) else { continue };
-            if !matches!(g, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Harbour { .. } | Gossip::Crew { .. } | Gossip::Deck { .. }) {
+            if !matches!(g, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Harbour { .. } | Gossip::Crew { .. } | Gossip::Deck { .. } | Gossip::Tagged { .. }) || (b.len() > net::CARD_WIRE && !matches!(g, Gossip::Tagged { .. })) {
                 continue;
             }
             self.notes.lock().unwrap().keep(&g, &b, now);
+            // A tagged note is read only when it is about a station this node knows.
+            let g = match g {
+                g @ Gossip::Tagged { .. } => match self.open_tagged(&g) {
+                    Some(inner) => inner,
+                    None => continue,
+                },
+                g => g,
+            };
             let Some(g) = g.from_network(now, node.as_bytes()) else { continue };
             let card = matches!(g, Gossip::Station(_));
             if card {
@@ -1232,6 +1253,11 @@ impl Inner {
     }
 
     pub async fn sync_log_direct(&self, station: StationId) -> Result<usize> {
+        // A station kept to its link has its card and carriers only under its tag: an exit asked
+        // for one learns its id from the ask, and opens what it holds of it.
+        if !self.log.lock().unwrap().get(&station).is_some_and(|l| l.announce.is_some() && !l.carriers.is_empty()) {
+            self.take_tags_for(&station);
+        }
         let mut added = 0;
         // At most twelve asked a round: a list full of claims that never answer costs a round
         // its time, not the node its afternoon. Each that fails goes to the back for a while.
@@ -1294,6 +1320,9 @@ impl Inner {
 
     /// Brings a station's log up to date: privately on phones, directly on Lanterns.
     pub async fn sync_log(&self, station: StationId) -> Result<usize> {
+        if !self.log.lock().unwrap().get(&station).is_some_and(|l| l.announce.is_some()) {
+            self.take_tags_for(&station);
+        }
         if self.is_own(&station) {
             return self.sync_own(station).await;
         }
@@ -1397,9 +1426,17 @@ impl Inner {
         Err(anyhow!("no carrier has that chunk"))
     }
 
+    /// Says something on the open Log: anything about a station kept to its link goes sealed
+    /// under its tag (see `tags`), and a plain carrier note for one not at all.
     async fn broadcast(&self, g: &Gossip) {
+        let Some(g) = self.outgoing(g) else { return };
         let tx = self.gossip_tx.lock().unwrap().clone();
-        if let (Some(tx), Ok(bytes)) = (tx, postcard::to_stdvec(g)) {
+        if let (Some(tx), Ok(bytes)) = (tx, postcard::to_stdvec(&g)) {
+            // Its own tagged notes too go in the cards it hands newcomers, unread by them unless
+            // they hold the link.
+            if matches!(g, Gossip::Tagged { .. }) {
+                self.notes.lock().unwrap().keep(&g, &bytes, now_ms());
+            }
             self.tap_look(&bytes);
             let _ = tx.broadcast(bytes.into()).await;
         }
@@ -1507,6 +1544,8 @@ impl Inner {
             }
             // Opened into a plain note by `from_network` before it reaches here.
             Gossip::Carried { .. } => return None,
+            // Opened by `open_tagged` before it reaches here, by a node that knows the station.
+            Gossip::Tagged { .. } => return None,
             // Doors are kept in the notes, for the cards and the player; nothing else to do here.
             Gossip::Door { .. } => return None,
             Gossip::Aboard { station, hour, tokens } => {
@@ -1862,10 +1901,10 @@ impl Inner {
             // the hash chose for it, and only while it is on Wi-Fi and charging. Away from the
             // charger it serves nobody, and its ballast set, which would tie one day's fresh id
             // to the next and one network to another, goes unsaid.
-            // A Lantern says nothing of a station it carries blind: no card from it and no
-            // carrier note, until carriers can be named by tags only the station's listeners
-            // can work out.
-            if self.cfg.lantern && !self.is_open(&station) {
+            // A Lantern carrying a station blind names itself for it only as `may_name_carrier`
+            // lets it: under the station's tag, for one kept to its link, so only its listeners
+            // learn who carries it; for a listed one, only where the ballast score puts it.
+            if !self.may_name_carrier(&station) {
                 continue;
             }
             let direct = self.direct.lock().unwrap().contains(&station);
@@ -1891,16 +1930,21 @@ impl Inner {
             // Signed for nodes that check, plain for older ones, which believe it only from
             // this node itself.
             let signed = Gossip::carried(&self.secret, station, head, now_ms());
+            // Kept to hand on in cards only for a listed station: one kept to its link goes sealed.
             if let Ok(raw) = postcard::to_stdvec(&signed) {
-                self.notes.lock().unwrap().keep(&signed, &raw, now_ms());
+                if !self.link_only(&station) {
+                    self.notes.lock().unwrap().keep(&signed, &raw, now_ms());
+                }
             }
             self.broadcast(&signed).await;
             self.broadcast(&g).await;
             said_carrier = true;
         }
         // Having said it carries something, this node says where it can be reached, every
-        // couple of minutes: the network's own address book, in place of anyone's directory.
-        if said_carrier && !self.dark && now.saturating_sub(self.last_harbour.load(std::sync::atomic::Ordering::Relaxed)) > 120_000 {
+        // couple of minutes: the network's own address book, in place of anyone's directory. A
+        // Lantern says so always: it is there to carry, and one carrying only stations kept to
+        // their links names itself as their carrier under tags alone.
+        if (said_carrier || self.cfg.lantern) && !self.dark && now.saturating_sub(self.last_harbour.load(std::sync::atomic::Ordering::Relaxed)) > 120_000 {
             // A Lantern running its own relay names it by its public address (PYRATE_RELAY_URL),
             // even while it reaches it from inside by another.
             // Only while it really is homed there: a note naming a relay this node is not on
@@ -2960,6 +3004,7 @@ impl Node {
             log: Mutex::new(HashMap::new()),
             conns: Mutex::new(HashMap::new()),
             gossip_tx: Mutex::new(None),
+            tags: Mutex::new(Default::default()),
             lan_running: std::sync::atomic::AtomicBool::new(false),
             gossip: gossip.clone(),
             chats: Mutex::new(HashMap::new()),
@@ -3122,6 +3167,11 @@ impl Node {
                     Ok(Event::Received(m)) => m,
                     Ok(Event::NeighborUp(n)) => {
                         crate::say_named(&format!("neighbour up {}", n.fmt_short()));
+                        // A new neighbour hears where this node is reached within twenty seconds,
+                        // not at the next turn of two minutes: a Lantern that names itself as a
+                        // carrier only under tags is a hop by this note alone.
+                        let t = now_ms().saturating_sub(100_000);
+                        i2.last_harbour.fetch_min(t, std::sync::atomic::Ordering::Relaxed);
                         // A node with a near-empty Log asks its first neighbours for theirs.
                         if i2.log.lock().unwrap().len() < 8 && i2.cards_asked.lock().unwrap().len() < 6 {
                             let (i5, n) = (i2.clone(), n);
@@ -3150,6 +3200,19 @@ impl Node {
                         d.push(&msg.content);
                     }
                 }
+                // A tagged note is opened when it is about a station this node knows, and taken
+                // in as what it holds; it is passed on and kept as it came either way.
+                let g = if matches!(g, Gossip::Tagged { .. }) {
+                    if let Some(d) = i2.door.lock().unwrap().clone() {
+                        d.push(&msg.content);
+                    }
+                    match i2.open_tagged(&g) {
+                        Some(inner) => inner,
+                        None => continue,
+                    }
+                } else {
+                    g
+                };
                 let Some(g) = g.from_network(now_ms(), msg.delivered_from.as_bytes()) else { continue };
                 if let Some(st) = i2.on_gossip(g) {
                     if i2.wants(&st) {

@@ -115,7 +115,9 @@ impl Inner {
         let head = self.store.lock().unwrap().logs.get(&station).map(|a| a.len()).unwrap_or(0);
         // The note goes up in the deck's next pull, and its way in passes it on: from this
         // node's own gossip endpoint, every neighbour would know this node plays the station.
-        let note = postcard::to_stdvec(&Gossip::deck(&seed, station, head, intro, lead, now)).unwrap_or_default();
+        // A station kept to its link: the note goes up sealed under its tag, which the way in
+        // passes on unread.
+        let note = self.outgoing(&Gossip::deck(&seed, station, head, intro, lead, now)).and_then(|g| postcard::to_stdvec(&g).ok()).unwrap_or_default();
         let start = {
             let mut d = self.deck.lock().unwrap();
             match d.as_mut() {

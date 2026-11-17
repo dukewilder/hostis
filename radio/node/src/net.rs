@@ -457,25 +457,107 @@ pub enum Gossip {
     Door { node: [u8; 32], addr: String, fp: [u8; 32], since: u64, app: bool, link: bool, at_ms: u64, sig: Vec<u8> },
     /// A radio saying it is there and how busy it is, with no address: as a door taking
     /// introductions (`limit` tabs at most, `load` now, `map` whether its router gave it a port,
-    /// `since` when this spell of door duty began; `limit` 0 when it is no door), and as a radio
-    /// passing on routes (`hops` passed in the last minute of the most `hop_limit` it takes; 0
-    /// when it takes none). `relay` is the relay it is homed on, never an address of its own.
-    /// Signed with its own node key, believed for fifteen minutes, never written into a page or
-    /// a build. Older nodes do not know this message and pass over it.
-    Presence { node: [u8; 32], at_ms: u64, since: u64, load: u16, limit: u16, map: bool, hops: u16, hop_limit: u16, relay: String, sig: Vec<u8> },
+    /// `since` when this spell of door duty began, never more than a spell's six hours back;
+    /// `limit` 0 when it is no door), and as a radio passing on routes (`middle`, and `busy` its
+    /// last minute's hops in thousandths of what it takes). Nothing in it tells a Lantern from a
+    /// listener's device: a Lantern takes ten times the hops, and says only how busy it is.
+    /// `relay` is the relay it is homed on, never an address of its own. Signed with its own node
+    /// key, believed for fifteen minutes, never written into a page or a build. Nodes before
+    /// 0.9.20 sent the hops and the most they take, and the two kinds pass over each other's.
+    Presence { node: [u8; 32], at_ms: u64, since: u64, load: u16, limit: u16, map: bool, middle: bool, busy: u16, relay: String, sig: Vec<u8> },
+    /// Anything said of a station kept to its link (its card, a carrier's note, its listeners'
+    /// tokens, a deck), sealed under a key drawn from the station's id and the hour, and filed
+    /// under a tag drawn the same way. Only someone who holds the station's id, from its link,
+    /// can work out the tag or open what it holds; to everyone else it is a different string of
+    /// bytes each hour, and a carrier that says it carries such a station names itself to that
+    /// station's listeners alone. See `tag_of`. Older nodes do not know this message and pass
+    /// over it.
+    Tagged { tag: [u8; 16], ct: Vec<u8> },
+}
+
+/// How long a station's tag lasts: an hour, so one station's notes cannot be tied together
+/// across hours by anyone without its link.
+pub const TAG_SPAN_MS: u64 = 3_600_000;
+/// The plain bytes inside a tagged note come in steps of this many, so the size of what is
+/// sealed says little of whether it is a card, a carrier's note or a deck.
+const TAG_STEP: usize = 512;
+/// The most a tagged note's sealed bytes may be: a card's and the seal's.
+pub const TAG_WIRE: usize = CARD_WIRE + TAG_STEP + 64;
+
+fn tag_input(st: &StationId, hour: u64) -> [u8; 40] {
+    let mut b = [0u8; 40];
+    b[..32].copy_from_slice(&st.0);
+    b[32..].copy_from_slice(&hour.to_le_bytes());
+    b
+}
+
+/// A station's tag for one hour: what its tagged notes are filed under.
+pub fn tag_of(st: &StationId, hour: u64) -> [u8; 16] {
+    let h = blake3::Hasher::new_derive_key("pyrate/tag/v1").update(&tag_input(st, hour)).finalize();
+    h.as_bytes()[..16].try_into().unwrap()
+}
+
+fn tag_key(st: &StationId, hour: u64) -> [u8; 32] {
+    *blake3::Hasher::new_derive_key("pyrate/tag-seal/v1").update(&tag_input(st, hour)).finalize().as_bytes()
+}
+
+/// The hours a tag is looked for in at `now`: this one and its neighbours, for clocks that differ.
+pub fn tag_hours(now: u64) -> [u64; 3] {
+    let h = now / TAG_SPAN_MS;
+    [h.saturating_sub(1), h, h + 1]
+}
+
+impl Gossip {
+    /// The station a note is about, for the kinds that name one.
+    pub fn about(&self) -> Option<StationId> {
+        match self {
+            Gossip::Station(a) => Some(a.station),
+            Gossip::Carrier { station, .. } | Gossip::Carried { station, .. } | Gossip::Aboard { station, .. } | Gossip::Deck { station, .. } => Some(*station),
+            _ => None,
+        }
+    }
+
+    /// A note about a station kept to its link, sealed under its tag for the hour of `now`.
+    /// Only a card, a signed carrier's note, tokens or a deck: a plain carrier note is believed
+    /// only from its own node, which a sealed one cannot show, so it is never sent sealed.
+    pub fn tagged(inner: &Gossip, now: u64) -> Option<Gossip> {
+        if !matches!(inner, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Aboard { .. } | Gossip::Deck { .. }) {
+            return None;
+        }
+        let st = inner.about()?;
+        let hour = now / TAG_SPAN_MS;
+        let body = postcard::to_stdvec(inner).ok()?;
+        let mut plain = (body.len() as u32).to_le_bytes().to_vec();
+        plain.extend_from_slice(&body);
+        plain.resize(plain.len().div_ceil(TAG_STEP) * TAG_STEP, 0);
+        let ct = pyrate_core::pocket::seal(&tag_key(&st, hour), &plain);
+        (ct.len() <= TAG_WIRE).then_some(Gossip::Tagged { tag: tag_of(&st, hour), ct })
+    }
+
+    /// A tagged note opened with the station and hour its tag was worked out from: what it
+    /// holds, if the seal opens and it is about that station.
+    pub fn open_tagged(&self, st: &StationId, hour: u64) -> Option<Gossip> {
+        let Gossip::Tagged { tag, ct } = self else { return None };
+        if *tag != tag_of(st, hour) || ct.len() < 12 + 16 + 4 || ct.len() > TAG_WIRE {
+            return None;
+        }
+        let plain = pyrate_core::pocket::open(&tag_key(st, hour), ct)?;
+        let n = u32::from_le_bytes(plain[..4].try_into().ok()?) as usize;
+        let g: Gossip = postcard::from_bytes(plain.get(4..4 + n)?).ok()?;
+        (matches!(g, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Aboard { .. } | Gossip::Deck { .. }) && g.about() == Some(*st)).then_some(g)
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
-fn presence_message(node: &[u8; 32], at_ms: u64, since: u64, load: u16, limit: u16, map: bool, hops: u16, hop_limit: u16, relay: &str) -> Vec<u8> {
-    let mut m = b"pyrate/presence/v1\0".to_vec();
+fn presence_message(node: &[u8; 32], at_ms: u64, since: u64, load: u16, limit: u16, map: bool, middle: bool, busy: u16, relay: &str) -> Vec<u8> {
+    let mut m = b"pyrate/presence/v2\0".to_vec();
     m.extend_from_slice(node);
     m.extend_from_slice(&at_ms.to_le_bytes());
     m.extend_from_slice(&since.to_le_bytes());
     m.extend_from_slice(&load.to_le_bytes());
     m.extend_from_slice(&limit.to_le_bytes());
-    m.push(map as u8);
-    m.extend_from_slice(&hops.to_le_bytes());
-    m.extend_from_slice(&hop_limit.to_le_bytes());
+    m.push(map as u8 | (middle as u8) << 1);
+    m.extend_from_slice(&busy.to_le_bytes());
     m.extend_from_slice(relay.as_bytes());
     m
 }
@@ -489,10 +571,14 @@ pub struct PresenceNote {
     pub load: u16,
     pub limit: u16,
     pub map: bool,
-    pub hops: u16,
-    pub hop_limit: u16,
+    pub middle: bool,
+    /// The last minute's hops, in thousandths of what this radio takes.
+    pub busy: u16,
     pub relay: String,
 }
+
+/// The most `busy` says: a middle taking all it takes.
+pub const BUSY_FULL: u16 = 1_000;
 
 /// The most a presence note's bytes may be: a fixed few fields and a relay's name.
 pub const PRESENCE_WIRE: usize = 400;
@@ -685,27 +771,27 @@ impl Gossip {
 
     /// This radio's presence, signed with its own secret.
     #[allow(clippy::too_many_arguments)]
-    pub fn presence(secret: &[u8; 32], since: u64, load: u16, limit: u16, map: bool, hops: u16, hop_limit: u16, relay: &str, at_ms: u64) -> Self {
+    pub fn presence(secret: &[u8; 32], since: u64, load: u16, limit: u16, map: bool, middle: bool, busy: u16, relay: &str, at_ms: u64) -> Self {
         let key = StationKey::from_seed(*secret);
         let node = key.id().0;
-        let sig = key.sign(&presence_message(&node, at_ms, since, load, limit, map, hops, hop_limit, relay)).to_vec();
-        Gossip::Presence { node, at_ms, since, load, limit, map, hops, hop_limit, relay: relay.into(), sig }
+        let sig = key.sign(&presence_message(&node, at_ms, since, load, limit, map, middle, busy, relay)).to_vec();
+        Gossip::Presence { node, at_ms, since, load, limit, map, middle, busy, relay: relay.into(), sig }
     }
 
     /// For a presence note: what it says, if its radio signed it within `DOOR_FRESH_MS` of `now`
     /// (and not more than five minutes ahead), its load is within its limit, and the relay it
     /// names is a name and not an address.
     pub fn presence_checked(&self, now: u64) -> Option<PresenceNote> {
-        let Gossip::Presence { node, at_ms, since, load, limit, map, hops, hop_limit, relay, sig } = self else { return None };
-        if relay.len() > 256 || now.saturating_sub(*at_ms) > DOOR_FRESH_MS || at_ms.saturating_sub(now) > 5 * 60_000 || since > at_ms || load > limit {
+        let Gossip::Presence { node, at_ms, since, load, limit, map, middle, busy, relay, sig } = self else { return None };
+        if relay.len() > 256 || now.saturating_sub(*at_ms) > DOOR_FRESH_MS || at_ms.saturating_sub(now) > 5 * 60_000 || since > at_ms || load > limit || *busy > BUSY_FULL || (!middle && *busy > 0) {
             return None;
         }
         if !relay.is_empty() && !relay_named(relay) {
             return None;
         }
         let sig: [u8; 64] = sig.as_slice().try_into().ok()?;
-        StationId(*node).verify(&presence_message(node, *at_ms, *since, *load, *limit, *map, *hops, *hop_limit, relay), &sig).ok()?;
-        Some(PresenceNote { node: *node, at_ms: *at_ms, since: *since, load: *load, limit: *limit, map: *map, hops: *hops, hop_limit: *hop_limit, relay: relay.clone() })
+        StationId(*node).verify(&presence_message(node, *at_ms, *since, *load, *limit, *map, *middle, *busy, relay), &sig).ok()?;
+        Some(PresenceNote { node: *node, at_ms: *at_ms, since: *since, load: *load, limit: *limit, map: *map, middle: *middle, busy: *busy, relay: relay.clone() })
     }
 
     /// A presence note as it came: only exactly the bytes its fields make, so nothing (an
@@ -789,9 +875,64 @@ pub struct Notes {
     /// Presence notes, as checked: for drawing doors and for duty. Never handed on in cards,
     /// in a page or in a build; they travel in the gossip alone.
     presence: std::collections::HashMap<[u8; 32], PresenceNote>,
+    /// Tagged notes as they came, by tag, with when each was heard: opaque to this node unless it
+    /// holds the station's id, and handed on in cards so a newcomer with a link finds its
+    /// station's carriers.
+    tagged: std::collections::HashMap<[u8; 16], Vec<(u64, Vec<u8>)>>,
+    tagged_count: usize,
 }
 
 impl Notes {
+    /// Tagged notes kept in all, and under any one tag.
+    const TAGGED: usize = 8_000;
+    const TAGGED_EACH: usize = 8;
+
+    fn keep_tagged(&mut self, tag: [u8; 16], raw: &[u8], now: u64) {
+        if raw.len() > TAG_WIRE + 64 {
+            return;
+        }
+        let l = self.tagged.entry(tag).or_default();
+        if l.iter().any(|(_, r)| r.as_slice() == raw) {
+            return;
+        }
+        l.push((now, raw.to_vec()));
+        self.tagged_count += 1;
+        if l.len() > Self::TAGGED_EACH {
+            l.sort_by(|a, b| b.0.cmp(&a.0));
+            l.truncate(Self::TAGGED_EACH);
+            self.tagged_count -= 1;
+        }
+        if self.tagged_count > Self::TAGGED {
+            for l in self.tagged.values_mut() {
+                l.retain(|(t, _)| now.saturating_sub(*t) < Self::FRESH_MS);
+            }
+            self.tagged.retain(|_, l| !l.is_empty());
+            self.tagged_count = self.tagged.values().map(Vec::len).sum();
+            while self.tagged_count > Self::TAGGED * 9 / 10 {
+                let Some(old) = self.tagged.iter().min_by_key(|(_, l)| l.iter().map(|x| x.0).max().unwrap_or(0)).map(|(k, _)| *k) else { break };
+                self.tagged_count -= self.tagged.remove(&old).map(|l| l.len()).unwrap_or(0);
+            }
+        }
+    }
+
+    /// The nodes that said lately where they are reached: only a node that carries something
+    /// says so, and the note names no station and nothing of what kind of node it is.
+    pub fn harbours(&self, now: u64) -> Vec<[u8; 32]> {
+        self.harbour.iter().filter(|(_, (t, _))| now.saturating_sub(*t) < Self::FRESH_MS).map(|(n, _)| *n).collect()
+    }
+
+    /// The tagged notes heard lately under any of these tags.
+    pub fn tagged_for(&self, tags: &[[u8; 16]], now: u64) -> Vec<Vec<u8>> {
+        tags.iter().filter_map(|t| self.tagged.get(t)).flatten().filter(|(t, _)| now.saturating_sub(*t) < Self::FRESH_MS).map(|(_, r)| r.clone()).collect()
+    }
+
+    /// The freshest `n` tagged notes, for a newcomer's cards.
+    pub fn tagged_fresh(&self, now: u64, n: usize) -> Vec<Vec<u8>> {
+        let mut v: Vec<&(u64, Vec<u8>)> = self.tagged.values().flatten().filter(|(t, _)| now.saturating_sub(*t) < Self::FRESH_MS).collect();
+        v.sort_by(|a, b| b.0.cmp(&a.0));
+        v.into_iter().take(n).map(|x| x.1.clone()).collect()
+    }
+
     const HARBOURS: usize = 4_000;
     const CARRIED: usize = 20_000;
     /// Notes older than this are not handed on, so the one who takes them still believes them.
@@ -835,6 +976,9 @@ impl Notes {
     }
 
     pub fn keep(&mut self, g: &Gossip, raw: &[u8], now: u64) {
+        if let Gossip::Tagged { tag, .. } = g {
+            return self.keep_tagged(*tag, raw, now);
+        }
         if raw.len() > 1024 {
             return;
         }
@@ -1594,25 +1738,27 @@ mod card_limit_tests {
         let now = 1_800_000_000_000;
         let secret = [5u8; 32];
         // A door at 198.51.100.23:40123 says it is there: nothing of its address is in the note.
-        let g = Gossip::presence(&secret, now - 60_000, 3, 64, false, 10, 600, "https://relay.hostis.black/", now);
+        let g = Gossip::presence(&secret, now - 60_000, 3, 64, false, true, 16, "https://relay.hostis.black/", now);
         let raw = postcard::to_stdvec(&g).unwrap();
         for needle in [&[198u8, 51, 100, 23][..], b"198.51.100.23", &40123u16.to_be_bytes(), &40123u16.to_le_bytes()] {
             assert!(!holds(&raw, needle), "no part of the address: {needle:?}");
         }
         let p = Gossip::presence_raw(&raw, now).expect("the radio's own note holds");
-        assert_eq!((p.load, p.limit, p.map, p.hops, p.hop_limit), (3, 64, false, 10, 600));
+        assert_eq!((p.load, p.limit, p.map, p.middle, p.busy), (3, 64, false, true, 16));
         // An address carried after the fields is refused, though the signature still holds.
         let mut tail = raw.clone();
         tail.extend_from_slice(b"198.51.100.23:40123");
         assert!(Gossip::presence_raw(&tail, now).is_none(), "nothing rides after the fields");
         // A relay written as an address (it could be the radio's own) is refused, signed or not.
         for relay in ["http://198.51.100.23:3340/", "https://[2001:db8::7]/", "http://127.0.0.1:3340/"] {
-            assert!(Gossip::presence(&secret, now, 0, 64, false, 0, 0, relay, now).presence_checked(now).is_none(), "{relay}");
+            assert!(Gossip::presence(&secret, now, 0, 64, false, false, 0, relay, now).presence_checked(now).is_none(), "{relay}");
         }
         // An edited load, a load past its limit, or a stale note: refused.
-        let Gossip::Presence { node, at_ms, since, limit, map, hops, hop_limit, relay, sig, .. } = g.clone() else { unreachable!() };
-        assert!(Gossip::Presence { node, at_ms, since, load: 0, limit, map, hops, hop_limit, relay: relay.clone(), sig }.presence_checked(now).is_none());
-        assert!(Gossip::presence(&secret, now, 65, 64, false, 0, 0, "", now).presence_checked(now).is_none());
+        let Gossip::Presence { node, at_ms, since, limit, map, middle, busy, relay, sig, .. } = g.clone() else { unreachable!() };
+        assert!(Gossip::Presence { node, at_ms, since, load: 0, limit, map, middle, busy, relay: relay.clone(), sig }.presence_checked(now).is_none());
+        assert!(Gossip::presence(&secret, now, 65, 64, false, false, 0, "", now).presence_checked(now).is_none());
+        assert!(Gossip::presence(&secret, now, 0, 64, false, true, BUSY_FULL + 1, "", now).presence_checked(now).is_none(), "no busier than full");
+        assert!(Gossip::presence(&secret, now, 0, 64, false, false, 5, "", now).presence_checked(now).is_none(), "busy only as a middle");
         assert!(g.presence_checked(now + DOOR_FRESH_MS + 1).is_none());
         // Kept apart: never among the doors handed on, the kept doors or the cards.
         let mut n = Notes::default();
