@@ -580,6 +580,9 @@ struct Ship {
     ballast_from: Mutex<Option<HashSet<StationId>>>,
     ballast_explicit: std::sync::atomic::AtomicBool,
     tuned: Mutex<Option<StationId>>,
+    /// The tags of the stations this tab knows, for opening what is said of those kept to their
+    /// link: when built, how many stations the Log held then, and the tags.
+    tags: Mutex<(u64, usize, HashMap<[u8; 16], (StationId, u64)>)>,
     tokens_sent: Mutex<HashMap<StationId, u64>>,
     syncing: Mutex<HashSet<StationId>>,
     drift: Mutex<pyrate_core::drift::Drift>,
@@ -1553,8 +1556,61 @@ impl Ship {
         self.tokens_sent.lock().unwrap().retain(|k, _| live.contains(k) || keep.contains(k));
     }
 
+    /// Whether a station keeps itself off the public dial, by its card or by its own log.
+    fn link_only(&self, st: &StationId) -> bool {
+        if let Some(a) = self.log.lock().unwrap().get(st).and_then(|l| l.announce.as_ref()) {
+            return a.link_only;
+        }
+        self.archives.lock().unwrap().get(st).is_some_and(|a| a.link_only())
+    }
+
+    /// As the app does (see the node's `tags`): anything said of a station kept to its link
+    /// goes sealed under its tag, and a plain carrier note for one not at all.
+    fn outgoing(&self, g: &Gossip) -> Option<Gossip> {
+        match g.about() {
+            Some(st) if self.link_only(&st) => Gossip::tagged(g, self.now()),
+            _ => Some(g.clone()),
+        }
+    }
+
+    /// A tagged note opened, if it is about a station this tab knows.
+    fn open_tagged(&self, g: &Gossip) -> Option<Gossip> {
+        let Gossip::Tagged { tag, .. } = g else { return None };
+        let now = self.now();
+        let known = self.log.lock().unwrap().len();
+        let hit = {
+            let t = self.tags.lock().unwrap();
+            let fresh = now.saturating_sub(t.0) < 60_000 && now / net::TAG_SPAN_MS == t.0 / net::TAG_SPAN_MS && t.1 == known;
+            match t.2.get(tag) {
+                Some(h) => Some(Some(*h)),
+                None if fresh => Some(None),
+                None => None,
+            }
+        };
+        let (st, hour) = match hit {
+            Some(h) => h?,
+            None => {
+                let mut stations: Vec<StationId> = self.log.lock().unwrap().keys().copied().collect();
+                stations.extend(self.archives.lock().unwrap().keys().copied());
+                stations.extend(*self.tuned.lock().unwrap());
+                let mut map = HashMap::new();
+                for st in stations {
+                    for h in net::tag_hours(now) {
+                        map.insert(net::tag_of(&st, h), (st, h));
+                    }
+                }
+                let h = map.get(tag).copied();
+                *self.tags.lock().unwrap() = (now, known, map);
+                h?
+            }
+        };
+        g.open_tagged(&st, hour)
+    }
+
     #[allow(dead_code)]
     async fn broadcast(&self, g: &Gossip) {
+        let Some(g) = self.outgoing(g) else { return };
+        let g = &g;
         // Through a door: only this tab's own crew note, which the door passes on.
         if self.door_now().is_some() && matches!(g, Gossip::Crew { .. }) {
             if let Ok(b) = postcard::to_stdvec(&net::DoorCtl::Gossip(postcard::to_stdvec(g).unwrap_or_default())) {
@@ -1598,13 +1654,24 @@ impl Ship {
         let mut kinds = (0, 0, 0, 0, std::collections::BTreeMap::<String, usize>::new());
         let now = self.now();
         for b in list.into_iter().take(net::CARDS_ITEMS) {
-            if b.len() > net::CARD_WIRE {
+            if b.len() > net::TAG_WIRE + 64 {
                 continue;
             }
             // Cards, then the carriers' signed notes: each taken as gossip from that node, and
             // checked against its own signature or dropped. With them the tab can reach the
             // carriers through two hops at once, without waiting for the network to repeat them.
             let Ok(g) = postcard::from_bytes::<Gossip>(&b) else { continue };
+            if b.len() > net::CARD_WIRE && !matches!(g, Gossip::Tagged { .. }) {
+                continue;
+            }
+            // Tagged notes are read only for the stations this tab knows, as what they hold.
+            let g = match g {
+                g @ Gossip::Tagged { .. } => match self.open_tagged(&g) {
+                    Some(inner) => inner,
+                    None => continue,
+                },
+                g => g,
+            };
             if !matches!(g, Gossip::Station(_) | Gossip::Carried { .. } | Gossip::Harbour { .. } | Gossip::Crew { .. } | Gossip::Deck { .. } | Gossip::Door { .. }) {
                 continue;
             }
@@ -1666,6 +1733,8 @@ impl Ship {
                 (head > ours).then_some(s)
             }
             Gossip::Carried { .. } => None,
+            // Opened before it reaches here, when it is about a station this tab knows.
+            Gossip::Tagged { .. } => None,
             Gossip::Carrier { station, node, head } => {
                 // A claim for a station with no card here is dropped: junk ids grow nothing.
                 let pocket = self.pockets.lock().unwrap().contains_key(&station);
@@ -3532,10 +3601,11 @@ impl Ship {
                 continue;
             }
             // The note goes up in the deck's next pull, and its way in passes it on.
+            let note = self.outgoing(&g).and_then(|g| postcard::to_stdvec(&g).ok()).unwrap_or_default();
             let start = {
                 let mut c = self.crew.lock().unwrap();
                 if let Some(d) = c.decks.get_mut(i) {
-                    d.note = postcard::to_stdvec(&g).unwrap_or_default();
+                    d.note = note;
                 }
                 c.pulling.insert(id)
             };
@@ -3829,6 +3899,7 @@ impl Radio {
             ballast_from: Mutex::new(None),
             ballast_explicit: std::sync::atomic::AtomicBool::new(false),
             tuned: Mutex::new(None),
+            tags: Mutex::new((0, 0, HashMap::new())),
             tokens_sent: Mutex::new(HashMap::new()),
             syncing: Mutex::new(HashSet::new()),
             drift: Mutex::new(pyrate_core::drift::Drift::new()),
@@ -3926,6 +3997,15 @@ impl Radio {
                     _ => continue,
                 };
                 let Ok(g) = postcard::from_bytes::<Gossip>(&msg.content) else { continue };
+                // A tagged note is read only when it is about a station this tab knows.
+                let g = if matches!(g, Gossip::Tagged { .. }) {
+                    match s2.open_tagged(&g) {
+                        Some(inner) => inner,
+                        None => continue,
+                    }
+                } else {
+                    g
+                };
                 let Some(g) = g.from_network(s2.now(), msg.delivered_from.as_bytes()) else { continue };
                 if let Some(st) = s2.on_gossip(g) {
                     if *s2.tuned.lock().unwrap() == Some(st) {
@@ -3961,6 +4041,16 @@ impl Radio {
         // A switch while listening is a first Listen of the new station.
         if self.ship.tuned.lock().unwrap().replace(st) != Some(st) {
             self.ship.listen_at.store(raw_now(), std::sync::atomic::Ordering::Relaxed);
+        }
+        // A station not heard of yet may be one kept to its link, whose card and carriers go
+        // only under its tag: the neighbours' cards are asked again, and its tagged notes opened.
+        if !self.ship.log.lock().unwrap().get(&st).is_some_and(|l| l.announce.is_some()) {
+            let near: Vec<EndpointId> = self.ship.neighbours.lock().unwrap().iter().take(2).copied().collect();
+            for n in near {
+                self.ship.cards_asked.lock().unwrap().remove(&n);
+                let s = self.ship.clone();
+                spawn(async move { s.cards_from(n).await });
+            }
         }
         self.ship.sync_soon(st);
         let s = self.ship.clone();
@@ -4371,6 +4461,12 @@ impl Radio {
         let Ok(net::DoorCtl::Gossip(raw)) = postcard::from_bytes::<net::DoorCtl>(bytes) else { return };
         let Some(d) = self.ship.door_now() else { return };
         let Ok(g) = postcard::from_bytes::<Gossip>(&raw) else { return };
+        let g = if matches!(g, Gossip::Tagged { .. }) {
+            let Some(inner) = self.ship.open_tagged(&g) else { return };
+            inner
+        } else {
+            g
+        };
         let Some(g) = g.from_network(self.ship.now(), d.as_bytes()) else { return };
         self.ship.doors.lock().unwrap().now_from = src_of(&d);
         let st = self.ship.on_gossip(g);
@@ -5146,7 +5242,7 @@ impl Radio {
                         Gossip::Aboard { station, .. } => *station == st,
                         Gossip::Harbour { .. } => true,
                         // No decks and no crew inside a pocket: its sound stays among its members.
-                        Gossip::Crew { .. } | Gossip::Deck { .. } | Gossip::Door { .. } | Gossip::Presence { .. } => false,
+                        Gossip::Crew { .. } | Gossip::Deck { .. } | Gossip::Door { .. } | Gossip::Presence { .. } | Gossip::Tagged { .. } => false,
                     };
                     if ok {
                         s2.on_gossip(g);
