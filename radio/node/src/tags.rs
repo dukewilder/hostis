@@ -34,8 +34,18 @@ pub(crate) struct TagTable {
 }
 
 impl Inner {
-    /// Whether a station keeps itself off the public dial, by its card or by its own log.
+    /// Whether a station keeps itself off the public dial, by its card or by its own log. One
+    /// this node holds neither of is taken to be: a deck made before the card came, or a note
+    /// about a station named only by a link, goes sealed, as the station's own word may ask.
     pub(crate) fn link_only(&self, st: &StationId) -> bool {
+        if let Some(a) = self.log.lock().unwrap().get(st).and_then(|l| l.announce.as_ref()) {
+            return a.link_only;
+        }
+        self.store.lock().unwrap().logs.get(st).is_none_or(|a| a.is_empty() || a.link_only())
+    }
+
+    /// Whether this node knows a station to be kept to its link, by its card or its log.
+    pub(crate) fn known_link_only(&self, st: &StationId) -> bool {
         if let Some(a) = self.log.lock().unwrap().get(st).and_then(|l| l.announce.as_ref()) {
             return a.link_only;
         }

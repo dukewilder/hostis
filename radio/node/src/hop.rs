@@ -1046,19 +1046,21 @@ impl Inner {
             }
             again
         };
-        // A station kept to its link never travels the plain stem: each node along it reads the
-        // cargo, and would learn a station only its link should name. The node the broadcaster's
-        // guard handed it to, sealed, which never learns who sent it, shows it at once, and one
-        // that would not carry it turns it away, so the broadcaster's guard tries another.
+        // A station kept to its link travels the plain stem no further than it must: each node
+        // along it reads the cargo, and would learn a station only its link should name. The
+        // first node that will carry it shows it at once (for a phone's stem, the node its guard
+        // handed it to sealed, which never learns who sent it); one that will not passes it on.
         // Known by the card, by the log here, or by the cargo itself: a stem that brings a new
         // station's first entries without its card still carries its `Listing`.
         let link_only = announce.as_ref().is_some_and(|a| a.link_only)
-            || self.link_only(&station)
+            || self.known_link_only(&station)
             || entries.iter().any(|b| SignedEntry::from_bytes(b).is_ok_and(|e| matches!(e.entry.body(), Body::Listing { link_only: true })));
-        if link_only && declines {
+        // A node that would not carry cargo it has already passed on once lets it go: two
+        // that both decline, each knowing the other, would hand it back and forth.
+        if declines && again {
             return false;
         }
-        let pass = !link_only && (declines || (!again && rand::random::<f64>() > FLUFF));
+        let pass = declines || (!link_only && !again && rand::random::<f64>() > FLUFF);
         if pass {
             let mut nodes = self.known_nodes();
             // Not a radio that could not be reached lately: a carrier's note outlives it by ten
