@@ -105,6 +105,11 @@ impl Inner {
                 if !pyrate_core::papers::trusted(&self.cfg.release_keys, &doc) {
                     continue;
                 }
+                // A seed list riding the Releases log is kept, if newer, for the next start.
+                if doc["pyrate"] == "seeds" {
+                    self.keep_seeds(&doc);
+                    continue;
+                }
                 let slot = if doc["pyrate"] == "bearings" { &mut bearings } else { &mut canary };
                 if slot.as_ref().is_none_or(|o| doc["at"].as_u64() > o["at"].as_u64()) {
                     *slot = Some(doc);
@@ -224,11 +229,11 @@ impl Inner {
         }
     }
 
-    /// releases/bearings.json and releases/canary.json, once signed, go into the Releases
+    /// releases/bearings.json, releases/seeds.json and releases/canary.json, once signed, go into the Releases
     /// station's log as notices, so they travel wherever the station does.
     fn publish_papers(&self, st: StationId) -> Result<()> {
         let dir = self.cfg.dir.join("releases");
-        for name in ["bearings.json", "canary.json"] {
+        for name in ["bearings.json", "seeds.json", "canary.json"] {
             let Ok(text) = std::fs::read_to_string(dir.join(name)) else { continue };
             let Ok(doc) = serde_json::from_str::<Value>(&text) else { continue };
             if !pyrate_core::papers::trusted(&self.cfg.release_keys, &doc) {

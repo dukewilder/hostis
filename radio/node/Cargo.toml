@@ -44,6 +44,9 @@ opusic-sys = "0.7"
 str0m = { version = "0.25", default-features = false, features = ["aws-lc-rs"] }
 # A door asks the home router for a port: UPnP-IGD first; NAT-PMP and PCP are spoken by hand.
 igd-next = { version = "0.17", default-features = false, features = ["aio_tokio"] }
+# The mainline BitTorrent DHT, the last way to find the network when every list and door is gone.
+mainline = { version = "8", default-features = false, features = ["async"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"] }
 
 p256 = { version = "0.14", features = ["ecdsa", "pkcs8"], optional = true }
 rcgen = { version = "0.14", default-features = false, features = ["ring"], optional = true }

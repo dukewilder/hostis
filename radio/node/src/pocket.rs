@@ -182,6 +182,16 @@ impl Inner {
                 let (st, key, host) = pocket::read_invitation(req["link"].as_str().context("link")?).context("not an invitation")?;
                 let st = StationId(st);
                 let hosts: Vec<EndpointId> = host.split('@').next().and_then(|h| h.parse().ok()).into_iter().collect();
+                // The link's host is a way into the network too, with the relay the link names.
+                if let Some((id, Some(relay))) = crate::find::parse_door(&host) {
+                    if let Ok(url) = relay.parse::<iroh::RelayUrl>() {
+                        self.book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url)].into_iter().collect() });
+                    }
+                    let mut l = self.links.lock().unwrap();
+                    if !l.iter().any(|(i, _)| *i == id) && l.len() < 16 {
+                        l.push((id, relay));
+                    }
+                }
                 let me = self.clone();
                 self.handle.block_on(async move {
                     me.pocket_open(st, key, hosts).await?;

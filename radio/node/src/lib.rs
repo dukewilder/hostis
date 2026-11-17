@@ -17,6 +17,7 @@ mod desk;
 mod deck;
 pub mod door;
 mod duty;
+pub mod find;
 mod portmap;
 pub mod net;
 pub mod page;
@@ -471,6 +472,12 @@ pub struct Inner {
     met: Mutex<HashMap<EndpointId, String>>,
     /// The Log's gossip neighbours right now: nodes this one is connected to, so reachable.
     neighbours: Mutex<std::collections::HashSet<[u8; 32]>>,
+    /// Peers found by the ladder (`find`): a seed list or the DHT. Their harbour notes are taken.
+    found: Mutex<std::collections::HashSet<[u8; 32]>>,
+    /// Peers named in links this node was handed this run (`id@relay`), a rung of the ladder.
+    links: Mutex<Vec<(EndpointId, String)>>,
+    /// The tunnel this node goes through (Tor's HTTP tunnel), for what it fetches over the web.
+    proxy: Option<String>,
     /// Relays the first doors named: home relays before number0's.
     our_relays: Mutex<Vec<String>>,
     #[cfg(feature = "playback")]
@@ -895,6 +902,15 @@ impl Inner {
 
     /// Asks a peer for the cards it knows, once a run, and takes each as if it came by
     /// gossip: checked, worked for and kept or refused by the same rules.
+    /// The relay this node is reached through, as others should name it: a Lantern running its
+    /// own relay names it by its public address (PYRATE_RELAY_URL), even while it reaches it from
+    /// inside by another, but only while it really is homed there.
+    pub(crate) fn public_relay(&self) -> Option<String> {
+        let local = std::env::var("PYRATE_RELAY_LOCAL").ok().and_then(|u| u.parse::<iroh::RelayUrl>().ok());
+        let own = std::env::var("PYRATE_RELAY_URL").ok().filter(|_| local.is_some() && self.endpoint.addr().relay_urls().next() == local.as_ref());
+        own.or_else(|| self.endpoint.addr().relay_urls().next().map(|u| u.to_string()))
+    }
+
     async fn cards_from(self: &Arc<Self>, node: EndpointId) {
         if !self.cards_asked.lock().unwrap().insert(*node.as_bytes()) {
             return;
@@ -1487,7 +1503,7 @@ impl Inner {
                 // Only a node this one would dial (a carrier it knows, or a bootstrap peer) goes in
                 // the book, so the book is no bigger than the Log's carrier lists.
                 let Some((node, relay)) = g.harbour_checked(now) else { return None };
-                let known = log.values().any(|l| l.carriers.contains_key(&node)) || self.cfg.bootstrap.iter().any(|b| *b.as_bytes() == node);
+                let known = log.values().any(|l| l.carriers.contains_key(&node)) || self.cfg.bootstrap.iter().any(|b| *b.as_bytes() == node) || self.found.lock().unwrap().contains(&node);
                 if let (true, Ok(id), Ok(url)) = (known, EndpointId::from_bytes(&node), relay.parse::<iroh::RelayUrl>()) {
                     self.book.add_endpoint_info(iroh::EndpointAddr { id, addrs: [iroh::TransportAddr::Relay(url.clone())].into_iter().collect() });
                     self.met.lock().unwrap().insert(id, relay.clone());
@@ -1872,9 +1888,7 @@ impl Inner {
             // even while it reaches it from inside by another.
             // Only while it really is homed there: a note naming a relay this node is not on
             // would send every phone to a door that does not open.
-            let local = std::env::var("PYRATE_RELAY_LOCAL").ok().and_then(|u| u.parse::<iroh::RelayUrl>().ok());
-            let own = std::env::var("PYRATE_RELAY_URL").ok().filter(|_| local.is_some() && self.endpoint.addr().relay_urls().next() == local.as_ref());
-            let relay = own.or_else(|| self.endpoint.addr().relay_urls().next().map(|u| u.to_string()));
+            let relay = self.public_relay();
             // No relay at all (every relay down, or none to be had): it still says it is of the
             // crew, with no relay named, so the tabs behind doors have middles and ways in that
             // are not each other. Radios reach it directly; nobody is sent anywhere by the note.
@@ -2692,20 +2706,32 @@ impl Node {
         // They are kept sealed, each with the relay its own signed note named, so the next start
         // reaches them without a lookup.
         let mut cfg = cfg;
-        // Bearings the release keys signed, checked on an earlier run, add their doors.
-        if let Some(b) = hold.read_note(&cfg.dir, "bearings", None).and_then(|t| serde_json::from_slice::<Value>(&t).ok()).filter(|b| pyrate_core::papers::trusted(&cfg.release_keys, b)) {
-            for d in b["doors"].as_array().into_iter().flatten().filter_map(|d| d.as_str()) {
+        // Where the node starts from, with no one source in charge: the doors it was handed
+        // (HOSTIS's harbours among them, or a link's), the doors of bearings and a seed list the
+        // release keys signed, checked on an earlier run, and every peer it met before. They are
+        // taken in turn from each source, so no one source fills the first places.
+        let given: Vec<EndpointId> = std::mem::take(&mut cfg.bootstrap);
+        let mut papers: Vec<EndpointId> = Vec::new();
+        let mut take_doors = |list: Vec<&str>| {
+            for d in list {
                 let (id, relay) = d.split_once('@').map(|(a, r)| (a, Some(r))).unwrap_or((d, None));
                 let Ok(id) = id.parse::<EndpointId>() else { continue };
                 if let Some(r) = relay {
                     DOOR_RELAYS.lock().unwrap().push((id, r.to_string()));
                 }
-                if !cfg.bootstrap.contains(&id) {
-                    cfg.bootstrap.push(id);
+                if !papers.contains(&id) {
+                    papers.push(id);
                 }
             }
+        };
+        if let Some(b) = hold.read_note(&cfg.dir, "bearings", None).and_then(|t| serde_json::from_slice::<Value>(&t).ok()).filter(|b| pyrate_core::papers::trusted(&cfg.release_keys, b)) {
+            take_doors(b["doors"].as_array().into_iter().flatten().filter_map(|d| d.as_str()).collect());
         }
-        let doors: Vec<EndpointId> = cfg.bootstrap.clone();
+        if let Some(sd) = hold.read_note(&cfg.dir, "seeds", None).and_then(|t| serde_json::from_slice::<Value>(&t).ok()) {
+            let seeds: Vec<String> = find::seeds_of(&cfg.release_keys, &sd).into_iter().map(|(id, r)| match r { Some(r) => format!("{id}@{r}"), None => id.to_string() }).collect();
+            take_doors(seeds.iter().map(String::as_str).collect());
+        }
+        let mut remembered: Vec<EndpointId> = Vec::new();
         let mut met: Vec<(EndpointId, String)> = DOOR_RELAYS.lock().unwrap().clone();
         let peers_text = hold.read_note(&cfg.dir, "peers", Some(&cfg.dir.join("peers"))).and_then(|b| String::from_utf8(b).ok()).unwrap_or_default();
         let _ = std::fs::remove_file(cfg.dir.join("peers"));
@@ -2715,10 +2741,12 @@ impl Node {
             if let Some(r) = w.next() {
                 met.push((p, r.to_string()));
             }
-            if !cfg.bootstrap.contains(&p) {
-                cfg.bootstrap.push(p);
-            }
+            remembered.push(p);
         }
+        cfg.bootstrap = find::interleave(&[remembered, given.clone(), papers.clone()]);
+        // The doors whose word is trusted about carriers: those handed in and those the release
+        // keys signed. Peers merely remembered are not doors.
+        let doors: Vec<EndpointId> = cfg.bootstrap.iter().filter(|d| given.contains(d) || papers.contains(d)).copied().collect();
         // Relays the first doors' own notes named, kept from earlier runs: this node's first
         // choice for a home relay, ahead of number0's.
         let ours: Vec<iroh::RelayUrl> = hold.read_note(&cfg.dir, "relays", None).and_then(|b| String::from_utf8(b).ok()).unwrap_or_default().lines().filter_map(|l| l.trim().parse().ok()).take(8).collect();
@@ -2799,7 +2827,9 @@ impl Node {
                 .secret_key(secret)
                 .address_lookup(book2)
                 .relay_mode(iroh::RelayMode::Custom(relays));
-            if lantern {
+            // A Lantern running dark looks nobody up either: the lookup is plain DNS from its own
+            // address, outside the tunnel. Its doors are named with their relays (`id@relay`).
+            if lantern && !dark {
                 b = b.address_lookup(iroh::address_lookup::PkarrResolver::n0_dns());
             } else if !dark && number0 {
                 b = b.address_lookup(DoorsOnly(asked));
@@ -2915,6 +2945,9 @@ impl Node {
             doors: doors.clone(),
             met: Mutex::new(met.iter().cloned().collect()),
             neighbours: Mutex::new(Default::default()),
+            found: Mutex::new(Default::default()),
+            links: Mutex::new(Vec::new()),
+            proxy: tor.clone().map(|t| t.trim().to_string()),
             our_relays: Mutex::new(ours.iter().map(|u| u.to_string()).collect()),
             #[cfg(feature = "playback")]
             queue: queue.clone(),
@@ -3021,6 +3054,10 @@ impl Node {
             };
             let (tx, mut rx) = sub.split();
             *i2.gossip_tx.lock().unwrap() = Some(tx.clone());
+            // When nothing it was handed answers, the node climbs the ladder (`find`); a Lantern
+            // not running dark leaves a note in the DHT for those who have nothing at all.
+            tokio::spawn(i2.clone().find_loop());
+            tokio::spawn(i2.clone().dht_loop());
             // Nearby radios, if the keeper turned them on.
             i2.lan_start();
             // The doors are asked for the cards they know at once: the dial fills in one round
