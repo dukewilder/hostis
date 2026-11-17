@@ -13,6 +13,9 @@ cd "$SITE"
 git fetch -q origin main
 git rebase -q origin/main
 cp "$R/landing/out/index.html" pyrateradio/index.html
+# The signed seed list, one of the mirrors nodes fetch it from (radio/seeds.json, once two
+# release holders have signed it).
+[ -e "$R/seeds.json" ] && cp "$R/seeds.json" pyrateradio/seeds.json
 # The Android app this page offers, and its torrent, when it is not already here.
 [ -e "pyrateradio/pyrate-radio-$VER.apk" ] || cp "$R/landing/out/pyrate-radio-$VER.apk" "$R/landing/out/pyrate-radio-$VER.apk.torrent" pyrateradio/ 2>/dev/null || true
 # The computers' builds, if the landing carried them, beside the Android app; older ones go.
