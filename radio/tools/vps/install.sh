@@ -139,6 +139,8 @@ read_secret() {
   fi
   printf '%s' "$a"
 }
+# The folder is read by Caddy and the relay; only the passphrase file in it is root alone.
+[ -d /etc/pyrate ] && run chmod 755 /etc/pyrate
 if [ -s "$HOLD_PASS" ]; then
   say "The Lantern's passphrase"
   echo "Kept in $HOLD_PASS."
@@ -156,6 +158,7 @@ else
     (umask 077 && mkdir -p "$(dirname "$HOLD_PASS")" && printf '%s\n' "$p1" >"$HOLD_PASS")
     chmod 600 "$HOLD_PASS"
     chown 0:0 "$HOLD_PASS"
+    chmod 755 "$(dirname "$HOLD_PASS")"
   fi
   unset p1 p2
 fi
