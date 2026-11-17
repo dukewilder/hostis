@@ -52,6 +52,9 @@ with sync_playwright() as p:
     a, ta = tab(b)
     aid = a.evaluate("window.pyrate.node()")
     print(f"  tab A {aid[:10]} listening after {ta and round(ta, 2)} s", flush=True)
+    # A tab offers to carry nothing in its first half minute, and says it is of the crew only
+    # then: B, coming back to A, finds it there once it has.
+    time.sleep(40)
     bb, tb = tab(b, [f"{aid}@{relay}"])
     print(f"  tab B listening through A after {tb and round(tb, 2)} s", flush=True)
     c, tc = tab(b)
