@@ -207,7 +207,14 @@ fn main() -> anyhow::Result<()> {
     let probe = |req: Request| -> Option<Response> {
         let rt = tokio::runtime::Runtime::new().ok()?;
         rt.block_on(async {
-            let ep = iroh::Endpoint::builder(iroh::endpoint::presets::Minimal).crypto_provider(std::sync::Arc::new(rustls::crypto::aws_lc_rs::default_provider())).relay_mode(iroh::RelayMode::custom([relay.clone()])).bind().await.ok()?;
+            let ep = iroh::Endpoint::builder(iroh::endpoint::presets::Minimal).crypto_provider(std::sync::Arc::new(rustls::crypto::aws_lc_rs::default_provider())).relay_mode(iroh::RelayMode::Custom({
+                // As a node's: no QUIC address discovery, whose probes name iroh in the clear.
+                let m = iroh::RelayMap::empty();
+                let mut c = iroh::RelayConfig::from(relay.clone());
+                c.quic = None;
+                m.insert(relay.clone(), std::sync::Arc::new(c));
+                m
+            })).bind().await.ok()?;
             let addr = iroh::EndpointAddr { id: lid_e, addrs: [iroh::TransportAddr::Relay(relay.clone())].into_iter().collect() };
             let c = tokio::time::timeout(Duration::from_secs(15), pyrate_node::dial(&ep, addr)).await.ok()?.ok()?;
             let (mut s, mut r) = c.open_bi().await.ok()?;

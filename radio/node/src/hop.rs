@@ -1050,7 +1050,11 @@ impl Inner {
         // cargo, and would learn a station only its link should name. The node the broadcaster's
         // guard handed it to, sealed, which never learns who sent it, shows it at once, and one
         // that would not carry it turns it away, so the broadcaster's guard tries another.
-        let link_only = announce.as_ref().map(|a| a.link_only).unwrap_or_else(|| self.link_only(&station));
+        // Known by the card, by the log here, or by the cargo itself: a stem that brings a new
+        // station's first entries without its card still carries its `Listing`.
+        let link_only = announce.as_ref().is_some_and(|a| a.link_only)
+            || self.link_only(&station)
+            || entries.iter().any(|b| SignedEntry::from_bytes(b).is_ok_and(|e| matches!(e.entry.body(), Body::Listing { link_only: true })));
         if link_only && declines {
             return false;
         }
