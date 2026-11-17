@@ -39,7 +39,7 @@ run() {
 if [ "$(free_mb)" -lt 800 ]; then echo "under 800 MB free on /: not building"; exit 2; fi
 line "== builds (release; the test wasm with PYRATE_LIST_AGE_MS=60000 PYRATE_DOOR_AGE_MS=30000 PYRATE_QUARTER_MS=20000)"
 # The listening suites play (to a null sink with PYRATE_NULL_AUDIO), so they are built with playback.
-run build-native 2400 "cargo build --release -p pyrate-node --bin lantern --bin pentest && cargo build --release -p pyrate-node --features playback --bin desk_test --bin privacy_test --bin onair_test --bin raise_test --bin crew_deck_test --bin pocket_test --bin flock_test"
+run build-native 2400 "cargo build --release -p pyrate-node --bin lantern --bin pentest --bin find_test && cargo build --release -p pyrate-node --features playback --bin desk_test --bin privacy_test --bin onair_test --bin raise_test --bin crew_deck_test --bin pocket_test --bin flock_test"
 if [ "$(free_mb)" -lt 800 ]; then line "FAIL disk under 800 MB after the native build"; exit 2; fi
 run build-wasm 2400 "PYRATE_LIST_AGE_MS=60000 PYRATE_DOOR_AGE_MS=30000 PYRATE_QUARTER_MS=20000 sh browser/build.sh"
 
@@ -59,6 +59,8 @@ sleep 5
 line "== native suites"
 run privacy_test 600 "$NET target/release/privacy_test /tmp/all-tests/privacy '$WAV'"
 run lantern_hold 300 "$NET sh tools/test/lantern_hold.sh '$WAV'"
+run find_test 900 "$NET target/release/find_test $RELAY $GANG"
+run lantern_dark 300 "$NET sh tools/test/lantern_dark.sh $RELAY"
 run onair_test 600 "$NET target/release/onair_test $RELAY '$WAV'"
 run desk_test 900 "$NET target/release/desk_test $RELAY /tmp/all-tests/desk"
 run crew_deck_test 600 "$NET target/release/crew_deck_test $RELAY $GANG"
