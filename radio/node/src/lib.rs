@@ -3978,6 +3978,11 @@ impl Node {
                     if refused.contains(&st) || inner.is_pocket(&st) {
                         continue;
                     }
+                    // A station kept to its link is known only by what is said under its tag:
+                    // that is looked at each time, as it costs nothing.
+                    if !inner.log.lock().unwrap().get(&st).is_some_and(|l| l.announce.is_some()) {
+                        inner.take_tags_for(&st);
+                    }
                     // The log is brought up to date at most every ten minutes; the sound on now,
                     // which moves on every few seconds, at most every twenty seconds.
                     let log_fresh = {

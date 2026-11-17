@@ -30,10 +30,18 @@ fn main() -> anyhow::Result<()> {
     // First the new station has to reach the listener at all.
     let t = Instant::now();
     // A station raised here is kept to its link, so only a listener holding the link hears of
-    // it: this one opens it at once.
-    l.call(&json!({ "cmd": "tune", "station": id }));
-    let sees = |n: &Node| n.call(&json!({ "cmd": "stations" })).as_array().is_some_and(|a| a.iter().any(|x| x["id"] == id.as_str()));
-    while !sees(&l) && t.elapsed() < Duration::from_secs(180) { std::thread::sleep(Duration::from_millis(500)) }
+    // it: this one has the link, and looks the station up by it every ten seconds until it shows,
+    // without tuning it yet.
+    let warm = |n: &Node| n.call(&json!({ "cmd": "warm", "stations": [id] }));
+    // Seen: its card is in the listener's Log (a station kept to its link stays off the list).
+    let card_of = pyrate_core::StationId::from_hex(&id).ok();
+    let sees = |n: &Node| card_of.as_ref().is_some_and(|st| n.heard_of(st));
+    while !sees(&l) && t.elapsed() < Duration::from_secs(180) {
+        if t.elapsed().as_millis() % 10_000 < 500 {
+            warm(&l);
+        }
+        std::thread::sleep(Duration::from_millis(500))
+    }
     println!("{} the listener sees the new station ({:.1} s after it went live)", if sees(&l) { "PASS" } else { "FAIL" }, t.elapsed().as_secs_f64());
     l.call(&json!({ "cmd": "tune", "station": id }));
     let state = |n: &Node| n.call(&json!({ "cmd": "status" }))["now"]["state"].as_str().unwrap_or("").to_string();
