@@ -13,6 +13,10 @@ import hashlib, io, os, re, sys, tarfile, urllib.request
 R = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCAL = f"{R}/browser/www/dist-open"
 GATEWAYS = ["https://trustless-gateway.link", "https://ipfs.io", "https://dweb.link"]
+# A gateway of one's own, tried first: a rented server's IPFS node that pins the player. Its CAR is
+# checked block by block like any other, so it is trusted no more than the public ones.
+if os.environ.get("PYRATE_IPFS_GATEWAY"):
+    GATEWAYS.insert(0, os.environ["PYRATE_IPFS_GATEWAY"].rstrip("/"))
 B32 = "abcdefghijklmnopqrstuvwxyz234567"
 
 

@@ -20,7 +20,9 @@ WORKDIR /src
 COPY tools/open_player.py tools/
 COPY app/assets/open_players.txt app/assets/
 COPY browser/www/ browser/www/
-RUN python3 tools/open_player.py --dir /player
+# A gateway of the builder's own to try first (tools/vps/install.sh passes its IPFS node's).
+ARG PYRATE_IPFS_GATEWAY=
+RUN PYRATE_IPFS_GATEWAY="$PYRATE_IPFS_GATEWAY" python3 tools/open_player.py --dir /player
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*

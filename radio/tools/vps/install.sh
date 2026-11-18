@@ -35,6 +35,8 @@ CADDYFILE=/etc/pyrate/Caddyfile
 CADDY_UNIT=/etc/systemd/system/pyrate-caddy.service
 CADDY_DATA=/var/lib/pyrate-caddy
 TLS=/etc/pyrate/tls # Caddy's certificate, copied for the relay's QUIC port
+IPFS_PORT=4001 # the IPFS node that keeps a copy of the open player, so it is never in one place
+IPFS_IMAGE=ipfs/kubo:v0.43.1
 DRY=${PYRATE_DRY:-0}
 
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
@@ -194,13 +196,14 @@ if [ "$mem_kb" -lt 3800000 ] && [ ! -f /swapfile ]; then
   grep -q '^/swapfile ' /etc/fstab 2>/dev/null || run sh -c 'echo "/swapfile none swap sw 0 0" >> /etc/fstab'
 fi
 
-say "Firewall: SSH, 80 and 443, $QUIC_PORT for QUIC and $STUN_PORT for STUN. Nothing else comes in."
+say "Firewall: SSH, 80 and 443, $QUIC_PORT for QUIC, $STUN_PORT for STUN and $IPFS_PORT for IPFS. Nothing else comes in."
 ssh_ports=$(sshd -T 2>/dev/null | awk '$1 == "port" {print $2}' | sort -u || true)
 for p in ${ssh_ports:-22}; do run ufw allow "$p/tcp" >/dev/null; done
 run ufw allow 80/tcp >/dev/null
 run ufw allow 443/tcp >/dev/null
 run ufw allow "$QUIC_PORT/udp" >/dev/null
 run ufw allow "$STUN_PORT/udp" >/dev/null
+run ufw allow "$IPFS_PORT" >/dev/null # tcp and udp
 run ufw default deny incoming >/dev/null
 run ufw default allow outgoing >/dev/null
 run ufw --force enable >/dev/null
@@ -500,6 +503,20 @@ fi
 RELAY_URL="https://$DOMAIN/"
 
 # ---- The Lantern ---------------------------------------------------------------------------
+# ---- IPFS ----------------------------------------------------------------------------------
+# A second home for the open player: an IPFS node that pins every player the app names and
+# offers it to anyone who asks, so the player stays up when the other copies are down. Its
+# gateway and API answer on loopback alone; only the swarm port is open.
+say "IPFS (kubo, keeping a copy of the open player)"
+if ! docker container inspect pyrate-ipfs >/dev/null 2>&1 || [ "$(docker container inspect -f '{{.Config.Image}}' pyrate-ipfs)" != "$IPFS_IMAGE" ]; then
+  docker container inspect pyrate-ipfs >/dev/null 2>&1 && run docker rm -f pyrate-ipfs >/dev/null
+  run docker run -d --name pyrate-ipfs --restart unless-stopped --network host \
+    -e IPFS_PROFILE=server -v pyrate-ipfs:/data/ipfs \
+    --log-driver local --log-opt max-size=1m --log-opt max-file=1 --log-opt compress=false "$IPFS_IMAGE" >/dev/null
+fi
+if [ "$DRY" != 1 ]; then
+  for _ in $(seq 1 30); do docker exec pyrate-ipfs ipfs id >/dev/null 2>&1 && break; sleep 2; done
+fi
 say "Lantern (the first build takes 10 to 30 minutes and shows nothing while it works)"
 if [ -d "$SRC/.git" ]; then
   run git -C "$SRC" fetch -q --depth 1 origin "$BRANCH"
@@ -508,7 +525,21 @@ else
   run mkdir -p "$(dirname "$SRC")"
   run git clone -q --depth 1 --branch "$BRANCH" "$REPO" "$SRC"
 fi
-run docker build -q -t pyrate-lantern -f "$SRC/radio/Dockerfile" "$SRC/radio" >/dev/null
+# Every player the app names, pinned here: fetched from whoever holds it, checked by IPFS block by
+# block, and offered on from now on. Ten minutes each at most; one not to be had yet is tried again
+# on the next run, and the Lantern's build then falls back to the public gateways.
+GW=""
+if [ "$DRY" != 1 ]; then
+  for cid in $(grep -oE '\bbafy[a-z2-7]{50,}\b' "$SRC/radio/app/assets/open_players.txt" 2>/dev/null | sort -u); do
+    if timeout 600 docker exec pyrate-ipfs ipfs pin add --progress=false "$cid" >/dev/null 2>&1; then
+      echo "Pinned the open player $cid."
+      GW=http://127.0.0.1:8080
+    else
+      echo "The open player $cid could not be fetched yet. Run this again later."
+    fi
+  done
+fi
+run docker build -q --network host --build-arg "PYRATE_IPFS_GATEWAY=$GW" -t pyrate-lantern -f "$SRC/radio/Dockerfile" "$SRC/radio" >/dev/null
 # The compiler stays behind in the build cache: gigabytes this server does not need.
 run docker builder prune -af >/dev/null || true
 run docker image prune -f >/dev/null
