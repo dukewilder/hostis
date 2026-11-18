@@ -255,7 +255,7 @@ shutil.copy(f"{W}/open.car", f"{W}/cars/{cid}.car")
 # then any public Lanterns listed by hand in open_players.json and mirrors.txt. The first that answers wins.
 extra_players = json.load(open(f"{R}/browser/open_players.json", encoding="utf-8")) if os.path.exists(f"{R}/browser/open_players.json") else []
 extra_players += [m for m in MIRRORS if m not in extra_players]
-# The player's fixed name (IPNS, published by dukewilder's pin_player.sh) comes first: one
+# The player's fixed name (IPNS, published by pin_player.sh) comes first: one
 # address for every release, so a browser keeps what it keeps from one to the next.
 ipns = open(f"{R}/browser/ipns.txt").read().strip() if os.path.exists(f"{R}/browser/ipns.txt") else ""
 # A test build can send them to its own: PYRATE_OPEN_PLAYERS="<url>,<url>".
