@@ -1,4 +1,4 @@
-# Waiting for a rented server: put its "Player:" line from tools/vps/install.sh below, one per line.
 # Lanterns that serve the open player, one address per line, each ending /listen/.
 # tools/vps/install.sh prints a rented server's as "Player:". Never a HOSTIS name.
 # Every build lists them in the player, on the landing and in the app.
+https://135-181-190-28.sslip.io/listen/
