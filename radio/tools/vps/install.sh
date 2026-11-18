@@ -168,9 +168,24 @@ else
   unset p1 p2
 fi
 
+# ---- The system's own log --------------------------------------------------------------------
+# Kept in memory for an hour at most, never on the disk: whatever any service lets slip into it
+# (a visitor's address in an error) is gone by the next hour and never reaches the provider's disk.
+if [ "$DRY" != 1 ]; then
+  mkdir -p /etc/systemd/journald.conf.d
+  printf '[Journal]\nStorage=volatile\nMaxRetentionSec=1h\nRuntimeMaxUse=32M\n' >/etc/systemd/journald.conf.d/pyrate.conf
+  systemctl restart systemd-journald
+  rm -rf /var/log/journal
+  # A syslog daemon would copy the journal to the disk again.
+  if systemctl list-unit-files rsyslog.service >/dev/null 2>&1; then
+    systemctl disable --now rsyslog >/dev/null 2>&1 || true
+    rm -f /var/log/syslog* /var/log/messages* /var/log/daemon.log* /var/log/kern.log*
+  fi
+fi
+
 # ---- Packages, swap, firewall --------------------------------------------------------------
 say "Packages"
-PKGS=(ca-certificates curl git ufw tar coturn)
+PKGS=(ca-certificates curl git ufw tar coturn zram-tools)
 command -v docker >/dev/null || PKGS+=(docker.io)
 missing=()
 for p in "${PKGS[@]}"; do dpkg -s "$p" >/dev/null 2>&1 || missing+=("$p"); done
@@ -183,17 +198,24 @@ if ! docker buildx version >/dev/null 2>&1 && apt-cache show docker-buildx >/dev
 fi
 run systemctl enable --now docker
 
-# Building the Lantern wants about 4 GB of memory; a small server borrows it from the disk.
+# Everyday swap lives in compressed memory (zram), never on the disk: a page of the running Lantern
+# written to the provider's disk could hold its opened keys. A swap file on the disk is made only
+# while the Lantern is built (about 4 GB of memory) and is wiped and removed straight after.
+if [ "$DRY" != 1 ]; then
+  printf 'ALGO=zstd\nPERCENT=60\n' >/etc/default/zramswap
+  systemctl restart zramswap >/dev/null 2>&1 || true
+fi
+# An older run kept /swapfile for good: it leaves fstab now, and the file goes after the build.
+if grep -q '^/swapfile ' /etc/fstab 2>/dev/null; then run sed -i '\#^/swapfile #d' /etc/fstab; fi
 mem_kb=$(awk '/^(MemTotal|SwapTotal):/ {s += $2} END {print s + 0}' /proc/meminfo)
 if [ "$mem_kb" -lt 3800000 ] && [ ! -f /swapfile ]; then
   swap=4G
   [ "$(df -Pk / | awk 'NR == 2 {print $4}')" -gt 16000000 ] || swap=2G
-  say "Swap ($swap, for building)"
+  say "Swap ($swap, for building only)"
   run fallocate -l "$swap" /swapfile
   run chmod 600 /swapfile
   run mkswap /swapfile
   run swapon /swapfile
-  grep -q '^/swapfile ' /etc/fstab 2>/dev/null || run sh -c 'echo "/swapfile none swap sw 0 0" >> /etc/fstab'
 fi
 
 say "Firewall: SSH, 80 and 443, $QUIC_PORT for QUIC, $STUN_PORT for STUN and $IPFS_PORT for IPFS. Nothing else comes in."
@@ -297,6 +319,11 @@ caddy_config() {
   elif [ "$PLAYER" != none ]; then
     own="
 $PLAYER {
+	header {
+		-Server
+		-Via
+		defer
+	}
 	handle /listen* {
 		reverse_proxy $LANTERN_HTTP
 	}
@@ -312,12 +339,22 @@ $PLAYER {
 	email relay@$relay
 	acme_ca https://acme-v02.api.letsencrypt.org/directory
 	storage file_system $CADDY_DATA
-	log {
-		level WARN
+	# No log at all: an error line would carry the visitor's address.
+	log default {
+		output discard
+	}
+	servers {
+		protocols h1 h2
 	}
 }
 
-$relay {$front
+$relay {
+	# Nothing that names the software.
+	header {
+		-Server
+		-Via
+		defer
+	}$front
 	# The relay answers only the paths a node uses. Everything else, the relay's own page
 	# included, gets a plain page that names no program and no project.
 	@relay path /relay /relay/* /derp /derp/* /ping
@@ -414,7 +451,7 @@ ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 LimitNOFILE=65536
-Environment=RUST_LOG=warn
+Environment=RUST_LOG=error
 Restart=always
 RestartSec=5
 
@@ -503,13 +540,32 @@ RELAY_URL="https://$DOMAIN/"
 # offers it to anyone who asks, so the player stays up when the other copies are down. Its
 # gateway and API answer on loopback alone; only the swarm port is open.
 say "IPFS (kubo, keeping a copy of the open player)"
-if ! docker container inspect pyrate-ipfs >/dev/null 2>&1 || [ "$(docker container inspect -f '{{.Config.Image}}' pyrate-ipfs)" != "$IPFS_IMAGE" ]; then
+want_ipfs=0
+if docker container inspect pyrate-ipfs >/dev/null 2>&1 \
+  && [ "$(docker container inspect -f '{{.Config.Image}}' pyrate-ipfs)" = "$IPFS_IMAGE" ] \
+  && docker container inspect -f '{{range .Config.Env}}{{println .}}{{end}}' pyrate-ipfs | grep -qx 'IPFS_TELEMETRY=off'; then
+  want_ipfs=1
+fi
+if [ "$want_ipfs" = 0 ]; then
   docker container inspect pyrate-ipfs >/dev/null 2>&1 && run docker rm -f pyrate-ipfs >/dev/null
+  run docker pull -q "$IPFS_IMAGE" >/dev/null
   run docker run -d --name pyrate-ipfs --restart unless-stopped --network host \
-    -e IPFS_PROFILE=server -v pyrate-ipfs:/data/ipfs \
+    -e IPFS_PROFILE=server -e IPFS_TELEMETRY=off -v pyrate-ipfs:/data/ipfs \
     --log-driver local --log-opt max-size=1m --log-opt max-file=1 --log-opt compress=false "$IPFS_IMAGE" >/dev/null
 fi
 if [ "$DRY" != 1 ]; then
+  for _ in $(seq 1 30); do docker exec pyrate-ipfs ipfs id >/dev/null 2>&1 && break; sleep 2; done
+  # Locked down: API and gateway on loopback, no relaying or port mapping for others, nothing
+  # fetched for a stranger through the gateway, only the pinned players offered, and no telemetry.
+  ipfs_set() { docker exec pyrate-ipfs ipfs config "$@" >/dev/null; }
+  ipfs_set Addresses.API /ip4/127.0.0.1/tcp/5001
+  ipfs_set Addresses.Gateway /ip4/127.0.0.1/tcp/8080
+  ipfs_set --json Swarm.RelayService.Enabled false
+  ipfs_set --json Swarm.DisableNatPortMap true
+  ipfs_set --json Gateway.NoFetch true
+  ipfs_set Plugins.Plugins.telemetry.Config.Mode off 2>/dev/null || true
+  ipfs_set Provide.Strategy pinned 2>/dev/null || ipfs_set Reprovider.Strategy pinned
+  run docker restart pyrate-ipfs >/dev/null
   for _ in $(seq 1 30); do docker exec pyrate-ipfs ipfs id >/dev/null 2>&1 && break; sleep 2; done
 fi
 say "Lantern (the first build takes 10 to 30 minutes and shows nothing while it works)"
@@ -539,6 +595,15 @@ run docker build -q --network host --build-arg "PYRATE_IPFS_GATEWAY=$GW" -t pyra
 run docker builder prune -af >/dev/null || true
 run docker image prune -f >/dev/null
 run docker rmi rust:bookworm python:3.12-slim-bookworm >/dev/null 2>&1 || true
+# The build's disk swap goes: its pages come back into memory, and the file is overwritten before
+# it is removed, so nothing that passed through it stays on the disk.
+if [ -f /swapfile ]; then
+  run swapoff /swapfile || true
+  if [ "$DRY" != 1 ]; then
+    dd if=/dev/zero of=/swapfile bs=1M count="$(( $(stat -c %s /swapfile) / 1048576 ))" conv=notrunc status=none 2>/dev/null || true
+  fi
+  run rm -f /swapfile
+fi
 
 # The gangway on loopback, for Caddy alone, with the image's copy of the open player. The log
 # names no station, peer or node; the id is asked of the Lantern itself below.
