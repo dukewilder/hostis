@@ -41,6 +41,8 @@ It builds the player and the landing, copies in the APK you name, writes the sou
 
 ## 6. Light a Lantern
 
+HOSTIS's own rented relay and Lantern, how to reach the server and how to update it: `tools/vps/SERVER.md`.
+
 A network of one station is still a network, but it carries best when Lanterns are up. Follow `LANTERN.md`: a Lantern in one Docker command, and a relay beside it on a server so browsers can reach the network. Seed your own stations from folders of audio with `--seed`, and mark one explicit or mature with a rating after its kind, as in `Name|About|/folder|talk/explicit`.
 
 ## The keys, in one place
