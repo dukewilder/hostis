@@ -12,7 +12,7 @@ This is the runbook for keeping Pyrate Radio going without the founder. Nothing 
 ## 1. Build
 
 - The browser player and the open player it carries: `sh browser/build.sh`.
-- The Android app: raise the version in `app/pubspec.yaml` (the number after the plus is the version code, and it must go up every release), then `cd app && flutter build apk --release`. The APK lands in `app/build/app/outputs/flutter-apk/`.
+- The Android app: raise the version in `app/pubspec.yaml` (the number after the plus is the version code, and it must go up every release), then `bash app/build_native.sh` (it builds the node for Android with the build paths remapped, then the app; see `RELEASES.md`). The APK lands in `app/build/app/outputs/flutter-apk/`.
 
 ## 2. Check the build
 

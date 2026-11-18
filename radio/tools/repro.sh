@@ -56,8 +56,8 @@ apk() {
     return 0
   fi
   [ -n "$pub" ] || { echo "  usage: tools/repro.sh apk <published.apk>"; return 2; }
-  echo "  building (flutter build apk --release) ..."
-  ( cd "$R/app" && flutter build apk --release )
+  echo "  building (app/build_native.sh) ..."
+  bash "$R/app/build_native.sh"
   built="$R/app/build/app/outputs/flutter-apk/app-release.apk"
   echo "  comparing $built against $pub, signatures aside"
   python3 "$R/tools/apk_compare.py" "$built" "$pub"

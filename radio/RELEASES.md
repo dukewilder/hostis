@@ -50,7 +50,7 @@ Every byte we ship can be rebuilt from this source and checked, so nobody has to
 **The pins.**
 
 - The browser player: Rust 1.97.0 (`rust-toolchain.toml`), wasm-bindgen 0.2.130, wasm-opt 132, and the `web` cargo profile in `Cargo.toml` (opt-level z, fat LTO, one codegen unit, no debug info). `browser/build.sh` remaps the source and registry paths, so the wasm carries none of the builder's own paths.
-- The Android app: Flutter on Dart 3.9 (`app/pubspec.yaml`, `sdk: ^3.9.0`), Gradle 9.3.1 (`app/android/gradle/wrapper/gradle-wrapper.properties`), Kotlin 2.4.0, minSdk 28, and the NDK the Flutter release names. The Flutter SDK is not kept in this tree, so record your `flutter --version` beside the release.
+- The Android app: built with `app/build_native.sh`, which remaps the Rust and C paths and builds the app from `/pyrate/app` when `/pyrate` is this folder (`mount --bind radio /pyrate`), since Dart writes its plugin registrant's absolute path into the app. Flutter on Dart 3.9 (`app/pubspec.yaml`, `sdk: ^3.9.0`), Gradle 9.3.1 (`app/android/gradle/wrapper/gradle-wrapper.properties`), Kotlin 2.4.0, minSdk 28, and the NDK the Flutter release names. The Flutter SDK is not kept in this tree, so record your `flutter --version` beside the release.
 
 **Check the player.**
 

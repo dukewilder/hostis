@@ -15,8 +15,16 @@ export CMAKE_TOOLCHAIN_FILE_aarch64_linux_android=$NDK/build/cmake/android.toolc
 # The build paths are remapped, as browser/build.sh does for the player, so the library names
 # none of the builder's own folders and the same source builds the same bytes anywhere.
 export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$(pwd)=/pyrate --remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo"
+# The C inside (opus) is mapped the same way, or its file names keep the cargo folder's path.
+MAP="-ffile-prefix-map=$(pwd)=/pyrate -ffile-prefix-map=${CARGO_HOME:-$HOME/.cargo}=/cargo"
+export CFLAGS_aarch64_linux_android="${CFLAGS_aarch64_linux_android:-} $MAP" CXXFLAGS_aarch64_linux_android="${CXXFLAGS_aarch64_linux_android:-} $MAP"
 cargo build --release -p pyrate-ffi --target aarch64-linux-android
 mkdir -p app/android/app/src/main/jniLibs/arm64-v8a
 cp target/aarch64-linux-android/release/libpyrate_ffi.so app/android/app/src/main/jniLibs/arm64-v8a/
-# Any further arguments go to flutter (e.g. --android-skip-build-dependency-validation).
-cd app && flutter build apk --release --target-platform android-arm64 "$@"
+# Dart writes one absolute path into the app (its plugin registrant's), so the app is built from
+# /pyrate/app where that is this tree (a bind mount: mount --bind <this folder> /pyrate), and the
+# path it carries is the same on every machine. Any further arguments go to flutter (e.g.
+# --android-skip-build-dependency-validation).
+APP=app
+if [ /pyrate/app -ef app ]; then APP=/pyrate/app; else echo "note: /pyrate is not this tree, so the app carries this folder's path" >&2; fi
+cd "$APP" && flutter build apk --release --target-platform android-arm64 "$@"
