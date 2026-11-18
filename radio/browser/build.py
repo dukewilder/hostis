@@ -116,6 +116,9 @@ assert len(keys) == 3 and all(re.fullmatch(r"[0-9a-f]{64}", k) for k in keys), "
 _find = open(f"{R}/node/src/find.rs", encoding="utf-8").read()
 SEED_MIRRORS = [u for u in os.environ.get("PYRATE_SEED_MIRRORS", "").split(",") if u] or re.findall(r'"(https://[^"]+seeds\.json)"', _find.split("pub const SEED_MIRRORS", 1)[1].split(";", 1)[0])
 assert SEED_MIRRORS and all(re.fullmatch(r"https?://[^\s'\"<>]+", u) for u in SEED_MIRRORS), "seed mirrors"
+# Every tab that meets nobody fetches the seed list: a HOSTIS name there marks it as a Pyrate Radio listener.
+for u in SEED_MIRRORS:
+    assert not re.match(r"https?://([a-z0-9.-]*\.)?hostis\.black([:/]|$)", u, re.I), f"seed mirrors: never at a HOSTIS name: {u}"
 base_js = js.replace("'{{RELEASE_KEYS}}'", json.dumps(keys)).replace("'{{SEED_MIRRORS}}'", json.dumps(SEED_MIRRORS)).replace("'{{HARBOUR}}'", json.dumps(harbour)).replace("'{{RELAYS}}'", json.dumps(os.environ.get("PYRATE_RELAYS", ""))).replace("'{{HARBOUR_STATIONS}}'", harbour_stations).replace("'{{STUN}}'", json.dumps(STUN)).replace("'{{DOORS}}'", json.dumps(DOORS)).replace("'{{ONION}}'", json.dumps(ONION))
 
 def build(scope, dist, open_players):

@@ -99,7 +99,7 @@ Fix: Start with CREW_RELAYS alone, put number0 behind a switch, and tell the own
 
 - Through Tor: relay dials use HTTP CONNECT by hostname, and HTTPS and captive-portal probes go through the proxy (iroh-relay client/tls.rs:163-175; iroh net_report/reportgen.rs:575-610). Dark nodes skip pkarr, LAN beacons, decks and carrier notes. The door's portmap while dark is the known finding, being fixed in the working tree.
 - Strict mode: logs, chunks, own-station sync, tokens and stems never go direct or one hop without direct-ok (lib.rs:905-907, 1052-1058, 1075-1083; hop.rs:418-421, 1110-1157).
-- The node contacts no NTP, GitHub, IPFS gateway or public STUN server. The clock comes from station cards, and 1.1.1.1 and 9.9.9.9 are used only with --public-dns.
+- The node contacts no NTP, GitHub, IPFS gateway or public STUN server. The clock comes from station cards. With --public-dns, which the Android app always sets, names are looked up at Cloudflare (1.1.1.1, 1.0.0.1) and Quad9 (9.9.9.9, 149.112.112.112) over DNS over TLS on port 853, with no plain-UDP fallback.
 - Lantern pkarr records carry relay addresses only (AddrFilter), never IPs.
 - Counting tokens are keyed by a daily-stepped key, station and hour, and travel two hops; pocket tokens stay on the pocket topic. Nothing links them across hours.
 - Apps announce only hash-chosen ballast, and only on Wi-Fi while charging; dark nodes announce nothing.

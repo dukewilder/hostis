@@ -31,7 +31,7 @@ use crate::{Inner, net, now_ms, say};
 
 /// Where a seed list is fetched from when no list is held yet. A list names the mirrors the next
 /// one may come from, and those are tried too. PYRATE_SEED_MIRRORS (commas) replaces these.
-pub const SEED_MIRRORS: &[&str] = &["https://raw.githubusercontent.com/dukewilder/hostis/radio/radio/seeds.json", "https://hostis.black/pyrateradio/seeds.json"];
+pub const SEED_MIRRORS: &[&str] = &["https://raw.githubusercontent.com/dukewilder/hostis/radio/radio/seeds.json"];
 
 /// How many entries of a seed list are taken.
 const SEEDS_MAX: usize = 48;

@@ -2920,7 +2920,8 @@ impl Node {
                 .crypto_provider(Arc::new(rustls::crypto::aws_lc_rs::default_provider()))
                 .secret_key(secret)
                 .address_lookup(book2)
-                .relay_mode(iroh::RelayMode::Custom(relays));
+                .relay_mode(iroh::RelayMode::Custom(relays))
+                .net_report_config(no_captive_probe());
             // A Lantern running dark looks nobody up either: the lookup is plain DNS from its own
             // address, outside the tunnel. Its doors are named with their relays (`id@relay`).
             // number0's address server only at the owner's word: its name in the TLS handshake
@@ -2950,9 +2951,22 @@ impl Node {
             }
             if public_dns {
                 b = b.dns_resolver(
+                    // DNS over TLS only, so the line's provider sees no names. No fallback tier:
+                    // iroh's default one is plain UDP.
                     iroh::dns::DnsResolver::builder()
-                        .with_nameserver("1.1.1.1:53".parse()?, iroh::dns::DnsProtocol::Udp)
-                        .with_nameserver("9.9.9.9:53".parse()?, iroh::dns::DnsProtocol::Udp)
+                        .add_nameserver_configs(
+                            [
+                                ("1.1.1.1", "cloudflare-dns.com"),
+                                ("1.0.0.1", "cloudflare-dns.com"),
+                                ("9.9.9.9", "dns.quad9.net"),
+                                ("149.112.112.112", "dns.quad9.net"),
+                            ]
+                            .into_iter()
+                            .map(|(ip, name)| {
+                                iroh::dns::NameserverConfig::tls(ip.parse().expect("ip")).with_tls_server_name(name)
+                            }),
+                        )
+                        .with_fallback_mode(iroh::dns::FallbackMode::Never)
                         .build(),
                 );
             }
@@ -4838,4 +4852,12 @@ mod pin_tests {
 /// A stranger's text as shown: no bidi tricks, no hidden marks, one line.
 pub(crate) fn shown<S: AsRef<str>>(s: S) -> String {
     pyrate_core::chat::shown(s.as_ref()).replace('\n', " ")
+}
+
+/// iroh's net report with its captive-portal check off: that check is a plain-HTTP GET to every
+/// relay's `/generate_204`, readable by anyone on the line. The HTTPS latency probes stay on.
+pub fn no_captive_probe() -> iroh::NetReportConfig {
+    let mut c = iroh::NetReportConfig::default();
+    c.captive_portal_check = false;
+    c
 }

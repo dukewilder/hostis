@@ -320,7 +320,7 @@ $PLAYER {
 $relay {$front
 	# The relay answers only the paths a node uses. Everything else, the relay's own page
 	# included, gets a plain page that names no program and no project.
-	@relay path /relay /relay/* /derp /derp/* /ping /generate_204
+	@relay path /relay /relay/* /derp /derp/* /ping
 	handle @relay {
 		reverse_proxy $RELAY_HTTP
 	}
@@ -331,12 +331,7 @@ $relay {$front
 }
 
 http://$relay {
-	handle /generate_204 {
-		reverse_proxy $RELAY_HTTP
-	}
-	handle {
-		redir https://{host}{uri} 308
-	}
+	redir https://{host}{uri} 308
 }
 $own
 EOF

@@ -3852,9 +3852,13 @@ impl Radio {
         // the harbours.
         // Only a harbour named without its relay is looked up at all.
         let doors: Arc<HashSet<EndpointId>> = Arc::new(if n0 { unplaced } else { HashSet::new() });
+        // No captive-portal check: it is a plain-HTTP GET to each relay.
+        let mut report = iroh::NetReportConfig::default();
+        report.captive_portal_check = false;
         let ep = Endpoint::builder(presets::Minimal)
             .secret_key(SecretKey::from_bytes(&seed))
             .relay_mode(iroh::RelayMode::Custom(relays))
+            .net_report_config(report)
             .address_lookup(book.clone())
             .address_lookup(DoorsOnly(doors))
             .bind()
