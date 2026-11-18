@@ -94,6 +94,9 @@ if [ -z "$DOMAIN" ] || [[ $DOMAIN == *.sslip.io || $DOMAIN == *.nip.io ]]; then
   [ -n "$DOMAIN" ] && [ "$DOMAIN" = "${FREE[1]}" ] && FREE=("${FREE[1]}" "${FREE[0]}")
   DOMAIN=${FREE[0]}
 fi
+# The relay's name goes out in the clear at the start of every connection to it, so a HOSTIS
+# name would mark every listener on the line as one. Never a HOSTIS name, for the relay or the player.
+[[ $DOMAIN == hostis.black || $DOMAIN == *.hostis.black ]] && die "A HOSTIS name marks everyone who connects to it. Use a name with nothing to do with HOSTIS, or press Enter for a free one."
 [[ $DOMAIN =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] || die "\"$DOMAIN\" is not a name."
 
 if [ ${#FREE[@]} = 0 ] && [ "$DRY" != 1 ]; then
@@ -285,7 +288,6 @@ caddy_config() {
   local relay=$1 front="" own=""
   if [ "$PLAYER" = "$relay" ]; then
     front="
-	redir / /listen/ 302
 	handle /listen* {
 		reverse_proxy $LANTERN_HTTP
 	}"
@@ -313,8 +315,15 @@ $PLAYER {
 }
 
 $relay {$front
-	handle {
+	# The relay answers only the paths a node uses. Everything else, the relay's own page
+	# included, gets a plain page that names no program and no project.
+	@relay path /relay /relay/* /derp /derp/* /ping /generate_204
+	handle @relay {
 		reverse_proxy $RELAY_HTTP
+	}
+	handle {
+		header Content-Type "text/html; charset=utf-8"
+		respond "<!doctype html><title>Welcome</title><p>It works." 200
 	}
 }
 

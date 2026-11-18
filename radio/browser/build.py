@@ -46,6 +46,8 @@ body = open(f"{R}/browser/body.html", encoding="utf-8").read()
 js = open(f"{W}/app.js", encoding="utf-8").read()
 # A test build names its own harbour and relays: PYRATE_HARBOUR="<id>@<relay>", PYRATE_RELAYS.
 harbour = os.environ.get("PYRATE_HARBOUR") or ",".join(open(f"{R}/app/assets/bootstrap.txt").read().split())
+# A harbour's relay name goes out in the clear on every connection: never a HOSTIS name.
+assert os.environ.get("PYRATE_HARBOUR") or not re.search(r"@https://([a-z0-9.-]*\.)?hostis\.black", harbour), "bootstrap.txt: a harbour's relay is never at a HOSTIS name"
 import json
 # HOSTIS's own stations: the only ones the landing page's set offers.
 # A test build can name its own: PYRATE_HARBOUR_STATIONS=<a json file like harbour.json>.
@@ -86,6 +88,7 @@ def stun_list():
         if not u: continue
         assert re.fullmatch(r"stuns?:[a-z0-9.-]+(:[0-9]+)?", u), f"stun.txt: not a plain stun: address: {u}"
         assert not re.search(r"(google|l\.google|cloudflare|twilio|stunprotocol|mozilla|ekiga|voip|xten)", u), f"stun.txt: only HOSTIS's own STUN servers: {u}"
+        assert not re.search(r"(^|[:.])hostis\.black(:|$)", u), f"stun.txt: a HOSTIS name marks everyone who asks it: {u}"
         if u not in out: out.append(u)
     return out
 STUN = stun_list()

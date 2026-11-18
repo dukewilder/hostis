@@ -2,4 +2,4 @@
 # line for each server it sets up. Only HOSTIS's: build.py refuses the well-known public ones,
 # and a tab never asks any server not listed here. Empty, a tab links directly only where the
 # addresses its machine knows already reach.
-stun:relay2.hostis.black:3478
+stun:135-181-190-28.sslip.io:3478

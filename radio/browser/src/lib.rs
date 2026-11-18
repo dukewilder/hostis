@@ -45,7 +45,7 @@ use pure::{chunk_at, quarter_stamp, release_cut as cut_of};
 use net::{ALPN, Announce, Gossip, MAX_FRAME, Request, Response, Sketch};
 
 /// The same relays the app uses: number0's, and the crew's own.
-const CREW_RELAYS: &[&str] = &["https://relay.hostis.black"];
+const CREW_RELAYS: &[&str] = &["https://135-181-190-28.sslip.io"];
 
 /// number0's address lookup, asked only about the harbours this tab was built with. A tab that
 /// asked it about every carrier would tell number0 which stations it was after. Every other

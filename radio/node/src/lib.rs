@@ -169,7 +169,7 @@ pub struct Config {
 
 /// Relays run by HOSTIS and the crew, used alongside number0's. Any iroh relay will do;
 /// a relay only forwards traffic it cannot read.
-pub const CREW_RELAYS: &[&str] = &["https://relay.hostis.black"];
+pub const CREW_RELAYS: &[&str] = &["https://135-181-190-28.sslip.io"];
 
 /// First doors' relays, named beside their ids where the app was handed them ("id@relay"),
 /// so a new node reaches its first doors without asking anyone's directory.

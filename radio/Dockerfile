@@ -31,4 +31,4 @@ COPY app/assets/release_keys.txt /usr/share/pyrate/release_keys.txt
 VOLUME /data
 # Its first door is named with its relay, so no lookup is needed to reach it (a Lantern running
 # dark makes none).
-ENTRYPOINT ["lantern", "--dir", "/data", "--quota-gb", "50", "--bootstrap", "a6e12327929c36614b4cd24483103a0dc125fdd0be97fd27b85bdb61b8c397c3@https://relay2.hostis.black,a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442@https://relay.hostis.black", "--release-keys", "/usr/share/pyrate/release_keys.txt"]
+ENTRYPOINT ["lantern", "--dir", "/data", "--quota-gb", "50", "--bootstrap", "a6e12327929c36614b4cd24483103a0dc125fdd0be97fd27b85bdb61b8c397c3@https://135-181-190-28.sslip.io,a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442@https://135-181-190-28.sslip.io", "--release-keys", "/usr/share/pyrate/release_keys.txt"]
