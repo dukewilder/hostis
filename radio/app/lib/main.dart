@@ -19,6 +19,7 @@ import 'more.dart';
 import 'native.dart';
 import 'station.dart';
 import 'tray.dart';
+import 'vpn.dart';
 
 // The site's ink.
 const black = Color(0xFF030303);
@@ -360,6 +361,9 @@ class Tuner extends ChangeNotifier {
   /// What this device is doing for the network now, in one plain line from the node.
   String jobsLine = '';
 
+  /// Whether links named this radio at the last check, to say so when a VPN comes or goes.
+  bool? _linksHeld;
+
   /// A door's owner turned it off, or never will: on unless the owner said no.
   static bool get doorWanted => pref('door') != false;
 
@@ -374,7 +378,15 @@ class Tuner extends ChangeNotifier {
     // for a port and stays shut if none is given.
     final tor = ((Native.call({'cmd': 'tor'}) as Map?)?['url'] ?? '').toString().isNotEmpty;
     final door = doorWanted && !tor && pref('crew') != false && !mine && (isComputer || (unmetered && c['charging'] == true));
-    final d = Native.call({'cmd': 'door', 'on': door, 'app': true, 'links': pref('door_links') == true});
+    // Links that name this radio carry a phone's address anywhere: on a phone they hold only
+    // behind a VPN or through Tor, and come back by themselves when one returns.
+    final linksWanted = pref('door_links') == true;
+    final links = linksWanted && (isComputer || dedicationAllowed(vpn: await Vpn.on(), tor: tor));
+    if (linksWanted && _linksHeld != null && links != _linksHeld) {
+      say(links ? 'The VPN is back. Shared links name this radio again.' : 'The VPN is off. Shared links stop naming this radio until it is back.');
+    }
+    _linksHeld = linksWanted ? links : null;
+    final d = Native.call({'cmd': 'door', 'on': door, 'app': true, 'links': links});
     if (d is Map) {
       doorState = d.cast<String, dynamic>();
       // The first time a door really opens, its owner is told, once, and may turn it off.
@@ -2106,10 +2118,16 @@ class _DrawerLanternState extends State<DrawerLantern> {
 
   @override
   Widget build(BuildContext context) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        setting('Use this as a spare phone', on, (v) => setState(() {
-              on = v;
-              apply();
-            }), sub: 'Got an old phone in a drawer? Leave it on a charger and Wi-Fi, and it helps carry stations all day with the screen off. Choose how much space to give.'),
+        setting('Use this as a spare phone', on, (v) async {
+          // A spare phone is on all day for strangers to reach: it starts only behind a VPN or
+          // through Tor, and stops by itself while neither is there (LanternService).
+          if (v && !await Vpn.phoneGate(spareNeedsVpn)) return;
+          if (!mounted) return;
+          setState(() {
+            on = v;
+            apply();
+          });
+        }, sub: 'Got an old phone in a drawer? Leave it on a charger and Wi-Fi, and it helps carry stations all day with the screen off. Choose how much space to give.'),
         if (on) Wrap(children: [for (final n in [4, 16, 64, 128]) sizeChip(n)]),
       ]);
 }

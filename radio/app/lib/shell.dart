@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'native.dart';
+import 'vpn.dart';
 
 /// A computer rather than a phone: the words the app uses, and what it offers, follow.
 final bool isComputer = !Platform.isAndroid && !Platform.isIOS;
@@ -155,6 +156,8 @@ class Desktop {
         // A computer takes its updates from the site, never through the app. The build's own
         // code (set when it is built) lets it say when a newer one is signed.
         return const int.fromEnvironment('PYRATE_CODE');
+      case 'vpn':
+        return Vpn.desktop();
       case 'conditions':
         // A computer is plugged in and on a fixed line or Wi-Fi more often than not.
         return {'charging': true, 'unmetered': true};

@@ -15,6 +15,7 @@ import 'mirror.dart';
 import 'native.dart';
 import 'station.dart';
 import 'tray.dart';
+import 'vpn.dart';
 
 const ship = ShellChannel();
 
@@ -1883,7 +1884,9 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         if (widget.radio.jobsLine.isNotEmpty)
           Padding(padding: const EdgeInsets.only(bottom: 6), child: note(widget.radio.jobsLine)),
-        setting('Let shared links name this radio', pref('door_links') == true, (v) {
+        setting('Let shared links name this radio', pref('door_links') == true, (v) async {
+          if (v && !(Platform.isAndroid ? await Vpn.phoneGate(linksNeedVpn) : await Vpn.computerGate(context))) return;
+          if (!mounted) return;
           pref('door_links', v);
           Native.call({'cmd': 'door', 'links': v});
           setState(() {});
@@ -1895,7 +1898,9 @@ class _SettingsPageState extends State<SettingsPage> {
             setState(() {});
           }, sub: 'The radio starts quietly when you sign in, playing nothing, and carries for others. This is how the radio stays up.'),
         if (isComputer)
-          setting('Keep the radio running when the window is closed', pref('keep_running') == true, (v) {
+          setting('Keep the radio running when the window is closed', pref('keep_running') == true, (v) async {
+            if (v && !await Vpn.computerGate(context)) return;
+            if (!mounted) return;
             unawaited(Tray.it.set(v));
             setState(() {});
           }, sub: 'Closing the window leaves the radio in ${Tray.place}, carrying for others and playing on if it was playing. Open it again or quit it from there.'),
@@ -1903,7 +1908,11 @@ class _SettingsPageState extends State<SettingsPage> {
         if (isComputer && !mineOnly)
           Wrap(children: [
             for (final gb in [2, 8, 20])
-              chip('$gb GB', carryGb() == gb, () {
+              chip('$gb GB', carryGb() == gb, () async {
+                // The largest share is the computer as a dedicated carrier: asked once more
+                // when no VPN is found.
+                if (gb == 20 && carryGb() != 20 && !await Vpn.computerGate(context)) return;
+                if (!mounted) return;
                 pref('carry_gb', gb);
                 Native.call({'cmd': 'ballast_size', 'gb': gb});
                 setState(() {});
