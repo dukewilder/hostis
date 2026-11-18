@@ -326,10 +326,20 @@ fn unwrap_key(blob: &[u8], pass: &[u8]) -> Result<Option<Zeroizing<[u8; 32]>>> {
 /// Lantern makes one. Without a passphrase it opens nothing, unless its keeper chose to keep the
 /// key on disk in the clear (`on_disk`), which it says at every start.
 pub fn lantern_key(dir: &Path, pass: Option<&[u8]>, on_disk: bool) -> Result<Zeroizing<[u8; 32]>> {
-    lantern_key_with(dir, pass, on_disk, KDF_KIB, KDF_PASSES)
+    lantern_key_with(dir, pass, on_disk, KDF_KIB, KDF_PASSES, true)
 }
 
-fn lantern_key_with(dir: &Path, pass: Option<&[u8]>, on_disk: bool, kib: u32, passes: u32) -> Result<Zeroizing<[u8; 32]>> {
+/// A Lantern's hold key for a look only (`--id`, `--open-hails`): the key it already has, and
+/// nothing made, sealed or removed. Asked while a new Lantern makes its first seal, a look that
+/// made a key of its own would seal it over the Lantern's, and the Lantern's notes would open
+/// under neither from then on.
+pub fn lantern_key_existing(dir: &Path, pass: Option<&[u8]>, on_disk: bool) -> Result<Zeroizing<[u8; 32]>> {
+    lantern_key_with(dir, pass, on_disk, KDF_KIB, KDF_PASSES, false)
+}
+
+const NO_KEY_YET: &str = "this Lantern has no hold key yet: start it once";
+
+fn lantern_key_with(dir: &Path, pass: Option<&[u8]>, on_disk: bool, kib: u32, passes: u32, make: bool) -> Result<Zeroizing<[u8; 32]>> {
     let sealed = dir.join(SEALED_KEY);
     let mut plain_paths = vec![disk_key_path(dir)];
     if !plain_paths.contains(&dir.join("hold.key")) {
@@ -343,6 +353,9 @@ fn lantern_key_with(dir: &Path, pass: Option<&[u8]>, on_disk: bool, kib: u32, pa
         if !on_disk {
             anyhow::bail!("This Lantern has no passphrase for its hold key, so it opens nothing and starts nothing. Give one with PYRATE_HOLD_PASS_FILE, PYRATE_HOLD_PASS_CMD or --hold-pass-fd, or type it when asked. To keep the key on this disk in the clear instead, start with --hold-key-on-disk (LANTERN.md).");
         }
+        if !make {
+            return plain_paths.iter().find_map(|p| read_plain(p)).ok_or_else(|| anyhow::anyhow!(NO_KEY_YET));
+        }
         let k = disk_key(dir)?;
         crate::say(&format!("WARNING the hold key lies in the clear at {}, so whoever takes that disk opens everything this Lantern keeps. A passphrase takes it off the disk (LANTERN.md).", disk_key_path(dir).display()));
         return Ok(k);
@@ -354,6 +367,9 @@ fn lantern_key_with(dir: &Path, pass: Option<&[u8]>, on_disk: bool, kib: u32, pa
         },
         None => {
             let found = plain_paths.iter().find_map(|p| read_plain(p));
+            if !make {
+                return found.ok_or_else(|| anyhow::anyhow!(NO_KEY_YET));
+            }
             if found.is_none() && sealed_here(dir) {
                 anyhow::bail!("This folder holds sealed data, and neither hold.sealed nor a hold key in the clear is here to open it. Is the key's disk mounted? Nothing was started, so nothing is lost.");
             }
@@ -361,7 +377,10 @@ fn lantern_key_with(dir: &Path, pass: Option<&[u8]>, on_disk: bool, kib: u32, pa
                 anyhow::bail!("A passphrase for the hold needs twelve characters or more. Four or five random words make a good one.");
             }
             let k = found.unwrap_or_else(fresh_key);
-            write_secret(&sealed, &wrap_with(&k, pass, kib, passes)?)?;
+            // Never over a seal another start made meanwhile: that one stands, and is opened.
+            if !write_secret_new(&sealed, &wrap_with(&k, pass, kib, passes)?)? {
+                return lantern_key_with(dir, Some(pass), on_disk, kib, passes, false);
+            }
             // The seal is read back and opened before anything in the clear is let go.
             let back = std::fs::read(&sealed).ok().and_then(|b| unwrap_key(&b, pass).ok().flatten());
             if back.as_deref() != Some(&*k) {
@@ -371,6 +390,9 @@ fn lantern_key_with(dir: &Path, pass: Option<&[u8]>, on_disk: bool, kib: u32, pa
             k
         }
     };
+    if !make {
+        return Ok(key);
+    }
     // A key in the clear that the seal now holds goes; one that differs is left for the keeper.
     for p in &plain_paths {
         match read_plain(p) {
@@ -400,6 +422,29 @@ pub fn scuttle(dir: &Path) -> std::io::Result<bool> {
         }
     }
     Ok(found)
+}
+
+/// Writes a secret as `write_secret` does, but only where there is none yet: false, and nothing
+/// changed, when another start put one there first.
+pub fn write_secret_new(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<bool> {
+    use std::io::Write;
+    let tmp = path.with_file_name(format!(".{}.{}.tmp", path.file_name().and_then(|n| n.to_str()).unwrap_or("secret"), rand::random::<u64>()));
+    let mut o = std::fs::OpenOptions::new();
+    o.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.mode(0o600);
+    }
+    let mut f = o.open(&tmp)?;
+    // A link fails when the name is taken, so of two starts only one seal stands.
+    let done = f.write_all(bytes).and_then(|_| f.sync_all()).and_then(|_| std::fs::hard_link(&tmp, path));
+    let _ = std::fs::remove_file(&tmp);
+    match done {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+        Err(e) => Err(e),
+    }
 }
 
 /// Writes a secret so that no one else can read it at any moment: a new file opened readable by
@@ -434,7 +479,40 @@ mod lantern_key_tests {
 
     // A small cost, so the tests are quick; the cost rides in the file, as it does for real.
     fn key(dir: &Path, pass: Option<&[u8]>, on_disk: bool) -> Result<Zeroizing<[u8; 32]>> {
-        lantern_key_with(dir, pass, on_disk, 64, 1)
+        lantern_key_with(dir, pass, on_disk, 64, 1, true)
+    }
+
+    // The installer asks `--id` while a new Lantern makes its first seal. The look makes no key,
+    // and a seal already there is never written over, so the Lantern's key is the one sealed.
+    #[test]
+    fn a_look_at_a_new_lantern_makes_no_key_and_never_seals_over_it() {
+        let d = fresh_dir("look");
+        let pass = b"four random words here";
+        let e = lantern_key_with(&d, Some(pass), false, 64, 1, false).unwrap_err().to_string();
+        assert!(e.contains("start it once"), "{e}");
+        let e = lantern_key_with(&d, None, true, 64, 1, false).unwrap_err().to_string();
+        assert!(e.contains("start it once"), "{e}");
+        assert_eq!(std::fs::read_dir(&d).unwrap().count(), 0, "a look made no file");
+        let k = key(&d, Some(pass), false).unwrap();
+        assert_eq!(*lantern_key_with(&d, Some(pass), false, 64, 1, false).unwrap(), *k);
+        // A second start that finds no seal when it looks, but one there when it writes, takes
+        // that one and leaves it as it was.
+        let blob = std::fs::read(d.join(SEALED_KEY)).unwrap();
+        assert!(!write_secret_new(&d.join(SEALED_KEY), &[0; 88]).unwrap());
+        assert_eq!(std::fs::read(d.join(SEALED_KEY)).unwrap(), blob);
+        assert_eq!(*key(&d, Some(pass), false).unwrap(), *k);
+        assert_eq!(std::fs::read_dir(&d).unwrap().count(), 1, "no temporary file is left");
+        // Two starts at once on a new folder end with one key between them.
+        let d2 = fresh_dir("race");
+        let (a, b) = std::thread::scope(|s| {
+            let x = s.spawn(|| key(&d2, Some(pass), false).map(|k| *k));
+            let y = s.spawn(|| key(&d2, Some(pass), false).map(|k| *k));
+            (x.join().unwrap().unwrap(), y.join().unwrap().unwrap())
+        });
+        assert_eq!(a, b, "both starts hold the key that is sealed");
+        assert_eq!(*key(&d2, Some(pass), false).unwrap(), a);
+        let _ = std::fs::remove_dir_all(&d2);
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

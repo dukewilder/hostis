@@ -230,8 +230,12 @@ fn main() -> anyhow::Result<()> {
             std::process::exit(2);
         }
     };
-    // The hold key, from the keeper's passphrase. Without it this Lantern opens nothing.
-    let key = match passphrase(&args, &dir).and_then(|p| pyrate_node::hold::lantern_key(&dir, p.as_ref().map(|p| p.as_bytes()), args.iter().any(|a| a == "--hold-key-on-disk"))) {
+    // The hold key, from the keeper's passphrase. Without it this Lantern opens nothing. --id and
+    // --open-hails only look: they make, seal and remove no key, so asked while a new Lantern
+    // seals its first one they cannot seal another over it.
+    let look = args.iter().any(|a| a == "--id" || a == "--open-hails");
+    let lantern_key = if look { pyrate_node::hold::lantern_key_existing } else { pyrate_node::hold::lantern_key };
+    let key = match passphrase(&args, &dir).and_then(|p| lantern_key(&dir, p.as_ref().map(|p| p.as_bytes()), args.iter().any(|a| a == "--hold-key-on-disk"))) {
         Ok(k) => k,
         Err(e) => {
             eprintln!("lantern: {e}");
