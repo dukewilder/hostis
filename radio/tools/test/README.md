@@ -1,6 +1,6 @@
 # Test harnesses outside cargo
 
-The private test network, as in `AUDIT-BRIEF.md` section 11: a relay Lantern first, then
+The private test network: a relay Lantern first, then
 `PYRATE_RELAYS=http://127.0.0.1:3340` for everything.
 
 - `cargo run -p pyrate-node --bin voyage_test <dir> <wav> <jpg>`: 22 checks end to end.

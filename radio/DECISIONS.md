@@ -61,7 +61,7 @@ The site's light imagery (the second candle lit from the first, the cathedral in
 
 **Interface.** Flutter, for Android, Linux, Windows and macOS from one codebase.
 
-**Transport.** iroh: QUIC connections, hole punching, `iroh-gossip` for the Log and live audio, `iroh-blobs` for content-addressed archive chunks. Veilid was weighed and set down. Its private routing is the stronger privacy story, but a radio that stutters loses its listener in ten seconds, and the colours say the product has to be better than what people already use before privacy counts for anything. The spike ran on 8 November 2026 on a phone on T-Mobile and a PC on home broadband: sound in 0.72 seconds, a direct hole-punched path inside five seconds, and no gaps across relay and direct runs alike. iroh is confirmed. The results are in `spike/RESULTS.md`.
+**Transport.** iroh: QUIC connections, hole punching, `iroh-gossip` for the Log and live audio, `iroh-blobs` for content-addressed archive chunks. Veilid was weighed and set down. Its private routing is the stronger privacy story, but a radio that stutters loses its listener in ten seconds, and the colours say the product has to be better than what people already use before privacy counts for anything. The spike ran on 8 November 2026 on a phone on T-Mobile and a PC on home broadband: sound in 0.72 seconds, a direct hole-punched path inside five seconds, and no gaps across relay and direct runs alike. iroh is confirmed.
 
 **Relays.** iroh's relays forward traffic when two peers cannot reach each other directly. Pyrate Radio never depends on anyone else's relays. Every Lantern can run as a relay, the app ships with a list of HOSTIS-run and crew-run relays, and the list is itself gossiped and grows.
 
@@ -651,7 +651,7 @@ Dylan's ruling: listeners carry the network as far as they can by themselves, an
 
 ## LV. Blind boxes and no box in charge (16 November 2026)
 
-0.9.20, in Dylan's order: sealed boxes, then anyone can help and nobody is in charge, then nothing marks a node. The brief and the record of each phase are in PLAN-0.9.20.md.
+0.9.20, in Dylan's order: sealed boxes, then anyone can help and nobody is in charge, then nothing marks a node.
 
 - **A Lantern's key leaves its disk.** The hold key is sealed under the keeper's passphrase (Argon2id), given through a file, a file descriptor, a keyring's own tool or the terminal. With no passphrase a Lantern opens nothing. `--hold-key-on-disk` keeps the old way and warns at every start. Notes, podcast episodes, logs and leftovers from before the hold key all lie sealed, and a walk of the data folder fails on anything else.
 - **Lanterns carry blind.** A Lantern answers clear requests only for its own stations and those named by `--open` (HOSTIS's harbour list among them). Everything else it holds and passes on sealed by name, as a phone does, and its page and feeds serve only open stations. Its log names no station, peer or node unless asked.

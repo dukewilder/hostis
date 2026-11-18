@@ -44,7 +44,7 @@ done
 # everything a browser keeps for the radio, stays the same from one release to the next. Only a
 # list two of the three release keys signed (players.sigs, `release sign-all`) moves the name:
 # verify_players.py checks it here when this machine has Python, or the host checks it first and
-# passes what it found as SIGNED_CID (tools/dukewilder-rebuild.md). A list that fails, or one
+# passes what it found as SIGNED_CID. A list that fails, or one
 # shorter than the last one named, leaves the name on the last signed player.
 if [ -n "$IPNS_KEY" ]; then
   STATE=${STATE:-${IPFS_PATH:-$HOME/.ipfs}/pyrate-named}
