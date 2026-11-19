@@ -410,9 +410,7 @@ fn main() -> anyhow::Result<()> {
         // Counts only: a Lantern's own output never lists the stations it carries.
         let st = node.call(&serde_json::json!({ "cmd": "stations" }));
         let n = st.as_array().map(|a| a.len()).unwrap_or(0);
-        let mine = node.call(&serde_json::json!({ "cmd": "status" }));
-        let own = mine["mine"]["name"].as_str().map(|m| format!(" · keeping {m}")).unwrap_or_default();
-        println!("{} · {n} stations in the Log{own}", now_ms() / 1000);
+        println!("{} · {n} stations in the Log", now_ms() / 1000);
         let _ = Body::Strike; // keep the import honest across features
     }
 }
