@@ -77,6 +77,6 @@ git add -A pyrateradio
 git commit -q -m "pyrateradio: $1 (radio $H)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01PDUodF7caB4z7mhG1vnrX5"
+Claude-Session: https://claude.ai/code/session_01PDUodHNT7L6m4ymsghFAC4"
 git push -q origin site-pyrateradio:main
 git log --oneline -1
