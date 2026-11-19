@@ -4,7 +4,7 @@ For the three people who hold the release keys. A release goes out only when two
 
 ## What arrives
 
-A zipped folder from Dylan, named like `pyrate-release-0.9.18.zip`. Inside it are `release.exe` and the files that make up the release:
+A zipped folder from Dylan, named like `pyrate-release-0.9.18.zip`. Inside it are `release.exe`, **Sign this release**, and the files that make up the release:
 
 - the Android app, named like `31-0.9.18.apk`;
 - `player.manifest`, the list of the browser player's files;
@@ -17,16 +17,13 @@ A folder may hold only some of these. Sometimes a release needs a second, smalle
 ## Signing it
 
 1. Save the zip to your Desktop. Right-click it, choose **Extract All**, then press **Extract**. A folder named like `pyrate-release-0.9.18` opens.
-2. Take the computer off the internet. Click the network icon at the bottom right of the screen and turn Wi-Fi off, or pull out the network cable.
-3. In the open folder, click once in the address bar at the top, where the folder's name is shown. Type `cmd` and press **Enter**. A black window opens.
-4. Copy this line, right-click inside the black window to paste it, change the `2` to your own key number (1, 2 or 3, as written on your paper), and press **Enter**:
+2. Take the computer off the internet: click the network icon at the bottom right of the screen and turn Wi-Fi off, or pull out the network cable. The window in the next step says when the computer is offline.
+3. In that folder, double-click **Sign this release**. A black window opens and lists the files waiting to be signed.
+4. Choose your key number (1, 2 or 3, as written on your paper), type your 24 words with a space between each, and press **SIGN THE RELEASE**.
+5. The window lists each file as signed. It zips the signed folder for you, beside the folder, named like `pyrate-release-0.9.18-signed-key-2.zip`, and opens it highlighted.
+6. Close the window and turn the internet back on. The first holder sends that zip to the second; the second holder sends it back to Dylan. The window says which.
 
-       release.exe sign-all - 2 .
-
-5. Type your 24 words from the paper, with a space between each, and press **Enter**.
-6. The window lists each file as signed, then says how many keys have signed each one. The first holder sees "One more holder needs to sign it" against each file. The second holder sees "Everything in this folder is signed. Send it back."
-7. Close the black window. Turn the internet back on.
-8. Right-click the folder, choose **Send to**, then **Compressed (zipped) folder**. Send the new zip back to Dylan the way the first one came.
+To sign without the window, open a command prompt in the folder (type `cmd` in its address bar and press **Enter**) and run `release.exe sign-all - <your key number> .`, then type the words.
 
 ## What you send back
 
@@ -34,8 +31,8 @@ The whole folder, zipped. Your signature sits in the new files ending `.sigs`, a
 
 ## When something looks wrong
 
-- If the window says those words are not your key, check the key number in the line you pasted and the words on your paper, then paste the line again.
-- If it says there is nothing here to sign, the black window opened somewhere else. Close it and start again at step 3, inside the folder itself.
-- To see what is signed without signing anything, paste `release.exe check .` in place of the line in step 4.
+- If the window says those words are not your key, check the key number you chose and the words on your paper, then try again.
+- If it says there is nothing here to sign, or release.exe is missing, the zip was opened without extracting it. Close it and start again at step 1.
+- To see what is signed without signing anything, open the window and read the list before typing anything, or run `release.exe check .` in a command prompt.
 - Sign only a folder you were expecting, sent by Dylan the usual way. If anything about it surprises you, ask him on another channel before you sign.
 - Nobody from HOSTIS will ever ask for your words, Dylan included.
