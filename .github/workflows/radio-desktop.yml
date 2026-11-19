@@ -36,7 +36,7 @@ jobs:
         with: { channel: stable, flutter-version: "3.47.9" }
       - run: cargo build --release --locked -p pyrate-ffi
       # The open player rides in the app, for sharing on a Wi-Fi and saving to a folder: the one
-      # this app names, fetched from IPFS and checked block by block.
+      # this app names, fetched from IPFS or the site's CAR and checked block by block.
       - run: python tools/open_player.py --tar app/assets/player/open-player.tar --need
         env: { PYRATE_PLAYER_CARS: "https://hostis.black/pyrateradio/ipfs" }
       # The build's own version code, so the app can tell when a newer one is signed.
@@ -73,7 +73,7 @@ jobs:
           lipo -create -output libpyrate_ffi.dylib target/aarch64-apple-darwin/release/libpyrate_ffi.dylib target/x86_64-apple-darwin/release/libpyrate_ffi.dylib
           install_name_tool -id @rpath/libpyrate_ffi.dylib libpyrate_ffi.dylib
       # The open player rides in the app, for sharing on a Wi-Fi and saving to a folder: the one
-      # this app names, fetched from IPFS and checked block by block.
+      # this app names, fetched from IPFS or the site's CAR and checked block by block.
       - run: python3 tools/open_player.py --tar app/assets/player/open-player.tar --need
         env: { PYRATE_PLAYER_CARS: "https://hostis.black/pyrateradio/ipfs" }
       # The build's own version code, so the app can tell when a newer one is signed.
@@ -103,7 +103,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libasound2-dev libayatana-appindicator3-dev
       - run: cargo build --release --locked -p pyrate-ffi
       # The open player rides in the app, for sharing on a Wi-Fi and saving to a folder: the one
-      # this app names, fetched from IPFS and checked block by block.
+      # this app names, fetched from IPFS or the site's CAR and checked block by block.
       - run: python3 tools/open_player.py --tar app/assets/player/open-player.tar --need
         env: { PYRATE_PLAYER_CARS: "https://hostis.black/pyrateradio/ipfs" }
       # The build's own version code, so the app can tell when a newer one is signed.
