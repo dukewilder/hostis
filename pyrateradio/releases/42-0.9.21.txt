@@ -1,0 +1,31 @@
+Pyrate Radio 0.9.21
+
+The first release since 0.9.18. It carries everything built for 0.9.19 and 0.9.20.
+
+What a stranger can learn
+- A listener's door no longer publishes its address. A tab asks for a way in through its own route, and only that tab learns the door's address.
+- A private device tells strangers nothing about what it keeps or played.
+- A station kept to its link is spoken of under tags that only its listeners can read.
+- Entries leave on the quarter hour, so a stamp never shows when the keeper sent it.
+- Every connection names h3 in the clear, as any HTTP/3 client does.
+- The relay is now 135-181-190-28.sslip.io, a name with nothing to do with HOSTIS.
+- Android looks up names over DNS over TLS. No plain DNS leaves the app.
+- The plaintext captive-portal probe is gone.
+- The seed list is fetched from mirrors off hostis.black.
+- number0's relays stand in only at a switch, off by default.
+
+Dedicated devices
+- Ordinary listening and carrying need no VPN, and nothing about them changes.
+- A spare phone is on all day for strangers to reach, so it starts only behind a VPN or through the app's Tor mode. If the VPN drops, the spare phone stops at once and says so, and it starts again by itself when the VPN is back.
+- On a phone, "Let shared links name this radio" also needs a VPN or Tor, since those links carry the device's address wherever they travel. It pauses while the VPN is off and comes back with it.
+- On a computer, turning on links that name it, the 20 GB share or "Keep the radio running when the window is closed" asks first when no VPN is found.
+
+The network
+- Anyone can help and nobody is in charge. A node finds the network from remembered peers, links, doors, a seed list signed by two of the three release keys and, last, the DHT.
+- Each device takes the jobs the network is short of, within its own limits.
+- Lanterns carry blind, keep their hold key sealed under a passphrase, and can run dark beside Tor.
+
+Fixes
+- A first look at a new Lantern no longer seals a key over the one it is making.
+
+Two of the three release keys sign this build. Your phone installs it only when you tap, and Android asks again.
