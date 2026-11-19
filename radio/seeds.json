@@ -1,0 +1,20 @@
+{
+  "at": 1795065137685,
+  "mirrors": [],
+  "pyrate": "seeds",
+  "seeds": [
+    "a6e12327929c36614b4cd24483103a0dc125fdd0be97fd27b85bdb61b8c397c3@https://135-181-190-28.sslip.io",
+    "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442@https://135-181-190-28.sslip.io",
+    "f6d5c5276a98baf5d4964683115e9f0f6095e713f46bec34c25c29a66e46d753@https://135-181-190-28.sslip.io"
+  ],
+  "sigs": [
+    [
+      2,
+      "cb9fda6d0d0898c6a303b2370882a6f6103a4696165c0e2ec7ab41b36a0df0067ee183c78e69ab2a96177c708655e75a636811a70c98dc7cd615b06da8aa9307"
+    ],
+    [
+      0,
+      "e7df99efe8b934460605633a5273586f5f992f8ebf6f9c0ebf8d9883b36108e0567a2728b4dc1fe8596f6eff9e54d286c4771002a55873ee5d03cdf0f3b30b08"
+    ]
+  ]
+}
