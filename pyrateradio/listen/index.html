@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-6MBa8wXKLGTYFDz3rGwbGGk4F/lu0RO4nT6soMe1ZC4='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https: wss:; font-src 'self' data:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<link rel="modulepreload" href="app.js?v=161ffd513c">
-<link rel="modulepreload" href="pkg/pyrate_browser.js?v=161ffd513c">
-<link rel="preload" href="pkg/pyrate_browser_bg.161ffd513c.wasm" as="fetch" type="application/wasm" crossorigin>
+<link rel="modulepreload" href="app.js?v=10aca61ec1">
+<link rel="modulepreload" href="pkg/pyrate_browser.js?v=10aca61ec1">
+<link rel="preload" href="pkg/pyrate_browser_bg.10aca61ec1.wasm" as="fetch" type="application/wasm" crossorigin>
 <link rel="preload" href="fonts/im-fell-dw-pica-sc-400-860d6a62.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/jetbrains-mono-400-cfd8dabe.woff2" as="font" type="font/woff2" crossorigin>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -259,7 +259,7 @@ button{background:none;border:0;color:inherit;padding:0;margin:0;cursor:pointer;
 .top .mh-title a{color:var(--ink)}.top .mh-title a:hover{color:var(--ink)}
 .top .mh-sub{font-size:clamp(14px,2.4vw,17px);margin-top:8px}
 .signalrow{display:flex;gap:.9rem;justify-content:center;align-items:center;flex-wrap:wrap;margin:16px 0 0;min-height:30px}
-.signal{font:400 11.5px var(--mono);letter-spacing:.2em;color:var(--faint);text-transform:uppercase}
+.signal{font:400 11.5px var(--mono);letter-spacing:.2em;color:var(--soft);text-transform:uppercase}
 .signal:not(:empty)::before{content:'';display:inline-block;width:5px;height:5px;background:var(--dim);transform:rotate(45deg);margin:0 .7rem .15rem 0;vertical-align:middle}
 .signalrow .btn{min-height:40px;padding:.3rem .9rem;font-size:.7rem}
 .mirrorbox:has(.mirrors:empty){display:none}
@@ -300,7 +300,7 @@ button{background:none;border:0;color:inherit;padding:0;margin:0;cursor:pointer;
 .freq{font:300 1.6rem var(--mono);letter-spacing:.04em;color:var(--ink);font-variant-numeric:tabular-nums}
 .freq:not(:empty)::after{content:'on the dial';font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin-left:.6rem;vertical-align:.35em}
 .ident .cs{font:400 .76rem var(--mono);letter-spacing:.14em;color:var(--dim);white-space:pre}
-.slot{font:400 11px var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--faint);min-height:1.2em;margin-top:1.4rem}
+.slot{font:400 11px var(--mono);letter-spacing:.24em;text-transform:uppercase;color:var(--dim);min-height:1.2em;margin-top:1.4rem}
 .set .np{font-style:italic;font-size:1.5rem;line-height:1.3;min-height:1.4em;margin-top:.3rem;color:var(--bonedim)}
 .set .by{font:600 .74rem var(--carved);letter-spacing:.22em;text-transform:uppercase;color:var(--dim);min-height:1.2em;margin-top:.35rem}
 .prog{position:relative;height:1px;background:var(--line);margin-top:1.2rem;max-width:440px}
@@ -316,7 +316,7 @@ button{background:none;border:0;color:inherit;padding:0;margin:0;cursor:pointer;
 @keyframes breathe{50%{opacity:.45}}
 .set.tuning .np{color:var(--soft);font-style:normal;font:400 .95rem var(--mono);letter-spacing:.08em}
 .hint{font-style:italic;color:var(--dim);font-size:1rem;line-height:1.5;margin:.8rem 0 0;max-width:30rem}
-.time{font:400 .72rem var(--mono);letter-spacing:.08em;color:var(--faint);margin-top:.6rem;min-height:1em;font-variant-numeric:tabular-nums}
+.time{font:400 .72rem var(--mono);letter-spacing:.08em;color:var(--dim);margin-top:.6rem;min-height:1em;font-variant-numeric:tabular-nums}
 
 /* the dial: a mark for every station where its frequency falls, behind glass, and names only
    around the needle, each on a hairline down to its mark */
@@ -329,7 +329,7 @@ button{background:none;border:0;color:inherit;padding:0;margin:0;cursor:pointer;
 .scale i.major{height:13px;background:var(--dim)}
 .scale b{position:absolute;bottom:17px;transform:translateX(-50%);font:400 .68rem var(--mono);letter-spacing:.06em;color:var(--dim)}
 .names{position:absolute;left:0;right:0;top:9px;height:26px}
-.names button{position:absolute;top:0;padding:0;min-height:26px;font:400 .68rem var(--mono);letter-spacing:.14em;text-transform:uppercase;
+.names button{position:absolute;top:-9px;padding:9px 0;min-height:44px;font:400 .68rem var(--mono);letter-spacing:.14em;text-transform:uppercase;
   color:var(--faint);white-space:nowrap;max-width:9.5rem;overflow:hidden;text-overflow:ellipsis;line-height:26px;transition:color .15s}
 .names button:hover{color:var(--ink)}
 .names button.on{color:var(--ink)}
@@ -574,7 +574,7 @@ textarea{display:block;width:100%;min-height:9rem;padding:.7rem;margin:1rem 0 .6
   button.power{min-height:58px}
   .passbox{flex-direction:column;text-align:center}.passbox .row-btns{justify-content:center}
 }
-@media (prefers-reduced-motion:reduce){.needle,.prog div{transition:none}.lamp.on,.set.tuning .needle,.row.skel,.row.playing .count::before{animation:none}.prog.busy div{animation-duration:3s}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.needle,.prog div,.vu .vun{transition:none}.lamp.on,.set.tuning .needle,.row.skel,.row.playing .count::before{animation:none}.prog.busy div{animation-duration:3s}}
 
 /* inside another page, the set alone */
 html.embed,html.embed body{background:transparent;min-height:0}
@@ -611,7 +611,7 @@ html.leaving .leavingnote{display:block}html.leaving .set,html.leaving .divider,
 
 /* raising colours from the tab */
 .field{display:block;margin:0 0 1rem}
-.field>span{display:block;font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin-bottom:.35rem}
+.field>span{display:block;font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin-bottom:.35rem}
 .field input{width:100%}
 input[type=password]{background:var(--panel);color:var(--ink);border:1px solid rgba(237,228,206,.24);border-radius:0;font:400 1rem var(--serif);padding:0 .9rem;min-height:44px}
 .studio .switches{flex-direction:row;flex-wrap:wrap;gap:.6rem 1.6rem;justify-content:center;width:auto}
@@ -623,7 +623,7 @@ input[type=password]{background:var(--panel);color:var(--ink);border:1px solid r
 .st-card{display:flex;align-items:center;gap:.9rem;padding:.8rem;border:1px solid var(--line);background:var(--panel);margin:0 0 .6rem}
 .st-card .meta{flex:1;min-width:0}.st-card .name{font:400 1.2rem var(--sc);letter-spacing:.02em;color:var(--ink)}
 .st-card .cs{font:400 .7rem var(--mono);letter-spacing:.14em;color:var(--dim)}
-.st-status{font:400 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);text-align:center;margin:.4rem 0 1rem;min-height:1.2em}
+.st-status{font:400 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--soft);text-align:center;margin:.4rem 0 1rem;min-height:1.2em}
 .st-status .live{color:var(--redup)}
 .drop{display:flex;flex-direction:column;align-items:center;gap:.3rem;padding:1.6rem 1rem;border:1px dashed rgba(237,228,206,.3);background:rgba(237,228,206,.015);cursor:pointer;text-align:center;margin:0 0 1rem;transition:border-color .18s,background .18s}
 .drop:hover,.drop.over{border-color:var(--faint)}
@@ -633,6 +633,8 @@ input[type=password]{background:var(--panel);color:var(--ink);border:1px solid r
 .st-queue{margin:0 0 1rem}
 .qi{display:flex;align-items:baseline;gap:.8rem;padding:.55rem 0;border-bottom:1px solid var(--line-soft)}
 .qi .qt{flex:1;min-width:0;color:var(--bonedim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qi .qt{display:flex;flex-wrap:wrap;gap:.2rem .6rem}.qi .qt input{flex:1 1 9rem;min-width:0;min-height:44px;background:none;border:0;border-bottom:1px solid var(--line-soft);color:var(--bonedim);font:inherit;padding:0}
+.qi .qt input.qb-in{color:var(--dim)}.qi .qt input:disabled{border-color:transparent}.qi .qgo{flex:0 0 auto;min-height:44px}
 .qi .qs{font:400 .66rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);flex:0 0 auto}
 .qi.done .qs{color:var(--ink)}.qi.bad .qs{color:var(--redup)}
 .qi .bar{flex:0 0 70px;height:1px;background:var(--line);position:relative;align-self:center}.qi .bar i{position:absolute;inset:0 auto 0 0;background:var(--ink)}
@@ -838,7 +840,7 @@ input[type=time]{background:var(--panel);color:var(--ink);border:1px solid rgba(
 button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228,206,.05)}
 .sleeprow{cursor:default}
 #sleepbtns{display:flex;gap:2px}
-#sleepbtns button{min-width:36px;min-height:34px;padding:0 .35rem;background:none;border:1px solid var(--line);color:var(--dim);font:400 .72rem var(--mono);cursor:pointer}
+#sleepbtns button{min-width:44px;min-height:44px;padding:0 .35rem;background:none;border:1px solid var(--line);color:var(--dim);font:400 .72rem var(--mono);cursor:pointer}
 #sleepbtns button:hover{color:var(--ink);border-color:var(--faint)}
 #sleepbtns button[aria-pressed="true"]{color:var(--ink);border-color:var(--ink)}
 .played{list-style:none;margin:0;padding:.2rem .95rem .6rem;max-height:10rem;overflow-y:auto;border-top:1px solid var(--line)}
@@ -1015,7 +1017,7 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 <p class="centre"><button id="st-raise" class="lead-btn"><span class="fc-lead">Raise colours</span><span class="fc-sub">all but the passphrase can change later</span></button></p>
 <p id="st-note" class="fine" role="status"></p>
 <details class="fold"><summary>Bring back a station with its 24 words</summary><div><textarea id="st-words" spellcheck="false" autocomplete="off" aria-label="The station's 24 words"></textarea><label class="field"><span>Passphrase, if you set one</span><input id="st-rpass" type="password" autocomplete="off"></label><p class="centre"><button id="st-restore" class="btn">Bring it back</button></p></div></details>
-<details class="fold"><summary>How private is broadcasting from a browser?</summary><div><p>Your station passes through other people's radios before it reaches anyone, so no listener can trace it to this tab. The relay this page connects through can see your address, though never what you send. Open this page in Tor Browser to hide your address from the relay too. The app on a phone is more private still.</p></div></details>
+<details class="fold"><summary>How private is broadcasting from a browser?</summary><div><p>Your station passes through other people's radios before it reaches anyone, so a listener cannot trace it to this tab. The relay this page connects through can see your address, though never what you send, and so can a door or first hop this tab links to directly; turn off Direct links in Settings to keep to the relay. Your first hop or your internet provider can still match the size and time of an upload with what appears on the station, and the app's Through Tor closes that gap. Tor Browser hides your address from the relay too, at its Standard level for this page, since Safer turns off what the radio runs on. The app on a phone is more private still.</p></div></details>
 </div>
 <div id="st-show" class="st-show" hidden>
 <p class="boxhead">Write these down</p>
@@ -1028,7 +1030,7 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 <div id="st-mine" hidden>
 <div id="st-born" class="st-born" hidden>
 <p class="born-lead">Colours raised</p>
-<p class="born-sub">Your station plays by its link from now on, at <span id="st-bfreq"></span> on the dial.</p>
+<p class="born-sub">Your station plays by its link once it has reached the network, within a quarter of an hour, at <span id="st-bfreq"></span> on the dial.</p>
 <p class="centre"><label class="blood" for="st-files">Add your first recording</label></p>
 </div>
 <div class="st-card"><div id="st-flag" class="mini"></div><div class="meta"><div id="st-mname" class="name"></div><div id="st-mcs" class="cs"></div></div><button id="st-tune" class="btn">Listen</button></div>
@@ -1078,6 +1080,7 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 </div>
 <label class="drop" id="st-drop"><input type="file" id="st-files" multiple accept="audio/*,video/mp4,video/webm,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.webm"><span class="drop-lead">Drop recordings here</span><span class="drop-sub">or click to choose them</span></label>
 <div class="st-opts"><label><input type="checkbox" id="st-talk"><span>Spoken word</span></label><label><input type="checkbox" id="st-disguise"><span>Disguise my voice</span></label></div>
+<p class="fine" id="st-optnote">Spoken word goes out in mono with the mains hum taken out. Disguise my voice lowers your voice by a shift your station keeps, and sends every upload as spoken word. It stops a casual ear, not a voice matcher.</p>
 <div id="st-queue" class="st-queue"></div>
 <p class="fine">Keep this tab open until they finish sending.</p>
 <div id="desk" class="desk" role="region" aria-label="Live desk">
@@ -1150,20 +1153,25 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 <label class="open-only"><input type="checkbox" id="sw-empty"><span>Show stations with nothing to play yet</span></label>
 <label><input type="checkbox" id="sw-art"><span>Show station pictures</span></label>
 <label><input type="checkbox" id="sw-crew"><span>Carry the radio while you listen</span></label>
+<label><input type="checkbox" id="sw-directlinks"><span>Direct links<small>This browser may link straight to a door or to its first hop when the relays are slow. A direct link goes around this browser&#8217;s proxy and shows this device&#8217;s address to the door or first hop.</small></span></label>
+<label><input type="checkbox" id="sw-plain"><span>Keep names plain<small>The tab and the lock screen say only Radio, with no station name or picture.</small></span></label>
 </div>
-<p id="crewnote" class="fine">Your browser passes on what it plays and other listeners&#8217; requests, through three hops, so no one can tell who hears what. What you play is held only while you listen. A computer also carries a few quiet stations drawn by lot, and keeps them between visits, up to 500 MB, until you forget this browser. It never keeps what you played. Your first hop may connect to you directly and see your address, as with Tor; it never sees what you hear. In turn, a listener whose first hop this browser is may see its address.</p>
+<p id="crewnote" class="fine">Your browser passes on what it plays and other listeners&#8217; requests, through three hops, so no single radio on the way learns both who you are and what you hear. While the network is young, HOSTIS&#8217;s first radios may carry both hops of a new browser&#8217;s route. What you play is held only while you listen. A computer also carries a few quiet stations drawn by lot, and keeps them between visits, up to 500 MB, until you forget this browser. It never keeps what you played. Your first hop may connect to you directly and see your address, as with Tor; it never sees what you hear. In turn, a listener whose first hop this browser is may see its address.</p>
 <p id="stockuse" class="fine" hidden></p>
 <div class="open-only">
 <p class="fine">Each station says for itself whether it is mature or explicit. Hide any station that gets it wrong.</p>
 <p class="centre"><button id="mlist" class="btn">Hidden stations</button></p>
 <div id="mbox" hidden><div id="mrows" class="mrows"></div><p class="fine">Copy this list to share it, or paste in a list someone shared with you.</p><textarea id="mtext" spellcheck="false" aria-label="Hidden stations"></textarea><div class="row-btns"><button id="mtake" class="btn">Hide these</button><button id="mclear" class="btn quiet">Show every station again</button></div><div id="mnote" class="fine"></div></div>
-<details class="fold"><summary>Advanced</summary><div>
-<div class="switches"><label><input type="checkbox" id="sw-direct"><span>Connect straight to quiet stations</span></label></div>
-<p>A station few people carry starts sooner. The radios carrying it can then see this connection, which the usual two steps keep from them.</p>
-</div></details>
 </div>
-<details class="fold mirrorbox"><summary>Other copies of the player</summary><div><p class="fine">The same player, served from elsewhere, for when this address is out of reach.</p><ul class="mirrors"></ul></div></details>
-<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your settings, kept and hidden stations, the list of stations last on the air, your name and mutes in the chat, any invitations you opened, and the key of any station you started here (never its 24 words). The key and invitations are locked under a key the browser keeps to itself.<span class="harbour-only"> On this page it also keeps the schedules of all of HOSTIS&#8217;s stations alike, so the next visit starts sooner.</span> While it carries the radio, a computer also keeps up to 500 MB of stations it does not play, and the radios that answered it quickly. The kept stations are passed on to other listeners who ask. Nothing else is sent anywhere.</p></div></details>
+<details class="fold"><summary>Advanced</summary><div>
+<div class="open-only"><div class="switches"><label><input type="checkbox" id="sw-direct"><span>Connect straight to quiet stations</span></label></div>
+<p>A station few people carry starts sooner. The radios carrying it can then see this connection, which the usual two steps keep from them.</p></div>
+<div class="switches"><label><input type="checkbox" id="sw-n0"><span>Use number0&#8217;s relays when ours fail</span></label></div>
+<p>number0 makes the networking the radio is built on and runs relays of its own. With this on, a tab that cannot reach HOSTIS&#8217;s relay within fifteen seconds goes through theirs, and number0 sees this device&#8217;s address.</p>
+<p id="n0note" class="fine" hidden>This takes effect the next time the page opens.</p>
+</div></details>
+<details class="fold mirrorbox"><summary>Other copies of the player</summary><div><p class="fine">The same player, served from elsewhere, for when this address is out of reach.</p><ul class="mirrors"><li><a href="https://135-181-190-28.sslip.io/listen/" target="_blank" rel="noopener noreferrer">135-181-190-28.sslip.io/listen</a></li></ul></div></details>
+<details class="fold keeps"><summary>What this browser keeps</summary><div><p>Your kept and hidden stations, your name and mutes in the chat, any invitations you opened, the doors it went through and the key of any station you started here (never its 24 words) are locked under a key the browser keeps to itself. That key lives in the browser&#8217;s profile, so a copy of the profile can open them. Your settings and the list of stations last on the air are kept as they are.<span class="harbour-only"> On this page it also keeps the schedules of all of HOSTIS&#8217;s stations alike, so the next visit starts sooner.</span> While it carries the radio, a computer also keeps up to 500 MB of stations it does not play, filed under names only this browser can make, and the radios that answered it quickly. The kept stations are passed on to other listeners who ask. Nothing else is sent anywhere.</p><p>A copy of the player installed from a checked address moves to a new version only when two of the three release keys have signed its list of files. Whoever serves an address can still replace the part of the page that does the checking.</p></div></details>
 <p class="centre"><button id="forget" class="btn quiet">Forget this browser</button></p>
 <footer>
 <p class="f-contact">Email corrections to <a href="mailto:hostisblack@pm.me">hostisblack@pm.me</a></p>
@@ -1176,6 +1184,6 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 <button id="mini-up" class="mp-main" aria-label="Back to the radio"><span id="mini-art" class="mp-art" aria-hidden="true"></span><span class="mp-text"><span id="mini-name" class="mp-name"></span><span id="mini-np" class="mp-np"></span></span></button>
 <button id="mini-go" class="mp-go" aria-label="Listen"><span class="glyph" aria-hidden="true"></span></button>
 </div>
-<script type="module" src="app.js?v=161ffd513c"></script>
+<script type="module" src="app.js?v=10aca61ec1"></script>
 </body>
 </html>

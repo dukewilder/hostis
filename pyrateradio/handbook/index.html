@@ -385,7 +385,7 @@ html.leaving .leavingnote{display:block}html.leaving .hero .ctas,html.leaving .h
 <div class="prose">
 <p>The radio cannot hide what you put on the air yourself.</p>
 </div>
-<details class="fold"><summary>Your voice, and the room around it</summary><div>The app takes out mains hum, which can date and place a recording. It cannot take out a siren, a church bell, a train or a neighbour's voice, so record somewhere quiet. Disguise my voice, in Settings, shifts your voice lower and make it not quite yours. A voice you have used anywhere else in public is a voice that can be matched.</div></details>
+<details class="fold"><summary>Your voice, and the room around it</summary><div>The app takes out mains hum, which can date and place a recording. It cannot take out a siren, a church bell, a train or a neighbour's voice, so record somewhere quiet. Disguise my voice, in Settings, shifts your voice lower by an amount your station keeps. It stops a casual ear, not a voice matcher: software that compares voices can still find yours, and a voice you have used anywhere else in public is a voice that can be matched.</div></details>
 <details class="fold"><summary>Your words</summary><div>Turns of phrase, spelling and the subjects you return to are as much yours as your face. Writing for a station in a voice you use nowhere else keeps the two apart.</div></details>
 <details class="fold"><summary>Your files</summary><div>Air what is yours to air. That means your own recordings, the public domain, and work its makers freed under a licence that lets anyone broadcast it. Bought and promotional music is somebody else's, and files can carry marks tied to the account that got them.</div></details>
 <details class="fold"><summary>What your station says of itself</summary><div>A home port is public, so leave it empty or name a city that is not yours. A programme that keeps clock times carries your time zone with it; one that only shuffles carries none. A Bitcoin tip address shows every payment to anyone who looks it up. Monero shows none.</div></details>
@@ -413,7 +413,7 @@ html.leaving .leavingnote{display:block}html.leaving .hero .ctas,html.leaving .h
 <section id="words">
 <div class="sechead"><h2>Your Words</h2><span class="cap">the station itself</span></div>
 <div class="prose">
-<p>The 24 words are the station. Write them on paper, in order, and keep the paper somewhere a search of your home would not find it. Nobody from Pyrate Radio or HOSTIS will ever ask for them.</p>
+<p>The 24 words are the station. If you set a passphrase, the words and the passphrase together are the station, and the words alone open a different, empty one. Write them on paper, in order, and keep the paper somewhere a search of your home would not find it. Nobody from Pyrate Radio or HOSTIS will ever ask for them.</p>
 <p>A passphrase on top of the words, set when you raise the station, makes the words alone open a different, empty station. A photograph of the paper then gives nothing away. Keep the passphrase in your head or apart from the words, because a station whose passphrase is lost is lost with it.</p>
 <p>If a phone is lost or taken, put the words into the app on another phone. The station comes back, and the old phone can no longer speak for it.</p>
 </div>
@@ -423,9 +423,11 @@ html.leaving .leavingnote{display:block}html.leaving .hero .ctas,html.leaving .h
 <section id="line">
 <div class="sechead"><h2>Your Line</h2><span class="cap">what your connection shows</span></div>
 <div class="prose">
-<p>The relay a phone or a tab connects through sees its address, and nothing of what passes. Your internet provider sees that you use the radio, and nothing of what you play or air.</p>
-<p>For more cover, run a VPN you trust on the phone, set to always on, so the radio never touches the network without it. In a browser, open the player in Tor Browser, and the relay sees only Tor.</p>
-<p>The app can go through Tor itself. Install Orbot, start it, and in Settings, under Advanced, Connections, turn on Go through Tor. From the next start the radio reaches the network only by way of Tor and offers no direct path, so no peer and no relay learns where the phone is. On a computer, Tor with its HTTP tunnel on port 8118 does the same.</p>
+<p>To anyone watching your line, the radio looks like a browser fetching from a website over HTTP/3, the protocol much of the web now runs on. Its connections carry no name of the radio's own, and a tool that sorts traffic by kind, such as nDPI, files every one of them as QUIC, HTTP or TLS. Each release is tested for it. The address you reach still shows. The relay's name has nothing to do with HOSTIS, but anyone who knows its address, or a Lantern's, can tell from a connection to it that you are probably a listener. When the radio finds nobody else at all, it looks the network up in the BitTorrent address book, under words that are the same for every copy, so whoever watches your line or answers that lookup can tell what was asked. It then fetches the signed seed list from GitHub (raw.githubusercontent.com). The relay's name is answered by sslip.io's DNS. On Android the app looks up every name at Cloudflare and Quad9 over DNS over TLS, so your provider sees none of them.</p>
+<p>The relay a phone or a tab connects through sees its address, and nothing of what passes. The timing and size of what you send and receive stay in view of your internet provider and your guard, so they can line up what you send with what appears on your station a little later, recordings and live shows alike. Tor with a bridge answers both the address and the timing.</p>
+<p>Whoever can see the size of a keeper's uploads, such as their internet provider or the first hop, could match them to what the station airs. Going through Tor answers that.</p>
+<p>For more cover, run a VPN you trust on the phone, set to always on, so the radio never touches the network without it. In a browser, open hostis.black's player or a Lantern's copy in Tor Browser, set to Standard for that site, and the relay sees only Tor. Tor Browser's Safer level turns off what the radio runs on, and Tor Browser keeps no service worker, so copies on inbrowser.link, and the invitations that go only to them, stay closed there.</p>
+<p>The app can go through Tor itself. Install Orbot, choose a bridge in it (Snowflake or WebTunnel), start it, and in Settings, under Advanced, Connections, turn on Go through Tor. With a bridge your provider sees a video call or an ordinary website, and not Tor. From the next start the radio reaches the network only by way of Tor and offers no direct path, so no peer and no relay learns where the phone is. On a computer, Tor with its HTTP tunnel on port 8118 does the same.</p>
 </div>
 </section>
 
@@ -461,7 +463,7 @@ html.leaving .leavingnote{display:block}html.leaving .hero .ctas,html.leaving .h
 <div class="prose">
 <p>Pyrate Radio has no server. Every phone with the app, every open player in a browser and every Lantern is a node, and the nodes keep the Log of stations between them. Each station is a key held by its keeper, and every entry in its log is signed by that key and checked by every node that carries it.</p>
 <p>HOSTIS writes and publishes the software, raises its own stations, and runs one Lantern among any number anyone may run. It ranks no station. HOSTIS can stop carrying a station on its own machines. It cannot take one off anyone else's, change what one plays or see who listens. HOSTIS holds no accounts, listening records or addresses. The stations hostis.black plays are HOSTIS's own, and every other station plays in the open player, which belongs to nobody.</p>
-<p>Updates are signed by two of three release keys held in separate places, and carried on the network like any station. The open player lives on IPFS under a name of its own, and the app, the source and the computers' builds travel by IPFS and BitTorrent as well as from this site.</p>
+<p>The app's updates are signed by two of three release keys held in separate places, and carried on the network like any station. The open player lives on IPFS under a name of its own, and the app, the source and the computers' builds travel by IPFS and BitTorrent as well as from this site.</p>
 </div>
 </section>
 <div class="divider"><span class="divider-glyph"></span></div>

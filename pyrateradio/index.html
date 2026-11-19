@@ -357,7 +357,7 @@ html.leaving .leavingnote{display:block}html.leaving .hero .ctas,html.leaving .h
 @media (max-width:760px){.pillars,.promises,.two{grid-template-columns:1fr}.pillars div+div{margin:-1px 0 0}.two .card+.card{margin:-1px 0 0}.setframe iframe{height:760px}}
 @media (max-width:560px){.desk{grid-template-columns:1fr}.desk a+a{margin:-1px 0 0}}
 </style>
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Pyrate Radio", "url": "https://hostis.black/pyrateradio/", "description": "Radio that anyone can raise and every listener carries, with no server to switch off.", "applicationCategory": "MultimediaApplication", "operatingSystem": "Android, Windows, macOS, Linux, Web", "inLanguage": "en-GB", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "publisher": {"@type": "Organization", "name": "HOSTIS", "url": "https://hostis.black/"}, "softwareVersion": "0.9.18", "fileSize": "50 MB", "downloadUrl": "https://hostis.black/pyrateradio/pyrate-radio-0.9.18.apk"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Pyrate Radio", "url": "https://hostis.black/pyrateradio/", "description": "Radio that anyone can raise and every listener carries, with no server to switch off.", "applicationCategory": "MultimediaApplication", "operatingSystem": "Android, Web", "inLanguage": "en-GB", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "publisher": {"@type": "Organization", "name": "HOSTIS", "url": "https://hostis.black/"}, "softwareVersion": "0.9.21", "fileSize": "51 MB", "downloadUrl": "https://hostis.black/pyrateradio/pyrate-radio-0.9.21.apk"}</script>
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "HOSTIS", "item": "https://hostis.black/"}, {"@type": "ListItem", "position": 2, "name": "Pyrate Radio", "item": "https://hostis.black/pyrateradio/"}]}</script>
 </head>
 <body>
@@ -369,7 +369,7 @@ html.leaving .leavingnote{display:block}html.leaving .hero .ctas,html.leaving .h
 <p class="mh-desc">Radio that anyone can raise and every listener carries, with no server to switch off.</p>
 <div class="ctas">
 <div><a class="hbtn openlink" href="listen/">Open the full player</a><p class="btnnote">every station, in any browser &#183; it opens off this site</p></div>
-<div class="ctas2"><a class="btn" href="#set">Get the app</a><a class="btn" href="#colours">Start a station</a><a class="btn" href="how-it-works/">Why no censor can switch it off</a></div>
+<div class="ctas2"><a class="btn" href="#set">Get the app</a><a class="btn" href="#colours">Start a station</a><a class="btn" href="how-it-works/">Why it is hard to switch off</a></div>
 </div>
 <div class="dialband" aria-hidden="true"><svg id="dialsvg" viewBox="0 0 1000 96"></svg></div>
 </header>
@@ -393,13 +393,21 @@ html.leaving .leavingnote{display:block}html.leaving .hero .ctas,html.leaving .h
 </div>
 </section>
 <script>
+// Whether a copy of the open player answers with its own files. A gateway that checks in the
+// browser answers any address with a page of its own, so an IPFS copy is asked for its file list
+// through a gateway that serves the raw bytes; a Lantern's copy answers for itself.
+window.pyrateAlive=function(u,ms){var gw=/\.ip[fn]s\.|\/ip[fn]s\//.test(u),late=new Promise(function(_,no){setTimeout(function(){no('slow')},ms||4000)});
+return Promise.race([late,gw?fetch(u.replace('.inbrowser.link/','.dweb.link/')+'player.manifest',{cache:'no-store'}).then(function(r){return r.ok?r.text():Promise.reject(r.status)}).then(function(t){return t.indexOf('pyrate-player/v1')===0?u:Promise.reject('not the player')})
+:fetch(u+'favicon.png',{mode:'no-cors',cache:'no-store'}).then(function(){return u})])};
+</script>
+<script>
 // A station link: hostis.black/pyrateradio/#<station id>. One of HOSTIS's own plays here, in
 // the browser or the app. Anything else (another station, an invitation, a flock) goes straight
 // on to the open player before this page reads it: the part after the # never reaches a server.
-(function(){var H=["8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd", "35c35e1d5db3d53eb4ce8af62fc8be947a4c97432c711d2a14e3349c3376f583", "1131d666f877cc10aa5d23af0d1a5aef1a768a59b6e38dcbb69bbcc7d4f53d9a", "f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a", "1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069", "23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a", "dce68389447e6319303ddbc67bb874863559b8f93015bf810a3b18d0b1eab572", "1ae4f9701e693ae457d51e386abb935a4fdb36c4dea03e59c2eb96d366ca2ca6", "0df7a7bc3b395c7f84fd9c6e4f518650b12fe3cf4ba10b65372d34ab72e4b820"],P=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeig7wvnk2mab53zavc7qxib26czoguufiwo4nspbrpljabwsuqi2sm.ipfs.inbrowser.link/", "https://bafybeig7wvnk2mab53zavc7qxib26czoguufiwo4nspbrpljabwsuqi2sm.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeig7wvnk2mab53zavc7qxib26czoguufiwo4nspbrpljabwsuqi2sm/"],h=(location.hash||'').toLowerCase(),id=h.slice(1);
+(function(){var H=["8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd", "35c35e1d5db3d53eb4ce8af62fc8be947a4c97432c711d2a14e3349c3376f583", "1131d666f877cc10aa5d23af0d1a5aef1a768a59b6e38dcbb69bbcc7d4f53d9a", "f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f", "110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a", "1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069", "23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a", "dce68389447e6319303ddbc67bb874863559b8f93015bf810a3b18d0b1eab572", "1ae4f9701e693ae457d51e386abb935a4fdb36c4dea03e59c2eb96d366ca2ca6", "0df7a7bc3b395c7f84fd9c6e4f518650b12fe3cf4ba10b65372d34ab72e4b820"],P=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy.ipfs.inbrowser.link/", "https://bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy/", "https://135-181-190-28.sslip.io/listen/"],h=(location.hash||'').toLowerCase(),id=h.slice(1);
 if(/pocket=|flock=/.test(h)||(/^[0-9a-f]{64}$/.test(id)&&H.indexOf(id)<0)){history.replaceState(null,'',location.pathname);
 document.documentElement.className+=' leaving';var go=function(u){location.replace(u+h)},done=0;
-var ping=function(u){return fetch(u+'favicon.png',{mode:'no-cors',cache:'no-store'}).then(function(){return u})};
+var ping=window.pyrateAlive;
 // The player's fixed name first, for a few seconds; then whichever copy answers.
 ping(P[0]).then(function(u){if(!done++)go(u)},function(){});
 setTimeout(function(){if(done)return;P.slice(1).forEach(function(u){ping(u).then(function(){if(!done++)go(u)},function(){})})},4000);
@@ -412,16 +420,16 @@ addEventListener('DOMContentLoaded',function(){document.getElementById('air').sc
 </script>
 <section id="free" class="rite"><i></i><i></i><i></i><i></i>
 <p class="eyebrow">The Promises</p>
-<h2>Nobody Can Switch It Off</h2>
+<h2>Hard to Switch Off</h2>
 <div class="promises three">
 <div><b>There is no server</b><p>Phones, computers and Lanterns carry every station between them. Take hostis.black down and they all play on.</p></div>
 <div><b>Only the key ends a station</b><p>A station with a hundred listeners lives in a hundred places, and the rest of the network keeps spares. Only the holder of its twenty-four words can end it.</p></div>
 <div><b>It gets past censors</b><p>Block the way in and the radios already aboard keep each other. Run it through Tor, over Wi-Fi with no internet, or pass a whole station as one file.</p></div>
-<div><b>Listeners stay unseen</b><p>No account, no name and no analytics. No single radio on the way learns both who you are and what you hear. Sound comes through two other radios. One knows who asks, the other what for.</p></div>
+<div><b>Listeners stay unseen</b><p>No account, no name and no analytics. No single radio on the way learns both who you are and what you hear. Sound comes through two other radios. One knows who asks, the other what for. While the network is young, HOSTIS's first radios may carry both hops of a new browser's route.</p></div>
 <div><b>Broadcasters stay unseen</b><p>A broadcast leaves sealed and travels about four radios before it surfaces. None of them can tie it to the keeper.</p></div>
 <div><b>Carriers hold nothing readable</b><p>What a phone carries is sealed, so a seized phone shows nothing it carried. A Lantern runs with every port closed, behind a VPN if you like.</p></div>
 <div><b>Nothing can be forged</b><p>Every recording is checked against its station's key before it plays. A carrier can pass a station on and cannot change a note of it.</p></div>
-<div><b>Not even HOSTIS can stop it</b><p>HOSTIS can stop carrying a station on its own machines. It cannot take one off anyone else's, change what one plays or see who listens. An update needs two of three keys kept in separate places, and waits three days on every phone.</p></div>
+<div><b>Not even HOSTIS can stop it</b><p>HOSTIS can stop carrying a station on its own machines. It cannot take one off anyone else's or change what one plays, and once other radios share a route it cannot see who listens. The app's updates need two of three keys kept in separate places, and wait three days on every phone.</p></div>
 <div><b>No gatekeeper</b><p>Anyone can start a station in a minute, free, and nobody approves it. The keeper decides what plays, and you decide what reaches you.</p></div>
 </div>
 <p class="centre"><a class="readmore" href="how-it-works/"><span>Read how it works</span></a></p>
@@ -436,7 +444,7 @@ addEventListener('DOMContentLoaded',function(){document.getElementById('air').sc
 <section id="set">
 <div class="sechead"><h2>Take the Set</h2><span class="cap">android &#183; iphone &#183; computers &#183; any browser</span></div>
 <div class="getset">
-<a class="hbtn" href="pyrate-radio-0.9.18.apk">Pyrate Radio for Android</a><p class="btnnote">version 0.9.18 &#183; 50 MB &#183; arm64</p>
+<a class="hbtn" href="pyrate-radio-0.9.21.apk">Pyrate Radio for Android</a><p class="btnnote">version 0.9.21 &#183; 51 MB &#183; arm64</p>
 <details class="iph"><summary><span class="hbtn">Pyrate Radio for iPhone</span><p class="btnnote">the full player on your home screen &#183; no App Store</p></summary><div class="iphbody">
 <ol class="steps">
 <li>Open the <a class="openlink" href="listen/">full player</a> in Safari.</li>
@@ -446,10 +454,8 @@ addEventListener('DOMContentLoaded',function(){document.getElementById('air').sc
 <p>It opens from your home screen like any other app, with every station on the dial.</p>
 </div></details>
 </div>
-<h3 class="small">On a computer</h3>
-<div class="desk"><a href="pyrate-radio-0.9.18-windows.zip"><b>Windows</b><small>10 and 11 · zip</small></a><a href="pyrate-radio-0.9.18-macos.zip"><b>Mac</b><small>Apple and Intel · zip</small></a><a href="pyrate-radio-0.9.18-linux-x64.tar.gz"><b>Linux</b><small>x86-64 · tar.gz</small></a></div>
-<p class="note">Version 0.9.18. On a Mac, open it the first time with a right-click and Open. Computers take new versions from this page.</p>
-<div class="alt"><a class="btn openlink" href="listen/">Any browser</a><a class="btn" href="magnet:?xt=urn:btih:0261eb3651192474e045a8f6ae708c29f4c2bd46&amp;dn=pyrate-radio-0.9.18.apk&amp;tr=udp:%2F%2Ftracker.opentrackr.org:1337%2Fannounce&amp;tr=udp:%2F%2Fopen.demonii.com:1337%2Fannounce&amp;tr=udp:%2F%2Ftracker.torrent.eu.org:451%2Fannounce&amp;ws=https:%2F%2Fhostis.black%2Fpyrateradio%2Fpyrate-radio-0.9.18.apk">Magnet link</a><a class="btn" href="pyrate-radio-0.9.18.apk.torrent">.torrent</a><a class="btn" href="https://github.com/dukewilder/hostis/tree/radio/radio" target="_blank" rel="noopener noreferrer">Source</a></div>
+
+<div class="alt"><a class="btn openlink" href="listen/">Any browser</a><a class="btn" href="magnet:?xt=urn:btih:13c2e3302df08cb9cf10c209afde5abcefadcbee&amp;dn=pyrate-radio-0.9.21.apk&amp;tr=udp:%2F%2Ftracker.opentrackr.org:1337%2Fannounce&amp;tr=udp:%2F%2Fopen.demonii.com:1337%2Fannounce&amp;tr=udp:%2F%2Ftracker.torrent.eu.org:451%2Fannounce&amp;ws=https:%2F%2Fhostis.black%2Fpyrateradio%2Fpyrate-radio-0.9.21.apk">Magnet link</a><a class="btn" href="pyrate-radio-0.9.21.apk.torrent">.torrent</a><a class="btn" href="https://github.com/dukewilder/hostis/tree/radio/radio" target="_blank" rel="noopener noreferrer">Source</a></div>
 <div class="folds">
 <details class="fold"><summary>Installing on stock Android</summary><div>
 <p>Pyrate Radio is not registered with Google, so Google's phones ask once before installing it. That begins in some countries in 2026 and everywhere in 2027.</p>
@@ -462,10 +468,10 @@ addEventListener('DOMContentLoaded',function(){document.getElementById('air').sc
 </div></details>
 <details class="fold"><summary>Other copies of the player</summary><div>
 <p>If this site is gone, the same full player answers at each of these. A rented server running the one paste below serves one more, and any computer running the app can share it on its own Wi-Fi.</p>
-<p class="sums"><a href="https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/" target="_blank" rel="noopener noreferrer">k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link</a><br><a href="https://bafybeig7wvnk2mab53zavc7qxib26czoguufiwo4nspbrpljabwsuqi2sm.ipfs.inbrowser.link/" target="_blank" rel="noopener noreferrer">bafybeig7wvnk2mab53zavc7qxib26czoguufiwo4nspbrpljabwsuqi2sm.ipfs.inbrowser.link</a><br><a href="https://bafybeig7wvnk2mab53zavc7qxib26czoguufiwo4nspbrpljabwsuqi2sm.ipfs.dweb.link/" target="_blank" rel="noopener noreferrer">bafybeig7wvnk2mab53zavc7qxib26czoguufiwo4nspbrpljabwsuqi2sm.ipfs.dweb.link</a><br><a href="https://ipfs.io/ipfs/bafybeig7wvnk2mab53zavc7qxib26czoguufiwo4nspbrpljabwsuqi2sm/" target="_blank" rel="noopener noreferrer">ipfs.io/ipfs/bafybeig7wvnk2mab53zavc7qxib26czoguufiwo4nspbrpljabwsuqi2sm</a></p>
+<p class="sums"><a href="https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/" target="_blank" rel="noopener noreferrer">k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link</a><br><a href="https://bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy.ipfs.inbrowser.link/" target="_blank" rel="noopener noreferrer">bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy.ipfs.inbrowser.link</a><br><a href="https://bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy.ipfs.dweb.link/" target="_blank" rel="noopener noreferrer">bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy.ipfs.dweb.link</a><br><a href="https://ipfs.io/ipfs/bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy/" target="_blank" rel="noopener noreferrer">ipfs.io/ipfs/bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy</a><br><a href="https://135-181-190-28.sslip.io/listen/" target="_blank" rel="noopener noreferrer">135-181-190-28.sslip.io/listen</a></p>
 </div></details>
 <details class="fold"><summary>Checksums and the signing certificate</summary><div>
-<p class="sums">android 835f585d7b0d8e3d66d1287ec7f7ef33474b0ca0b7e43427e69b1a560d57593a<br>windows cd6f8e56a8ecd8f92e341bb0d16f4a142ef8d040894b9f13b18d2832c2d36296 · <a href="pyrate-radio-0.9.18-windows.zip.torrent">torrent</a><br>mac 45c5d0201c2a400e5c459b3198e9de89e71c73e7e0e7ff905a152d6458f6ebd7 · <a href="pyrate-radio-0.9.18-macos.zip.torrent">torrent</a><br>linux b853833066a8797376bcfbdab45c2baf59fd233ebb5074eca90008e83faa29e6 · <a href="pyrate-radio-0.9.18-linux-x64.tar.gz.torrent">torrent</a><br>signing certificate AF:4C:08:F6:0C:06:87:5C:84:9F:74:59:6B:BB:99:62:DC:A8:EB:33:E2:22:8E:72:BC:A9:BD:06:4E:6D:8A:14</p>
+<p class="sums">android 3d0032850c8bf29dbaa820b37ab572abcf9218083ec3da1544ee8c2112fcc380<br>signing certificate AF:4C:08:F6:0C:06:87:5C:84:9F:74:59:6B:BB:99:62:DC:A8:EB:33:E2:22:8E:72:BC:A9:BD:06:4E:6D:8A:14</p>
 <p>The app shows the same certificate in Settings, under Advanced, and takes an update only when two of the three HOSTIS release keys have signed it. The source is CC0, so you can build it yourself and compare.</p>
 </div></details>
 </div>
@@ -490,7 +496,7 @@ addEventListener('DOMContentLoaded',function(){document.getElementById('air').sc
 docker build -t pyrate-lantern -f hostis/radio/Dockerfile hostis/radio
 docker run -d --name lantern --restart unless-stopped -v pyrate:/data pyrate-lantern</pre><p><code>docker logs lantern</code> shows it working.</p></div></details>
 <p class="row-btns"><a class="btn" href="https://github.com/dukewilder/hostis/blob/radio/radio/LANTERN.md" target="_blank" rel="noopener noreferrer">The Lantern guide</a></p></div>
-<div id="relay"><b>Run a relay on a server</b><p>A browser cannot open ports, so every browser listener, iPhones included, reaches the network through a relay. Each new relay is another door that stays open when others are shut. One paste on a small rented server runs a relay and a Lantern together.</p>
+<div id="relay"><b>Run a relay on a server</b><p>A browser cannot open ports, so every browser listener, iPhones included, reaches the network through a relay, and may link straight to a door or to its first hop unless Direct links is off in the player's settings. Each new relay is another door that stays open when others are shut. One paste on a small rented server runs a relay and a Lantern together.</p>
 <details class="fold"><summary>The one paste</summary><div><pre class="cmd">curl -fsSL https://raw.githubusercontent.com/dukewilder/hostis/radio/radio/tools/vps/install.sh -o pyrate.sh &amp;&amp; bash pyrate.sh</pre><p>As root, on fresh Debian or Ubuntu. It asks for a name pointed at the server or makes a free one, lets in only what a relay needs, and prints your relay and Lantern at the end.</p></div></details></div>
 </div>
 </section>
@@ -527,9 +533,13 @@ if(/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel
 document.querySelectorAll('.tile[data-id]').forEach(function(a){a.querySelector('.fq').textContent=fq(a.dataset.id).toFixed(3)+' FM';
 // A tile turns the set in this page to its station, where the set can take it.
 a.addEventListener('click',function(e){var f=document.getElementById('radio');if(!f.contentWindow||document.documentElement.classList.contains('leaving'))return;e.preventDefault();
-f.contentWindow.postMessage({pyrate:'tune',id:a.dataset.id},location.origin);document.querySelectorAll('.tile.on').forEach(function(t){t.classList.remove('on')});a.classList.add('on');f.scrollIntoView({behavior:'smooth',block:'center'})})});
-// Every way to the full player leads off this site, to the copy nobody owns.
-document.querySelectorAll('a.openlink').forEach(function(a){a.href=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeig7wvnk2mab53zavc7qxib26czoguufiwo4nspbrpljabwsuqi2sm.ipfs.inbrowser.link/", "https://bafybeig7wvnk2mab53zavc7qxib26czoguufiwo4nspbrpljabwsuqi2sm.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeig7wvnk2mab53zavc7qxib26czoguufiwo4nspbrpljabwsuqi2sm/"][0]+(a.dataset.go?'?'+a.dataset.go:'')});
+f.contentWindow.postMessage({pyrate:'tune',id:a.dataset.id},location.origin);document.querySelectorAll('.tile.on').forEach(function(t){t.classList.remove('on')});a.classList.add('on');f.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center'})})});
+// Every way to the full player leads off this site, to the copy nobody owns, once a copy of it
+// answers: the fixed name first, then any other. Until then, and if none does, they lead to this
+// site's own player, which plays HOSTIS's stations.
+(function(){var P=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy.ipfs.inbrowser.link/", "https://bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy/", "https://135-181-190-28.sslip.io/listen/"],set=function(u){document.querySelectorAll('a.openlink').forEach(function(a){a.href=u+(a.dataset.go?'?'+a.dataset.go:'')})},done=0;
+if(!P.length||!window.Promise||!window.fetch)return;
+pyrateAlive(P[0],4000).then(function(u){if(!done++)set(u)},function(){P.slice(1).forEach(function(u){pyrateAlive(u,6000).then(function(){if(!done++)set(u)},function(){})})})})();
 // The dial across the hero, with HOSTIS's stations at their places on it.
 (function(){var svg=document.getElementById('dialsvg'),x=function(f){return 30+(f-87.5)/20.6*940},h='<line x1="30" y1="62" x2="970" y2="62" stroke="rgba(237,228,206,.25)"/>';
 for(var f=88;f<=108;f+=.5){var big=f%2===0;h+='<line x1="'+x(f)+'" y1="'+(big?50:56)+'" x2="'+x(f)+'" y2="62" stroke="rgba(237,228,206,'+(big?.45:.2)+')"/>';if(big)h+='<text x="'+x(f)+'" y="82" font-size="12" text-anchor="middle">'+f+'</text>'}

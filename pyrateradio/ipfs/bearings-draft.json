@@ -1,15 +1,17 @@
 {
  "pyrate": "bearings",
- "at": 1794761224965,
+ "at": 1795097883533,
  "doors": [
-  "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442",
-  "f6d5c5276a98baf5d4964683115e9f0f6095e713f46bec34c25c29a66e46d753"
+  "a6e12327929c36614b4cd24483103a0dc125fdd0be97fd27b85bdb61b8c397c3@https://135-181-190-28.sslip.io",
+  "a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442@https://135-181-190-28.sslip.io",
+  "f6d5c5276a98baf5d4964683115e9f0f6095e713f46bec34c25c29a66e46d753@https://135-181-190-28.sslip.io"
  ],
  "players": [
   "https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/",
-  "https://bafybeiagcyweulgm4ksqnejfyqxtmkouq5naab3ciihjxbmx2wqcynyhau.ipfs.inbrowser.link/",
-  "https://bafybeiagcyweulgm4ksqnejfyqxtmkouq5naab3ciihjxbmx2wqcynyhau.ipfs.dweb.link/",
-  "https://ipfs.io/ipfs/bafybeiagcyweulgm4ksqnejfyqxtmkouq5naab3ciihjxbmx2wqcynyhau/"
+  "https://bafybeigox2na7jthuz5vumhn2ifxzdimycfa2tpm6uh3egddtjzvcfjzaq.ipfs.inbrowser.link/",
+  "https://bafybeigox2na7jthuz5vumhn2ifxzdimycfa2tpm6uh3egddtjzvcfjzaq.ipfs.dweb.link/",
+  "https://ipfs.io/ipfs/bafybeigox2na7jthuz5vumhn2ifxzdimycfa2tpm6uh3egddtjzvcfjzaq/",
+  "https://135-181-190-28.sslip.io/listen/"
  ],
  "ipns": "k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr",
  "onion": "",
@@ -47,6 +49,10 @@
    "cid": "bafybeidszpgng2r2rkwne2ue6ll7custggh26ibdjstheuiweuyb7gofu4"
   },
   {
+   "name": "pyrate-radio-0.9.21.apk",
+   "cid": "bafybeicqc3gsva2k7h5ogqqwwfo7q2xu52mkzgxrogr36esddhdr7cf36e"
+  },
+  {
    "name": "pyrate-radio-0.9.5.apk",
    "cid": "bafybeif736juxf2nquix2g7xpvp3keyqb6owbvkrl7dmnryw5mihpnpjra"
   },
@@ -63,8 +69,8 @@
    "cid": "bafybeidbt4d5fppy6zor4yof2zinppg4vc265ax33iusj34kijr6vi4uh4"
   },
   {
-   "name": "source/pyrate-radio-src-327d6c5.tar.gz",
-   "cid": "bafybeicilzwgpndxka7gqcmna4ilgdzrv7gy5lf7fvcgwvp2n4ly2edccu"
+   "name": "source/pyrate-radio-src-300736c.tar.gz",
+   "cid": "bafybeife3rjwtlxupmi6cp5s427fgfowkapm66b7ym3tixgph4de472kcm"
   }
  ]
 }

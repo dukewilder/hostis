@@ -109,9 +109,6 @@ export class IntoUnderlyingSource {
 }
 if (Symbol.dispose) IntoUnderlyingSource.prototype[Symbol.dispose] = IntoUnderlyingSource.prototype.free;
 
-/**
- * The tab's node, as the page sees it.
- */
 export class Radio {
     static __wrap(ptr) {
         const obj = Object.create(Radio.prototype);
@@ -185,23 +182,31 @@ export class Radio {
     /**
      * Takes back a station this browser keeps, from its deputy's seed. Resolves once its log is
      * aboard from the network, to whether this deputy still speaks for it.
+     *
+     * `held` is what `held_export` gave for this station on an earlier visit, as JSON: the
+     * entries that were still waiting for their stamp when the tab closed. They go back on the
+     * log before the check, and sail as soon as their stamp has come.
      * @param {string} id
      * @param {string} deputy
+     * @param {string | null} [held]
      * @returns {Promise<any>}
      */
-    adopt(id, deputy) {
-        let ptr0, len0, ptr1, len1;
+    adopt(id, deputy, held) {
+        let ptr0, len0, ptr1, len1, ptr2, len2;
         try {
             ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
             len0 = WASM_VECTOR_LEN;
             ptr1 = passStringToWasm0(deputy, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
             len1 = WASM_VECTOR_LEN;
+            ptr2 = isLikeNone(held) ? 0 : passStringToWasm0(held, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len2 = WASM_VECTOR_LEN;
         } catch (e) {
+            if (ptr2) { wasm.__wbindgen_free(ptr2, len2 * 1, 1); }
             if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
             if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
             throw e;
         }
-        const ret = wasm.radio_adopt(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        const ret = wasm.radio_adopt(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -497,6 +502,22 @@ export class Radio {
         }
     }
     /**
+     * How many semitones a disguised voice goes down for recordings made here for `id`: drawn
+     * from the key this browser records under (the station's own, or its deputy's), as the
+     * app draws it, so each keeper's shift is their own and the same every time.
+     * @param {string} id
+     * @returns {number}
+     */
+    disguise_semitones(id) {
+        const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.radio_disguise_semitones(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return ret[0];
+    }
+    /**
      * A control frame from the door: gossip it passes on.
      * @param {Uint8Array | number[]} bytes
      */
@@ -568,6 +589,34 @@ export class Radio {
         var v4 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
         return v4;
+    }
+    /**
+     * An introduced door's channel is open: `note` is what it sent first, `door` the radio the
+     * middle drew (hex). The note must be that radio's own: its presence, or its listed note.
+     * Returns the tab's hello.
+     * @param {Uint8Array | number[]} note
+     * @param {string} door
+     * @returns {Uint8Array}
+     */
+    door_up_intro(note, door) {
+        let ptr0, len0, ptr1, len1;
+        try {
+            ptr0 = passArray8ToWasm0(note, wasm.__wbindgen_malloc);
+            len0 = WASM_VECTOR_LEN;
+            ptr1 = passStringToWasm0(door, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len1 = WASM_VECTOR_LEN;
+        } catch (e) {
+            if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+            if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+            throw e;
+        }
+        const ret = wasm.radio_door_up_intro(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v3;
     }
     /**
      * The doors this tab knows, as JSON, best first: those it may draw as a guard, then the
@@ -724,6 +773,24 @@ export class Radio {
         return ret !== 0;
     }
     /**
+     * The entries this tab has signed that are still waiting for their stamp, as JSON keyed by
+     * station: the page keeps them sealed and hands them back to `adopt` on the next visit, so
+     * a tab closed in the wait loses nothing. `{}` when nothing waits.
+     * @returns {string}
+     */
+    held_export() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.radio_held_export(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
      * @returns {string}
      */
     id() {
@@ -737,6 +804,23 @@ export class Radio {
         } finally {
             wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
         }
+    }
+    /**
+     * Whether to ask a middle for an introduction now (see `Ship::introduce`).
+     * @returns {boolean}
+     */
+    intro_due() {
+        const ret = wasm.radio_intro_due(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * Asks a middle for a way in through a door no note names, and links to it. Resolves with
+     * the door's id once its channel is open; the next try waits longer after each that fails.
+     * @returns {Promise<any>}
+     */
+    introduce() {
+        const ret = wasm.radio_introduce(this.__wbg_ptr);
+        return ret;
     }
     /**
      * Measures a recording a block at a time, so an hour of it never sits in memory twice:
@@ -807,6 +891,20 @@ export class Radio {
             return getStringFromWasm0(ptr2, len2);
         } finally {
             wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        }
+    }
+    /**
+     * A station named by a link the page was opened with or followed: a station kept to its
+     * link is spoken of only under tags, so the tab learns its card and carriers only once it
+     * knows the id. The neighbours' cards are asked again.
+     * @param {string} id
+     */
+    link(id) {
+        const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.radio_link(this.__wbg_ptr, ptr0, len0);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
         }
     }
     /**
@@ -1321,6 +1419,52 @@ export class Radio {
         return ret;
     }
     /**
+     * A seed list the page fetched from a mirror (or kept from an earlier visit), as the app
+     * takes one: only when two of the three release keys (`keys`, hex, commas) signed it. Its
+     * Lanterns (`id@relay`) go in the address book and the gossip is asked to meet them, and a
+     * few are asked for their cards. Gives how many were taken; 0 for a list refused.
+     * @param {string} text
+     * @param {string} keys
+     * @returns {number}
+     */
+    seeds_take(text, keys) {
+        let ptr0, len0, ptr1, len1;
+        try {
+            ptr0 = passStringToWasm0(text, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len0 = WASM_VECTOR_LEN;
+            ptr1 = passStringToWasm0(keys, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len1 = WASM_VECTOR_LEN;
+        } catch (e) {
+            if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+            if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+            throw e;
+        }
+        const ret = wasm.radio_seeds_take(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        return ret >>> 0;
+    }
+    /**
+     * Where ballast comes from: station ids by commas (HOSTIS's own, on hostis.black and the
+     * embed), or empty for the whole Log; and whether explicit stations may be carried. A
+     * ballast station now outside it is let go at the next draw.
+     * @param {string} only
+     * @param {boolean} explicit
+     */
+    set_ballast(only, explicit) {
+        const val2 = +explicit;
+        const ptr0 = passStringToWasm0(only, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.radio_set_ballast(this.__wbg_ptr, ptr0, len0, val2);
+    }
+    /**
+     * The chat voices' own secret (64 hex), kept by the page apart from the counting key.
+     * @param {string} key
+     */
+    set_chat_key(key) {
+        const ptr0 = passStringToWasm0(key, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.radio_set_chat_key(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
      * "Carry the radio while you listen", and whether this is a phone. Off closes every deck at
      * once and passes nothing on from then.
      * @param {boolean} on
@@ -1328,6 +1472,14 @@ export class Radio {
      */
     set_crew(on, mobile) {
         wasm.radio_set_crew(this.__wbg_ptr, on, mobile);
+    }
+    /**
+     * "Direct links": off, this tab opens no WebRTC link of its own to its guard (the page
+     * dials no door either).
+     * @param {boolean} on
+     */
+    set_direct_links(on) {
+        wasm.radio_set_direct_links(this.__wbg_ptr, on);
     }
     /**
      * A proof of work found before, as the page kept it. Checked before it is taken.
@@ -1367,13 +1519,24 @@ export class Radio {
      *
      * A harbour entry may name its relay, as `<id>@<relay url>`, so it is found without a
      * lookup. `relays`, when not empty, replaces the usual relays: for a private network.
+     * `n0` is "Use number0's relays when ours fail": on, number0's relays come in when none of
+     * ours has answered within fifteen seconds, and number0's address server may be asked
+     * about a harbour named without its relay. Off, number0 is never contacted.
+     *
+     * `peers` are the radios that answered quickly last visit and the guards kept from it, in
+     * the same form: met at once beside the harbours, but never counted as harbours. A harbour
+     * is HOSTIS's, one operator on every route and named by the build itself; a peer is
+     * whoever answered.
      * @param {string} harbour
      * @param {string} token_key
      * @param {string} relays
+     * @param {boolean} n0
+     * @param {string} peers
      * @returns {Promise<Radio>}
      */
-    static start(harbour, token_key, relays) {
-        let ptr0, len0, ptr1, len1, ptr2, len2;
+    static start(harbour, token_key, relays, n0, peers) {
+        const val5 = +n0;
+        let ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3;
         try {
             ptr0 = passStringToWasm0(harbour, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
             len0 = WASM_VECTOR_LEN;
@@ -1381,13 +1544,16 @@ export class Radio {
             len1 = WASM_VECTOR_LEN;
             ptr2 = passStringToWasm0(relays, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
             len2 = WASM_VECTOR_LEN;
+            ptr3 = passStringToWasm0(peers, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len3 = WASM_VECTOR_LEN;
         } catch (e) {
+            if (ptr3) { wasm.__wbindgen_free(ptr3, len3 * 1, 1); }
             if (ptr2) { wasm.__wbindgen_free(ptr2, len2 * 1, 1); }
             if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
             if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
             throw e;
         }
-        const ret = wasm.radio_start(ptr0, len0, ptr1, len1, ptr2, len2);
+        const ret = wasm.radio_start(ptr0, len0, ptr1, len1, ptr2, len2, val5, ptr3, len3);
         return ret;
     }
     /**
@@ -1522,6 +1688,48 @@ export class Radio {
     }
 }
 if (Symbol.dispose) Radio.prototype[Symbol.dispose] = Radio.prototype.free;
+
+/**
+ * A recording's "by", cleaned as a title is (core plain_by).
+ * @param {string} s
+ * @returns {string}
+ */
+export function plain_by(s) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(s, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.plain_by(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * The tab's node, as the page sees it.
+ * A title made from a file name, cleaned by the app's own rules (core plain_title): JSON
+ * {text, cut}, where cut says something was taken out.
+ * @param {string} s
+ * @returns {string}
+ */
+export function plain_title(s) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(s, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.plain_title(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
@@ -1885,8 +2093,12 @@ function __wbg_get_imports() {
         __wbg_pyrateDoorCtl_17597cb564f0a483: function() { return handleError(function (arg0, arg1) {
             pyrateDoorCtl(getArrayU8FromWasm0(arg0, arg1));
         }, arguments); },
-        __wbg_pyrateRtcAccept_b0cd3e07a52ad745: function() { return handleError(function (arg0, arg1, arg2, arg3) {
-            const ret = pyrateRtcAccept(getStringFromWasm0(arg0, arg1), getStringFromWasm0(arg2, arg3));
+        __wbg_pyrateIntroAnswer_7dee3ea390271155: function() { return handleError(function (arg0, arg1) {
+            const ret = pyrateIntroAnswer(getStringFromWasm0(arg0, arg1));
+            return ret;
+        }, arguments); },
+        __wbg_pyrateIntroOffer_a9374748365e7f10: function() { return handleError(function () {
+            const ret = pyrateIntroOffer();
             return ret;
         }, arguments); },
         __wbg_pyrateRtcAnswer_39f99f076107d601: function() { return handleError(function (arg0, arg1, arg2, arg3) {
@@ -2091,42 +2303,42 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_generic_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 2615, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 2671, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke___wasm_bindgen_b7c0b3f1bb65bebe___JsValue______true_);
             return ret;
         },
         __wbindgen_generic_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4204, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 4260, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke___wasm_bindgen_b7c0b3f1bb65bebe___JsValue__core_7d5f0a2ba6a62c33___result__Result_____wasm_bindgen_b7c0b3f1bb65bebe___JsError___true_);
             return ret;
         },
         __wbindgen_generic_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("CloseEvent")], shim_idx: 1365, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("CloseEvent")], shim_idx: 1430, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke___web_sys_ab6ad03aa4ba2834___features__gen_CloseEvent__CloseEvent______true_);
             return ret;
         },
         __wbindgen_generic_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 3021, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 3077, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke___web_sys_ab6ad03aa4ba2834___features__gen_MessageEvent__MessageEvent______true_);
             return ret;
         },
         __wbindgen_generic_0000000000000005: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2574, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2630, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke_______true_);
             return ret;
         },
         __wbindgen_generic_0000000000000006: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2755, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2811, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke_______true__1_);
             return ret;
         },
         __wbindgen_generic_0000000000000007: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2757, ret: Unit, inner_ret: Some(Unit) }, mutable: false }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 2813, ret: Unit, inner_ret: Some(Unit) }, mutable: false }) -> Externref`.
             const ret = makeClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke_______true__2_);
             return ret;
         },
         __wbindgen_generic_0000000000000008: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 4185, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 4241, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_b7c0b3f1bb65bebe___convert__closures_____invoke_______true__3_);
             return ret;
         },
@@ -2575,7 +2787,7 @@ async function __wbg_init_once(module_or_path) {
     }
 
     if (module_or_path === undefined) {
-        module_or_path = new URL('pyrate_browser_bg.161ffd513c.wasm', import.meta.url);
+        module_or_path = new URL('pyrate_browser_bg.10aca61ec1.wasm', import.meta.url);
     }
     const imports = __wbg_get_imports();
 
