@@ -202,7 +202,10 @@ $go.Add_Click({
   $parent = Split-Path -Parent $here
   $zip = Join-Path $parent ((Split-Path -Leaf $here) + "-signed-key-$n.zip")
   if (Test-Path $zip) { Remove-Item $zip -Force }
-  Compress-Archive -Path $here -DestinationPath $zip
+  # Windows PowerShell 5.1's Compress-Archive writes backslashes into the zip's paths, which other
+  # systems read as one long file name; ZipFile writes them with forward slashes.
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  [System.IO.Compression.ZipFile]::CreateFromDirectory($here, $zip, 'Optimal', $true)
   $note.ForeColor = $bone
   if ($log.Text -match "Everything in this folder is signed") {
     $note.Text = "Signed by two keys. Turn the internet back on and send Dylan the file now highlighted."
