@@ -53,7 +53,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: pyrate-radio-windows, path: radio/pyrate-radio-windows.zip }
       # The release tool for the key holders and for signing APKs (HOLDERS.md, RELEASES.md).
-      - run: cargo build --release --locked -p pyrate-node --bin release
+      - run: cargo build --release --locked -p pyrate-node --bin release --features keytool
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: pyrate-release-tool-windows, path: radio/target/release/release.exe }
   macos:
