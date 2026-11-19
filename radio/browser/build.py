@@ -87,7 +87,7 @@ def stun_list():
         u = line.split("#", 1)[0].strip()
         if not u: continue
         assert re.fullmatch(r"stuns?:[a-z0-9.-]+(:[0-9]+)?", u), f"stun.txt: not a plain stun: address: {u}"
-        assert not re.search(r"(google|l\.google|cloudflare|twilio|stunprotocol|mozilla|ekiga|voip|xten)", u), f"stun.txt: only HOSTIS's own STUN servers: {u}"
+        assert not re.search(r"(google|l\.google|cloudflare|twilio|stunprotocol|mozilla|ekiga|voip|xten)", u), f"stun.txt: only the listed STUN servers: {u}"
         assert not re.search(r"(^|[:.])hostis\.black(:|$)", u), f"stun.txt: a HOSTIS name marks everyone who asks it: {u}"
         if u not in out: out.append(u)
     return out

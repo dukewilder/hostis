@@ -1,5 +1,5 @@
-# HOSTIS's own STUN servers, one per line, as stun:<name>:3478. tools/vps/install.sh prints the
-# line for each server it sets up. Only HOSTIS's: build.py refuses the well-known public ones,
+# The STUN servers the player asks, one per line, as stun:<name>:3478. tools/vps/install.sh prints the
+# line for each server it sets up. build.py refuses the well-known public ones,
 # and a tab never asks any server not listed here. Empty, a tab links directly only where the
 # addresses its machine knows already reach.
 stun:135-181-190-28.sslip.io:3478
