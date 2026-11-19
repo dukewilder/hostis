@@ -38,6 +38,7 @@ jobs:
       # The open player rides in the app, for sharing on a Wi-Fi and saving to a folder: the one
       # this app names, fetched from IPFS and checked block by block.
       - run: python tools/open_player.py --tar app/assets/player/open-player.tar --need
+        env: { PYRATE_PLAYER_CARS: "https://hostis.black/pyrateradio/ipfs" }
       # The build's own version code, so the app can tell when a newer one is signed.
       - shell: bash
         run: |
@@ -66,6 +67,7 @@ jobs:
         with: { channel: stable, flutter-version: "3.47.9" }
       - run: brew install cmake || true
       - run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
           cargo build --release --locked -p pyrate-ffi --target aarch64-apple-darwin
           cargo build --release --locked -p pyrate-ffi --target x86_64-apple-darwin
           lipo -create -output libpyrate_ffi.dylib target/aarch64-apple-darwin/release/libpyrate_ffi.dylib target/x86_64-apple-darwin/release/libpyrate_ffi.dylib
@@ -73,6 +75,7 @@ jobs:
       # The open player rides in the app, for sharing on a Wi-Fi and saving to a folder: the one
       # this app names, fetched from IPFS and checked block by block.
       - run: python3 tools/open_player.py --tar app/assets/player/open-player.tar --need
+        env: { PYRATE_PLAYER_CARS: "https://hostis.black/pyrateradio/ipfs" }
       # The build's own version code, so the app can tell when a newer one is signed.
       - shell: bash
         run: |
@@ -102,6 +105,7 @@ jobs:
       # The open player rides in the app, for sharing on a Wi-Fi and saving to a folder: the one
       # this app names, fetched from IPFS and checked block by block.
       - run: python3 tools/open_player.py --tar app/assets/player/open-player.tar --need
+        env: { PYRATE_PLAYER_CARS: "https://hostis.black/pyrateradio/ipfs" }
       # The build's own version code, so the app can tell when a newer one is signed.
       - shell: bash
         run: |

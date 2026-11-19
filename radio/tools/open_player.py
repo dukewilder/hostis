@@ -118,6 +118,19 @@ def fetch():
                 return files
         except Exception as e:
             print(f"open player: {g}: {e}", file=sys.stderr)
+    # A CAR published as a plain file (the site's pyrateradio/ipfs/<cid>.car), checked block by block
+    # like any gateway's. Only where the builder names it (the computers' builds on CI), so a
+    # Lantern or relay never asks a HOSTIS address for anything.
+    site = os.environ.get("PYRATE_PLAYER_CARS", "").rstrip("/")
+    if site:
+        try:
+            req = urllib.request.Request(f"{site}/{cid}.car", headers={"User-Agent": "pyrate-open-player"})
+            files = from_car(urllib.request.urlopen(req, timeout=120).read(), root)
+            if "index.html" in files:
+                print(f"open player {cid}, checked, from {site}", file=sys.stderr)
+                return files
+        except Exception as e:
+            print(f"open player: {site}: {e}", file=sys.stderr)
     return None
 
 
