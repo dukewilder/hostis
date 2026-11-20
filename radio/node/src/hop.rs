@@ -156,6 +156,11 @@ pub(crate) struct PullBox {
 /// hop kept for weeks. App radios take a new id every day, so a guard is a radio that keeps
 /// its id, and a crowd of new ones never wins a redraw.
 pub(crate) const GUARD_AGE_MS: u64 = 7 * 86_400_000;
+/// The most a stem's chunks weigh, well inside the 4 MiB a radio takes in one request once the
+/// entries, the card and two layers of sealing are added.
+const STEM_BYTES: usize = 2 * 1024 * 1024;
+/// The most entries one stem carries.
+const STEM_ENTRIES: usize = 32;
 /// How long a radio's word that it is of the crew is believed: it says so every two minutes, so
 /// one silent for four has most likely gone, and a route through it would only time out.
 pub(crate) const CREW_FRESH_MS: u64 = 4 * 60_000;
@@ -1182,6 +1187,25 @@ impl Inner {
         }
     }
 
+    /// Where the chunks of one of this node's stations stand: every chunk named before entry
+    /// `.0`, and the first `.1` of entry `.0`'s, has been taken by some radio.
+    fn stem_cursor(&self, station: &StationId) -> (usize, usize) {
+        self.hold
+            .read_note(&self.cfg.dir, &format!("stem-cursor/{}", station.to_hex()), None)
+            .and_then(|b| String::from_utf8(b).ok())
+            .and_then(|t| {
+                let (e, c) = t.trim().split_once(' ')?;
+                Some((e.parse().ok()?, c.parse().ok()?))
+            })
+            .unwrap_or((0, 0))
+    }
+
+    fn stem_commit(&self, station: &StationId, cur: (usize, usize)) {
+        if cur > self.stem_cursor(station) {
+            let _ = self.hold.write_note(&self.cfg.dir, &format!("stem-cursor/{}", station.to_hex()), format!("{} {}", cur.0, cur.1).as_bytes());
+        }
+    }
+
     /// The guard: the first hop of every stem, kept for weeks so an attacker cannot wait for a lucky draw.
     fn guard(&self) -> Option<EndpointId> {
         let old = self.cfg.dir.join("guard");
@@ -1215,32 +1239,71 @@ impl Inner {
             let log = self.log.lock().unwrap();
             log.get(&station).map(|l| l.carriers.iter().filter(|(n, _)| **n != me).map(|(_, (h, _))| *h).max().unwrap_or(0)).unwrap_or(0)
         };
-        let (entries, chunks) = {
+        // What goes is bounded in bytes: a request a radio takes is at most `REQUEST_MAX`, and an
+        // album's first stem, every chunk of its first tracks at once, ran past it, so the guard
+        // dropped it, nothing ever landed and the station never reached the network. Chunks go
+        // in log order from a cursor this node keeps sealed (every chunk before it has been
+        // taken by some radio), a few megabytes a stem, each stem carrying the entries that
+        // name its chunks. Live sound goes first, whatever is still to sail behind it.
+        let cur = self.stem_cursor(&station);
+        let (entries, chunks, next_cur) = {
             let s = self.store.lock().unwrap();
             let Some(a) = s.logs.get(&station) else { return true };
             // An entry dated to a quarter hour still to come waits for it (see
             // `pyrate_core::archive::quarter_stamp`), unless live sound behind it cannot.
             let due = a.due(now_ms());
-            let fresh: Vec<&SignedEntry> = a.entries().iter().take(due).skip(landed as usize).take(32).collect();
-            let mut chunks = Vec::new();
-            for e in &fresh {
-                let hashes: Vec<Hash> = match e.entry.body() {
-                    Body::Track { chunks, .. } => chunks.iter().map(|c| c.hash).collect(),
+            let all = a.entries();
+            let start = (landed as usize).min(cur.0).min(due);
+            let span: Vec<&SignedEntry> = all.iter().take(due).skip(start).take(STEM_ENTRIES).collect();
+            let names = |e: &SignedEntry| -> Vec<Hash> {
+                match e.entry.body() {
+                    Body::Track { chunks, .. } | Body::Release { chunks, .. } => chunks.iter().map(|c| c.hash).collect(),
                     Body::Live { chunk, .. } => vec![chunk.hash],
                     Body::Art { cover, banner, .. } => cover.iter().chain(banner.iter()).map(|r| r.hash).collect(),
                     Body::TrackArt { art, .. } => vec![art.hash],
                     _ => vec![],
-                };
-                for h in hashes {
-                    if let Some(b) = s.get_chunk(&h) {
-                        chunks.push((h, b));
+                }
+            };
+            let (mut chunks, mut bytes) = (Vec::new(), 0usize);
+            let mut taken = std::collections::HashSet::new();
+            // Live chunks among the entries the carriers lack, at once.
+            for e in span.iter().skip((landed as usize).saturating_sub(start)) {
+                if let Body::Live { chunk, .. } = e.entry.body() {
+                    if let Some(b) = s.get_chunk(&chunk.hash) {
+                        if bytes + b.len() > STEM_BYTES && !chunks.is_empty() {
+                            break;
+                        }
+                        bytes += b.len();
+                        taken.insert(chunk.hash);
+                        chunks.push((chunk.hash, b));
                     }
                 }
-                if chunks.len() >= 64 {
-                    break;
-                }
             }
-            (fresh.iter().filter_map(|e| e.to_bytes().ok()).collect::<Vec<_>>(), chunks)
+            // Then the backlog, from the cursor, within the entries this stem carries.
+            let mut next = cur;
+            'walk: for (i, e) in span.iter().enumerate() {
+                let at = start + i;
+                if at < cur.0 {
+                    continue;
+                }
+                let hs = names(e);
+                let from = if at == cur.0 { cur.1.min(hs.len()) } else { 0 };
+                for (j, h) in hs.iter().enumerate().skip(from) {
+                    if !taken.contains(h) {
+                        if let Some(b) = s.get_chunk(h) {
+                            if bytes + b.len() > STEM_BYTES && !chunks.is_empty() {
+                                break 'walk;
+                            }
+                            bytes += b.len();
+                            taken.insert(*h);
+                            chunks.push((*h, b));
+                        }
+                    }
+                    next = (at, j + 1);
+                }
+                next = (at + 1, 0);
+            }
+            (span.iter().filter_map(|e| e.to_bytes().ok()).collect::<Vec<_>>(), chunks, next)
         };
         // The end of the stem holds cargo a while before it shows it (see `fluff`), so what was
         // sent lately is not sent again for four minutes, and a card already sent goes once.
@@ -1251,6 +1314,7 @@ impl Inner {
         let (resend, entries, chunks) = {
             let sent = self.stem_sent.lock().unwrap();
             match sent.get(&station) {
+                _ if !chunks.is_empty() => (false, entries, chunks),
                 Some((from, n, at, _)) if *from == landed && *n == entries.len() && now.saturating_sub(*at) < 4 * 60_000 => (false, Vec::new(), Vec::new()),
                 Some((from, n, _, _)) if *from == landed && *n == entries.len() => (true, entries, chunks),
                 _ => (false, entries, chunks),
@@ -1311,7 +1375,7 @@ impl Inner {
                     let took = c.decrypt(Nonce::from_slice(&ANSWER_NONCE), raw.as_slice()).ok().and_then(|p| postcard::from_bytes::<Response>(&p).ok());
                     if matches!(took, Some(Response::Sealed(Some(_)))) {
                         self.guard_misses.store(0, std::sync::atomic::Ordering::Relaxed);
-                        return true;
+                        { self.stem_commit(&station, next_cur); return true; }
                     }
                 }
                 // A guard that does not answer, or relays for nobody, twice in a row is let go:
@@ -1333,7 +1397,7 @@ impl Inner {
         let mut tried = Vec::new();
         if let Some(g) = self.guard().filter(|_| !resend) {
             if tokio::time::timeout(Duration::from_secs(20), self.hop(g, &hop)).await.is_ok_and(|r| r.is_ok_and(|b| !b.is_empty())) {
-                return true;
+                { self.stem_commit(&station, next_cur); return true; }
             }
             tried.push(g);
         }
@@ -1344,10 +1408,10 @@ impl Inner {
         for n in self.known_nodes().into_iter().filter(|n| !tried.contains(n)).take(3) {
             if self.hop(n, &hop).await.is_ok_and(|b| !b.is_empty()) {
                 if resend {
-                    return true;
+                    { self.stem_commit(&station, next_cur); return true; }
                 }
                 let _ = self.hold.write_note(&self.cfg.dir, "stem-guard", n.to_string().as_bytes());
-                return true;
+                { self.stem_commit(&station, next_cur); return true; }
             }
         }
         self.stem_sent.lock().unwrap().remove(&station);
