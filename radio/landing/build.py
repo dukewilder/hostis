@@ -83,7 +83,7 @@ foot = page[page.index("<footer>"):page.index("</footer>") + 9]
 desc = re.search(r'<meta name="description" content="([^"]*)">', head).group(1)
 for slug, body, title, about in [
     ("handbook", "handbook.body.html", "The Keeper's Handbook", "What Pyrate Radio does to keep a station keeper unknown, what only the keeper can do, and how the network stands."),
-    ("terms", "terms.body.html", "Terms", "HOSTIS's position on Pyrate Radio: lawful use only, each keeper answers for their own station, what HOSTIS runs, and where to send a notice."),
+    ("terms", "terms.body.html", "Terms", "HOSTIS's position on Pyrate Radio: lawful use only, each keeper answers for their own station and what HOSTIS runs."),
     ("sources", "sources.body.html", "Sources", "Every recording on HOSTIS's own stations, with its licence and where it came from."),
     ("how-it-works", "how.body.html", "How Pyrate Radio Works", "No server and nobody in charge. How Pyrate Radio carries every station, keeps listeners and keepers unseen, and what a censor would need to silence it."),
 ]:
