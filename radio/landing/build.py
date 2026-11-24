@@ -28,6 +28,15 @@ else:
 import json
 op = json.load(open(f"{R}/browser/www/open.json"))
 page = page.replace("{{OPEN_ORIGIN}}", op["players"][0].rstrip("/")).replace("{{OPEN_PLAYERS}}", json.dumps(op["players"])).replace("{{HARBOUR_IDS}}", json.dumps([h["id"] for h in json.load(open(f"{R}/browser/harbour.json", encoding="utf-8")) if re.fullmatch(r"[0-9a-f]{64}", h["id"])]))
+# On the Air: a tile for every one of HOSTIS's stations, from the list the player itself uses.
+import html as _h
+tiles = []
+for h in json.load(open(f"{R}/browser/harbour.json", encoding="utf-8")):
+    if not re.fullmatch(r"[0-9a-f]{64}", h["id"]):
+        continue
+    about = (h.get("about") or "").strip()
+    tiles.append(f'<a class="tile" role="listitem" href="listen/#{h["id"]}" data-id="{h["id"]}"><img src="listen/{h["art"]}" alt="" width="512" height="512" loading="lazy"><b>{_h.escape(h["name"])}</b><span class="fq"></span>' + (f'<i>{_h.escape(about)}</i>' if about else '') + '</a>')
+page = page.replace("{{TILES}}", "\n".join(tiles))
 # Every other copy of the open player: its IPFS names and the Lanterns in browser/mirrors.txt.
 page = page.replace("{{MIRRORS}}", "<br>".join(f'<a href="{u}" target="_blank" rel="noopener noreferrer">{u.split("://", 1)[1].rstrip("/")}</a>' for u in op["players"]))
 page = page.replace("{{VERSION}}", version).replace("{{SHA}}", sha).replace("{{SIZE}}", size).replace("{{MAGNET}}", magnet.replace("&", "&amp;"))
@@ -44,7 +53,7 @@ if os.path.isdir(D) and all(os.path.exists(f"{D}/{k[1]}") for k in kinds):
         shutil.copy(f"{D}/{f}", f"{out}/{name}")
         sha_d = hashlib.sha256(open(f"{out}/{name}", "rb").read()).hexdigest()
         subprocess.run([sys.executable, f"{R}/tools/torrent.py", f"{out}/{name}", f"{out}/{name}.torrent", f"https://hostis.black/pyrateradio/{name}"], capture_output=True, text=True, check=True)
-        links.append(f'<a href="{name}"><b>{label}</b><small>{how}</small></a>')
+        links.append(f'<a class="plat" href="{name}"><b>{label}</b><small>{how}</small></a>')
         # The release keys' signatures over its SHA-256 (release sign-all), when the holders
         # have sent them back: the file beside the zip in landing/desktop/.
         signed = ""
@@ -53,8 +62,7 @@ if os.path.isdir(D) and all(os.path.exists(f"{D}/{k[1]}") for k in kinds):
             shutil.copy(got[0], f"{out}/{name}.sigs")
             signed = f' · <a href="{name}.sigs">signatures</a>'
         sums.append(f"{label.lower()} {sha_d} · <a href=\"{name}.torrent\">torrent</a>{signed}<br>")
-    desk = ('<h3 class="small">On a computer</h3>\n<div class="desk">' + "".join(links) + '</div>\n'
-            '<p class="note">Version ' + appver + '. On a Mac, open it the first time with a right-click and Open. Computers take new versions from this page.</p>')
+    desk = "\n".join(links)
     desk_sums = "".join(sums)
 page = page.replace("{{DESKTOP}}", desk).replace("{{DESKTOP_SUMS}}", desk_sums)
 # Structured data for search engines: the app on the landing (free, no ratings claimed), and
