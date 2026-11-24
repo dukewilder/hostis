@@ -1351,6 +1351,7 @@ impl Inner {
                 let mut others: Vec<EndpointId> = known.into_iter().filter(|n| *n != g && !skip.contains(n)).collect();
                 others.shuffle(&mut rand::thread_rng());
                 let mut guard_answered = false;
+                crate::say_named(&format!("stem: guard {} others {:?} known {:?} chunk bytes {}", g.fmt_short(), others.iter().map(|n| n.fmt_short().to_string()).collect::<Vec<_>>(), self.known_nodes().iter().map(|n| n.fmt_short().to_string()).collect::<Vec<_>>(), chunks.iter().map(|c| c.1.len()).sum::<usize>()));
                 // With no second node to try, the guard was never asked: it is kept.
                 let tried = others.len().min(3);
                 for x in others.into_iter().take(3) {
@@ -1358,6 +1359,7 @@ impl Inner {
                     let Ok((sealed, c)) = seal(x.as_bytes(), &ask) else { continue };
                     let Ok(blob) = postcard::to_stdvec(&sealed) else { continue };
                     let r = tokio::time::timeout(Duration::from_secs(25), self.hop(g, &Hop::Forward { next: *x.as_bytes(), blob })).await;
+                    crate::say_named(&format!("stem: to {}: {:?}", x.fmt_short(), r.as_ref().map(|r| r.as_ref().map(|b| b.len()).map_err(|e| e.to_string()))));
                     let Ok(Ok(raw)) = r else { break };
                     // An empty answer through a guard that has relayed before is the second node
                     // turning the cargo away: another second node is tried. Through one that has

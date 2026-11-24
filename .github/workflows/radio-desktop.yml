@@ -6,7 +6,7 @@ name: radio desktop
 on:
   push:
     branches: [radio]
-    paths: ["radio/app/**", "radio/core/**", "radio/node/**", "radio/ffi/**", "radio/tools/open_player.py", ".github/workflows/radio-desktop.yml"]
+    paths: ["radio/tools/desktop/**", "radio/app/**", "radio/core/**", "radio/node/**", "radio/ffi/**", "radio/tools/open_player.py", ".github/workflows/radio-desktop.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -49,6 +49,7 @@ jobs:
         run: |
           $out = "app/build/windows/x64/runner/Release"
           Copy-Item target/release/pyrate_ffi.dll $out -Force
+          Copy-Item "tools/desktop/Pyrate Radio with a log.bat" $out -Force
           Compress-Archive -Path "$out/*" -DestinationPath pyrate-radio-windows.zip
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: pyrate-radio-windows, path: radio/pyrate-radio-windows.zip }

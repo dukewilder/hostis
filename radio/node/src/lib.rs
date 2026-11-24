@@ -3345,6 +3345,19 @@ impl Node {
             });
         }
 
+        // With PYRATE_LOG set on a computer: say when the store has been held for seconds on end,
+        // the usual reason the window stops answering.
+        if !QUIET.load(std::sync::atomic::Ordering::Relaxed) {
+            let w = inner.clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(Duration::from_secs(5));
+                let t = std::time::Instant::now();
+                drop(w.store.lock());
+                if t.elapsed() > Duration::from_secs(2) {
+                    say(&format!("the store was held {:.1} s", t.elapsed().as_secs_f64()));
+                }
+            });
+        }
         Ok(Self { rt, inner, _router: router })
     }
 
@@ -3526,7 +3539,12 @@ impl Node {
 
     /// The JSON face the app talks to.
     pub fn call(&self, req: &Value) -> Value {
-        match self.call_inner(req) {
+        let t = std::time::Instant::now();
+        let r = self.call_inner(req);
+        if t.elapsed() > std::time::Duration::from_secs(1) {
+            say(&format!("slow call {} took {:.1} s", req["cmd"].as_str().unwrap_or("?"), t.elapsed().as_secs_f64()));
+        }
+        match r {
             Ok(v) => v,
             Err(e) => json!({ "error": e.to_string() }),
         }
