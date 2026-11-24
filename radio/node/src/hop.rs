@@ -1189,7 +1189,7 @@ impl Inner {
 
     /// Where the chunks of one of this node's stations stand: every chunk named before entry
     /// `.0`, and the first `.1` of entry `.0`'s, has been taken by some radio.
-    fn stem_cursor(&self, station: &StationId) -> (usize, usize) {
+    pub(crate) fn stem_cursor(&self, station: &StationId) -> (usize, usize) {
         self.hold
             .read_note(&self.cfg.dir, &format!("stem-cursor/{}", station.to_hex()), None)
             .and_then(|b| String::from_utf8(b).ok())
@@ -1340,6 +1340,7 @@ impl Inner {
         // directly sends its station no other way, resends included: with no second node, or
         // none that takes it, the cargo waits for the next tick.
         let strict = self.cfg.private && self.strict.load(std::sync::atomic::Ordering::Relaxed);
+        crate::say_named(&format!("stem: {} entries, {} chunks, resend {resend}, guard {:?}", entries.len(), chunks.len(), self.guard().map(|g| g.fmt_short().to_string())));
         if !resend || strict {
             if let Some(g) = self.guard() {
                 // Up to three second nodes a tick, each a different one: a node that declines

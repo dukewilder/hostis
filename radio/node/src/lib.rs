@@ -89,6 +89,9 @@ pub fn say_named(msg: &str) {
 
 /// Whether lines naming stations, peers and this node are said (see `say_named`). On by default;
 /// a Lantern turns it off unless asked.
+/// Calls in progress, watched only while logging: which one the window is waiting on.
+static IN_FLIGHT: Mutex<std::collections::BTreeMap<u64, (String, std::time::Instant)>> = Mutex::new(std::collections::BTreeMap::new());
+
 pub static NAMES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 /// Set by the app on a computer: it writes nothing about stations or peers anywhere, unless
@@ -3349,12 +3352,32 @@ impl Node {
         // the usual reason the window stops answering.
         if !QUIET.load(std::sync::atomic::Ordering::Relaxed) {
             let w = inner.clone();
-            std::thread::spawn(move || loop {
-                std::thread::sleep(Duration::from_secs(5));
-                let t = std::time::Instant::now();
-                drop(w.store.lock());
-                if t.elapsed() > Duration::from_secs(2) {
-                    say(&format!("the store was held {:.1} s", t.elapsed().as_secs_f64()));
+            say("logging: on");
+            std::thread::spawn(move || {
+                let mut beat = 0u32;
+                loop {
+                    std::thread::sleep(Duration::from_secs(5));
+                    let t = std::time::Instant::now();
+                    let own: Vec<(StationId, u64, usize)> = {
+                        let s = w.store.lock().unwrap();
+                        s.own().into_iter().filter_map(|id| s.logs.get(&id).map(|a| (id, a.len(), a.due(now_ms())))).collect()
+                    };
+                    if t.elapsed() > Duration::from_secs(2) {
+                        say(&format!("the store was held {:.1} s", t.elapsed().as_secs_f64()));
+                    }
+                    for (cmd, at) in IN_FLIGHT.lock().unwrap().values() {
+                        if at.elapsed() > Duration::from_secs(3) {
+                            say(&format!("call {cmd} still running after {:.0} s", at.elapsed().as_secs_f64()));
+                        }
+                    }
+                    beat += 1;
+                    if beat % 12 == 1 {
+                        for (id, len, due) in own {
+                            let pow = w.pow.lock().unwrap().get(&id).copied();
+                            let carriers = w.log.lock().unwrap().get(&id).map(|l| l.carriers.len()).unwrap_or(0);
+                            say(&format!("own station {}: {len} entries, {due} due, work {}, {carriers} carriers, sent to {:?}", &id.to_hex()[..8], pow.map(|n| n.to_string()).unwrap_or("not ready".into()), w.stem_cursor(&id)));
+                        }
+                    }
                 }
             });
         }
@@ -3540,7 +3563,15 @@ impl Node {
     /// The JSON face the app talks to.
     pub fn call(&self, req: &Value) -> Value {
         let t = std::time::Instant::now();
+        let watched = !QUIET.load(std::sync::atomic::Ordering::Relaxed);
+        let slot = rand::random::<u64>();
+        if watched {
+            IN_FLIGHT.lock().unwrap().insert(slot, (req["cmd"].as_str().unwrap_or("?").to_string(), t));
+        }
         let r = self.call_inner(req);
+        if watched {
+            IN_FLIGHT.lock().unwrap().remove(&slot);
+        }
         if t.elapsed() > std::time::Duration::from_secs(1) {
             say(&format!("slow call {} took {:.1} s", req["cmd"].as_str().unwrap_or("?"), t.elapsed().as_secs_f64()));
         }
