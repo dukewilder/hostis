@@ -324,7 +324,12 @@ impl Inner {
         // One this node is talking to now before one only heard of, so a new guard answers
         // from its first fetch.
         others.sort_by_key(|n| !self.live(n));
-        let g = others.first().copied().or_else(|| known.iter().find(|n| self.doors.contains(n)).copied())?;
+        // A harbour let go lately is passed over while another is known, or the first in the
+        // list was drawn again every tick and a harbour that relays for nobody held every route.
+        let mut harbours: Vec<EndpointId> = known.iter().filter(|n| self.doors.contains(n)).copied().collect();
+        harbours.shuffle(&mut rand::thread_rng());
+        harbours.sort_by_key(|n| failed.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS));
+        let g = others.first().copied().or_else(|| harbours.first().copied())?;
         let _ = self.hold.write_note(&self.cfg.dir, "fetch-guard", g.to_string().as_bytes());
         Some(g)
     }
@@ -1226,7 +1231,12 @@ impl Inner {
         let veteran = self.veteran();
         let mut others: Vec<EndpointId> = known.iter().filter(|n| !self.doors.contains(n) && veteran(n) && !failed.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS)).copied().collect();
         others.shuffle(&mut rand::thread_rng());
-        let g = others.first().copied().or_else(|| known.iter().find(|n| self.doors.contains(n)).copied())?;
+        // A harbour let go lately is passed over while another is known, or the first in the
+        // list was drawn again every tick and a harbour that relays for nobody held every route.
+        let mut harbours: Vec<EndpointId> = known.iter().filter(|n| self.doors.contains(n)).copied().collect();
+        harbours.shuffle(&mut rand::thread_rng());
+        harbours.sort_by_key(|n| failed.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS));
+        let g = others.first().copied().or_else(|| harbours.first().copied())?;
         let _ = self.hold.write_note(&self.cfg.dir, "stem-guard", g.to_string().as_bytes());
         Some(g)
     }
@@ -1347,15 +1357,26 @@ impl Inner {
                 // (a phone that relays for nobody, a tab that has gone) costs a moment, not the
                 // six seconds to the next tick, and a live show does not fall behind.
                 // Never a harbour behind a harbour guard while another radio is known.
+                // The other harbours come last, after every other radio, so a young network whose
+                // other radios all turn the cargo away (phones that relay for nobody, ids gone
+                // stale) still sends it: HOSTIS's own Lanterns then carry both hops, as the
+                // network's pages say they may while it is young.
                 let known = self.known_nodes();
                 let skip = if self.doors.contains(&g) { self.harbours_besides(&known, &[g]) } else { vec![] };
-                let mut others: Vec<EndpointId> = known.into_iter().filter(|n| *n != g && !skip.contains(n)).collect();
+                let failed = self.failed.lock().unwrap().clone();
+                let now = now_ms();
+                let lately = |n: &EndpointId| failed.get(n.as_bytes()).is_some_and(|t| now.saturating_sub(*t) < crate::net::FAILED_MS);
+                let mut others: Vec<EndpointId> = known.iter().filter(|n| **n != g && !skip.contains(n) && !lately(n)).copied().collect();
                 others.shuffle(&mut rand::thread_rng());
+                let mut last: Vec<EndpointId> = skip.iter().filter(|n| **n != g).copied().collect();
+                last.shuffle(&mut rand::thread_rng());
+                last.sort_by_key(|n| lately(n));
+                others.extend(last);
                 let mut guard_answered = false;
                 crate::say_named(&format!("stem: guard {} others {:?} known {:?} chunk bytes {}", g.fmt_short(), others.iter().map(|n| n.fmt_short().to_string()).collect::<Vec<_>>(), self.known_nodes().iter().map(|n| n.fmt_short().to_string()).collect::<Vec<_>>(), chunks.iter().map(|c| c.1.len()).sum::<usize>()));
                 // With no second node to try, the guard was never asked: it is kept.
-                let tried = others.len().min(3);
-                for x in others.into_iter().take(3) {
+                let tried = others.len().min(4);
+                for x in others.into_iter().take(4) {
                     let ask = Ask::Stem { station, entries: entries.clone(), chunks: chunks.clone(), announce: announce.clone() };
                     let Ok((sealed, c)) = seal(x.as_bytes(), &ask) else { continue };
                     let Ok(blob) = postcard::to_stdvec(&sealed) else { continue };
@@ -1365,13 +1386,15 @@ impl Inner {
                     // An empty answer through a guard that has relayed before is the second node
                     // turning the cargo away: another second node is tried. Through one that has
                     // not, it is the guard that relays for nobody.
+                    // An empty answer through a guard not yet known to relay may be either: the
+                    // next second node is tried, and a guard that never once answered is let go
+                    // below.
                     if raw.is_empty() {
+                        self.failed.lock().unwrap().insert(*x.as_bytes(), now_ms());
                         if self.relayed.lock().unwrap().contains(&g) {
                             guard_answered = true;
-                            self.failed.lock().unwrap().insert(*x.as_bytes(), now_ms());
-                            continue;
                         }
-                        break;
+                        continue;
                     }
                     self.relayed.lock().unwrap().insert(g);
                     guard_answered = true;

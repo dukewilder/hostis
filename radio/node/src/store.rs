@@ -808,8 +808,16 @@ impl Store {
     /// oldest-touched chunk of whichever station holds the most here, so one station flooding
     /// the disk shrinks before any other loses a chunk. Its own stations and pinned ones stay.
     /// Bytes of the ballast share already on this disk.
+    /// What the ballast weighs, from the size of up to 64 of its chunks: reading the size of
+    /// every one of tens of thousands of files took seconds on a computer, with the store held
+    /// and the window waiting on it.
     pub fn ballast_bytes(&self) -> u64 {
-        self.ballast.iter().filter_map(|h| fs::metadata(self.chunk_path(h)).ok()).map(|m| m.len()).sum()
+        let n = self.ballast.len() as u64;
+        let sizes: Vec<u64> = self.ballast.iter().take(64).filter_map(|h| fs::metadata(self.chunk_path(h)).ok()).map(|m| m.len()).collect();
+        if sizes.is_empty() {
+            return 0;
+        }
+        sizes.iter().sum::<u64>() * n / sizes.len() as u64
     }
 
     /// Carried logs left on disk from before a restart are not in memory until asked for, so

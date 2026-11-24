@@ -372,7 +372,7 @@ class Tuner extends ChangeNotifier {
     final unmetered = c['unmetered'] == true;
     // "Keep only what I play": no ballast, and no serving of others' sealed chunks.
     final mine = pref('carry_mine_only') == true && pref('lantern') != true;
-    final r = Native.call({'cmd': 'ballast_ok', 'value': !mine && unmetered && c['charging'] == true, 'unmetered': !mine && unmetered});
+    final r = await Native.callAway({'cmd': 'ballast_ok', 'value': !mine && unmetered && c['charging'] == true, 'unmetered': !mine && unmetered});
     // A door for browsers: on unless its owner turned it off, with carrying on, never through
     // Tor, on a computer, or on a phone on Wi-Fi while it charges. The node asks the router
     // for a port and stays shut if none is given.
