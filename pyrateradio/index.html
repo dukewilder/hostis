@@ -236,7 +236,7 @@ footer .f-contact a:hover,footer .f-source a:hover{color:#c52828;border-color:#c
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
 
 /* The radio's own page: the sibling sheet above, and what only this page needs. */
-.tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:0;margin:0 0 1.6rem}
+.tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin:0 0 1.6rem}.tiles .tile:nth-child(n+6){margin-top:-1px}.tiles .tile:nth-child(5n+1){margin-left:0}
 .tile{display:block;padding:0 0 1rem;border:1px solid var(--line);background:var(--panel);color:var(--ink);transition:border-color .18s,background .18s;position:relative}
 .tile+.tile{margin-left:-1px}
 .tile:hover,.tile:focus-visible{border-color:var(--faint);z-index:1;outline:none}.tile.on{border-color:var(--red);z-index:2}
@@ -265,6 +265,7 @@ footer .f-contact a:hover,footer .f-source a:hover{color:#c52828;border-color:#c
 .promises>div:last-child:nth-child(odd){grid-column:1/-1}
 @media (min-width:901px){.promises.three>div:last-child{grid-column:auto}}
 @media (max-width:640px){.promises>div:last-child{grid-column:auto}}
+.pgroups{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0 0 2rem;text-align:left}.pg{padding:1.4rem 1.4rem .4rem;border:1px solid var(--line);background:var(--panel)}.pg+.pg{margin-left:-1px}.pg h3{font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--redup);margin:0 0 1.2rem}.pg>div{margin:0 0 1.2rem}.pg b{display:block;font:400 1.1rem var(--sc);letter-spacing:.04em;color:var(--ink);margin-bottom:.35rem}.pg p{margin:0;color:var(--bonedim);font-size:.98rem;line-height:1.55}
 .promises b{display:block;font:400 1.15rem var(--sc);letter-spacing:.04em;color:var(--ink);margin-bottom:.45rem}
 .promises b::before{content:'';display:inline-block;width:6px;height:6px;background:var(--red);transform:rotate(45deg);margin:0 .7rem .2rem 0;vertical-align:middle}
 .promises p{margin:0;color:var(--bonedim);font-size:1rem;line-height:1.6}
@@ -273,7 +274,7 @@ footer .f-contact a:hover,footer .f-source a:hover{color:#c52828;border-color:#c
 .two .card+.card{margin-left:-1px}
 .two .card>b{display:block;font:400 1.25rem var(--sc);letter-spacing:.04em;color:var(--ink);margin-bottom:.6rem}
 .two .card>p{color:var(--dim);font-size:1rem;line-height:1.6;margin:0 0 1rem}
-.two .fold{margin-top:.4rem}
+.two .fold{margin-top:.4rem}.fleet{display:grid;grid-template-columns:1fr 1fr;gap:0}.fleet .card{display:flex;flex-direction:column;padding:1.5rem 1.4rem;border:1px solid var(--line);background:var(--panel)}.fleet .card:nth-child(even){margin-left:-1px}.fleet .card:nth-child(n+3){margin-top:-1px}.fleet .card>b{display:block;font:400 1.25rem var(--sc);letter-spacing:.04em;color:var(--ink);margin-bottom:.6rem}.fleet .card>p{color:var(--dim);font-size:1rem;line-height:1.6;margin:0 0 1rem}.fleet .row-btns{margin-top:auto}
 .row-btns{display:flex;flex-wrap:wrap;gap:.5rem}
 .compare-wrap{overflow-x:auto}
 .compare{width:100%;border-collapse:collapse;font-size:1rem;line-height:1.45}
@@ -295,7 +296,7 @@ main{max-width:68ch;margin:0 auto;padding:0 18px 2rem}
 .dialband svg{display:block;width:100%;height:auto}
 .dialband text{font-family:var(--mono);fill:var(--dim)}.dialband .st{fill:var(--bonedim);font-family:var(--sc)}
 @media (max-width:560px){.dialband{display:none}.hbtn{width:100%;padding:1rem 1.2rem}}
-.framebar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem 1rem;padding:.7rem .9rem;border:1px solid var(--line);border-bottom:0;background:var(--panel);color:var(--bonedim);font-style:italic;font-size:1rem}
+.framebar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem 1rem;max-width:940px;margin:0 auto .6rem;padding:0 .2rem;color:var(--bonedim);font-style:italic;font-size:1rem}
 .framebar .btn{min-height:40px}
 .last{text-align:center;padding:52px 0 12px}
 .stick{position:fixed;left:.6rem;right:.6rem;bottom:calc(.6rem + env(safe-area-inset-bottom));z-index:20;display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.5rem .5rem .5rem 1rem;border:1px solid var(--ghost);background:#0b0a08;color:var(--ink);transition:transform .25s,opacity .25s}
@@ -334,6 +335,7 @@ section{padding:40px 0 4px}
 .getset.ios{display:flex;flex-direction:column;align-items:center}.getset.ios .iph{order:-1;margin:0 0 1.6rem;align-self:stretch}
 .alt{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:center;margin:1rem 0 0}
 h3.small{font:400 11px var(--mono);letter-spacing:.2em;text-transform:uppercase;color:var(--faint);text-align:center;margin:2.2rem 0 1rem}
+.plats{display:grid;grid-template-columns:repeat(3,1fr);gap:0;max-width:760px;margin:0 auto 1rem}.plat{display:block;padding:1.1rem .8rem;border:1px solid var(--line);background:var(--panel);text-align:center;color:var(--ink);transition:border-color .18s}.plat:nth-child(n+4){margin-top:-1px}.plat:not(:nth-child(3n+1)){margin-left:-1px}.plat:hover,.plat:focus-visible{border-color:var(--red);position:relative;z-index:1;outline:none}.plat b{display:block;font:400 1.15rem var(--sc);letter-spacing:.05em;font-weight:400}.plat small{display:block;font:400 .62rem var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-top:.35rem}.also{text-align:center;font:400 .72rem var(--mono);letter-spacing:.1em;color:var(--dim);margin:.4rem 0 0}.also a{color:var(--bonedim);border-bottom:1px solid var(--faint)}.also a:hover{border-color:var(--red)}#set .note{text-align:center;color:var(--dim);font-style:italic;margin:0 auto .2rem;max-width:620px}
 .desk{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin:0 auto .4rem;max-width:620px}
 .desk a{display:block;padding:.9rem .8rem;border:1px solid var(--line);background:var(--panel);text-align:center;color:var(--ink);transition:border-color .18s,background .18s}
 .desk a+a{margin-left:-1px}.desk a:hover{border-color:var(--faint);position:relative}
@@ -354,8 +356,8 @@ footer .f-runs{max-width:46em;margin:0 auto 1.6rem;font-size:.95rem;line-height:
 .leavingnote{display:none;max-width:560px;margin:0 auto 1.6rem;padding:1rem 1.25rem;border:1px solid var(--ghost);background:#0b0a08;font-style:italic;text-align:center;color:var(--bonedim)}
 html.leaving .leavingnote{display:block}html.leaving .hero .ctas,html.leaving .hero .free,html.leaving .dialband,html.leaving main>section,html.leaving main>.divider,html.leaving .stick{display:none}
 @media (max-width:900px){.tiles{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:.6rem;padding:0 1rem;margin-left:50%;width:100vw;transform:translateX(-50%);scrollbar-width:none}.tiles::-webkit-scrollbar{display:none}.tile{flex:0 0 min(62vw,240px);scroll-snap-align:center}.tile+.tile{margin-left:0}}
-@media (max-width:760px){.pillars,.promises,.two{grid-template-columns:1fr}.pillars div+div{margin:-1px 0 0}.two .card+.card{margin:-1px 0 0}.setframe iframe{height:760px}}
-@media (max-width:560px){.desk{grid-template-columns:1fr}.desk a+a{margin:-1px 0 0}}
+@media (max-width:760px){.pillars,.promises,.two,.pgroups,.fleet{grid-template-columns:1fr}.pg+.pg,.fleet .card+.card{margin:-1px 0 0}.pillars div+div{margin:-1px 0 0}.two .card+.card{margin:-1px 0 0}.setframe iframe{height:760px}}
+@media (max-width:560px){.desk{grid-template-columns:1fr}.desk a+a{margin:-1px 0 0}.plats{grid-template-columns:1fr 1fr}.plat:nth-child(n){margin:0}.plat:nth-child(n+3){margin-top:-1px}.plat:nth-child(even){margin-left:-1px}}
 </style>
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Pyrate Radio", "url": "https://hostis.black/pyrateradio/", "description": "Radio that anyone can raise and every listener carries, with no server to switch off.", "applicationCategory": "MultimediaApplication", "operatingSystem": "Android, Windows, macOS, Linux, Web", "inLanguage": "en-GB", "isAccessibleForFree": true, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "publisher": {"@type": "Organization", "name": "HOSTIS", "url": "https://hostis.black/"}, "softwareVersion": "0.9.21", "fileSize": "51 MB", "downloadUrl": "https://hostis.black/pyrateradio/pyrate-radio-0.9.21.apk"}</script>
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "HOSTIS", "item": "https://hostis.black/"}, {"@type": "ListItem", "position": 2, "name": "Pyrate Radio", "item": "https://hostis.black/pyrateradio/"}]}</script>
@@ -380,12 +382,16 @@ html.leaving .leavingnote{display:block}html.leaving .hero .ctas,html.leaving .h
 <section id="air">
 <div class="sechead"><h2>On the Air</h2><span class="cap">HOSTIS's own stations</span></div>
 <div class="tiles wide" role="list">
-<a class="tile" role="listitem" href="listen/#f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f" data-id="f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f"><img src="listen/art/the-public-domain.jpg" alt="" width="512" height="512" loading="lazy"><b>The Public Domain</b><span class="fq"></span><i>Recordings published in 1925 or earlier, free in the United States since 1 January 2026.</i></a>
-<a class="tile" role="listitem" href="listen/#110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a" data-id="110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"><img src="listen/art/readings.jpg" alt="" width="512" height="512" loading="lazy"><b>Readings</b><span class="fq"></span><i>LibriVox recordings read aloud round the clock, Johnson's General History of the Pyrates first.</i></a>
+<a class="tile" role="listitem" href="listen/#8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd" data-id="8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd"><img src="listen/art/netlabel.jpg" alt="" width="512" height="512" loading="lazy"><b>Netlabel</b><span class="fq"></span><i>Electronic, ambient and experimental records their makers set free under Creative Commons. Ambient alone through the small hours.</i></a>
+<a class="tile" role="listitem" href="listen/#35c35e1d5db3d53eb4ce8af62fc8be947a4c97432c711d2a14e3349c3376f583" data-id="35c35e1d5db3d53eb4ce8af62fc8be947a4c97432c711d2a14e3349c3376f583"><img src="listen/art/drift.jpg" alt="" width="512" height="512" loading="lazy"><b>Drift</b><span class="fq"></span><i>Long ambient, drone and piano for work and sleep, from musicians who set it free under Creative Commons.</i></a>
+<a class="tile" role="listitem" href="listen/#1131d666f877cc10aa5d23af0d1a5aef1a768a59b6e38dcbb69bbcc7d4f53d9a" data-id="1131d666f877cc10aa5d23af0d1a5aef1a768a59b6e38dcbb69bbcc7d4f53d9a"><img src="listen/art/concert-hall.jpg" alt="" width="512" height="512" loading="lazy"><b>Concert Hall</b><span class="fq"></span><i>Bach, Chopin, Beethoven and more, in modern recordings free for anyone to play.</i></a>
+<a class="tile" role="listitem" href="listen/#f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f" data-id="f33eb5c67e9dd58ca8f85aa4c730f23081937ad9e99746829f7233dadff0803f"><img src="listen/art/the-public-domain.jpg" alt="" width="512" height="512" loading="lazy"><b>The Public Domain</b><span class="fq"></span><i>Music and speech off records from 1925 and before. Each New Year&#x27;s Day another year of them goes free.</i></a>
+<a class="tile" role="listitem" href="listen/#110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a" data-id="110243ae29e24f4f77bf4e5b0b9bb115ee4f2a4dfb76d6091fc913c54d97e44a"><img src="listen/art/readings.jpg" alt="" width="512" height="512" loading="lazy"><b>Readings</b><span class="fq"></span><i>Johnson&#x27;s General History of the Pyrates, Treasure Island, Captain Blood, Moby-Dick and more of the sea, read aloud chapter by chapter.</i></a>
 <a class="tile" role="listitem" href="listen/#1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069" data-id="1243e4ce0ee6a4acbbf471d1e11b0325899d50880a80e5bc22fd65f999864069"><img src="listen/art/the-numbers.jpg" alt="" width="512" height="512" loading="lazy"><b>The Numbers</b><span class="fq"></span></a>
-<a class="tile" role="listitem" href="listen/#8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd" data-id="8a422de6ab81bc5e3254430c73d13ef820b5b80e4f85bbe33969f30e804b76dd"><img src="listen/art/netlabel.jpg" alt="" width="512" height="512" loading="lazy"><b>Netlabel</b><span class="fq"></span><i>Creative Commons electronic, ambient and experimental music from the netlabels that gave it away.</i></a>
-<a class="tile" role="listitem" href="listen/#23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a" data-id="23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a"><img src="listen/art/poets-corner.jpg" alt="" width="512" height="512" loading="lazy"><b>Poets&rsquo; Corner</b><span class="fq"></span><i>Short public domain poems read by LibriVox volunteers, one on the hour.</i></a>
-<a class="tile" role="listitem" href="listen/#dce68389447e6319303ddbc67bb874863559b8f93015bf810a3b18d0b1eab572" data-id="dce68389447e6319303ddbc67bb874863559b8f93015bf810a3b18d0b1eab572"><img src="listen/art/shanties.jpg" alt="" width="512" height="512" loading="lazy"><b>Shanties</b><span class="fq"></span><i>Sea shanties, sea songs and pirate songs on records from 1925 and before.</i></a>
+<a class="tile" role="listitem" href="listen/#23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a" data-id="23e3e7537c08675de0f0bf2ab62cf2ce3f4779625f2e2377c63aef18bb0f417a"><img src="listen/art/poets-corner.jpg" alt="" width="512" height="512" loading="lazy"><b>Poets&#x27; Corner</b><span class="fq"></span><i>Blake, Dickinson, Shelley, Owen and over a hundred more poets, read aloud. Nobody owns a word of it.</i></a>
+<a class="tile" role="listitem" href="listen/#dce68389447e6319303ddbc67bb874863559b8f93015bf810a3b18d0b1eab572" data-id="dce68389447e6319303ddbc67bb874863559b8f93015bf810a3b18d0b1eab572"><img src="listen/art/shanties.jpg" alt="" width="512" height="512" loading="lazy"><b>Shanties</b><span class="fq"></span><i>Shanties, sea songs and pirate songs off 78s and field recordings, every one free to air.</i></a>
+<a class="tile" role="listitem" href="listen/#1ae4f9701e693ae457d51e386abb935a4fdb36c4dea03e59c2eb96d366ca2ca6" data-id="1ae4f9701e693ae457d51e386abb935a4fdb36c4dea03e59c2eb96d366ca2ca6"><img src="listen/art/contraband.jpg" alt="" width="512" height="512" loading="lazy"><b>Contraband</b><span class="fq"></span><i>Books that kings, censors and courts tried to stop, read aloud round the clock. Milton, Paine, Douglass, Whitman, Wilde, Joyce, Lawrence.</i></a>
+<a class="tile" role="listitem" href="listen/#0df7a7bc3b395c7f84fd9c6e4f518650b12fe3cf4ba10b65372d34ab72e4b820" data-id="0df7a7bc3b395c7f84fd9c6e4f518650b12fe3cf4ba10b65372d34ab72e4b820"><img src="listen/art/brass.jpg" alt="" width="512" height="512" loading="lazy"><b>Brass</b><span class="fq"></span><i>Sousa&#x27;s marches to 1926 by the Marine Band, with the bands of the Navy, Army and Air Force.</i></a>
 </div>
 <div class="setframe">
 <div class="framebar"><span>This page plays only HOSTIS's own stations.</span><a class="btn openlink" href="listen/">Every station</a></div>
@@ -421,31 +427,41 @@ addEventListener('DOMContentLoaded',function(){document.getElementById('air').sc
 <section id="free" class="rite"><i></i><i></i><i></i><i></i>
 <p class="eyebrow">The Promises</p>
 <h2>Hard to Switch Off</h2>
-<div class="promises three">
+<div class="pgroups">
+<div class="pg"><h3>Nothing to switch off</h3>
 <div><b>There is no server</b><p>Phones, computers and Lanterns carry every station between them. Take hostis.black down and they all play on.</p></div>
-<div><b>Only the key ends a station</b><p>A station with a hundred listeners lives in a hundred places, and the rest of the network keeps spares. Only the holder of its twenty-four words can end it.</p></div>
-<div><b>It gets past censors</b><p>Block the way in and the radios already aboard keep each other. Run it through Tor, over Wi-Fi with no internet, or pass a whole station as one file.</p></div>
-<div><b>Listeners stay unseen</b><p>No account, no name and no analytics. No single radio on the way learns both who you are and what you hear. Sound comes through two other radios. One knows who asks, the other what for. While the network is young, HOSTIS's first radios may carry both hops of a new browser's route.</p></div>
-<div><b>Broadcasters stay unseen</b><p>A broadcast leaves sealed and travels about four radios before it surfaces. None of them can tie it to the keeper.</p></div>
-<div><b>Carriers hold nothing readable</b><p>What a phone carries is sealed, so a seized phone shows nothing it carried. A Lantern runs with every port closed, behind a VPN if you like.</p></div>
+<div><b>Only the key ends a station</b><p>A station lives on every radio that plays it, and the network keeps spares. Only the holder of its twenty-four words can end it.</p></div>
+<div><b>It gets past censors</b><p>Block the way in and the radios aboard keep each other. Run it through Tor, over Wi-Fi with no internet, or pass a station as one file.</p></div>
+</div>
+<div class="pg"><h3>Nobody is seen</h3>
+<div><b>Listeners</b><p>No account, no name and no analytics. Sound comes through two other radios. One knows who asks and the other what for.</p></div>
+<div><b>Broadcasters</b><p>A broadcast leaves sealed and passes about four radios before it surfaces. None of them can tie it to the keeper.</p></div>
+<div><b>Carriers</b><p>What a radio carries for others is sealed, so a seized phone or server shows nothing it carried.</p></div>
+</div>
+<div class="pg"><h3>Nobody is in charge</h3>
 <div><b>Nothing can be forged</b><p>Every recording is checked against its station's key before it plays. A carrier can pass a station on and cannot change a note of it.</p></div>
-<div><b>Not even HOSTIS can stop it</b><p>HOSTIS's Lanterns carry other people's stations sealed and blind, and HOSTIS cannot read what they hold. It cannot take a station off the air or change what one plays, and once other radios share a route it cannot see who listens. The app's updates need two of three keys kept in separate places, and wait three days on every phone.</p></div>
+<div><b>Not even HOSTIS</b><p>HOSTIS cannot read what its Lanterns carry, take a station off the air or change what one plays. Updates need two of three keys kept apart, and wait three days on every phone.</p></div>
 <div><b>No gatekeeper</b><p>Anyone can start a station in a minute, free, and nobody approves it. The keeper decides what plays, and you decide what reaches you.</p></div>
+</div>
 </div>
 <p class="centre"><a class="readmore" href="how-it-works/"><span>Read how it works</span></a></p>
 </section>
 
-<div class="divider"><span class="divider-glyph"></span></div>
-<section id="wake">
-<div class="sechead"><h2>In Caroline's Wake</h2></div>
-<p>In 1964 Radio Caroline broadcast from a ship off the English coast and broke the BBC's hold on the British air. Parliament outlawed it in 1967, and fifty years later the regulator licensed it. Pyrate Radio was born from that story, with every listening phone for a ship. <a href="how-it-works/#wake">The wake</a></p>
-</section>
 
 <section id="set">
 <div class="sechead"><h2>Take the Set</h2><span class="cap">android &#183; iphone &#183; computers &#183; any browser</span></div>
-<div class="getset">
-<a class="hbtn" href="pyrate-radio-0.9.21.apk">Pyrate Radio for Android</a><p class="btnnote">version 0.9.21 &#183; 51 MB &#183; arm64</p>
-<details class="iph"><summary><span class="hbtn">Pyrate Radio for iPhone</span><p class="btnnote">the full player on your home screen &#183; no App Store</p></summary><div class="iphbody">
+<div class="plats">
+<a class="plat" href="pyrate-radio-0.9.21.apk"><b>Android</b><small>51 MB &#183; apk</small></a>
+<a class="plat" href="#iphone" data-open="iphone"><b>iPhone</b><small>from Safari &#183; no App Store</small></a>
+<a class="plat" href="pyrate-radio-0.9.21-windows.zip"><b>Windows</b><small>10 and 11 · zip</small></a>
+<a class="plat" href="pyrate-radio-0.9.21-macos.zip"><b>Mac</b><small>Apple and Intel · zip</small></a>
+<a class="plat" href="pyrate-radio-0.9.21-linux-x64.tar.gz"><b>Linux</b><small>x86-64 · tar.gz</small></a>
+<a class="plat openlink" href="listen/"><b>Any browser</b><small>nothing to install</small></a>
+</div>
+<p class="note">Version 0.9.21. Windows may warn the first time: More info, then Run anyway. On a Mac, right-click the app and choose Open.</p>
+<p class="also">Also by <a href="magnet:?xt=urn:btih:13c2e3302df08cb9cf10c209afde5abcefadcbee&amp;dn=pyrate-radio-0.9.21.apk&amp;tr=udp:%2F%2Ftracker.opentrackr.org:1337%2Fannounce&amp;tr=udp:%2F%2Fopen.demonii.com:1337%2Fannounce&amp;tr=udp:%2F%2Ftracker.torrent.eu.org:451%2Fannounce&amp;ws=https:%2F%2Fhostis.black%2Fpyrateradio%2Fpyrate-radio-0.9.21.apk">magnet link</a> &#183; <a href="pyrate-radio-0.9.21.apk.torrent">torrent</a> &#183; <a href="https://github.com/dukewilder/hostis/tree/radio/radio" target="_blank" rel="noopener noreferrer">source</a></p>
+<div class="folds">
+<details class="fold" id="iphone"><summary>On iPhone</summary><div>
 <ol class="steps">
 <li>Open the <a class="openlink" href="listen/">full player</a> in Safari.</li>
 <li>Tap Share. On iOS 26 it is in the &#8943; menu beside the address.</li>
@@ -453,12 +469,6 @@ addEventListener('DOMContentLoaded',function(){document.getElementById('air').sc
 </ol>
 <p>It opens from your home screen like any other app, with every station on the dial.</p>
 </div></details>
-</div>
-<h3 class="small">On a computer</h3>
-<div class="desk"><a href="pyrate-radio-0.9.21-windows.zip"><b>Windows</b><small>10 and 11 · zip</small></a><a href="pyrate-radio-0.9.21-macos.zip"><b>Mac</b><small>Apple and Intel · zip</small></a><a href="pyrate-radio-0.9.21-linux-x64.tar.gz"><b>Linux</b><small>x86-64 · tar.gz</small></a></div>
-<p class="note">Version 0.9.21. On a Mac, open it the first time with a right-click and Open. Computers take new versions from this page.</p>
-<div class="alt"><a class="btn openlink" href="listen/">Any browser</a><a class="btn" href="magnet:?xt=urn:btih:13c2e3302df08cb9cf10c209afde5abcefadcbee&amp;dn=pyrate-radio-0.9.21.apk&amp;tr=udp:%2F%2Ftracker.opentrackr.org:1337%2Fannounce&amp;tr=udp:%2F%2Fopen.demonii.com:1337%2Fannounce&amp;tr=udp:%2F%2Ftracker.torrent.eu.org:451%2Fannounce&amp;ws=https:%2F%2Fhostis.black%2Fpyrateradio%2Fpyrate-radio-0.9.21.apk">Magnet link</a><a class="btn" href="pyrate-radio-0.9.21.apk.torrent">.torrent</a><a class="btn" href="https://github.com/dukewilder/hostis/tree/radio/radio" target="_blank" rel="noopener noreferrer">Source</a></div>
-<div class="folds">
 <details class="fold"><summary>Installing on stock Android</summary><div>
 <p>Pyrate Radio is not registered with Google, so Google's phones ask once before installing it. That begins in some countries in 2026 and everywhere in 2027.</p>
 <ol class="steps">
@@ -481,25 +491,19 @@ addEventListener('DOMContentLoaded',function(){document.getElementById('air').sc
 
 <div class="divider"><span class="divider-glyph"></span></div>
 <section id="colours">
-<div class="sechead"><h2>Join the Fleet</h2></div>
-<div class="two wide">
-<div class="card"><b>Raise colours</b><p>Name it, drop recordings in, and it plays round the clock. Go live from the microphone whenever you like.</p><p class="row-btns"><a class="btn openlink" href="listen/?start" data-go="start">Start a station</a><a class="btn quiet" href="handbook/">Keeper's handbook</a></p></div>
-<div class="card"><b>Carry the radio further</b><p>Every radio aboard keeps the stations alive. Carry more from your phone, a spare machine or a rented server.</p><p class="row-btns"><a class="btn" href="#carry">Three ways to carry</a></p></div>
+<div class="sechead"><h2>Join the Fleet</h2><span class="cap">raise a station &#183; carry the radio</span></div>
+<span id="carry"></span>
+<div class="fleet wide">
+<div class="card"><b>Raise colours</b><p>Name a station, drop recordings in, and it plays round the clock. Go live from the microphone whenever you like.</p><p class="row-btns"><a class="btn openlink" href="listen/?start" data-go="start">Start a station</a><a class="btn quiet" href="handbook/">Keeper's handbook</a></p></div>
+<div class="card"><b>Listen</b><p>Every listener carries. While you listen your radio passes stations on to the next, so each listener makes the network harder to sink. It is on by default.</p></div>
+<div class="card" id="lantern"><b>Light a Lantern</b><p>The radio on any machine that stays on, like a Raspberry Pi or an old laptop. It carries every station sealed and opens no ports.</p><p class="row-btns"><a class="btn" href="#lantern-cmd" data-open="lantern-cmd">The three lines</a><a class="btn quiet" href="https://github.com/dukewilder/hostis/blob/radio/radio/LANTERN.md" target="_blank" rel="noopener noreferrer">The guide</a></p></div>
+<div class="card" id="relay"><b>Run a relay</b><p>Browsers, iPhones included, reach the network through relays. Each new one is another door that stays open when others shut. One paste on a small rented server runs a relay and a Lantern together.</p><p class="row-btns"><a class="btn" href="#relay-cmd" data-open="relay-cmd">The one paste</a></p></div>
 </div>
-</section>
-
-<div class="divider"><span class="divider-glyph"></span></div>
-<section id="carry">
-<div class="sechead"><h2>Carry the radio further</h2></div>
-<div class="promises three wide">
-<div><b>Listen</b><p>Every listener carries. The stations you hear pass from your radio to the next, so each listener makes the network harder to sink. Soon a Carry the radio switch lets you give it more.</p></div>
-<div id="lantern"><b>Light a Lantern</b><p>The radio on any machine that stays on, like a Raspberry Pi or an old laptop. It carries every station and opens no ports.</p>
-<details class="fold"><summary>The three lines</summary><div><pre class="cmd">git clone --depth 1 --branch radio https://github.com/dukewilder/hostis
+<div class="folds">
+<details class="fold" id="lantern-cmd"><summary>Light a Lantern: the three lines</summary><div><pre class="cmd">git clone --depth 1 --branch radio https://github.com/dukewilder/hostis
 docker build -t pyrate-lantern -f hostis/radio/Dockerfile hostis/radio
 docker run -d --name lantern --restart unless-stopped -v pyrate:/data pyrate-lantern</pre><p><code>docker logs lantern</code> shows it working.</p></div></details>
-<p class="row-btns"><a class="btn" href="https://github.com/dukewilder/hostis/blob/radio/radio/LANTERN.md" target="_blank" rel="noopener noreferrer">The Lantern guide</a></p></div>
-<div id="relay"><b>Run a relay on a server</b><p>A browser cannot open ports, so every browser listener, iPhones included, reaches the network through a relay, and may link straight to a door or to its first hop unless Direct links is off in the player's settings. Each new relay is another door that stays open when others are shut. One paste on a small rented server runs a relay and a Lantern together.</p>
-<details class="fold"><summary>The one paste</summary><div><pre class="cmd">curl -fsSL https://raw.githubusercontent.com/dukewilder/hostis/radio/radio/tools/vps/install.sh -o pyrate.sh &amp;&amp; bash pyrate.sh</pre><p>As root, on fresh Debian or Ubuntu. It asks for a name pointed at the server or makes a free one, lets in only what a relay needs, and prints your relay and Lantern at the end.</p></div></details></div>
+<details class="fold" id="relay-cmd"><summary>Run a relay: the one paste</summary><div><pre class="cmd">curl -fsSL https://raw.githubusercontent.com/dukewilder/hostis/radio/radio/tools/vps/install.sh -o pyrate.sh &amp;&amp; bash pyrate.sh</pre><p>As root, on fresh Debian or Ubuntu. It asks for a name pointed at the server or makes a free one, lets in only what a relay needs, and prints your relay and Lantern at the end.</p></div></details>
 </div>
 </section>
 
@@ -514,7 +518,7 @@ docker run -d --name lantern --restart unless-stopped -v pyrate:/data pyrate-lan
 <details class="fold"><summary>How much data, room and battery does it use?</summary><div>Music streams at about 29 MB an hour and talk at about 11. The share your phone carries for others takes up to 4 GB, less on a fuller phone, and fills only on Wi-Fi while it charges, so away from the charger it costs you nothing.</div></details>
 <details class="fold"><summary>How do I know the app is genuine?</summary><div>Check the file against the checksum under Take the Set, and the signing certificate against the one the app shows. Updates arrive inside the app, signed by two of three HOSTIS release keys, and wait three days before they install unless you take them sooner.</div></details>
 </div>
-<p class="centre"><a class="readmore" href="how-it-works/#questions"><span>More questions, answered</span></a></p>
+<p class="centre"><a class="readmore" href="how-it-works/#questions"><span>More questions</span></a></p>
 </section>
 
 <section class="last">
@@ -531,7 +535,9 @@ docker run -d --name lantern --restart unless-stopped -v pyrate:/data pyrate-lan
 <script>
 // Each station's flag is its key, drawn, and its place on the dial comes from the key as well.
 function fq(id){return ((875+parseInt(id.slice(0,6),16)%206)*100+parseInt(id.slice(6,10),16)%100)/1000}
-if(/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)){var gs=document.querySelector('.getset'),ip=document.querySelector('.iph');if(gs&&ip){gs.classList.add('ios');ip.open=true}}
+if(/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)){var ip=document.getElementById('iphone');if(ip)ip.open=true}
+// A card that points at a fold below opens it.
+document.querySelectorAll('[data-open]').forEach(function(a){a.addEventListener('click',function(){var d=document.getElementById(a.dataset.open);if(d)d.open=true})});
 document.querySelectorAll('.tile[data-id]').forEach(function(a){a.querySelector('.fq').textContent=fq(a.dataset.id).toFixed(3)+' FM';
 // A tile turns the set in this page to its station, where the set can take it.
 a.addEventListener('click',function(e){var f=document.getElementById('radio');if(!f.contentWindow||document.documentElement.classList.contains('leaving'))return;e.preventDefault();
@@ -542,13 +548,11 @@ f.contentWindow.postMessage({pyrate:'tune',id:a.dataset.id},location.origin);doc
 (function(){var P=["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy.ipfs.inbrowser.link/", "https://bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy/", "https://135-181-190-28.sslip.io/listen/"],set=function(u){document.querySelectorAll('a.openlink').forEach(function(a){a.href=u+(a.dataset.go?'?'+a.dataset.go:'')})},done=0;
 if(!P.length||!window.Promise||!window.fetch)return;
 pyrateAlive(P[0],4000).then(function(u){if(!done++)set(u)},function(){P.slice(1).forEach(function(u){pyrateAlive(u,6000).then(function(){if(!done++)set(u)},function(){})})})})();
-// The dial across the hero, with HOSTIS's stations at their places on it.
+// The dial across the hero: HOSTIS's stations are the red marks, named in the tiles below.
 (function(){var svg=document.getElementById('dialsvg'),x=function(f){return 30+(f-87.5)/20.6*940},h='<line x1="30" y1="62" x2="970" y2="62" stroke="rgba(237,228,206,.25)"/>';
 for(var f=88;f<=108;f+=.5){var big=f%2===0;h+='<line x1="'+x(f)+'" y1="'+(big?50:56)+'" x2="'+x(f)+'" y2="62" stroke="rgba(237,228,206,'+(big?.45:.2)+')"/>';if(big)h+='<text x="'+x(f)+'" y="82" font-size="12" text-anchor="middle">'+f+'</text>'}
-var rows=[],st=[].map.call(document.querySelectorAll('.tile[data-id]'),function(a){return{f:fq(a.dataset.id),n:a.querySelector('b').textContent}}).sort(function(a,b){return a.f-b.f});
-st.forEach(function(s){var px=x(s.f),w=s.n.length*8.2+14,r=0;while(rows[r]!==undefined&&rows[r]>px-w/2)r++;rows[r]=px+w/2;var y=40-r*18;
-h+='<line x1="'+px+'" y1="'+(y+3)+'" x2="'+px+'" y2="62" stroke="#c52828" stroke-width="2"/><text class="st" x="'+px+'" y="'+y+'" font-size="12" text-anchor="middle">'+s.n.replace(/&/g,'&amp;')+'</text>'});
-var top=Math.min(0,40-(rows.length-1)*18-18);svg.setAttribute('viewBox','0 '+top+' 1000 '+(96-top));svg.innerHTML=h})();
+[].forEach.call(document.querySelectorAll('.tile[data-id]'),function(a){var px=x(fq(a.dataset.id));h+='<line x1="'+px+'" y1="34" x2="'+px+'" y2="62" stroke="#c52828" stroke-width="2"/>'});
+svg.setAttribute('viewBox','0 24 1000 72');svg.innerHTML=h})();
 // Once the way in has scrolled away, a bar keeps the full player one tap off.
 (function(){var bar=document.getElementById('stick'),seen=new Map();if(!('IntersectionObserver' in window))return;
 var io=new IntersectionObserver(function(es){es.forEach(function(e){seen.set(e.target,e.isIntersecting)});var any=false;seen.forEach(function(v){any=any||v});bar.classList.toggle('off',any);bar.setAttribute('aria-hidden',any);bar.tabIndex=any?-1:0},{threshold:0});
