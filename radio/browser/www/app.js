@@ -820,7 +820,8 @@ function scale() {
   let t = ''; for (let a = -48; a <= 48; a += 12) { const r = a * Math.PI / 180; t += '<line x1="' + (60 + 46 * Math.sin(r)) + '" y1="' + (64 - 46 * Math.cos(r)) + '" x2="' + (60 + 52 * Math.sin(r)) + '" y2="' + (64 - 52 * Math.cos(r)) + '"/>' }
   $('ticks').innerHTML = t;
 }
-// The dial: a mark for every station at its frequency, and names only around the needle. The
+// The dial: a mark for every station at its frequency. On a copy that plays only HOSTIS's
+// stations, names around the needle as well (never in the open player, where they crowd). The
 // station on the set is named over the needle and its nearest neighbours either side, as many as
 // fit with no two touching, each with a hairline down to its mark. Pointing at a mark names it;
 // dragging along the glass carries the needle and the names with it, and letting go tunes in.
@@ -840,7 +841,9 @@ function names(id) {
   namedAt = id;
   const box = $('names'), W = $('track').clientWidth, i = order.findIndex(s => s.id === id);
   box.innerHTML = '';
-  if (i < 0 || !W) { leads([]); return }
+  // Names on the glass only where it carries HOSTIS's few stations: with every station they
+  // crowd it. Pointing at a mark still names it, and the face above names the one on the set.
+  if (i < 0 || !W || !HOSTIS_ONLY) { leads([]); return }
   const mk = s => {
     const b = document.createElement('button'); b.textContent = s.name || s.call_sign; b.dataset.id = s.id; b.title = fqs(s.id) + '  ' + (s.name || s.call_sign || '');
     b.setAttribute('role', 'option'); b.setAttribute('aria-selected', s.id === cur?.id); b.classList.toggle('on', s.id === cur?.id); b.classList.toggle('live', !!s.live);

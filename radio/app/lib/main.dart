@@ -449,6 +449,9 @@ class Tuner extends ChangeNotifier {
 
   bool _refreshing = false;
 
+  /// Asks the node now, rather than at the next tick: after the keeper picks another station.
+  Future<void> refreshNow() => _refresh();
+
   /// The dial's poll runs off the screen's thread, one at a time, so a node busy with a
   /// slow job never stalls a frame.
   Future<void> _refresh() async {
@@ -464,7 +467,7 @@ class Tuner extends ChangeNotifier {
   Future<void> _refreshOnce() async {
     _ticks++;
     final acts = _acts;
-    final st = await Native.callAway({'cmd': 'status'});
+    final st = await Native.callAway({'cmd': 'status', 'mine': pref('mine_pick')});
     if (st is Map<String, dynamic> && st['error'] == null) status = st;
     // The lock screen, headphones or the car may have changed station or stopped the radio.
     // A status asked for before the owner's last Listen or Stop says nothing about it.
@@ -1417,6 +1420,8 @@ class _ColoursPageState extends State<ColoursPage> {
   final restorePass = TextEditingController();
   final pass = TextEditingController();
   bool raising = false;
+  /// Starting another station while one is already kept here.
+  bool starting = false;
   bool talk = false;
   String? error;
   List library = [];
@@ -1664,7 +1669,10 @@ class _ColoursPageState extends State<ColoursPage> {
       }
     }
     String? shaped;
-    if (r is Map && r['id'] is String) justRaised = r['id'] as String;
+    if (r is Map && r['id'] is String) {
+      justRaised = r['id'] as String;
+      pref('mine_pick', r['id']);
+    }
     if (r is Map && r['id'] is String) {
       try {
         await shape.apply(r['id']);
@@ -1675,6 +1683,7 @@ class _ColoursPageState extends State<ColoursPage> {
     if (!mounted) return;
     setState(() {
       raising = false;
+      if (r is Map && r['id'] is String) starting = false;
       if (r is Map && r['error'] != null) error = r['error'];
       if (r is Map && r['pocket_error'] != null) error = 'The station is private, but its topic did not open yet. ${r['pocket_error']}';
       if (shaped != null) error = shaped;
@@ -1832,11 +1841,15 @@ class _ColoursPageState extends State<ColoursPage> {
   @override
   Widget build(BuildContext context) {
     final mine = widget.radio.mine;
-    return ListView(padding: const EdgeInsets.fromLTRB(24, 26, 24, 40), children: [
+    return LayoutBuilder(builder: (context, box) {
+    // A column no wider than reads well, centred on a wide window.
+    final side = math.max(24.0, (box.maxWidth - 760) / 2);
+    return ListView(padding: EdgeInsets.fromLTRB(side, 26, side, 40), children: [
       // The form stays, with its progress, until the words have been shown: the new station
       // turns up in the node a moment before them.
-      if (mine == null || raising) ...[
-        masthead('Broadcast', sub: 'Start a station of your own.'),
+      if (mine == null || raising || starting) ...[
+        masthead('Broadcast', sub: mine == null ? 'Start a station of your own.' : 'Start another station.'),
+        if (mine != null && !raising) Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: () => setState(() => starting = false), child: Text('BACK TO ${(mine['name'] ?? 'YOUR STATION').toString().toUpperCase()}', style: carved(11, color: boneFaint)))),
         const SizedBox(height: 10),
         note('Give it a name, add some recordings, and it plays day and night, carried by everyone who listens.'),
         const SizedBox(height: 18),
@@ -1897,18 +1910,47 @@ class _ColoursPageState extends State<ColoursPage> {
         ..._station(mine),
       ],
     ]);
+    });
   }
 
-  // The live desk (desk.dart) runs the show: going live and ending, the inputs, the deck, the
-  // pads, and the phone's foreground service that keeps it on the air with the screen off.
-  List<Widget> _onAir(String id) => [
-        heading('GO LIVE', color: bloodBright),
-        note('Talk to your listeners, play music under your voice and fire jingles from the pads. Your recordings carry on when you stop.'),
-        const SizedBox(height: 14),
-        LiveDesk(station: id),
-      ];
+  /// Which of the keeper's stations Broadcast shows, and the way to start another.
+  Widget _switcher(Map<String, dynamic> mine) {
+    final all = ((widget.radio.status['mine_all'] as List?) ?? const []).whereType<Map>().toList();
+    final id = mine['id'] as String;
+    String label(Map s) => '${((s['name'] ?? '').toString().trim().isEmpty ? 'Untitled' : s['name'])}   ${s['call_sign'] ?? ''}';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(border: Border.all(color: line, width: 1)),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: all.any((s) => s['id'] == id) ? id : null,
+          isExpanded: true,
+          dropdownColor: panel,
+          iconEnabledColor: boneFaint,
+          hint: Text(label(mine), style: serif(16)),
+          items: [
+            for (final s in all) DropdownMenuItem(value: s['id'] as String, child: Text(label(s), overflow: TextOverflow.ellipsis, style: serif(16))),
+            DropdownMenuItem(value: '+', child: Text('Start another station', style: serif(16, color: boneFaint, italic: true))),
+          ],
+          onChanged: (v) {
+            if (v == null || v == id) return;
+            if (v == '+') {
+              setState(() => starting = true);
+              return;
+            }
+            pref('mine_pick', v);
+            programmeFor = null;
+            libraryFor = null;
+            widget.radio.refreshNow();
+          },
+        ),
+      ),
+    );
+  }
 
-  List<Widget> _programme(String id, Map<String, dynamic> mine) {
+  List<Widget> _station(Map<String, dynamic> mine) {
+    final id = mine['id'] as String;
+    loadLibrary(id, (mine['tracks'] as num?)?.toInt() ?? 0);
     if (programmeFor != id) {
       programmeFor = id;
       final r = Native.call({'cmd': 'programme', 'station': id});
@@ -1919,37 +1961,24 @@ class _ColoursPageState extends State<ColoursPage> {
       if (mounted) setState(() => programmeFor = null);
     }
 
-    return [
-      heading('WHEN IT PLAYS'),
-      note(programmeSummary(programme)),
-      const SizedBox(height: 12),
-      Wrap(spacing: 6, runSpacing: 6, children: [
-        button('CHANGE THE SCHEDULE', () => after(Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(backgroundColor: black, appBar: AppBar(backgroundColor: black), body: ProgrammeEditor(station: id, name: (mine['name'] ?? '').toString())))))),
-        button('PLAN A PREMIERE', () => after(pyrateSheet(context, ShowEditor(station: id)))),
-        button('POST A NOTICE', () => after(pyrateSheet(context, NoticeEditor(station: id)))),
-        button('SEE YOUR PAGE', () => openPage(context, mine, widget.radio)),
-        if (widget.radio.stations.any((x) => x['id'] == id && x['pocket'] == true))
-          button('INVITE LISTENERS', () => pyrateSheet(context, InviteSheet(station: id)))
-        else
-          button('MAKE A POSTER', () => pyrateSheet(context, PosterSheet(station: mine))),
-      ]),
-    ];
-  }
-
-  List<Widget> _station(Map<String, dynamic> mine) {
-    final id = mine['id'] as String;
-    loadLibrary(id, (mine['tracks'] as num?)?.toInt() ?? 0);
     final jobs = widget.radio.jobs;
+    final tracks = (mine['tracks'] as num?)?.toInt() ?? 0;
+    final pocket = widget.radio.stations.any((x) => x['id'] == id && x['pocket'] == true);
+    final onAir = widget.radio.status['live'] is Map;
+    // Each fold keeps its own open or shut state per station, so switching stations does not
+    // carry one station's open folds over to the next.
+    Key k(String f) => PageStorageKey('$f-$id');
     return [
+      _switcher(mine),
+      const SizedBox(height: 18),
       Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Flag(id: id, width: 96),
-        const SizedBox(width: 18),
+        Flag(id: id, width: 72),
+        const SizedBox(width: 16),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(mine['name'] ?? '', style: pica(28, spacing: 0.03)),
-            Text(mine['call_sign'] ?? '', style: mono(12)),
-            const SizedBox(height: 6),
-            Text('${mine['tracks']} ${mine['tracks'] == 1 ? 'recording' : 'recordings'}', style: serif(14, color: boneFaint, italic: true)),
+            Text(mine['name'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis, style: pica(26, spacing: 0.03)),
+            const SizedBox(height: 2),
+            Text('${mine['call_sign'] ?? ''}  ·  $tracks ${tracks == 1 ? 'recording' : 'recordings'}', style: mono(11, color: boneFaint)),
             if (mine['waiting'] == true)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -1965,61 +1994,74 @@ class _ColoursPageState extends State<ColoursPage> {
           ]),
         ),
       ]),
-      const SizedBox(height: 18),
+      const SizedBox(height: 16),
       _reach(id, mine),
-      AboardChart(station: id),
-      const SizedBox(height: 30),
-      heading('ADD RECORDINGS'),
-      note('Music, shows or readings from your files. Name a file "Artist - Title" and both show.'),
-      setting('Spoken word', talk || disguiseOn(), (v) => setState(() => talk = v), enabled: !disguiseOn(), sub: disguiseOn() ? 'On while Disguise my voice is on. Talk is filtered for mains hum and the voice is lowered.' : 'For talk and readings. Smaller files, so they reach listeners sooner, and mains hum is filtered out of the voice. Leave it off for music.'),
-      Row(children: [button('CHOOSE FILES', () => add(id))]),
-      for (final j in jobs)
-        Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Row(children: [
-            Expanded(child: Text(j['state'] ?? '', style: serif(14, color: boneDim, italic: true))),
-            if (!(j['state'] as String).startsWith('Setting'))
-              IconButton(tooltip: 'Remove', icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () => Native.call({'cmd': 'clear_job', 'job': j['id']})),
-          ]),
-        ),
-      if (library.isNotEmpty) ...[
-        const SizedBox(height: 22),
-        Text('YOUR RECORDINGS', style: carved(12, color: boneFaint, spacing: 0.3)),
-        const SizedBox(height: 6),
-        for (final t in library)
+      const SizedBox(height: 12),
+      fold('Recordings', key: k('rec'), open: tracks == 0 || jobs.isNotEmpty, sub: tracks == 0 ? 'Add music, shows or readings' : '$tracks on the station · add more', [
+        setting('Spoken word', talk || disguiseOn(), (v) => setState(() => talk = v), enabled: !disguiseOn(), sub: disguiseOn() ? 'On while Disguise my voice is on. Talk is filtered for mains hum and the voice is lowered.' : 'For talk and readings: smaller files, and mains hum filtered out of the voice. Leave it off for music.'),
+        Row(children: [button('CHOOSE FILES', () => add(id))]),
+        const SizedBox(height: 4),
+        note('Name a file "Artist - Title" and both show.'),
+        for (final j in jobs)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.only(top: 10),
             child: Row(children: [
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(t['title'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(16, color: boneDim)),
-                  if ((t['by'] ?? '').toString().isNotEmpty) Text(t['by'], style: carved(11, color: boneFaint, spacing: 0.2)),
-                ]),
-              ),
-              Text(fmtTime((t['duration_ms'] as num).toInt()), style: mono(11, color: boneFaint)),
-              IconButton(
-                icon: const Icon(Icons.remove, size: 18, color: boneFaint),
-                tooltip: 'Remove',
-                onPressed: () {
-                  Native.call({'cmd': 'withdraw', 'station': id, 'track': t['hash']});
-                  libraryCount = -1;
-                },
-              ),
+              Expanded(child: Text(j['state'] ?? '', style: serif(14, color: boneDim, italic: true))),
+              if (!(j['state'] as String).startsWith('Setting'))
+                IconButton(tooltip: 'Remove', icon: const Icon(Icons.close, size: 18, color: boneFaint), onPressed: () => Native.call({'cmd': 'clear_job', 'job': j['id']})),
             ]),
           ),
-      ],
-      const SizedBox(height: 30),
-      ..._programme(id, mine),
-      const SizedBox(height: 30),
-      ..._onAir(id),
-      const SizedBox(height: 30),
-      RecordPanel(station: id),
-      const SizedBox(height: 30),
-      ..._art(id, mine),
-      const SizedBox(height: 30),
-      DetailsPanel(station: id),
-      const SizedBox(height: 30),
-      fold('More', sub: isComputer ? 'Podcast feeds, co-hosts, ending the station' : 'Podcast feeds, co-hosts, numbers, ending the station', [
+        if (library.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          for (final t in library)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(t['title'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: serif(16, color: boneDim)),
+                    if ((t['by'] ?? '').toString().isNotEmpty) Text(t['by'], maxLines: 1, overflow: TextOverflow.ellipsis, style: carved(11, color: boneFaint, spacing: 0.2)),
+                  ]),
+                ),
+                const SizedBox(width: 8),
+                Text(fmtTime((t['duration_ms'] as num).toInt()), style: mono(11, color: boneFaint)),
+                IconButton(
+                  icon: const Icon(Icons.remove, size: 18, color: boneFaint),
+                  tooltip: 'Remove',
+                  onPressed: () {
+                    Native.call({'cmd': 'withdraw', 'station': id, 'track': t['hash']});
+                    libraryCount = -1;
+                  },
+                ),
+              ]),
+            ),
+        ],
+      ]),
+      fold('Schedule', key: k('sched'), sub: programmeSummary(programme), [
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          button('CHANGE THE SCHEDULE', () => after(Navigator.push(context, MaterialPageRoute(builder: (_) => Scaffold(backgroundColor: black, appBar: AppBar(backgroundColor: black), body: ProgrammeEditor(station: id, name: (mine['name'] ?? '').toString())))))),
+          button('PLAN A PREMIERE', () => after(pyrateSheet(context, ShowEditor(station: id)))),
+        ]),
+        const SizedBox(height: 8),
+        note('The schedule sets how your recordings play, your hours and your regular shows. A premiere plays chosen recordings once, at a time you pick.'),
+      ]),
+      fold('Go live', key: k('live'), open: onAir, sub: onAir ? 'On the air now' : 'Talk, play music under your voice, fire jingles', [
+        LiveDesk(station: id),
+        const SizedBox(height: 26),
+        RecordPanel(station: id),
+      ]),
+      fold('Your page', key: k('page'), sub: 'Notices, pictures, ${pocket ? 'invitations' : 'a poster'}', [
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          button('POST A NOTICE', () => after(pyrateSheet(context, NoticeEditor(station: id)))),
+          button('SEE YOUR PAGE', () => openPage(context, mine, widget.radio)),
+          if (pocket) button('INVITE LISTENERS', () => pyrateSheet(context, InviteSheet(station: id))) else button('MAKE A POSTER', () => pyrateSheet(context, PosterSheet(station: mine))),
+        ]),
+        const SizedBox(height: 22),
+        ..._art(id, mine),
+      ]),
+      fold('Station settings', key: k('settings'), sub: 'Name, line, kinds, ratings, home port, tips', [DetailsPanel(key: ValueKey('details-$id'), station: id)]),
+      fold('Listeners', key: k('listeners'), sub: 'How many tuned in, hour by hour', [AboardChart(station: id)]),
+      fold('More', key: k('more'), sub: isComputer ? 'Podcast feeds, co-hosts, your 24 words, ending the station' : 'Podcast feeds, co-hosts, numbers, your 24 words, ending the station', [
         FeedsPanel(station: id),
         const SizedBox(height: 26),
         HandsPanel(station: id),

@@ -1095,9 +1095,13 @@ class _DetailsPanelState extends State<DetailsPanel> {
   bool explicit = false;
   final port = TextEditingController();
   final tip = TextEditingController();
+  final name = TextEditingController();
+  final about = TextEditingController();
   String? saved;
   @override
   void dispose() {
+    name.dispose();
+    about.dispose();
     port.dispose();
     tip.dispose();
     super.dispose();
@@ -1113,19 +1117,23 @@ class _DetailsPanelState extends State<DetailsPanel> {
       explicit = d['explicit'] == true;
       port.text = d['port'] ?? '';
       tip.text = d['tip'] ?? '';
+      name.text = d['name'] ?? '';
+      about.text = d['about'] ?? '';
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      heading('ABOUT THE STATION'),
-      note('Helps listeners find you in Stations.'),
-      const SizedBox(height: 10),
+      TextField(enableIMEPersonalizedLearning: false, controller: name, maxLength: 40, style: serif(18), decoration: pyrateField('Station name')),
+      TextField(enableIMEPersonalizedLearning: false, controller: about, maxLength: 140, style: serif(15), decoration: pyrateField('What it plays, in a line')),
+      const SizedBox(height: 6),
+      Text('KINDS, UP TO FIVE', style: carved(11, color: boneFaint, spacing: 0.3)),
+      const SizedBox(height: 8),
       Wrap(spacing: 8, runSpacing: 8, children: [
         for (final k in stationKinds)
           Tappable(
-            onTap: () => setState(() => kinds.contains(k) ? kinds.remove(k) : kinds.add(k)),
+            onTap: () => setState(() => kinds.contains(k) ? kinds.remove(k) : (kinds.length < 5 ? kinds.add(k) : null)),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(border: Border.all(color: kinds.contains(k) ? bone : boneGhost, width: kinds.contains(k) ? 0.9 : 0.5)),
@@ -1145,7 +1153,7 @@ class _DetailsPanelState extends State<DetailsPanel> {
       Row(children: [
         pyrateButton('SAVE', () {
           Native.call({'cmd': 'details_set', 'station': widget.station, 'kinds': kinds.toList(), 'mature': mature, 'explicit': explicit});
-          final r = Native.call({'cmd': 'colours_set', 'station': widget.station, 'port': port.text, 'tip': tip.text});
+          final r = Native.call({'cmd': 'colours_set', 'station': widget.station, 'name': name.text, 'about': about.text, 'port': port.text, 'tip': tip.text});
           setState(() => saved = r is Map && r['error'] != null ? r['error'] : 'Saved. Listeners see it within a quarter of an hour.');
         }),
       ]),
@@ -1475,9 +1483,11 @@ Widget section(String title, List<Widget> children) => Padding(
     );
 
 /// Something most people never need, folded away under a plain title.
-Widget fold(String title, List<Widget> children, {String? sub}) => Theme(
+Widget fold(String title, List<Widget> children, {String? sub, bool open = false, Key? key}) => Theme(
+      key: key,
       data: ThemeData.dark().copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
+        initiallyExpanded: open,
         tilePadding: EdgeInsets.zero,
         childrenPadding: const EdgeInsets.only(top: 8, bottom: 8),
         expandedCrossAxisAlignment: CrossAxisAlignment.start,

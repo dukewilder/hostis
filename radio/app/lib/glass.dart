@@ -1,7 +1,6 @@
-// Pyrate Radio: the dial glass, as the browser draws it. A mark for every station where its
-// frequency falls, and names only around the needle: the station in view over its mark and its
-// nearest neighbours either side, as many as fit with no two touching, each on a hairline down
-// to its mark. Pointing at a mark or touching one names it; dragging carries the needle and the
+// Pyrate Radio: the dial glass. A mark for every station where its frequency falls, and no
+// names on it: the face above names the station in view. Pointing at a mark or touching one
+// names it; dragging carries the needle and the
 // names with it, and letting go tunes in. The same with three stations or a thousand: the marks
 // only grow denser. No rights reserved.
 
@@ -165,7 +164,9 @@ class _DialGlassState extends State<DialGlass> {
                     inView = dragTo;
                     needle = xOf(dragTo!, w);
                   }
-                  names = layout(inView, w, o);
+                  // No names on the glass: with more than a handful of stations they crowded it.
+                  // Pointing at a mark still names it, and the face above names the station in view.
+                  names = const [];
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 3),
                     child: CustomPaint(

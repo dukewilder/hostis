@@ -3600,9 +3600,21 @@ impl Node {
                 inner.page_call(cmd, st, req)
             }
             "status" => {
+                let mut mine_all: Vec<Value> = Vec::new();
                 let mine = {
                 let s = inner.store.lock().unwrap();
-                let mine_v = s.own().into_iter().find(|id| !s.logs.get(id).is_some_and(|a| a.is_struck())).map(|id| {
+                // A keeper with more than one station picks which one Broadcast shows ("mine"):
+                // that one if it is still on the air, else the first.
+                let live_own: Vec<StationId> = s.own().into_iter().filter(|id| !s.logs.get(id).is_some_and(|a| a.is_struck())).collect();
+                let picked = req["mine"].as_str().and_then(|h| StationId::from_hex(h).ok()).filter(|id| live_own.contains(id));
+                mine_all = live_own.iter().map(|id| {
+                    let name = s.logs.get(id).and_then(|a| a.colours()).map(|c| match c {
+                        Body::Colours { name, .. } => shown(name),
+                        _ => String::new(),
+                    });
+                    json!({ "id": id.to_hex(), "name": name, "call_sign": id.call_sign() })
+                }).collect();
+                let mine_v = picked.or_else(|| live_own.first().copied()).map(|id| {
                     let a = s.logs.get(&id);
                     let name = a.and_then(|a| a.colours()).map(|c| match c {
                         Body::Colours { name, .. } => name.clone(),
@@ -3651,7 +3663,7 @@ impl Node {
                 // The broadcast's station and time while on the air, with the desk's state while
                 // it is in use; null otherwise.
                 let live = inner.desk.state(inner, false, false);
-                Ok(json!({ "node": self.id().to_string(), "mine": mine, "jobs": jobs, "tuned": tuned, "now": np, "live": live, "heard_ms": heard_ms,
+                Ok(json!({ "node": self.id().to_string(), "mine": mine, "mine_all": mine_all, "jobs": jobs, "tuned": tuned, "now": np, "live": live, "heard_ms": heard_ms,
                     "served_bytes": inner.served_bytes.load(std::sync::atomic::Ordering::Relaxed), "relayed_bytes": inner.relayed_bytes.load(std::sync::atomic::Ordering::Relaxed) }))
             }
             // Where links for stations other than HOSTIS's point (the app's open player).
@@ -3706,11 +3718,11 @@ impl Node {
                 let s = inner.store.lock().unwrap();
                 let a = s.logs.get(&st).context("no log")?;
                 let (kinds, mature) = a.details().unwrap_or_default();
-                let (port, tip) = match a.colours() {
-                    Some(Body::Colours { port, tip, .. }) => (port.clone(), tip.clone()),
-                    _ => (None, None),
+                let (name, about, port, tip) = match a.colours() {
+                    Some(Body::Colours { name, about, port, tip }) => (Some(name.clone()), Some(about.clone()), port.clone(), tip.clone()),
+                    _ => (None, None, None, None),
                 };
-                Ok(json!({ "kinds": kinds, "mature": mature, "explicit": a.explicit(), "port": port, "tip": tip }))
+                Ok(json!({ "name": name, "about": about, "kinds": kinds, "mature": mature, "explicit": a.explicit(), "port": port, "tip": tip }))
             }
             "schedule" => {
                 let st = station()?;
