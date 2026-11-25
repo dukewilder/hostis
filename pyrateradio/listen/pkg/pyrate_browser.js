@@ -2787,7 +2787,7 @@ async function __wbg_init_once(module_or_path) {
     }
 
     if (module_or_path === undefined) {
-        module_or_path = new URL('pyrate_browser_bg.10aca61ec1.wasm', import.meta.url);
+        module_or_path = new URL('pyrate_browser_bg.b11d6810ba.wasm', import.meta.url);
     }
     const imports = __wbg_get_imports();
 

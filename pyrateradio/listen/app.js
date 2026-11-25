@@ -1,7 +1,7 @@
 // Pyrate Radio in a browser tab. The tab is a node: it hears the Log, checks every entry
 // against its station's key, and plays six-second chunks from whoever carries them, to
 // the second the station's own clock says. No rights reserved.
-import init, { Radio, plain_title, plain_by } from './pkg/pyrate_browser.js?v=10aca61ec1';
+import init, { Radio, plain_title, plain_by } from './pkg/pyrate_browser.js?v=b11d6810ba';
 
 const HARBOUR = "a6e12327929c36614b4cd24483103a0dc125fdd0be97fd27b85bdb61b8c397c3@https://135-181-190-28.sslip.io,a324c679b0dda368e23f21d6abbdaec0ef541a4ac317fa0643802b2734c9a442@https://135-181-190-28.sslip.io,f6d5c5276a98baf5d4964683115e9f0f6095e713f46bec34c25c29a66e46d753@https://135-181-190-28.sslip.io";
 // HOSTIS's own stations. Inside another page (the landing page's hero) the set offers these
@@ -15,7 +15,7 @@ const EMBED = document.documentElement.classList.contains('embed');
 // flock goes straight to an open player, the same set served where no one owns it (IPFS, a
 // Lantern). 'open' is that copy: the whole Log, the chatter and the colours.
 const SCOPE = "harbour";
-const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy.ipfs.inbrowser.link/", "https://bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeicsaqyunwngxzwmj5v3qtacu72ho65zmk6rx5oyjnslcmt77exkfy/", "https://135-181-190-28.sslip.io/listen/"];
+const OPEN_PLAYERS = ["https://k51qzi5uqu5dhbdmsbccqsq3q9cfzwdod64hxnmila4ark5kds3fxf7k6pc0fr.ipns.inbrowser.link/", "https://bafybeiaq2ukhvot3eacgm2jabrqpyrqchfagfo6k2udwb2qn2dagox7yfa.ipfs.inbrowser.link/", "https://bafybeiaq2ukhvot3eacgm2jabrqpyrqchfagfo6k2udwb2qn2dagox7yfa.ipfs.dweb.link/", "https://ipfs.io/ipfs/bafybeiaq2ukhvot3eacgm2jabrqpyrqchfagfo6k2udwb2qn2dagox7yfa/", "https://135-181-190-28.sslip.io/listen/"];
 const HOSTIS_ONLY = SCOPE === 'harbour' || EMBED;
 const isHarbour = id => HARBOUR_STATIONS.some(h => h.id === id);
 // HOSTIS's stations carry their pictures in the page, so they show before the network answers.
@@ -820,7 +820,8 @@ function scale() {
   let t = ''; for (let a = -48; a <= 48; a += 12) { const r = a * Math.PI / 180; t += '<line x1="' + (60 + 46 * Math.sin(r)) + '" y1="' + (64 - 46 * Math.cos(r)) + '" x2="' + (60 + 52 * Math.sin(r)) + '" y2="' + (64 - 52 * Math.cos(r)) + '"/>' }
   $('ticks').innerHTML = t;
 }
-// The dial: a mark for every station at its frequency, and names only around the needle. The
+// The dial: a mark for every station at its frequency. On a copy that plays only HOSTIS's
+// stations, names around the needle as well (never in the open player, where they crowd). The
 // station on the set is named over the needle and its nearest neighbours either side, as many as
 // fit with no two touching, each with a hairline down to its mark. Pointing at a mark names it;
 // dragging along the glass carries the needle and the names with it, and letting go tunes in.
@@ -840,7 +841,9 @@ function names(id) {
   namedAt = id;
   const box = $('names'), W = $('track').clientWidth, i = order.findIndex(s => s.id === id);
   box.innerHTML = '';
-  if (i < 0 || !W) { leads([]); return }
+  // Names on the glass only where it carries HOSTIS's few stations: with every station they
+  // crowd it. Pointing at a mark still names it, and the face above names the one on the set.
+  if (i < 0 || !W || !HOSTIS_ONLY) { leads([]); return }
   const mk = s => {
     const b = document.createElement('button'); b.textContent = s.name || s.call_sign; b.dataset.id = s.id; b.title = fqs(s.id) + '  ' + (s.name || s.call_sign || '');
     b.setAttribute('role', 'option'); b.setAttribute('aria-selected', s.id === cur?.id); b.classList.toggle('on', s.id === cur?.id); b.classList.toggle('live', !!s.live);
@@ -1865,7 +1868,11 @@ function studioShow() {
   const on = !!mineCur && adopted.has(mineCur), looking = !on && !!mineCur && seeking > 0;
   $('st-mine').hidden = !on; $('st-finding').hidden = !looking; $('st-head').textContent = on ? 'Your Station' : 'Start a Station'; $('st-new').hidden = on || looking || !$('st-show').hidden;
   if (!on) return;
-  const k = JSON.parse(radio.mine()).find(m => m.id === mineCur);
+  const all = JSON.parse(radio.mine()), k = all.find(m => m.id === mineCur);
+  // Which of the stations kept in this browser the page shows, and the way to start another.
+  const pick = $('st-pick');
+  pick.innerHTML = all.map(m => '<option value="' + m.id + '">' + esc((m.name || 'Untitled') + '   ' + (m.call_sign || '')) + '</option>').join('') + '<option value="+">Start another station</option>';
+  pick.value = mineCur; $('st-pickf').hidden = false;
   $('st-mname').textContent = k?.name || 'Your station'; $('st-mcs').textContent = (k?.call_sign || '') + '  ' + fqs(mineCur);
   flag($('st-flag'), mineCur, false);
   ysLoad();
@@ -2023,6 +2030,12 @@ $('st-restore').onclick = async () => {
   } catch (e) { stNote(String(e)) }
 };
 // A new station starts with an empty form and none of the last one's recordings in its queue.
+$('st-pick').onchange = e => {
+  const v = e.target.value;
+  if (v === '+') return $('st-another').onclick();
+  if (live || v === mineCur) { e.target.value = mineCur; return }
+  mineCur = v; $('st-queue').innerHTML = ''; studioShow(); studioStatus(); ysLoad(true);
+};
 $('st-another').onclick = () => { mineCur = null; $('st-name').value = $('st-about').value = $('st-kinds').value = ''; $('st-kindnote').hidden = true; $('st-queue').innerHTML = ''; studioShow() };
 $('st-kinds').oninput = () => { $('st-kindnote').hidden = $('st-kinds').value.split(',').filter(k => k.trim()).length <= 5 };
 
@@ -2633,7 +2646,8 @@ function deskPaint() {
   $('dk-two').hidden = !dk.two; $('desk').classList.toggle('has2', !!dk.two); if (dk.two) $('dk-twoname').textContent = dk.two.name;
   $('dk-twoopen').setAttribute('aria-pressed', dk.twoOpen); $('dk-twoopen').querySelector('.lbl').textContent = dk.twoOpen ? 'Open' : 'Closed';
   $('dk-play').classList.toggle('playing', !dk.el.paused); $('dk-play').setAttribute('aria-label', dk.el.paused ? 'Play' : 'Pause');
-  $('st-another').disabled = !!live;
+  $('st-another').disabled = !!live; $('st-pick').disabled = !!live;
+  $('ys-golive-v').textContent = live ? 'On the air now' : 'Talk, music under your voice, jingles'; if (live) $('ys-golive').open = true;
   deckClock();
 }
 padsPaint(); deckList(); deskSay(''); deskPaint();
