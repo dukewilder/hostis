@@ -1868,7 +1868,11 @@ function studioShow() {
   const on = !!mineCur && adopted.has(mineCur), looking = !on && !!mineCur && seeking > 0;
   $('st-mine').hidden = !on; $('st-finding').hidden = !looking; $('st-head').textContent = on ? 'Your Station' : 'Start a Station'; $('st-new').hidden = on || looking || !$('st-show').hidden;
   if (!on) return;
-  const k = JSON.parse(radio.mine()).find(m => m.id === mineCur);
+  const all = JSON.parse(radio.mine()), k = all.find(m => m.id === mineCur);
+  // Which of the stations kept in this browser the page shows, and the way to start another.
+  const pick = $('st-pick');
+  pick.innerHTML = all.map(m => '<option value="' + m.id + '">' + esc((m.name || 'Untitled') + '   ' + (m.call_sign || '')) + '</option>').join('') + '<option value="+">Start another station</option>';
+  pick.value = mineCur; $('st-pickf').hidden = false;
   $('st-mname').textContent = k?.name || 'Your station'; $('st-mcs').textContent = (k?.call_sign || '') + '  ' + fqs(mineCur);
   flag($('st-flag'), mineCur, false);
   ysLoad();
@@ -2026,6 +2030,12 @@ $('st-restore').onclick = async () => {
   } catch (e) { stNote(String(e)) }
 };
 // A new station starts with an empty form and none of the last one's recordings in its queue.
+$('st-pick').onchange = e => {
+  const v = e.target.value;
+  if (v === '+') return $('st-another').onclick();
+  if (live || v === mineCur) { e.target.value = mineCur; return }
+  mineCur = v; $('st-queue').innerHTML = ''; studioShow(); studioStatus(); ysLoad(true);
+};
 $('st-another').onclick = () => { mineCur = null; $('st-name').value = $('st-about').value = $('st-kinds').value = ''; $('st-kindnote').hidden = true; $('st-queue').innerHTML = ''; studioShow() };
 $('st-kinds').oninput = () => { $('st-kindnote').hidden = $('st-kinds').value.split(',').filter(k => k.trim()).length <= 5 };
 
@@ -2636,7 +2646,8 @@ function deskPaint() {
   $('dk-two').hidden = !dk.two; $('desk').classList.toggle('has2', !!dk.two); if (dk.two) $('dk-twoname').textContent = dk.two.name;
   $('dk-twoopen').setAttribute('aria-pressed', dk.twoOpen); $('dk-twoopen').querySelector('.lbl').textContent = dk.twoOpen ? 'Open' : 'Closed';
   $('dk-play').classList.toggle('playing', !dk.el.paused); $('dk-play').setAttribute('aria-label', dk.el.paused ? 'Play' : 'Pause');
-  $('st-another').disabled = !!live;
+  $('st-another').disabled = !!live; $('st-pick').disabled = !!live;
+  $('ys-golive-v').textContent = live ? 'On the air now' : 'Talk, music under your voice, jingles'; if (live) $('ys-golive').open = true;
   deckClock();
 }
 padsPaint(); deckList(); deskSay(''); deskPaint();

@@ -629,3 +629,6 @@ button.mi:hover,button.mi:focus-visible{color:var(--ink);background:rgba(237,228
 .st-work::after{content:'';position:absolute;top:0;left:-40%;width:40%;height:1px;background:var(--bonedim);animation:working 1.8s ease-in-out infinite}
 @keyframes working{to{left:100%}}
 @media (prefers-reduced-motion:reduce){.st-work::after{animation:none;left:30%}}
+/* The live desk folded into Your station: it fits the column rather than overhanging it. */
+#ys-golive>.ys-body{padding:0}
+#ys-golive .desk{left:0;width:auto;margin:0;border:0;border-top:1px solid var(--line)}
